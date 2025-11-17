@@ -1,0 +1,13 @@
+﻿.env
+*.env
+server/.env
+server/*.env
+node_modules/
+dist/
+build/
+.env.local
+.env.*.local
+uploads/
+.DS_Store
+npm-debug.log
+yarn-error.log
