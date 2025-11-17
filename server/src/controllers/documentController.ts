@@ -417,27 +417,9 @@ export const deleteDocument = async (req: Request, res: Response) => {
 };
 
 
-// Extend Express Request type to include Multer's file property
-// Define MulterFile type manually since 'multer' does not export a 'File' type
-type MulterFile = {
-  fieldname: string;
-  originalname: string;
-  encoding: string;
-  mimetype: string;
-  size: number;
-  destination: string;
-  filename: string;
-  path: string;
-  buffer?: Buffer;
-};
-
-declare global {
-  namespace Express {
-    interface Request {
-      file?: MulterFile;
-    }
-  }
-}
+// NOTE: Do not augment the global `Express.Request` type here.
+// Access `req.file` via a local `any` cast to avoid type collisions with
+// other declaration files (DOM `File`, multer types, etc.).
 
 const mongoURI = process.env.MONGO_URI || 'mongodb://localhost:27017/alphaversion';
 let gridFSBucket: GridFSBucket | null = null;
@@ -453,7 +435,8 @@ mongoose.connection.on('open', () => {
 // Handle document upload
 export const uploadDocument = async (req: Request, res: Response) => {
   try {
-    if (!req.file) {
+    const multerFile = (req as any).file as any;
+    if (!multerFile) {
       console.error('Multer did not receive a file. req.body:', req.body);
       return res.status(400).json({ success: false, message: 'No file uploaded.', debug: req.body });
     }
@@ -461,15 +444,15 @@ export const uploadDocument = async (req: Request, res: Response) => {
       console.error('GridFSBucket not initialized. Mongoose state:', mongoose.connection.readyState);
       return res.status(500).json({ success: false, message: 'GridFSBucket not initialized.' });
     }
-    const filePath = req.file.path;
+    const filePath = multerFile.path;
     try {
       const tempFileSize = fs.statSync(filePath).size;
       console.log('Temp file size before upload:', tempFileSize);
     } catch (err) {
       console.error('Error reading temp file size:', err);
     }
-    const uploadStream = gridFSBucket.openUploadStream(req.file.originalname, {
-      contentType: req.file.mimetype
+    const uploadStream = gridFSBucket.openUploadStream(multerFile.originalname, {
+      contentType: multerFile.mimetype
     });
     fs.createReadStream(filePath)
       .pipe(uploadStream)
