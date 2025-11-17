@@ -9,6 +9,7 @@
     "start:prod": "cross-env NODE_ENV=production node dist/index.js",
     "dev": "nodemon src/index.ts",
     "build": "tsc",
+    "postinstall": "npm run build",
     "test": "jest --runInBand --detectOpenHandles --forceExit"
   },
   "keywords": [],
