@@ -9,6 +9,7 @@ import { validateEmail, validatePassword } from '../utils/validation';
 // Types for request bodies
 interface RegisterRequest {
   fullName: string;
+  name?: string;
   username: string;
   email: string;
   password: string;

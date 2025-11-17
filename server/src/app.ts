@@ -118,7 +118,7 @@ console.log('Mounted documentsRoutes on /api/document');
 // These use the DocumentRequest mongoose model so behavior matches production.
 // In-memory storage for document requests used only during tests (keeps behavior deterministic)
 const __testDocumentRequests = new Map<string, any>();
-import mongoose from 'mongoose';
+// `mongoose` is already imported above; do not re-import to avoid duplicate identifier errors
 
 app.post('/api/document/request', (req, res) => {
   try {
