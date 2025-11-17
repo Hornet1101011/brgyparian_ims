@@ -3,6 +3,11 @@ import templatesRoutes from './routes/templates';
 import residentsRoutes from './routes/residents';
 import documentsRoutes from './routes/documents';
 import authRoutes from './routes/authRoutes';
+import notificationRoutes from './routes/notificationRoutes';
+import inquiryMessageRoutes from './routes/inquiryMessageRoutes';
+import messageRoutes from './routes/messageRoutes';
+import logsRoutes from './routes/logs';
+import verificationRoutes from './routes/verificationRoutes';
 console.log('Loaded inboxRoutes in app.ts');
 import express from 'express';
 import morgan from 'morgan';
@@ -14,9 +19,9 @@ dotenv.config();
 
 const app = express();
 // Register notification routes
-app.use('/api/notifications', require('./routes/notificationRoutes'));
+app.use('/api/notifications', notificationRoutes);
 // Register inquiry message routes
-app.use('/api/inquiry-messages', require('./routes/inquiryMessageRoutes'));
+app.use('/api/inquiry-messages', inquiryMessageRoutes);
 
 // Basic security settings
 app.set('trust proxy', 1); // Trust only the first proxy (safer for local dev)
@@ -87,10 +92,10 @@ app.use('/api/document', documentsRoutes);
 app.use('/api/auth', authRoutes);
 
 app.use('/api/inbox', (req, res, next) => { console.log('Received request to /api/inbox'); next(); }, inboxRoutes);
-app.use('/api/messages', require('./routes/messageRoutes'));
-app.use('/api/logs', require('./routes/logs'));
-app.use('/api/notifications', require('./routes/notificationRoutes').default);
+app.use('/api/messages', messageRoutes);
+app.use('/api/logs', logsRoutes);
+app.use('/api/notifications', notificationRoutes);
 // Verification routes for resident ID uploads and admin verification actions
-app.use('/api/verification', require('./routes/verificationRoutes').default);
+app.use('/api/verification', verificationRoutes);
 
 export default app;
