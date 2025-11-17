@@ -417,9 +417,23 @@ export const deleteDocument = async (req: Request, res: Response) => {
 };
 
 
-// NOTE: Do not augment the global `Express.Request` type here.
-// Access `req.file` via a local `any` cast to avoid type collisions with
-// other declaration files (DOM `File`, multer types, etc.).
+// Extend Express Request type to include Multer's file property
+// Define MulterFile type manually since 'multer' does not export a 'File' type
+type MulterFile = {
+  fieldname: string;
+  originalname: string;
+  encoding: string;
+  mimetype: string;
+  size: number;
+  destination: string;
+  filename: string;
+  path: string;
+  buffer?: Buffer;
+};
+
+// NOTE: Avoid augmenting the global Express.Request type to prevent conflicts
+// with other libraries that may declare `Request.file` (e.g. DOM `File`).
+// Instead, cast `req` locally to access multer file properties where needed.
 
 const mongoURI = process.env.MONGO_URI || 'mongodb://localhost:27017/alphaversion';
 let gridFSBucket: GridFSBucket | null = null;
@@ -435,7 +449,7 @@ mongoose.connection.on('open', () => {
 // Handle document upload
 export const uploadDocument = async (req: Request, res: Response) => {
   try {
-    const multerFile = (req as any).file as any;
+    const multerFile = (req as any).file as MulterFile | undefined;
     if (!multerFile) {
       console.error('Multer did not receive a file. req.body:', req.body);
       return res.status(400).json({ success: false, message: 'No file uploaded.', debug: req.body });

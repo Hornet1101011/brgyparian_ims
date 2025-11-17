@@ -78,7 +78,8 @@ const userSchema = new mongoose.Schema({
     unique: true,
     trim: true,
     lowercase: true,
-    match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email'],
+    // Allow modern TLDs (2+ chars). Accept longer TLDs like .local, .museum, etc.
+    match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.[a-zA-Z]{2,})+$/, 'Please enter a valid email'],
   },
   password: {
     type: String,

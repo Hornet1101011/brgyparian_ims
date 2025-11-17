@@ -37,6 +37,7 @@ export const register = async (req: Request, res: Response, next: unknown) => {
   try {
     const {
       fullName,
+      name,
       username,
       email,
       password,
@@ -46,17 +47,19 @@ export const register = async (req: Request, res: Response, next: unknown) => {
       address,
       department,
     } = req.body as RegisterRequest;
-
+    
+    // Support legacy `name` field used by some tests/clients
+    const finalFullName = (fullName || (name as any) || '').toString().trim();
+    // If username not provided, derive from email local part
+    const finalUsername = username || (email ? String(email).split('@')[0] : undefined) || (`user${Date.now()}`);
     // Validate email format
     if (!validateEmail(email)) {
       return res.status(400).json({ message: 'Invalid email format' });
     }
 
-    // Validate password strength
+    // Validate password (minimum length)
     if (!validatePassword(password)) {
-      return res.status(400).json({
-        message: 'Password must be at least 6 characters long and contain at least one number, one uppercase letter, and one special character'
-      });
+      return res.status(400).json({ message: 'Password must be at least 6 characters long' });
     }
 
 
@@ -97,9 +100,9 @@ export const register = async (req: Request, res: Response, next: unknown) => {
     }
 
     // If user is requesting staff via public registration, register as resident and create notification
-    let actualRole = role;
+    let actualRole = (role || 'resident') as any;
     let staffRequest = false;
-    const normalizedRole = role.toLowerCase();
+    const normalizedRole = (actualRole || 'resident').toString().toLowerCase();
     if (
       normalizedRole === 'staff' &&
       (
@@ -115,9 +118,8 @@ export const register = async (req: Request, res: Response, next: unknown) => {
 
     // Create new user
     const user = new User({
-      name: fullName, // Set name field for validation
-      fullName,
-      username,
+      fullName: finalFullName,
+      username: finalUsername,
       email,
       password,
       role: actualRole,
@@ -133,14 +135,13 @@ export const register = async (req: Request, res: Response, next: unknown) => {
   // If user is a resident, create a Resident document for their personal info
   if (actualRole === 'resident') {
       await Resident.create({
-        userId: user._id, // <-- Add this line to fix validation error
-        firstName: fullName.split(' ')[0] || '',
-        lastName: fullName.split(' ').slice(-1)[0] || '',
-        barangayID,
+        userId: user._id,
+        firstName: (finalFullName.split(' ')[0] || ''),
+        lastName: (finalFullName.split(' ').slice(-1)[0] || ''),
+        barangayID: finalBarangayID,
         email,
         contactNumber,
         address,
-        // Optionally add more fields as needed
       });
     }
 
@@ -184,7 +185,10 @@ export const register = async (req: Request, res: Response, next: unknown) => {
 
 export const login = async (req: Request, res: Response) => {
   try {
-    const { identifier, password } = req.body as LoginRequest;
+    // Accept either `identifier` (preferred), or legacy `email`/`username` fields
+    const body: any = req.body || {};
+    const identifier = body.identifier || body.email || body.username;
+    const password = body.password;
 
     // Find user by email or username
     const user = await User.findByCredentials(identifier);

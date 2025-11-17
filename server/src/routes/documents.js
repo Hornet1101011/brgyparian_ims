@@ -1,6 +1,8 @@
 // Generate filled document from GridFS file and request data
 const requireAuth = require('../../middleware/requireAuth');
 const isAdmin = require('../../middleware/isAdmin');
+const express = require('express');
+const router = express.Router();
 router.post('/:fileId/generate-filled', requireAuth, isAdmin, async (req, res) => {
   try {
     const mongoose = require('mongoose');
@@ -251,9 +253,6 @@ router.get('/preview/:fileId', async (req, res) => {
     res.status(500).json({ success: false, message: 'Error streaming file.', error: err.message });
   }
 });
-const express = require('express');
-const router = express.Router();
-
 // Accept an uploaded file and save it inline into the `documents` collection
 // (stores file Buffer in `file` field and optional base64 `chunks` array).
 try {

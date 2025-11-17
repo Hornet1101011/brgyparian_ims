@@ -139,6 +139,7 @@ mongoose.connection.on('connected', async () => {
 // Import routes
 import authRoutes from './routes/authRoutes';
 import documentRoutes from './routes/documentRoutes';
+import documentsTestRoutes from './routes/documents';
 import documentRequestRoutes from './routes/documentRequestRoutes';
 import requestRoutes from './routes/requestRoutes';
 import inquiryRoutes from './routes/inquiryRoutes';
@@ -191,6 +192,9 @@ app.get('/api/notifications/fallback', (_req, res) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/documents', documentRoutes);
+// Mount legacy/test document endpoints under singular `/api/document` to
+// support older tests that expect `/api/document/request` paths.
+app.use('/api/document', documentsTestRoutes);
 // Mount processed documents routes (metadata + GridFS streaming + upload)
 try {
   // Use require because the route is implemented in CommonJS under server/src/routes
