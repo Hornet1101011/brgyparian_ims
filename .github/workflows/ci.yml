@@ -21,8 +21,9 @@ jobs:
       - name: Install backend dependencies (including devDeps for build)
         run: |
           cd server
-          # Ensure devDependencies (types, jest types) are installed for the TypeScript build
-          NPM_CONFIG_PRODUCTION=false npm ci
+          # server/ does not include a package-lock.json in this repo, so use npm install
+          # Install devDependencies so tsc can find @types/* during the build
+          NPM_CONFIG_PRODUCTION=false npm install
 
       - name: Build backend
         run: npm run build --prefix server
