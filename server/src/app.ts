@@ -1,4 +1,8 @@
 import inboxRoutes from './routes/inboxRoutes';
+import templatesRoutes from './routes/templates';
+import residentsRoutes from './routes/residents';
+import documentsRoutes from './routes/documents';
+import authRoutes from './routes/authRoutes';
 console.log('Loaded inboxRoutes in app.ts');
 import express from 'express';
 import morgan from 'morgan';
@@ -76,11 +80,11 @@ app.get('/', (req, res) => {
   res.send('Alphaversion backend running');
 });
 
-// Use templates route (TypeScript)
-app.use('/api/templates', require('./routes/templates'));
-app.use('/api/resident', require('./routes/residents'));
-app.use('/api/document', require('./routes/documents'));
-app.use('/api/auth', require('./routes/authRoutes'));
+// Use templates and API routes (imported as ES modules)
+app.use('/api/templates', templatesRoutes);
+app.use('/api/resident', residentsRoutes);
+app.use('/api/document', documentsRoutes);
+app.use('/api/auth', authRoutes);
 
 app.use('/api/inbox', (req, res, next) => { console.log('Received request to /api/inbox'); next(); }, inboxRoutes);
 app.use('/api/messages', require('./routes/messageRoutes'));
