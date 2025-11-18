@@ -213,7 +213,13 @@ mongoose.connection.on('connected', async () => {
             // eslint-disable-next-line @typescript-eslint/no-var-requires
             require(path.join(modelsDir, mf));
           } catch (reqErr) {
-            console.warn('Failed to require model file', mf, reqErr && (reqErr as Error).message);
+            const msg = reqErr && (reqErr as Error).message ? (reqErr as Error).message : String(reqErr);
+            // Ignore harmless mongoose 'Cannot overwrite <Model> model once compiled' errors
+            if (/Cannot overwrite `.*` model once compiled/i.test(msg) || /Cannot overwrite model once compiled/i.test(msg)) {
+              console.log(`Model ${mf} already registered - skipping`);
+            } else {
+              console.warn('Failed to require model file', mf, msg);
+            }
           }
         }
 
