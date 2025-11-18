@@ -99,6 +99,9 @@ export function getAbsoluteApiUrl(path: string) {
   if (root.endsWith('/api')) root = root.replace(/\/api$/, '');
   // Ensure path begins with a single '/'
   const p = path.startsWith('/') ? path : `/${path}`;
+  // If caller already passed a path that starts with '/api', just join with root
+  if (p.startsWith('/api')) return `${root}${p}`;
+  // Otherwise prefix with /api
   return `${root}/api${p}`;
 }
 
