@@ -11,3 +11,6 @@ uploads/
 .DS_Store
 npm-debug.log
 yarn-error.log
+# Ignore build and DB archive binaries
+client_build.zip
+*.archive
