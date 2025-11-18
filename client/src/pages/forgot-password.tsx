@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Form, Input, Button, Card, Typography, message, Steps } from 'antd';
+import { axiosPublic } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 
 const ForgotPassword: React.FC = () => {
@@ -14,13 +15,8 @@ const ForgotPassword: React.FC = () => {
   const onRequest = async (values: { contact: string }) => {
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/forgot-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contact: values.contact })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Failed to send OTP');
+      const res = await axiosPublic.post('/auth/forgot-password', { contact: values.contact });
+      const data = res.data;
       setContact(values.contact);
       setStep('otp');
       message.success('OTP sent to your email or phone.');
@@ -35,13 +31,8 @@ const ForgotPassword: React.FC = () => {
   const onVerifyOtp = async (values: { otp: string }) => {
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/verify-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contact, otp: values.otp })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Invalid OTP');
+      const res = await axiosPublic.post('/auth/verify-otp', { contact, otp: values.otp });
+      const data = res.data;
       setToken(data.token); // token for password reset
       setStep('reset');
       message.success('OTP verified. You may now reset your password.');
@@ -56,13 +47,8 @@ const ForgotPassword: React.FC = () => {
   const onResetPassword = async (values: { password: string }) => {
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/reset-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, password: values.password })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Failed to reset password');
+      const res = await axiosPublic.post('/auth/reset-password', { token, password: values.password });
+      const data = res.data;
       setStep('done');
       message.success('Password reset successful! You may now log in.');
     } catch (error: any) {

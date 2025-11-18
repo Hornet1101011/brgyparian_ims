@@ -1,9 +1,9 @@
-import axios from 'axios';
+import { axiosInstance } from './api';
 
 export async function generateFilledDocx(fileId: string, fieldValues: Record<string, string>, requestId?: string) {
   const payload: any = { fieldValues };
   if (requestId) payload.requestId = requestId;
-  const response = await axios.post(`/api/documents/${fileId}/generate-filled`, payload, {
+  const response = await axiosInstance.post(`/documents/${fileId}/generate-filled`, payload, {
     responseType: 'blob',
   });
   // Parse filename from Content-Disposition header if present

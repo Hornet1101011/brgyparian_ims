@@ -95,8 +95,9 @@ const DocumentRequestForm: React.FC = () => {
     }
     setModalDocName(file.filename.replace(/\.docx$/i, ''));
     try {
-      const res = await fetch(`/api/documents/preview/${file._id}?format=html`);
-      const html = await res.text();
+      const api = await import('../services/api');
+      const res = await api.axiosPublic.get(`/documents/preview/${file._id}`, { params: { format: 'html' }, responseType: 'text' });
+      const html = res && res.data ? res.data : '';
       const regex = /\{(.*?)\}/g;
       const fields: string[] = [];
       let match;
@@ -151,13 +152,9 @@ const DocumentRequestForm: React.FC = () => {
     const form = new FormData();
     uploadList.slice(0, 2).forEach((f, idx) => form.append('ids', f.originFileObj || f));
     try {
-      const res = await fetch('/api/verification/upload', {
-        method: 'POST',
-        body: form,
-        credentials: 'include'
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
+      const api = await import('../services/api');
+      const res = await api.axiosInstance.post('/verification/upload', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+      const data = res && res.data ? res.data : null;
       message.success('Verification documents uploaded. Admin will review shortly.');
       setVerificationModalOpen(false);
       // Optionally refresh user profile from server so verified flag may be updated later

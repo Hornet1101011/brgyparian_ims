@@ -27,7 +27,9 @@ export interface PublicOfficial {
  */
 
 export function getOfficialPhotoSrc(off: OfficialLite) {
-  if (!off) return '/Templates/default-avatar.png';
+  // Small embedded PNG data-URI as a safe default (1x1 neutral placeholder)
+  const DEFAULT_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=';
+  if (!off) return DEFAULT_PNG;
   if (off.previewUrl) return off.previewUrl;
   // If the document has raw photo bytes (admin view) prefer admin photo endpoint
   if ((off as any).photo && off._id) return getAbsoluteApiUrl(`/admin/officials/${off._id}/photo`);
@@ -35,7 +37,7 @@ export function getOfficialPhotoSrc(off: OfficialLite) {
   if ((off as any).hasPhoto && off._id) return getAbsoluteApiUrl(`/officials/${off._id}/photo`);
   if (off.photoUrl) return off.photoUrl;
   if (off.photoPath) return getAbsoluteApiUrl(`/${off.photoPath.replace(/^\//, '')}`);
-  return '/Templates/default-avatar.png';
+  return DEFAULT_PNG;
 }
 
 export default getOfficialPhotoSrc;

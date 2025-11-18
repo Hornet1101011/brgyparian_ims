@@ -1,0 +1,32 @@
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # Don't rewrite existing files or directories
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # Exclude API, static assets, Templates folder, config.json and asset-manifest
+  RewriteRule ^(api|static|Templates|config\.json|asset-manifest\.json)(/.*)?$ - [L]
+
+  # Fallback to index.html for SPA routes
+  RewriteRule ^ index.html [L]
+</IfModule>
+
+# Serve index as default
+DirectoryIndex index.html
+
+# Caching
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType text/html "access plus 0 seconds"
+  ExpiresByType text/css "access plus 7 days"
+  ExpiresByType application/javascript "access plus 7 days"
+  ExpiresByType image/png "access plus 30 days"
+  ExpiresByType image/jpeg "access plus 30 days"
+  ExpiresByType image/x-icon "access plus 30 days"
+</IfModule>
+
+# Prevent directory listing
+Options -Indexes

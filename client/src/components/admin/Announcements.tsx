@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Card, Input, Upload, Button, message, Typography, List, Popconfirm, Image, Modal, Space, Tooltip } from 'antd';
 import { UploadOutlined, CheckCircleOutlined, CloseCircleOutlined, DeleteOutlined, EyeOutlined, EditOutlined } from '@ant-design/icons';
-import { adminAPI } from '../../services/api';
+import { adminAPI, getAbsoluteApiUrl } from '../../services/api';
 
 const { TextArea } = Input;
 
@@ -187,7 +187,7 @@ const Announcements: React.FC = () => {
                   ].filter(Boolean) as any
                 }>
                   <List.Item.Meta title={new Date(item.createdAt).toLocaleString()} description={item.text} />
-                  {item.imagePath && <Image className="rounded-img" width={80} src={`${process.env.REACT_APP_API_URL || ''}/api/announcements/${item._id}/image`} />}
+                  {item.imagePath && <Image className="rounded-img" width={80} src={getAbsoluteApiUrl(`/announcements/${item._id}/image`)} />}
                 </List.Item>
               )}
             />
@@ -205,7 +205,7 @@ const Announcements: React.FC = () => {
         {viewing && (
           <div>
             <p>{viewing.text}</p>
-            {viewing.imagePath && <Image className="rounded-img rounded-img-lg" src={`${process.env.REACT_APP_API_URL || ''}/api/announcements/${viewing._id}/image`} width={320} />}
+            {viewing.imagePath && <Image className="rounded-img rounded-img-lg" src={getAbsoluteApiUrl(`/announcements/${viewing._id}/image`)} width={320} />}
           </div>
         )}
       </Modal>

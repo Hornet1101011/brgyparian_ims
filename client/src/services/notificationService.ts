@@ -4,7 +4,7 @@ import {
   offNotificationEvent,
   getSocket,
 } from './notificationSocket';
-import axios from 'axios';
+import { axiosInstance } from './api';
 
 export type Notification = {
   id: string;
@@ -28,10 +28,8 @@ export type MarkAllAsReadResponse = {
   updatedCount: number;
 };
 
-const API_BASE = '/api/notifications';
-
 const getNotifications = async (): Promise<GetNotificationsResponse> => {
-  const res = await axios.get(API_BASE);
+  const res = await axiosInstance.get('/notifications');
   // If backend returns { data, total, ... }, extract data
   let notifications = Array.isArray(res.data)
     ? res.data
@@ -45,12 +43,12 @@ const getNotifications = async (): Promise<GetNotificationsResponse> => {
 };
 
 const markAsRead = async (id: string): Promise<MarkAsReadResponse> => {
-  const res = await axios.post<MarkAsReadResponse>(`${API_BASE}/${id}/read`);
+  const res = await axiosInstance.post<MarkAsReadResponse>(`/notifications/${id}/read`);
   return res.data;
 };
 
 const markAllAsRead = async (): Promise<MarkAllAsReadResponse> => {
-  const res = await axios.post<MarkAllAsReadResponse>(`${API_BASE}/read-all`);
+  const res = await axiosInstance.post<MarkAllAsReadResponse>(`/notifications/read-all`);
   return res.data;
 };
 

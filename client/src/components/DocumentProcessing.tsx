@@ -322,8 +322,8 @@ const DocumentProcessing: React.FC = () => {
   const prioritizedPending = prioritized && ((prioritized.status || '').toString().toLowerCase() === 'pending') ? prioritized : null;
   setPreviewSelectedRequestId(prioritizedPending ? (prioritizedPending._id || prioritizedPending.requestId) : (firstPending?._id || firstPending?.requestId || null));
       // Fetch template preview HTML once for this file
-      const res = await fetch(`/api/documents/preview/${file._id}?format=html`);
-      const html = await res.text();
+      const previewResp = await (await import('../services/api')).axiosPublic.get(`/documents/preview/${file._id}`, { params: { format: 'html' }, responseType: 'text' });
+      const html = previewResp && previewResp.data ? previewResp.data : '';
       setPreviewTemplateHtml(html);
       // Render preview for the selected/prioritized request
   const selectedReqId = prioritizedPending ? (prioritizedPending._id || prioritizedPending.requestId) : (firstPending?._id || firstPending?.requestId || null);
@@ -854,7 +854,7 @@ const DocumentProcessing: React.FC = () => {
                         if (documentsAPI.updateDocumentStatus) {
                           await documentsAPI.updateDocumentStatus(requestId, { status: 'approved' });
                         } else {
-                          await fetch(`/api/document-requests/${requestId}/process`, { method: 'PATCH' });
+                          await (await import('../services/api')).axiosInstance.patch(`/document-requests/${requestId}/process`);
                         }
                         // Refresh mapping/UI after marking complete
                         await fetchFilesAndRequests();

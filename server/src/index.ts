@@ -70,8 +70,12 @@ const io = new SocketIOServer(httpServer, {
 // Accepts comma-separated list in FRONTEND_URLS or a single FRONTEND_URL.
 // Custom CORS middleware: explicitly set a single Access-Control-Allow-Origin
 // header (prevents the server or proxies from returning multiple comma-separated values).
+const ALLOW_ALL_ORIGINS = String(process.env.ALLOW_ALL_ORIGINS || '').toLowerCase() === 'true';
 app.use((req, res, next) => {
   const origin = (req.headers.origin as string) || '';
+
+  // Debug log to help diagnose CORS issues in production (safe to remove later)
+  if (origin) console.debug('Incoming request Origin:', origin);
 
   // If no Origin header present (server-to-server or curl), allow the request
   if (!origin) {
@@ -84,6 +88,17 @@ app.use((req, res, next) => {
   // If '*' present in allowed origins, allow any origin
   if (FRONTEND_ORIGINS.includes('*')) {
     res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+    if (req.method === 'OPTIONS') return res.sendStatus(204);
+    return next();
+  }
+
+  // Allow all origins toggle: echo the requesting origin so credentialed requests still work
+  if (ALLOW_ALL_ORIGINS) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');

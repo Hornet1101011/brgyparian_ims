@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useContext } from 'react';
 import { Badge } from 'antd';
 import { AuthContext } from '../../context/AuthContext';
-import axios from 'axios';
+import { axiosInstance } from '../../services/api';
 
 const UnreadBadge: React.FC = () => {
   const { user } = useContext(AuthContext)!;
@@ -9,7 +9,7 @@ const UnreadBadge: React.FC = () => {
 
   useEffect(() => {
     if (user) {
-      axios.get('/api/messages/unread/count').then(res => setCount(res.data.count));
+      axiosInstance.get('/messages/unread/count').then(res => setCount(res.data.count));
     }
   }, [user]);
 

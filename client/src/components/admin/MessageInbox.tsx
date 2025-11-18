@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Card, List, Typography, Avatar, Spin, Button, Space } from 'antd';
 import { BellOutlined, TeamOutlined, CheckCircleOutlined, ArrowLeftOutlined } from '@ant-design/icons';
-import { getInbox } from '../../services/api';
+import { getInbox, axiosInstance } from '../../services/api';
 import { Notification } from '../../types/notification';
 import { useNavigate } from 'react-router-dom';
 
@@ -36,7 +36,7 @@ const MessageInbox: React.FC = () => {
     setLoading(true);
     try {
       // mark the message as read via messages endpoint
-      await fetch(`/api/messages/${msg._id}/read`, { method: 'PATCH', credentials: 'include' });
+      await axiosInstance.patch(`/messages/${msg._id}/read`);
       await fetchNotifications();
     } catch (err) {
       // Optionally show error

@@ -20,6 +20,7 @@ import {
   ,MenuFoldOutlined, MenuUnfoldOutlined
 } from '@ant-design/icons';
 import AvatarImage from './AvatarImage';
+import { getAbsoluteApiUrl } from '../services/api';
 import './AppLayoutSidebar.css';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -174,7 +175,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             return;
           }
           if (data?.profileImageId) {
-            setResidentImageSrc(`/api/resident/personal-info/avatar/${data.profileImageId}`);
+            setResidentImageSrc(getAbsoluteApiUrl(`/resident/personal-info/avatar/${data.profileImageId}`));
             return;
           }
         } catch (err) {
@@ -187,7 +188,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             const url = d.profileImage.startsWith('http') ? d.profileImage : `${window.location.origin}${d.profileImage}`;
             setResidentImageSrc(url);
           } else if (d?.profileImageId) {
-            setResidentImageSrc(`/api/resident/personal-info/avatar/${d.profileImageId}`);
+            setResidentImageSrc(getAbsoluteApiUrl(`/resident/personal-info/avatar/${d.profileImageId}`));
           }
         } catch (err) {
           // ignore
@@ -205,7 +206,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           const url = updated.profileImage.startsWith('http') ? updated.profileImage : `${window.location.origin}${updated.profileImage}`;
           setResidentImageSrc(url);
         } else if (updated.profileImageId) {
-          setResidentImageSrc(`/api/resident/personal-info/avatar/${updated.profileImageId}`);
+          setResidentImageSrc(getAbsoluteApiUrl(`/resident/personal-info/avatar/${updated.profileImageId}`));
         }
       } catch (err) {
         // ignore

@@ -3,7 +3,7 @@ import { Row, Col, Form, Input, Button, Card, Typography, message, Modal } from 
 import { UserOutlined, LockOutlined } from '@ant-design/icons';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { adminAPI } from '../services/api';
+import { adminAPI, axiosPublic, axiosInstance, getAbsoluteApiUrl } from '../services/api';
 import getOfficialPhotoSrc, { fetchPublicOfficials, PublicOfficial } from '../utils/officials';
 import StatsPanel from './StatsPanel';
 import './LoginForm.css';
@@ -40,20 +40,26 @@ const LoginForm: React.FC = () => {
           setOfficialsStatus(`public:${offs.length}`);
         } else {
           // fallback attempt to admin endpoint (useful during local dev when auth may be present)
-          setOfficialsStatus('trying-admin-fallback');
-          try {
-            const adminOffs: any[] = await adminAPI.getOfficials();
-            if (mounted && Array.isArray(adminOffs) && adminOffs.length > 0) {
-              // normalize to PublicOfficial shape
-              const mapped = adminOffs.map(a => ({ _id: a._id, name: a.name, title: a.title, term: a.term, hasPhoto: !!a.photo || !!a.photoPath }));
-              setOfficials(mapped);
-              setOfficialsStatus(`admin:${mapped.length}`);
-            } else {
-              setOfficialsStatus('no-officials');
+          // Only attempt admin fallback if the current user is authenticated.
+          // Public (unauthenticated) visitors should not hit admin endpoints.
+          if (isAuthenticated) {
+            setOfficialsStatus('trying-admin-fallback');
+            try {
+              const adminOffs: any[] = await adminAPI.getOfficials();
+              if (mounted && Array.isArray(adminOffs) && adminOffs.length > 0) {
+                // normalize to PublicOfficial shape
+                const mapped = adminOffs.map(a => ({ _id: a._id, name: a.name, title: a.title, term: a.term, hasPhoto: !!a.photo || !!a.photoPath }));
+                setOfficials(mapped);
+                setOfficialsStatus(`admin:${mapped.length}`);
+              } else {
+                setOfficialsStatus('no-officials');
+              }
+            } catch (e) {
+              console.warn('Admin fallback failed', e);
+              setOfficialsStatus('error');
             }
-          } catch (e) {
-            console.warn('Admin fallback failed', e);
-            setOfficialsStatus('error');
+          } else {
+            setOfficialsStatus('no-officials');
           }
         }
       } catch (e) {
@@ -67,17 +73,12 @@ const LoginForm: React.FC = () => {
   const onFinish = async (values: { username: string; password: string }) => {
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ identifier: values.username, password: values.password }),
-      });
+      // Use axiosInstance so runtime API_BASE is respected and credentials are sent
+      const resp = await axiosInstance.post('/auth/login', { identifier: values.username, password: values.password });
+      const data = resp && resp.data ? resp.data : {};
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        console.error('Login response not OK:', { status: res.status, data });
+      if (!resp || resp.status >= 400) {
+        console.error('Login response not OK:', { status: resp?.status, data });
         throw new Error(data.message || 'Login failed');
       }
 
@@ -122,7 +123,19 @@ const LoginForm: React.FC = () => {
                         officials.map(off => (
                           <div key={off._id} className="official-card">
                             <div className="official-avatar">
-                              <img alt={off.name} src={getOfficialPhotoSrc(off as any)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              <img
+                                alt={off.name}
+                                src={getOfficialPhotoSrc(off as any)}
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                onError={(e) => {
+                                  try {
+                                    const t = e.currentTarget as HTMLImageElement;
+                                    t.onerror = null;
+                                    // Use lightweight data-URI fallback to avoid missing static asset
+                                    t.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=';
+                                  } catch (err) {}
+                                }}
+                              />
                             </div>
                             <div style={{ fontWeight: 700 }}>{off.name}</div>
                             <div style={{ color: '#666', fontSize: 13 }}>{off.title}</div>
@@ -198,13 +211,11 @@ const LoginForm: React.FC = () => {
           const vals = await guestForm.validateFields();
           // submit to server to persist in Guest collection
           try {
-            const res = await fetch('/api/auth/guest', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name: vals.name, contactNumber: vals.contactNumber, email: vals.email, intent: vals.intent })
-            });
-            const data = await res.json();
-            if (!res.ok) {
+            // Use public axios instance so the request goes to the configured API base
+            // and does not include any auth cookies.
+            const resp = await axiosPublic.post('/auth/guest', { name: vals.name, contactNumber: vals.contactNumber, email: vals.email, intent: vals.intent });
+            const data = resp && resp.data ? resp.data : {};
+            if (!resp || resp.status >= 400) {
               message.error(data.message || 'Failed to create guest');
               return;
             }

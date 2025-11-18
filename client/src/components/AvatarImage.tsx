@@ -1,4 +1,5 @@
 import React from 'react';
+import { getAbsoluteApiUrl } from '../services/api';
 
 type AvatarSource = {
   profileImage?: string | null;
@@ -28,7 +29,7 @@ const AvatarImage: React.FC<Props> = ({ user, src, profileImageId, size = 40, al
     // Use GridFS streaming endpoint
     return (
       <img
-        src={`/api/resident/personal-info/avatar/${id}`}
+        src={getAbsoluteApiUrl(`/resident/personal-info/avatar/${id}`)}
         alt={alt || u?.fullName || u?.username || u?.email || 'avatar'}
         width={size}
         height={size}

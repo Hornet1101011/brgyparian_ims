@@ -11,20 +11,28 @@ const StatsPanel: React.FC = () => {
     let mounted = true;
     (async () => {
       try {
-        // Fetch admin statistics, list of files, document requests, and public announcements in parallel
-        const [resStats, filesRes, docRequestsRes, announcementsRes] = await Promise.all([
-          adminAPI.getSystemStatistics(),
+        // Fetch supporting public resources in parallel (files, documents, announcements)
+        const [filesRes, docRequestsRes, announcementsRes] = await Promise.all([
           documentsAPI.listFiles().catch(() => ([])),
           documentsAPI.getAllDocuments().catch(() => ([])),
           contactAPI.getAnnouncements().catch(() => ([]))
         ]);
+
+        // Attempt to fetch admin statistics, but tolerate 401/unauthenticated errors
+        let resStats: any = null;
+        try {
+          resStats = await adminAPI.getSystemStatistics();
+        } catch (statErr) {
+          console.warn('Could not fetch admin statistics (likely unauthenticated):', String(statErr));
+          resStats = null;
+        }
 
         if (mounted) {
           // attach filesCount, docRequestsCount and announcementsCount to stats for display
           const filesCount = Array.isArray(filesRes) ? filesRes.length : (filesRes && filesRes.length) || 0;
           const docRequestsCount = Array.isArray(docRequestsRes) ? docRequestsRes.length : (docRequestsRes && docRequestsRes.length) || 0;
           const announcementsCount = Array.isArray(announcementsRes) ? announcementsRes.length : (announcementsRes && announcementsRes.length) || 0;
-          setStats({ ...resStats, filesCount, docRequestsCount, announcementsCount });
+          setStats({ ...(resStats || {}), filesCount, docRequestsCount, announcementsCount });
         }
       } catch (err) {
         console.error('Failed to load system statistics', err);

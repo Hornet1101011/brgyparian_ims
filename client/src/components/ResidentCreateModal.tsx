@@ -1,6 +1,6 @@
 import React from 'react';
 import { Modal, Form, Input, message } from 'antd';
-import axios from 'axios';
+import { axiosInstance } from '../services/api';
 
 interface Props {
   visible: boolean;
@@ -40,7 +40,7 @@ const ResidentCreateModal: React.FC<Props> = ({ visible, onClose, onCreated, def
         username: defaultUsername || values.username || '',
         email: defaultEmail || values.email || ''
       };
-  const resp = await axios.put('/api/resident/personal-info', payload);
+  const resp = await axiosInstance.put('/resident/personal-info', payload);
       message.success('Resident container created');
       onCreated(resp.data);
       form.resetFields();

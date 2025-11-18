@@ -9,8 +9,16 @@ const Official = require('../models/Official');
 router.get('/', async (req, res) => {
   try {
     const list = await Official.find().select('name title term photo photoPath photoContentType createdAt').sort({ createdAt: -1 });
-    // send minimal data suitable for public display
-    const mapped = list.map(o => ({ _id: o._id, name: o.name, title: o.title, term: o.term, hasPhoto: !!o.photo || !!o.photoPath }));
+    // Build absolute base URL from request (respecting proxies)
+    const proto = req.get('x-forwarded-proto') || req.protocol || 'http';
+    const host = req.get('x-forwarded-host') || req.get('host');
+    const base = host ? `${proto}://${host}` : '';
+    // send minimal data suitable for public display, include a full photoUrl when available
+    const mapped = list.map(o => {
+      const hasPhoto = !!o.photo || !!o.photoPath;
+      const photoUrl = hasPhoto && base ? `${base}/api/officials/${o._id}/photo` : undefined;
+      return { _id: o._id, name: o.name, title: o.title, term: o.term, hasPhoto, photoUrl };
+    });
     res.json(mapped);
   } catch (err) {
     console.error('Failed to list public officials', err);

@@ -71,13 +71,36 @@ export const staffRegister = async (data: any) => {
 const runtimeCfg = (globalThis as any).__APP_CONFIG__;
 export const API_URL = (runtimeCfg && runtimeCfg.API_BASE) || process.env.REACT_APP_API_URL || '/api';
 
-const axiosInstance = axios.create({
+export const axiosInstance = axios.create({
   baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
   },
   withCredentials: true, // Send cookies with every request
 });
+
+// Public axios instance (no credentials) that uses the same resolved API base.
+// Use this for public endpoints (guest views) so we don't send auth cookies
+// and avoid 401/redirect HTML pages that the client may try to parse as JSON.
+export const axiosPublic = axios.create({
+  baseURL: API_URL,
+  headers: { 'Content-Type': 'application/json' },
+  withCredentials: false,
+});
+
+// Build an absolute URL to the API given a path (path may start with '/').
+// This normalizes the configured API base (runtime config -> REACT_APP_API_URL -> '/api')
+// and ensures requests to asset URLs (images/files) resolve to the correct origin.
+export function getAbsoluteApiUrl(path: string) {
+  const cfg = (globalThis as any).__APP_CONFIG__;
+  const base = (cfg && cfg.API_BASE) || process.env.REACT_APP_API_URL || '/api';
+  let root = String(base).replace(/\/$/, '');
+  // If the base includes the '/api' suffix, strip it to create a root host
+  if (root.endsWith('/api')) root = root.replace(/\/api$/, '');
+  // Ensure path begins with a single '/'
+  const p = path.startsWith('/') ? path : `/${path}`;
+  return `${root}/api${p}`;
+}
 
 
 // Auth service wrapper
@@ -233,7 +256,18 @@ export const documentsAPI = {
   getDocumentById: (id: string) => 
     axiosInstance.get(`/document-requests/${id}`).then(response => response.data),
   getAllDocuments: () =>
-    axiosInstance.get('/document-requests/all').then(response => response.data),
+    axiosInstance.get('/document-requests/all')
+      .then(response => response.data)
+      .catch((err) => {
+        // If unauthenticated (401) return an empty list instead of throwing
+        // so public pages don't log parse errors or unhandled rejections.
+        const status = err?.response?.status;
+        if (status === 401) {
+          return [] as any[];
+        }
+        // Re-throw other errors so callers can handle them as before.
+        throw err;
+      }),
   getDocumentRecords: () =>
     axiosInstance.get('/document-requests/all').then(response => response.data),
   updateDocumentStatus: (id: string, data: { status: string; notes?: string }) =>
@@ -372,20 +406,20 @@ const admin = {
         if (settings) return settings;
       }
       // If the dev proxy isn't forwarding (requests hit :3000 and return 404),
-      // try fallbacks in order: /settings (non-admin), then absolute backend admin/settings,
-      // then absolute backend /settings, and finally /settings/public if enabled on server.
-      const backendBase = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+      // try fallbacks in order: /settings (non-admin), then admin settings,
+      // then absolute /settings, and finally /settings/public if enabled on server.
       try {
         // try non-admin path on same base (/api/settings)
         const resp = await axiosInstance.get('/settings');
         return resp.data;
       } catch (e1) {
         try {
-          const resp2 = await axios.get(`${backendBase.replace(/\/$/, '')}/admin/settings`, { withCredentials: true });
+          // attempt admin settings again via configured API base
+          const resp2 = await axiosInstance.get('/admin/settings');
           return resp2.data;
         } catch (e2) {
           try {
-            const resp3 = await axios.get(`${backendBase.replace(/\/$/, '')}/settings`, { withCredentials: true });
+            const resp3 = await axiosInstance.get('/settings');
             return resp3.data;
           } catch (e3) {
             try {
@@ -429,9 +463,8 @@ const admin = {
       // If the dev proxy isn't forwarding (requests hit :3000 and return 404),
       // try a direct request to the backend API base as a fallback.
       try {
-        const backendBase = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-        const url = `${backendBase.replace(/\/$/, '')}/admin/settings`;
-        const resp = await axios.put(url, settings, { withCredentials: true });
+        // Attempt direct PUT using configured API base
+        const resp = await axiosInstance.put('/admin/settings', settings, { withCredentials: true });
         // persist locally as well
         try { await localDB.saveSettings(settings); } catch (e) {}
         return resp.data;
@@ -572,10 +605,7 @@ const admin = {
       // If that also fails, return an empty array so UI remains functional.
       console.warn('getOfficials: primary request failed; attempting public backend fallback. Error:', error);
       try {
-        const backendBase = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-        const url = `${backendBase.replace(/\/$/, '')}/officials`;
-        // Use the plain axios instance (not axiosInstance) and do NOT send credentials.
-        const resp2 = await axios.get(url, { withCredentials: false });
+        const resp2 = await axiosPublic.get('/officials');
         return Array.isArray(resp2.data) ? resp2.data : [];
       } catch (pfall) {
         return [];
@@ -587,17 +617,10 @@ const admin = {
       const response = await axiosInstance.post('/admin/officials', data);
       return response.data;
     } catch (error) {
-      // If the dev proxy isn't forwarding (requests hit :3000 and return 404),
-      // attempt a direct request to the backend API base so developers can still work.
-      try {
-        const backendBase = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-        const url = `${backendBase.replace(/\/$/, '')}/admin/officials`;
-        const resp = await axios.post(url, data, { withCredentials: true });
-        return resp.data;
-      } catch (fall) {
-        // rethrow original error to preserve context for callers
-        throw error;
-      }
+      // Creating an official is an admin operation and should fail loudly if
+      // the authenticated request does not succeed. Rethrow the original
+      // error so callers can handle/show the proper message.
+      throw error;
     }
   },
   updateOfficial: async (id: string, data: any) => {
@@ -610,15 +633,9 @@ const admin = {
         await syncService.performOperation('update', 'officials', { ...data, _id: id });
         return;
       }
-      // Fallback to backend base if proxy not forwarding
-      try {
-        const backendBase = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-        const url = `${backendBase.replace(/\/$/, '')}/admin/officials/${id}`;
-        const resp = await axios.put(url, data, { withCredentials: true });
-        return resp.data;
-      } catch (fall) {
-        throw error;
-      }
+      // Rethrow original error so callers can handle it; fallback to a
+      // direct backend URL is unnecessary when runtime `API_BASE` exists.
+      throw error;
     }
   },
   deleteOfficial: async (id: string) => {
@@ -719,7 +736,7 @@ const residentPersonalInfoAPI = {
     }
     // Last-resort: hit absolute API_URL to avoid using client origin (avoids 3000 -> 404)
     try {
-      const resp = await axios.get(`${API_URL}/resident/personal-info`, { withCredentials: true });
+      const resp = await axiosInstance.get('/resident/personal-info');
       if (resp && resp.data) return resp.data;
     } catch (e) {
       // ignore and throw below

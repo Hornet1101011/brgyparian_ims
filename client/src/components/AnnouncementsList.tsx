@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Card, List, Typography, Modal, Image, Empty } from 'antd';
-import { contactAPI } from '../services/api';
+import { contactAPI, getAbsoluteApiUrl } from '../services/api';
 
 const { Title, Paragraph } = Typography;
 
@@ -43,7 +43,7 @@ const AnnouncementsList: React.FC = () => {
               </div>
               {item.imagePath && (
                 <div style={{ marginLeft: 12, width: 80, display: 'flex', justifyContent: 'flex-end' }}>
-                  <Image className="rounded-img" width={72} height={48} src={`${process.env.REACT_APP_API_URL || ''}/api/announcements/${item._id}/image`} alt="announcement" preview={false} />
+                  <Image className="rounded-img" width={72} height={48} src={getAbsoluteApiUrl(`/announcements/${item._id}/image`)} alt="announcement" preview={false} />
                 </div>
               )}
             </List.Item>
@@ -52,14 +52,14 @@ const AnnouncementsList: React.FC = () => {
       )}
 
       <Modal open={!!selected} onCancel={() => setSelected(null)} footer={null} title="Announcement">
-        {selected && (
-          <div>
-            <Paragraph>{selected.text}</Paragraph>
-            {selected.imagePath && (
-              <Image className="rounded-img rounded-img-lg" src={`${process.env.REACT_APP_API_URL || ''}/api/announcements/${selected._id}/image`} alt="announcement" />
+            {selected && (
+              <div>
+                <Paragraph>{selected.text}</Paragraph>
+                {selected.imagePath && (
+                  <Image className="rounded-img rounded-img-lg" src={getAbsoluteApiUrl(`/announcements/${selected._id}/image`)} alt="announcement" />
+                )}
+              </div>
             )}
-          </div>
-        )}
       </Modal>
     </Card>
   );

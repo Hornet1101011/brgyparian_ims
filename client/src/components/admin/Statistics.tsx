@@ -4,7 +4,7 @@ import { Card, Row, Col, Divider, Skeleton, Empty, Form, Select, DatePicker, Spa
 import { DownOutlined } from '@ant-design/icons';
 import { QueryClient, QueryClientProvider, useQueries } from '@tanstack/react-query';
 import { Pie, Bar, Line, Area } from '@ant-design/charts';
-import axios from 'axios';
+import { axiosInstance } from '../../services/api';
 import type { Moment } from 'moment'; // Add this import at the top if using moment
 import jsPDF from 'jspdf';
 
@@ -14,11 +14,11 @@ const { Option } = Select;
 // Chart definitions (top-level so hooks depending on them stay stable)
 // Only include charts backed by server endpoints to avoid 404s
 const CHARTS: Record<string, { title: string; chartType: 'pie'|'bar'|'line'|'area'; endpoint: string; colors?: string[] }> = {
-  gender: { title: 'Sex Distribution', chartType: 'pie', endpoint: '/api/analytics/gender', colors: ['#1890ff', '#00bcd4', '#888888'] },
-  age: { title: 'Age Groups', chartType: 'bar', endpoint: '/api/analytics/age', colors: ['#1890ff'] },
-  'civil-status': { title: 'Civil Status', chartType: 'bar', endpoint: '/api/analytics/civil-status', colors: ['#1890ff'] },
-  education: { title: 'Education', chartType: 'bar', endpoint: '/api/analytics/education', colors: ['#13c2c2'] },
-  'documents-monthly': { title: 'Monthly Document Requests', chartType: 'line', endpoint: '/api/analytics/documents-monthly', colors: ['#722ed1'] },
+  gender: { title: 'Sex Distribution', chartType: 'pie', endpoint: '/analytics/gender', colors: ['#1890ff', '#00bcd4', '#888888'] },
+  age: { title: 'Age Groups', chartType: 'bar', endpoint: '/analytics/age', colors: ['#1890ff'] },
+  'civil-status': { title: 'Civil Status', chartType: 'bar', endpoint: '/analytics/civil-status', colors: ['#1890ff'] },
+  education: { title: 'Education', chartType: 'bar', endpoint: '/analytics/education', colors: ['#13c2c2'] },
+  'documents-monthly': { title: 'Monthly Document Requests', chartType: 'line', endpoint: '/analytics/documents-monthly', colors: ['#722ed1'] },
 };
 
 // stable array of chart ids (top-level so it's stable across renders)
@@ -63,7 +63,7 @@ const StatisticsInner: React.FC = () => {
   const fetchSummary = useCallback(async () => {
     setLoadingSummary(true);
     try {
-      const res = await axios.get('/api/analytics/summary', {
+      const res = await axiosInstance.get('/analytics/summary', {
         params: {
           startDate: filters.dateRange?.[0]?.format?.('YYYY-MM-DD'),
           endDate: filters.dateRange?.[1]?.format?.('YYYY-MM-DD'),
@@ -105,7 +105,7 @@ const StatisticsInner: React.FC = () => {
       const cs = chartSettings[chartId] || {};
       const start = cs.dateRange?.[0]?.format?.('YYYY-MM-DD') || filters.dateRange?.[0]?.format?.('YYYY-MM-DD');
       const end = cs.dateRange?.[1]?.format?.('YYYY-MM-DD') || filters.dateRange?.[1]?.format?.('YYYY-MM-DD');
-      const res = await axios.get(def.endpoint, { params: { startDate: start, endDate: end } });
+      const res = await axiosInstance.get(def.endpoint, { params: { startDate: start, endDate: end } });
       let payload = res.data?.data || [];
       // server returns { name, value } for sex endpoint; map to { type, value } expected by charts
       if (chartId === 'gender') {
@@ -244,7 +244,7 @@ const StatisticsInner: React.FC = () => {
           const cs = chartSettings[id] || {};
           const start = cs.dateRange?.[0]?.format?.('YYYY-MM-DD') || filters.dateRange?.[0]?.format?.('YYYY-MM-DD');
           const end = cs.dateRange?.[1]?.format?.('YYYY-MM-DD') || filters.dateRange?.[1]?.format?.('YYYY-MM-DD');
-          const res = await axios.get(CHARTS[id].endpoint, { params: { startDate: start, endDate: end, residentType: filters.residentType } });
+          const res = await axiosInstance.get(CHARTS[id].endpoint, { params: { startDate: start, endDate: end, residentType: filters.residentType } });
           return res.data?.data || [];
         },
         retry: 2

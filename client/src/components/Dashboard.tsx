@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Row, Col, Card, Typography, Button, List, Spin, Divider, Tag, Badge, Statistic, Space, Modal, Table, Upload, message as antdMessage, Tooltip, Checkbox } from 'antd';
 import { FileTextOutlined, MailOutlined, NotificationOutlined, UploadOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import AvatarImage from './AvatarImage';
+import { getAbsoluteApiUrl } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { documentsAPI, contactAPI } from '../services/api';
 import { useNavigate } from 'react-router-dom';
@@ -93,7 +94,7 @@ const Dashboard: React.FC = () => {
             return;
           }
           if (data?.profileImageId) {
-            setResidentImageSrc(`/api/resident/personal-info/avatar/${data.profileImageId}`);
+            setResidentImageSrc(getAbsoluteApiUrl(`/resident/personal-info/avatar/${data.profileImageId}`));
             return;
           }
         } catch (err) {
@@ -108,7 +109,7 @@ const Dashboard: React.FC = () => {
             const url2 = data2.profileImage.startsWith('http') ? data2.profileImage : `${window.location.origin}${data2.profileImage}`;
             setResidentImageSrc(url2);
           } else if (data2?.profileImageId) {
-            setResidentImageSrc(`/api/resident/personal-info/avatar/${data2.profileImageId}`);
+            setResidentImageSrc(getAbsoluteApiUrl(`/resident/personal-info/avatar/${data2.profileImageId}`));
           }
         } catch (err) {
           // ignore

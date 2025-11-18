@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useContext } from 'react';
 import { List, Typography } from 'antd';
 import { AuthContext } from '../../context/AuthContext';
-import axios from 'axios';
+import { axiosInstance } from '../../services/api';
 
 type Message = {
   subject: string;
@@ -16,7 +16,7 @@ const MessageSent: React.FC = () => {
 
   useEffect(() => {
     if (user) {
-      axios.get('/api/messages/sent').then(res => setMessages(res.data));
+      axiosInstance.get('/messages/sent').then(res => setMessages(res.data));
     }
   }, [user]);
 

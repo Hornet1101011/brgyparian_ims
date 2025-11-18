@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { residentPersonalInfoAPI } from '../services/api';
-import axios, { AxiosResponse } from 'axios';
+import { residentPersonalInfoAPI, axiosInstance } from '../services/api';
+import { AxiosResponse } from 'axios';
 import { Form, Input, Button, Select, Typography, Divider, Row, Col, Card, Space, message, Switch, Upload, Alert } from 'antd';
 import { UploadOutlined } from '@ant-design/icons';
 import ResidentCreateModal from './ResidentCreateModal';
@@ -119,7 +119,7 @@ export default function ResidentPortal() {
 				username: profile.username || '',
 				email: profile.email || ''
 			};
-			const resp = await axios.put('/api/resident/personal-info', payload);
+			const resp = await axiosInstance.put('/resident/personal-info', payload);
 			setPersonalInfo(resp.data);
 			setPersonalForm(resp.data);
 			setResidentMissing(false);
@@ -140,7 +140,7 @@ export default function ResidentPortal() {
 		const form = new FormData();
 		form.append('avatar', file);
 		try {
-			const resp = await axios.post('/api/resident/personal-info/avatar', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+			const resp = await axiosInstance.post('/resident/personal-info/avatar', form, { headers: { 'Content-Type': 'multipart/form-data' } });
 			// server returns { message, resident, user }
 			const updated = resp.data?.resident;
 			const returnedUser = resp.data?.user;
@@ -186,7 +186,7 @@ export default function ResidentPortal() {
 				username: form?.username || '',
 				...personalForm
 			};
-			await axios.post('/resident', payload);
+			await axiosInstance.post('/resident', payload);
 			alert('Resident registered successfully!');
 		} catch (error) {
 			alert('Failed to register resident.');
@@ -206,8 +206,8 @@ export default function ResidentPortal() {
 	const [currentTime, setCurrentTime] = useState<string>('');
 
 	useEffect(() => {
-    // Fetch resident profile and requests
-	axios.get('/api/resident/profile').then((res: AxiosResponse<any>) => {
+	// Fetch resident profile and requests
+	axiosInstance.get('/resident/profile').then((res: AxiosResponse<any>) => {
 		setProfile(res.data);
 		setForm(res.data);
 		if (res.data?.profileImage) {
@@ -260,9 +260,9 @@ export default function ResidentPortal() {
           });
         }
       });
-	axios.get('/api/resident/requests').then((res: AxiosResponse<any>) => {
-        setRequests(res.data);
-    });
+	axiosInstance.get('/resident/requests').then((res: AxiosResponse<any>) => {
+		setRequests(res.data);
+	});
 }, []);
 
 	useEffect(() => {
@@ -316,7 +316,7 @@ export default function ResidentPortal() {
 				contactNumber: form?.contactNumber || profile?.contactNumber || '',
 				address: form?.address || profile?.address || ''
 			};
-			const resp = await axios.put('/api/resident/personal-info', payload);
+			const resp = await axiosInstance.put('/resident/personal-info', payload);
 			// Update local profile with returned resident/user fields when available
 			if (resp && resp.data) {
 				setProfile({ ...profile, ...resp.data });
@@ -363,7 +363,7 @@ export default function ResidentPortal() {
 	const handleRequestStaff = async () => {
 		setRequesting(true);
 		try {
-			const resp = await axios.post('/api/resident/request-staff-access');
+			const resp = await axiosInstance.post('/resident/request-staff-access');
 			const serverMsg = resp?.data?.message || 'Request sent to admin for staff access';
 			if (resp && (resp.status === 200 || resp.status === 201)) {
 				message.success(serverMsg);

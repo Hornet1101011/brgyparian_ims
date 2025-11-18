@@ -1,5 +1,5 @@
 import { localDB } from './localDatabase';
-import axiosInstance from './api';
+import { axiosInstance } from './api';
 
 class SyncService {
   private static instance: SyncService;
@@ -81,15 +81,15 @@ class SyncService {
     
     switch (operation) {
       case 'create':
-        await axiosInstance.post(`/api/${collection}`, data);
+        await axiosInstance.post(`/${collection}`, data);
         break;
       
       case 'update':
-        await axiosInstance.put(`/api/${collection}/${data._id}`, data);
+        await axiosInstance.put(`/${collection}/${data._id}`, data);
         break;
       
       case 'delete':
-        await axiosInstance.delete(`/api/${collection}/${data._id}`);
+        await axiosInstance.delete(`/${collection}/${data._id}`);
         break;
     }
   }

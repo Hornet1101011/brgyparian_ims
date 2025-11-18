@@ -1,7 +1,7 @@
 import React, { useState, useContext } from 'react';
 import { Form, Input, Button, message } from 'antd';
 import { AuthContext } from '../../context/AuthContext';
-import axios from 'axios';
+import { axiosInstance } from '../../services/api';
 
 const MessageCompose: React.FC = () => {
   const authContext = useContext(AuthContext);
@@ -16,7 +16,7 @@ const MessageCompose: React.FC = () => {
         setLoading(false);
         return;
       }
-      await axios.post('/api/messages', {
+      await axiosInstance.post('/messages', {
         senderId: user._id,
         recipientId: values.recipientId,
         subject: values.subject,

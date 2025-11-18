@@ -304,6 +304,13 @@ router.get('/profile', auth, async (req: any, res) => {
 		const resident = await Resident.findOne({ userId: user._id });
 		const profileImage = resident && resident.profileImage ? resident.profileImage : undefined;
 		const profileImageId = resident && resident.profileImageId ? resident.profileImageId : undefined;
+		// Build absolute base URL from request (respecting proxies)
+		const proto = req.get('x-forwarded-proto') || req.protocol || 'http';
+		const host = req.get('x-forwarded-host') || req.get('host');
+		const base = host ? `${proto}://${host}` : '';
+		// If profileImage is a relative path like '/api/resident/...', convert it to absolute so clients can display it
+		const profileImageUrl = profileImage && profileImage.startsWith('/') && base ? `${base}${profileImage}` : profileImage;
+
 		res.json({
 			_id: user._id,
 			username: user.username,
@@ -316,7 +323,7 @@ router.get('/profile', auth, async (req: any, res) => {
 			firstName,
 			lastName,
 			department: user.department || '',
-			profileImage,
+			profileImage: profileImageUrl,
 			profileImageId,
 			// Do NOT include password
 		});

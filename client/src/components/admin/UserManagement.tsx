@@ -31,6 +31,7 @@ import type { SortOrder } from 'antd/es/table/interface';
 import { adminAPI, staffRegister } from '../../services/api';
 import dayjs from 'dayjs';
 import AvatarImage from '../AvatarImage';
+import { getAbsoluteApiUrl } from '../../services/api';
 
 const roleOptions = [
   { text: 'Admin', value: 'admin' },
@@ -467,7 +468,7 @@ const UserManagement: React.FC = () => {
                       selectedResident.profileImage ? (
                         <AvatarImage src={selectedResident.profileImage} size={64} />
                       ) : (
-                        <AvatarImage src={`/api/resident/personal-info/avatar/${selectedResident.profileImageId}`} size={64} />
+                        <AvatarImage src={getAbsoluteApiUrl(`/resident/personal-info/avatar/${selectedResident.profileImageId}`)} size={64} />
                       )
                     ) : selectedUser.avatar ? (
                       <AvatarImage src={selectedUser.avatar} size={64} />
@@ -910,10 +911,10 @@ const UserManagement: React.FC = () => {
                             if (resp?.resident) {
                               setSelectedResident(resp.resident);
                               setEditFormValues((prev: any) => ({ ...prev, profileImage: resp.resident.profileImage, profileImageId: resp.resident.profileImageId }));
-                              setUploadPreview(resp.resident.profileImage || `/api/resident/personal-info/avatar/${resp.fileId}`);
+                              setUploadPreview(resp.resident.profileImage || getAbsoluteApiUrl(`/resident/personal-info/avatar/${resp.fileId}`));
                             } else if (resp?.fileId) {
-                              setEditFormValues((prev: any) => ({ ...prev, profileImage: `/api/resident/personal-info/avatar/${resp.fileId}`, profileImageId: resp.fileId }));
-                              setUploadPreview(`/api/resident/personal-info/avatar/${resp.fileId}`);
+                              setEditFormValues((prev: any) => ({ ...prev, profileImage: getAbsoluteApiUrl(`/resident/personal-info/avatar/${resp.fileId}`), profileImageId: resp.fileId }));
+                            setUploadPreview(getAbsoluteApiUrl(`/resident/personal-info/avatar/${resp.fileId}`));
                             }
                             setUploadProgress(100);
                             message.success('Avatar uploaded');

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Table, Button, Space, Tag, message, Spin } from 'antd';
-import { verificationAPI } from '../../services/api';
+import { verificationAPI, getAbsoluteApiUrl } from '../../services/api';
 
 interface IVReq {
   _id: string;
@@ -75,7 +75,7 @@ const VerificationRequests: React.FC = () => {
     { title: 'Files', dataIndex: 'gridFileIds', key: 'files', render: (ids: string[]) => (
       <Space>
         {ids && ids.map((id: string) => (
-          <Button key={id} type="link" href={`${(process.env.REACT_APP_API_URL || '/api')}/verification/file/${id}`} target="_blank">Open</Button>
+          <Button key={id} type="link" href={getAbsoluteApiUrl(`/verification/file/${id}`)} target="_blank">Open</Button>
         ))}
       </Space>
     ) },
@@ -83,7 +83,7 @@ const VerificationRequests: React.FC = () => {
       <Space>
         <Button onClick={() => approve(record.userId._id || record.userId)} type="primary">Verify</Button>
         <Button danger onClick={() => reject(record)}>Reject</Button>
-        <Button type="link" href={`${(process.env.REACT_APP_API_URL || '/api')}/verification/file/${(record.gridFileIds && record.gridFileIds[0]) || ''}`} target="_blank">Check ID</Button>
+        <Button type="link" href={getAbsoluteApiUrl(`/verification/file/${(record.gridFileIds && record.gridFileIds[0]) || ''}`)} target="_blank">Check ID</Button>
       </Space>
     ) }
   ];

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Form, Input, Button, Card, Typography, notification, Progress } from 'antd';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import axios from 'axios';
+import { axiosPublic } from '../services/api';
 
 const ResetPassword: React.FC = () => {
   const { token } = useParams<{ token: string }>();
@@ -50,7 +50,7 @@ const ResetPassword: React.FC = () => {
       let res;
       // If token is present in URL, use the legacy link endpoint
       if (token) {
-        res = await axios.post(`/api/auth/reset-password/${token}`, { password: values.password });
+        res = await axiosPublic.post(`/auth/reset-password/${token}`, { password: values.password });
       } else if (mode === 'otp') {
         // OTP flow: code is provided by user in a field; submit token in body
         if (!values.code) {
@@ -58,10 +58,10 @@ const ResetPassword: React.FC = () => {
           setLoading(false);
           return;
         }
-        res = await axios.post(`/api/auth/reset-password`, { token: values.code, password: values.password });
+        res = await axiosPublic.post(`/auth/reset-password`, { token: values.code, password: values.password });
       } else {
         // fallback: attempt body token
-        res = await axios.post(`/api/auth/reset-password`, { token: values.code || '', password: values.password });
+        res = await axiosPublic.post(`/auth/reset-password`, { token: values.code || '', password: values.password });
       }
       notification.success({ message: 'Password reset', description: res.data?.message || 'Your password has been reset. Please log in.' });
       navigate('/login');

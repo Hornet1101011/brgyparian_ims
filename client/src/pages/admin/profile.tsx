@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import Profile from '../../components/Profile';
+import { axiosInstance } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 
 const AdminProfilePage: React.FC = () => {
@@ -9,14 +10,10 @@ const AdminProfilePage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Replace with your actual API call for admin profile
-    fetch('/api/admin/profile')
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to fetch profile');
-        return res.json();
-      })
-      .then(data => {
-        setProfile(data);
+    // Replace with API call that uses runtime-aware axiosInstance
+    axiosInstance.get('/admin/profile')
+      .then(resp => {
+        setProfile(resp.data);
         setError(null);
       })
       .catch(() => setError('Failed to load profile'))

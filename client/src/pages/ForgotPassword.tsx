@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Form, Input, Button, Card, Typography, notification, Radio } from 'antd';
-import axios from 'axios';
+import { axiosPublic } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 
 const ForgotPassword: React.FC = () => {
@@ -15,7 +15,7 @@ const ForgotPassword: React.FC = () => {
   const onFinish = async (values: { email: string }) => {
     setLoading(true);
     try {
-      const res = await axios.post('/api/auth/forgot-password', { email: values.email, mode });
+      const res = await axiosPublic.post('/auth/forgot-password', { email: values.email, mode });
       // server returns generic success message
       notification.success({ message: 'Request sent', description: res.data?.message || 'Check your email for instructions.' });
       setSent(true);
@@ -45,7 +45,7 @@ const ForgotPassword: React.FC = () => {
       // send token to server; server will email a temporary password if token is valid
       const payload: any = { token: code };
       if (submittedEmail) payload.email = submittedEmail;
-      const res = await axios.post('/api/auth/verify-otp', payload);
+      const res = await axiosPublic.post('/auth/verify-otp', payload);
       notification.success({ message: 'If valid', description: res.data?.message || 'Check your email for the new temporary password.' });
       // clear input and allow user to go back to login
       setCode('');

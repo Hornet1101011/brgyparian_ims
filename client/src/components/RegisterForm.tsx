@@ -4,6 +4,7 @@ import * as Yup from 'yup';
 import { TextField, Button, Box, Link, Paper, Container, InputAdornment, Alert, MenuItem } from '@mui/material';
 import { Email, Lock, Home, Phone, Badge, Person, Visibility, VisibilityOff } from '@mui/icons-material';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import { axiosInstance } from '../services/api';
 
 // Server requires: min 6 chars, at least one number, one uppercase letter, and one special character
 const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{6,}$/;
@@ -79,31 +80,27 @@ const RegisterForm = () => {
       try {
         const fullName = [values.firstName, values.middleName, values.lastName].filter(Boolean).join(' ');
 
-        const res = await fetch('/api/auth/register', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fullName,
-            firstName: values.firstName,
-            middleName: values.middleName,
-            lastName: values.lastName,
-            username: values.username,
-            email: values.email,
-            password: values.password,
-            address: values.address,
-            contactNumber: values.contactNumber,
-            barangayID: values.barangayID,
-            role: values.role,
-          })
+        const resp = await axiosInstance.post('/auth/register', {
+          fullName,
+          firstName: values.firstName,
+          middleName: values.middleName,
+          lastName: values.lastName,
+          username: values.username,
+          email: values.email,
+          password: values.password,
+          address: values.address,
+          contactNumber: values.contactNumber,
+          barangayID: values.barangayID,
+          role: values.role,
         });
         let data: any = {};
         try {
-          data = await res.json();
+          data = resp && resp.data ? resp.data : {};
         } catch (jsonErr) {
           setError('Server error: Could not parse response');
           return;
         }
-        if (res.ok) {
+        if (resp && resp.status >= 200 && resp.status < 300) {
           setSuccess('Registration successful! You may now log in.');
           resetForm();
           setTimeout(() => navigate('/login'), 1500);

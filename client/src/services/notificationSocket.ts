@@ -28,7 +28,6 @@ export function initNotificationSocket(token?: string) {
     path: '/socket.io',
     transports: ['websocket'],
     auth: token ? { token } : undefined,
-    withCredentials: true,
     autoConnect: true,
   });
   return socket;

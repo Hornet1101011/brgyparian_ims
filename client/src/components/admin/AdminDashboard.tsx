@@ -13,7 +13,7 @@ import {
   CheckOutlined,
   ExclamationCircleOutlined
 } from '@ant-design/icons';
-import { adminAPI, notificationAPI, contactAPI, requestsAPI, verificationAPI } from '../../services/api';
+import { adminAPI, notificationAPI, contactAPI, requestsAPI, verificationAPI, getAbsoluteApiUrl } from '../../services/api';
 import { documentsAPI } from '../../services/api';
 import { initNotificationSocket, onNotificationEvent, offNotificationEvent } from '../../services/notificationSocket';
 import { Notification } from '../../types/notification';
@@ -764,13 +764,13 @@ const AdminDashboard: React.FC = () => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {(selectedVerif.gridFileIds || []).map((id: string) => (
                 <div key={id} style={{ border: '1px solid #f0f0f0', padding: 8, borderRadius: 6 }}>
-                  <div style={{ marginBottom: 8 }}>
-                    <a href={`${(process.env.REACT_APP_API_URL || '/api')}/verification/file/${id}`} target="_blank" rel="noreferrer">Open file in new tab</a>
-                  </div>
+                    <div style={{ marginBottom: 8 }}>
+                      <a href={getAbsoluteApiUrl(`/verification/file/${id}`)} target="_blank" rel="noreferrer">Open file in new tab</a>
+                    </div>
                   {/* inline preview for images if possible */}
-                  <div>
-                    <img src={`${(process.env.REACT_APP_API_URL || '/api')}/verification/file/${id}`} alt="id" style={{ maxWidth: '100%', maxHeight: 400 }} onError={() => { /* ignore errors for non-images */ }} />
-                  </div>
+                    <div>
+                      <img src={getAbsoluteApiUrl(`/verification/file/${id}`)} alt="id" style={{ maxWidth: '100%', maxHeight: 400 }} onError={() => { /* ignore errors for non-images */ }} />
+                    </div>
                 </div>
               ))}
             </div>
@@ -844,11 +844,11 @@ const AdminDashboard: React.FC = () => {
                   </div>}
                   description={null}
                 />
-                {item.imagePath && (
-                  <div style={{ marginLeft: 12, width: 92, display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
-                    <img loading="lazy" className="rounded-img" src={`${process.env.REACT_APP_API_URL || ''}/api/announcements/${item._id}/image`} alt="ann" style={{ width: 92, height: 60, objectFit: 'cover', borderRadius: 6, background: '#f0f0f0' }} />
-                  </div>
-                )}
+                  {item.imagePath && (
+                    <div style={{ marginLeft: 12, width: 92, display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
+                      <img loading="lazy" className="rounded-img" src={getAbsoluteApiUrl(`/announcements/${item._id}/image`)} alt="ann" style={{ width: 92, height: 60, objectFit: 'cover', borderRadius: 6, background: '#f0f0f0' }} />
+                    </div>
+                  )}
               </List.Item>
             )}
             size="small"
@@ -865,9 +865,9 @@ const AdminDashboard: React.FC = () => {
         {miniSelected && (
           <div>
             <Text style={{ display: 'block', marginBottom: 12, whiteSpace: 'pre-wrap' }}>{miniSelected.text}</Text>
-            {miniSelected.imagePath && (
-              <img loading="lazy" className="rounded-img rounded-img-lg" src={`${process.env.REACT_APP_API_URL || ''}/api/announcements/${miniSelected._id}/image`} alt="announcement" style={{ width: '100%', height: 'auto', borderRadius: 8, background: '#f6f6f6' }} />
-            )}
+                    {miniSelected.imagePath && (
+                      <img loading="lazy" className="rounded-img rounded-img-lg" src={getAbsoluteApiUrl(`/announcements/${miniSelected._id}/image`)} alt="announcement" style={{ width: '100%', height: 'auto', borderRadius: 8, background: '#f6f6f6' }} />
+                    )}
             <div style={{ marginTop: 8, color: '#888' }}>{timeAgo(miniSelected.createdAt)}</div>
           </div>
         )}

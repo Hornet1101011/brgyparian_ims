@@ -1,7 +1,7 @@
 // Generate filled document for a document request (staff action)
-import axios from 'axios';
+import { axiosInstance } from './api';
 
 export async function generateFilledDocument(requestId: string) {
-  const response = await axios.post(`/api/document-requests/${requestId}/generate-filled`);
+  const response = await axiosInstance.post(`/document-requests/${requestId}/generate-filled`);
   return response.data;
 }

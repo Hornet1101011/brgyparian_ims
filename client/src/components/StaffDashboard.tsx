@@ -24,7 +24,7 @@ import {
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { documentsAPI, contactAPI } from '../services/api';
+import { documentsAPI, contactAPI, getAbsoluteApiUrl, axiosInstance } from '../services/api';
 
 
 interface DocumentRequest {
@@ -64,6 +64,26 @@ const StaffDashboard: React.FC = () => {
       try { localStorage.setItem('viewedInquiries', JSON.stringify(Array.from(next))); } catch (e) {}
       return next;
     });
+  };
+
+  // Handle responding to an inquiry from the Inquiry Response modal
+  const handleInquiryResponse = async () => {
+    if (!selectedInquiry) return;
+    const id = selectedInquiry._id || selectedInquiry.id;
+    if (!id) return;
+    try {
+      notification.info({ message: 'Sending response', description: 'Posting your reply...', duration: 1.2 });
+      await contactAPI.respondToInquiry(id, { response: responseText });
+      // Update local inquiries list if present
+      setInquiries(prev => (prev || []).map(q => (q && (q._id === id || q.id === id)) ? { ...q, status: 'resolved' } : q));
+      notification.success({ message: 'Response sent', description: 'Inquiry has been updated' });
+      setSelectedInquiry(null);
+      setResponseText('');
+    } catch (err: any) {
+      console.error('Failed to send inquiry response', err);
+      const msg = err?.response?.data?.message || err?.message || 'Failed to send response';
+      notification.error({ message: 'Error', description: msg });
+    }
   };
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
   // Mini announcements (replace Recent Activity)
@@ -173,47 +193,40 @@ const StaffDashboard: React.FC = () => {
       let lastError: any = null;
 
       console.debug('[handleDownloadProcessed] record:', rec, 'candidateIds:', ids);
+      let finalBlob: Blob | null = null;
+      let finalHeaders: any = null;
       for (const id of ids) {
         try {
           console.debug('[handleDownloadProcessed] attempting id=', id);
-          const r = await fetch(`/api/processed-documents/${id}/raw`, { credentials: 'include' });
-          console.debug('[handleDownloadProcessed] response for id=', id, 'status=', r.status, 'headers:', {
-            xProcessedSource: r.headers.get('x-processed-source'),
-            contentDisposition: r.headers.get('content-disposition')
-          });
-          if (r.ok) {
-            finalResp = r;
+          const r = await (await import('../services/api')).axiosInstance.get(`/processed-documents/${id}/raw`, { responseType: 'blob' });
+          if (r && r.status >= 200 && r.status < 300) {
+            finalBlob = r.data as Blob;
+            finalHeaders = r.headers || {};
             usedId = id;
             break;
           }
-          // If 404, try next id. For other statuses, surface error.
-          if (r.status === 404) {
-            lastError = { status: r.status, body: await (async () => { try { return await r.json(); } catch (e) { return null; } })() };
+        } catch (err: any) {
+          const status = err && err.response && err.response.status ? err.response.status : null;
+          if (status === 404) {
+            lastError = { status: 404, body: err.response && err.response.data ? err.response.data : null };
             continue;
           }
-          // Non-404 failure: capture and stop
-          let body = null;
-          try { body = await r.json(); } catch (e) {}
-          notification.error({ message: 'Download failed', description: (body && body.message) ? body.message : `Server returned ${r.status}` });
+          notification.error({ message: 'Download failed', description: status ? `Server returned ${status}` : String(err) });
           return;
-        } catch (err) {
-          lastError = err;
-          continue;
         }
       }
 
-      if (!finalResp) {
-        // Nothing worked
+      if (!finalBlob) {
         const msg = lastError && lastError.body && lastError.body.message ? lastError.body.message : (lastError && lastError.message) ? lastError.message : 'File not found';
         notification.error({ message: 'Download failed', description: msg });
         return;
       }
 
-      const blob = await finalResp.blob();
+      const blob = finalBlob;
 
       // Prefer filename from Content-Disposition header if provided
       let filename: string | null = null;
-      const cd = finalResp.headers.get('content-disposition') || finalResp.headers.get('Content-Disposition');
+      const cd = (finalHeaders && (finalHeaders['content-disposition'] || finalHeaders['Content-Disposition'])) || null;
       if (cd) {
         const m = cd.match(/filename\*=UTF-8''([^;\n\r]+)/i);
         if (m && m[1]) filename = decodeURIComponent(m[1]);
@@ -223,7 +236,7 @@ const StaffDashboard: React.FC = () => {
         }
       }
       // Fallback to X-Processed headers or record fields
-      if (!filename) filename = finalResp.headers.get('x-processed-transactioncode') || finalResp.headers.get('X-Processed-TransactionCode') || rec.filename || rec.name || `document_${usedId || rec._id}.docx`;
+      if (!filename) filename = (finalHeaders && (finalHeaders['x-processed-transactioncode'] || finalHeaders['X-Processed-TransactionCode'])) || rec.filename || rec.name || `document_${usedId || rec._id}.docx`;
 
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -286,11 +299,9 @@ const StaffDashboard: React.FC = () => {
       // Attempt to get count of processed documents from server-side processed_documents metadata
       let processedCount = docRecords.length;
       try {
-        const resp = await fetch('/api/processed-documents?page=1&limit=1', { credentials: 'include' });
-        if (resp.ok) {
-          const j = await resp.json();
-          if (j && typeof j.total === 'number') processedCount = j.total;
-        }
+        const resp = await axiosInstance.get('/processed-documents', { params: { page: 1, limit: 1 } });
+        const j = resp && resp.data ? resp.data : null;
+        if (j && typeof j.total === 'number') processedCount = j.total;
       } catch (e) {
         // ignore and fall back to docRecords.length
       }
@@ -319,14 +330,12 @@ const StaffDashboard: React.FC = () => {
       // Prefer processed_documents metadata endpoint; fallback to older documents listing
       let processedItems: any[] = [];
       try {
-        const resp = await fetch('/api/processed-documents?page=1&limit=200', { credentials: 'include' });
-        if (resp.ok) {
-          const j = await resp.json();
-          if (j && Array.isArray(j.items)) {
-            processedItems = j.items;
-          } else if (Array.isArray(j)) {
-            processedItems = j;
-          }
+        const resp = await axiosInstance.get('/processed-documents', { params: { page: 1, limit: 200 } });
+        const j = resp && resp.data ? resp.data : null;
+        if (j && Array.isArray(j.items)) {
+          processedItems = j.items;
+        } else if (Array.isArray(j)) {
+          processedItems = j as any[];
         }
       } catch (e) {
         // fallback to older endpoints
@@ -364,57 +373,6 @@ const StaffDashboard: React.FC = () => {
       setMiniLoading(false);
     }
   };
-
-  // Document status update
-  const handleDocumentAction = async () => {
-    if (!selectedDocument || !documentStatus) return;
-    try {
-      await documentsAPI.updateDocumentStatus(selectedDocument._id || '', {
-        status: documentStatus,
-        notes: responseText,
-      });
-      setSelectedDocument(null);
-      setResponseText('');
-      setDocumentStatus('');
-      fetchData();
-    } catch (error) {
-      console.error('Error updating document status:', error);
-    }
-  };
-
-  // Inquiry response
-  const handleInquiryResponse = async () => {
-    if (!selectedInquiry || !responseText) return;
-    try {
-      setResponding(true);
-      await contactAPI.respondToInquiry(selectedInquiry._id, {
-        response: responseText,
-      });
-      setSelectedInquiry(null);
-      setResponseText('');
-      fetchData();
-    } catch (error) {
-      console.error('Error responding to inquiry:', error);
-    } finally {
-      setResponding(false);
-    }
-  };
-
-  // Mark inquiry as resolved
-  const handleResolveInquiry = async (inquiryId?: string) => {
-    const id = inquiryId || (selectedInquiry && selectedInquiry._id);
-    if (!id) return;
-    try {
-      await contactAPI.resolveInquiry(id);
-      // Close modal if open and refresh
-      setSelectedInquiry(null);
-      setResponseText('');
-      fetchData();
-    } catch (error) {
-      console.error('Error resolving inquiry:', error);
-    }
-  };
-
   // Open Manage/Expand modal helper (centralized for logging + notification)
   const openManageModal = (e?: React.MouseEvent) => {
     try {
@@ -426,6 +384,31 @@ const StaffDashboard: React.FC = () => {
     } catch (err) {}
     setManageTableData(sortByDateDesc(inquiries));
     setManageModalVisible(true);
+  };
+
+  // Handle approve/reject/other document actions from Document Response modal
+  const handleDocumentAction = async () => {
+    if (!selectedDocument) return;
+    const id = selectedDocument._id || selectedDocument.id;
+    if (!id) return;
+    try {
+      // Use documentsAPI to update status; server expects lowercase status strings
+      const payload = { status: (documentStatus || '').toString().toLowerCase(), notes: responseText };
+      // Show a short in-UI indicator using notification
+      notification.info({ message: 'Processing', description: `Updating document status to ${payload.status}...`, duration: 1.2 });
+      await documentsAPI.updateDocumentStatus(id, payload);
+      // Update local list if present
+      setDocumentRequests(prev => (prev || []).map(d => d && (d._id === id || d.id === id) ? { ...d, status: payload.status } : d));
+      notification.success({ message: 'Success', description: `Document marked ${payload.status}` });
+      // Clear modal and fields
+      setSelectedDocument(null);
+      setResponseText('');
+      setDocumentStatus('');
+    } catch (err: any) {
+      console.error('Failed to update document status', err);
+      const msg = err?.response?.data?.message || err?.message || 'Failed to update document';
+      notification.error({ message: 'Error', description: msg });
+    }
   };
 
   // Format helpers
@@ -1076,7 +1059,7 @@ const StaffDashboard: React.FC = () => {
                         />
                         {item.imagePath && (
                           <div style={{ marginLeft: 12, width: 92, display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
-                            <img loading="lazy" className="rounded-img" src={`${process.env.REACT_APP_API_URL || ''}/api/announcements/${item._id}/image`} alt="ann" style={{ width: 92, height: 60, objectFit: 'cover', borderRadius: 6, background: '#f0f0f0' }} />
+                            <img loading="lazy" className="rounded-img" src={getAbsoluteApiUrl(`/announcements/${item._id}/image`)} alt="ann" style={{ width: 92, height: 60, objectFit: 'cover', borderRadius: 6, background: '#f0f0f0' }} />
                           </div>
                         )}
                       </List.Item>
@@ -1092,7 +1075,7 @@ const StaffDashboard: React.FC = () => {
                   <div>
                     <Typography.Text style={{ display: 'block', marginBottom: 12, whiteSpace: 'pre-wrap' }}>{miniSelected.text}</Typography.Text>
                     {miniSelected.imagePath && (
-                      <img loading="lazy" className="rounded-img rounded-img-lg" src={`${process.env.REACT_APP_API_URL || ''}/api/announcements/${miniSelected._id}/image`} alt="announcement" style={{ width: '100%', height: 'auto', borderRadius: 8, background: '#f6f6f6' }} />
+                      <img loading="lazy" className="rounded-img rounded-img-lg" src={getAbsoluteApiUrl(`/announcements/${miniSelected._id}/image`)} alt="announcement" style={{ width: '100%', height: 'auto', borderRadius: 8, background: '#f6f6f6' }} />
                     )}
                     <div style={{ marginTop: 8, color: '#888' }}>{new Date(miniSelected.createdAt).toLocaleString()}</div>
                   </div>

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useContext } from 'react';
 import { List, Typography, Button, Badge } from 'antd';
 import { AuthContext } from '../../context/AuthContext';
-import axios from 'axios';
+import { axiosInstance } from '../../services/api';
 
 const MessageInbox: React.FC<{ onRead?: (id: string) => void }> = ({ onRead }) => {
   const { user } = useContext(AuthContext)!;
@@ -11,7 +11,7 @@ const MessageInbox: React.FC<{ onRead?: (id: string) => void }> = ({ onRead }) =
   useEffect(() => {
     if (user) {
       setLoading(true);
-      axios.get('/api/messages/inbox').then(res => {
+      axiosInstance.get('/messages/inbox').then(res => {
         setMessages(res.data);
         setLoading(false);
       });
@@ -19,7 +19,7 @@ const MessageInbox: React.FC<{ onRead?: (id: string) => void }> = ({ onRead }) =
   }, [user]);
 
   const markAsRead = async (id: string) => {
-    await axios.patch(`/api/messages/${id}/read`);
+    await axiosInstance.patch(`/messages/${id}/read`);
     setMessages(msgs => msgs.map(m => m._id === id ? { ...m, status: 'read' } : m));
     if (onRead) onRead(id);
   };

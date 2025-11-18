@@ -3,7 +3,7 @@ import { Button, Form, Input, message, Upload, Alert, Modal } from 'antd';
 import { UserOutlined, MailOutlined, HomeOutlined, PhoneOutlined, UploadOutlined } from '@ant-design/icons';
 import AvatarImage from './AvatarImage';
 import { useAuth } from '../contexts/AuthContext';
-import axios from 'axios';
+import { axiosInstance } from '../services/api';
 import dayjs from 'dayjs';
 
 interface ProfileProps {
@@ -37,7 +37,7 @@ const Profile: React.FC<ProfileProps> = ({ profile, onProfileUpdate }) => {
         username: values.username || '',
         email: values.email || ''
       };
-      const resp = await axios.put('/api/resident/personal-info', payload);
+      const resp = await axiosInstance.put('/resident/personal-info', payload);
       residentForm.setFieldsValue(resp.data || {});
       setResidentMissing(false);
       message.success('Resident profile created');
@@ -48,7 +48,7 @@ const Profile: React.FC<ProfileProps> = ({ profile, onProfileUpdate }) => {
   };
 
   useEffect(() => {
-    axios.get('/api/resident/profile')
+    axiosInstance.get('/resident/profile')
       .then(res => {
         userForm.setFieldsValue(res.data || {});
         if (res.data?.profileImage) {
@@ -58,7 +58,7 @@ const Profile: React.FC<ProfileProps> = ({ profile, onProfileUpdate }) => {
       })
       .catch(() => {});
 
-    axios.get('/api/resident/personal-info')
+    axiosInstance.get('/resident/personal-info')
       .then(res => {
         residentForm.setFieldsValue(res.data || {});
         if (res.data?.profileImage) {
@@ -77,7 +77,7 @@ const Profile: React.FC<ProfileProps> = ({ profile, onProfileUpdate }) => {
   const handleUserSave = async () => {
     try {
       const values = await userForm.validateFields();
-      const resp = await axios.put('/api/resident/profile', values);
+      const resp = await axiosInstance.put('/resident/profile', values);
       // If server returned an updated user profile, update auth context
       const returned = resp?.data || null;
       if (returned) {
@@ -96,7 +96,7 @@ const Profile: React.FC<ProfileProps> = ({ profile, onProfileUpdate }) => {
   const handleResidentSave = async () => {
     try {
       const values = await residentForm.validateFields();
-      await axios.put('/api/resident/personal-info', values);
+      await axiosInstance.put('/resident/personal-info', values);
       message.success('Resident info updated');
     } catch (err) {
       message.error('Failed to update resident info');
@@ -112,7 +112,7 @@ const Profile: React.FC<ProfileProps> = ({ profile, onProfileUpdate }) => {
     const form = new FormData();
     form.append('avatar', file);
     try {
-      const resp = await axios.post('/api/resident/personal-info/avatar', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+      const resp = await axiosInstance.post('/resident/personal-info/avatar', form, { headers: { 'Content-Type': 'multipart/form-data' } });
       const updated = resp.data?.resident;
       const returnedUser = resp.data?.user;
       if (updated) {
@@ -145,7 +145,7 @@ const Profile: React.FC<ProfileProps> = ({ profile, onProfileUpdate }) => {
   const handleRequestStaff = async () => {
     setRequesting(true);
     try {
-      const resp = await axios.post('/api/resident/request-staff-access');
+      const resp = await axiosInstance.post('/resident/request-staff-access');
       message.success(resp.data?.message || 'Request sent');
     } catch (err) {
       message.error('Failed to send request');
@@ -228,8 +228,8 @@ const Profile: React.FC<ProfileProps> = ({ profile, onProfileUpdate }) => {
             return;
           }
           setPwdLoading(true);
-          try {
-            const resp = await axios.post('/api/change-password', { currentPassword, newPassword });
+            try {
+            const resp = await axiosInstance.post('/change-password', { currentPassword, newPassword });
             message.success('Changes have been saved');
             setPwdModalVisible(false);
             changeForm.resetFields();
