@@ -172,6 +172,9 @@ mongoose.connection.on('connected', async () => {
   } catch (err: any) {
     console.error('Error ensuring processed_documents bucket', err && err.message);
   }
+
+  // Default admin creation removed from startup. Use the script
+  // `src/utils/createAdmin.ts` to create a default admin account when needed.
 });
 
 // Import routes

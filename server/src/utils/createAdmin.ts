@@ -18,18 +18,22 @@ async function createAdmin() {
     console.log('Admin already exists:', existing.username);
     return;
   }
-  const password = 'admin123!'; // Change this after first login
-  const hashed = await bcrypt.hash(password, 10);
+  const DEFAULT_ADMIN_USERNAME = process.env.DEFAULT_ADMIN_USERNAME || 'admin';
+  const DEFAULT_ADMIN_PASSWORD = process.env.DEFAULT_ADMIN_PASSWORD || 'Admin123@parian';
+  const DEFAULT_ADMIN_EMAIL = process.env.DEFAULT_ADMIN_EMAIL || 'admin@localhost.local';
+  const DEFAULT_ADMIN_BARANGAY_ID = process.env.DEFAULT_ADMIN_BARANGAY_ID || '0000';
+
+  // Let the User model pre-save middleware hash the password; pass plain password
   const admin = new User({
-    fullName: 'Admin User',
+    fullName: 'Administrator',
     role: 'admin',
-    username: 'admin',
-    password: hashed,
-    email: 'admin@yourdomain.com',
-    barangayID: '0000',
+    username: DEFAULT_ADMIN_USERNAME,
+    password: DEFAULT_ADMIN_PASSWORD,
+    email: DEFAULT_ADMIN_EMAIL,
+    barangayID: DEFAULT_ADMIN_BARANGAY_ID,
   });
   await admin.save();
-  console.log('Admin created: username=admin, password=admin123!');
+  console.log(`Admin created: username=${DEFAULT_ADMIN_USERNAME}, password=${DEFAULT_ADMIN_PASSWORD}`);
 }
 
 createAdmin().then(() => mongoose.disconnect());
