@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import './Profile.css';
 import { Button, Form, Input, message, Upload, Alert, Modal } from 'antd';
 import { UserOutlined, MailOutlined, HomeOutlined, PhoneOutlined, UploadOutlined } from '@ant-design/icons';
 import AvatarImage from './AvatarImage';
@@ -154,10 +155,10 @@ const Profile: React.FC<ProfileProps> = ({ profile, onProfileUpdate }) => {
   };
 
   return (
-    <div>
-      <div style={{ background: '#fff', borderRadius: 8, padding: 24, marginBottom: 24 }}>
+    <div className="profile-page">
+      <div className="profile-header" style={{ background: '#fff', borderRadius: 8, padding: 24, marginBottom: 24 }}>
         <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-          <div style={{ width: 72, height: 72, borderRadius: 36, overflow: 'hidden', background: '#f0f0f0' }}>
+          <div className="profile-avatar" style={{ overflow: 'hidden', background: '#f0f0f0' }}>
             {avatarPreview ? (
               <img src={avatarPreview} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             ) : (
@@ -174,7 +175,7 @@ const Profile: React.FC<ProfileProps> = ({ profile, onProfileUpdate }) => {
             )}
           </div>
           <div style={{ flex: 1 }}>
-            <Form form={userForm} layout="vertical" disabled={!editMode}>
+            <Form className="profile-info" form={userForm} layout="vertical" disabled={!editMode}>
               <Form.Item name="username" label="Username">
                 <Input prefix={<UserOutlined />} />
               </Form.Item>
@@ -256,7 +257,7 @@ const Profile: React.FC<ProfileProps> = ({ profile, onProfileUpdate }) => {
         </Form>
       </Modal>
 
-      <div style={{ background: '#fff', borderRadius: 8, padding: 24 }}>
+      <div style={{ background: '#fff', borderRadius: 8, padding: 24 }} className="profile-resident">
         <h3 style={{ marginTop: 0 }}>Resident Info</h3>
         {residentMissing && (
           <Alert
@@ -272,7 +273,7 @@ const Profile: React.FC<ProfileProps> = ({ profile, onProfileUpdate }) => {
             style={{ marginBottom: 12 }}
           />
         )}
-        <Form form={residentForm} layout="vertical">
+        <Form className="profile-info" form={residentForm} layout="vertical">
           <Form.Item name="firstName" label="First Name">
             <Input />
           </Form.Item>

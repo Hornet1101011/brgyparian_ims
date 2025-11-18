@@ -87,6 +87,36 @@ router.get('/admin/requests', auth, authorize('admin'), async (req, res) => {
   }
 });
 
+// Resident: get their own verification requests
+router.get('/requests/my', auth, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    if (!user) return res.status(401).json({ message: 'Unauthorized' });
+    const reqs = await VerificationRequest.find({ userId: user._id }).sort({ createdAt: -1 });
+    return res.json(reqs);
+  } catch (err) {
+    console.error('Error fetching my verification requests', err);
+    return res.status(500).json({ message: 'Error fetching requests', error: String(err) });
+  }
+});
+
+// Get a specific verification request by id (owner or admin)
+router.get('/requests/:id', auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const vr = await VerificationRequest.findById(id).populate('userId', 'fullName username barangayID verified');
+    if (!vr) return res.status(404).json({ message: 'Verification request not found' });
+    const user = (req as any).user;
+    if (String(vr.userId._id || vr.userId) !== String(user._id) && user.role !== 'admin') {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+    return res.json(vr);
+  } catch (err) {
+    console.error('Error fetching verification request by id', err);
+    return res.status(500).json({ message: 'Error fetching request', error: String(err) });
+  }
+});
+
 // Admin: stream/download a verification file from GridFS by id
 router.get('/file/:id', auth, authorize('admin'), async (req, res) => {
   try {
@@ -132,6 +162,116 @@ router.post('/admin/verify-user/:userId', auth, authorize('admin'), async (req, 
     return res.json({ message: 'User verification updated', user: { _id: user._id, verified: verifiedValue } });
   } catch (err) {
     res.status(500).json({ message: 'Error updating user verification', error: String(err) });
+  }
+});
+
+// Resident: cancel their own verification request (delete request and files)
+router.delete('/requests/:id', auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const vr = await VerificationRequest.findById(id);
+    if (!vr) return res.status(404).json({ message: 'Verification request not found' });
+    const user = (req as any).user;
+    // only owner or admin can delete
+    if (String(vr.userId) !== String(user._id) && user.role !== 'admin') {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+
+    // delete associated GridFS files if any
+    try {
+      const bucket = ensureBucket('verificationRequests');
+      const mongodb = await import('mongodb');
+      const ObjectId = mongodb.ObjectId;
+      if (bucket && Array.isArray(vr.gridFileIds)) {
+        for (const fid of vr.gridFileIds) {
+          try {
+            const fileId = typeof fid === 'string' ? new ObjectId(fid) : fid;
+            // GridFSBucket.delete accepts ObjectId
+            // @ts-ignore
+            await bucket.delete(fileId);
+          } catch (e) {
+            console.warn('Failed to delete GridFS file', fid, e && (e as Error).message);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Error cleaning GridFS files for verification request', e && (e as Error).message);
+    }
+
+    await vr.remove();
+    return res.json({ message: 'Verification request cancelled' });
+  } catch (err) {
+    console.error('Error cancelling verification request', err);
+    return res.status(500).json({ message: 'Error cancelling request', error: String(err) });
+  }
+});
+
+// Admin: approve a specific verification request by id
+router.post('/admin/requests/:id/approve', auth, authorize('admin'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const vr = await VerificationRequest.findById(id);
+    if (!vr) return res.status(404).json({ message: 'Verification request not found' });
+    vr.status = 'approved';
+    vr.reviewedAt = new Date();
+    vr.reviewerId = (req as any).user._id;
+    await vr.save();
+
+    // set user verified
+    const user = await User.findById(vr.userId) as any;
+    if (user) {
+      user.set('verified', true);
+      await user.save();
+    }
+
+    return res.json({ message: 'Verification request approved' });
+  } catch (err) {
+    console.error('Error approving verification request', err);
+    return res.status(500).json({ message: 'Error', error: String(err) });
+  }
+});
+
+// Admin: reject a specific verification request by id (delete files and request, leave user unverified)
+router.post('/admin/requests/:id/reject', auth, authorize('admin'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const vr = await VerificationRequest.findById(id);
+    if (!vr) return res.status(404).json({ message: 'Verification request not found' });
+
+    // delete GridFS files
+    try {
+      const bucket = ensureBucket('verificationRequests');
+      const mongodb = await import('mongodb');
+      const ObjectId = mongodb.ObjectId;
+      if (bucket && Array.isArray(vr.gridFileIds)) {
+        for (const fid of vr.gridFileIds) {
+          try {
+            const fileId = typeof fid === 'string' ? new ObjectId(fid) : fid;
+            // @ts-ignore
+            await bucket.delete(fileId);
+          } catch (e) {
+            console.warn('Failed to delete GridFS file', fid, e && (e as Error).message);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Error cleaning GridFS files for verification request', e && (e as Error).message);
+    }
+
+    // remove request
+    await vr.remove();
+
+    // ensure user is not marked verified
+    const user = await User.findById(vr.userId) as any;
+    if (user) {
+      user.set('verified', false);
+      await user.save();
+    }
+
+    return res.json({ message: 'Verification request rejected and removed' });
+  } catch (err) {
+    console.error('Error rejecting verification request', err);
+    return res.status(500).json({ message: 'Error', error: String(err) });
   }
 });
 

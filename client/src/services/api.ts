@@ -209,6 +209,11 @@ export const verificationAPI = {
   approveRequest: async (requestId: string) => axiosInstance.post(`/verification/admin/requests/${requestId}/approve`).then(res => res.data),
   // Reject a verification request by request id (admin)
   rejectRequest: async (requestId: string, reason?: string) => axiosInstance.post(`/verification/admin/requests/${requestId}/reject`, { reason }).then(res => res.data),
+  // Resident: cancel their own verification request
+  cancelRequest: async (requestId: string) => axiosInstance.delete(`/verification/requests/${requestId}`).then(res => res.data),
+  // Get current user's verification requests
+  getMyRequests: async () => axiosInstance.get('/verification/requests/my').then(res => res.data),
+  getRequestById: async (id: string) => axiosInstance.get(`/verification/requests/${id}`).then(res => res.data),
 };
 interface LoginCredentials {
   email: string;

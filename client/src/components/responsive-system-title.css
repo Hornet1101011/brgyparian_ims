@@ -4,28 +4,30 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 
 @media (max-width: 600px) {
   .responsive-system-title {
     font-size: 1.1rem !important;
-    white-space: nowrap !important;
     word-break: normal !important;
     text-align: left !important;
     padding: 0 4px !important;
     overflow: hidden !important;
     position: relative !important;
-    width: 100% !important;
-    max-width: 100vw !important;
+    width: auto !important;
+    max-width: calc(100% - 120px) !important; /* leave room for date/avatar */
   }
+  /* Disable marquee/animation on small screens to avoid layout shifts */
   .responsive-system-title > span,
   .responsive-system-title span {
     display: inline-block !important;
-    min-width: 100% !important;
-    animation: slide-title 8s linear infinite !important;
-    will-change: transform;
+    min-width: 0 !important;
+    animation: none !important;
+    transform: none !important;
   }
 }
 
@@ -46,6 +48,9 @@
 
 /* Header responsiveness and icon preserve */
 .app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   box-sizing: border-box;
 }
 .app-header .responsive-system-title img,
@@ -82,6 +87,9 @@
   width: 36px !important;
   height: 36px !important;
 }
+
+.app-header .responsive-system-title { flex: 1 1 auto; min-width: 0; }
+.app-header .header-controls { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 
 @media (max-width: 900px) {
   .app-header {
@@ -124,6 +132,10 @@
   color: #666;
 }
 
+/* Keep the date/time visible on mobile but smaller */
 @media (max-width: 480px) {
-  .app-header .date-time { display: none; }
+  .app-header .date-time { font-size: 11px; color: #666; }
 }
+
+/* Prevent header contents from wrapping to next line */
+.app-header { flex-wrap: nowrap; }

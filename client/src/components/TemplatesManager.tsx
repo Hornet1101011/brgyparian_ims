@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Button, Tooltip, Upload, message } from 'antd';
 import { UploadOutlined, EyeOutlined, DownloadOutlined, DeleteOutlined, FileWordOutlined } from '@ant-design/icons';
 import { axiosInstance, axiosPublic } from '../services/api';
+import styles from './TemplatesManager.module.css';
 
 const getLabel = (filename?: string) =>
   filename ? filename.replace(/_/g, " ").replace(/\.docx$/, "") : "Untitled";
@@ -40,43 +41,20 @@ const TemplatesManager: React.FC = () => {
   }, []);
 
   return (
-    <div style={{
-      padding: "2rem",
-      background: "#f3f4f6",
-      borderRadius: "16px",
-      boxShadow: "0 2px 8px #e5e7eb",
-      maxWidth: "2000px",
-      margin: "2rem auto"
-    }}>
-      <h2 style={{ fontWeight: "bold", fontSize: "1.5rem", marginBottom: "1.5rem" }}>
-        📂 Templates Manager
-      </h2>
+    <div className={styles.wrapper}>
+      <h2 className={styles.heading}>📂 Templates Manager</h2>
       {/* GridFS Files Section */}
       <div style={{ marginBottom: 32 }}>
       <h3 style={{ fontWeight: "bold", fontSize: "1.1rem", marginBottom: "0.5rem", color: '#374151' }}></h3>
         {loading && <div>Loading templates...</div>}
         {error && <div style={{ color: 'red' }}>{error}</div>}
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "1.5rem" }}>
+        <div className={styles.grid}>
           {templateList.filter((file: any) => file && file.filename).map((file: any) => (
-            <div key={file._id} style={{
-              display: "flex",
-              flexDirection: "row",
-              alignItems: "center",
-              padding: "1.5rem 2rem",
-              border: "1px solid #e5e7eb",
-              borderRadius: "12px",
-              background: "#fff",
-              color: "#374151",
-              width: "500px",
-              minHeight: "100px",
-              boxShadow: "0 1px 4px rgba(0,0,0,0.04)",
-              marginBottom: "1rem",
-              position: "relative"
-            }}>
-              <img src="/word.png" alt="Word Icon" style={{ width: 56, height: 56, marginRight: 24 }} />
-              <div style={{ flex: 1 }}>
-                <span style={{ fontWeight: "bold", fontSize: "1.1rem", marginBottom: 4, display: "block" }}>{getLabel(file.filename)}</span>
-                <div style={{ display: "flex", gap: "1rem", marginTop: 8 }}>
+            <div key={file._id} className={styles.card}>
+              <img src="/word.png" alt="Word Icon" className={styles.icon} />
+              <div className={styles.cardBody}>
+                <span className={styles.cardTitle}>{getLabel(file.filename)}</span>
+                <div className={styles.actions}>
                   <Tooltip title="Preview">
                     <Button
                       icon={<EyeOutlined />}
@@ -147,30 +125,10 @@ const TemplatesManager: React.FC = () => {
                   </Tooltip>
                 </div>
                 {previewId === file._id && htmlContent && (
-                  <div
-                    style={{
-                      position: 'fixed',
-                      top: '50%',
-                      left: '50%',
-                      transform: 'translate(-50%, -50%)',
-                      background: '#fff',
-                      border: '1px solid #e5e7eb',
-                      borderRadius: 12,
-                      boxShadow: '0 4px 32px rgba(0,0,0,0.18)',
-                      padding: 32,
-                      zIndex: 1000,
-                      minWidth: 600,
-                      maxWidth: 900,
-                      maxHeight: 600,
-                      overflow: 'auto',
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                      <span style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>Preview</span>
-                      <button
-                        style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: 4, padding: '4px 12px', cursor: 'pointer' }}
-                        onClick={() => { setPreviewId(null); setHtmlContent(''); }}
-                      >Close</button>
+                  <div className={styles.previewModal}>
+                    <div className={styles.previewHeader}>
+                      <span className={styles.previewTitle}>Preview</span>
+                      <button className={styles.previewClose} onClick={() => { setPreviewId(null); setHtmlContent(''); }}>Close</button>
                     </div>
                     <div dangerouslySetInnerHTML={{ __html: htmlContent }} />
                   </div>
@@ -184,7 +142,7 @@ const TemplatesManager: React.FC = () => {
         <div style={{ color: 'red', marginBottom: 16 }}>{downloadError}</div>
       )}
       {/* Upload Section */}
-      <div style={{ marginTop: 32 }}>
+      <div className={styles.uploadWrap}>
         <Upload
           accept=".docx"
           showUploadList={false}

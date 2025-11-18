@@ -33,14 +33,31 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieSession({ name: 'session', keys: ['secretKey'], maxAge: 24 * 60 * 60 * 1000 }));
 app.use(passport.initialize());
 app.use(passport.session());
-app.use(cors({ 
-  origin: 'http://localhost:3000', 
-  credentials: true,
-  methods: ['GET','HEAD','PUT','PATCH','POST','DELETE','OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  // Expose custom headers so the browser/axios can read them
-  exposedHeaders: ['Authorization', 'X-Filled-File-Id', 'X-Generated-Doc-Id', 'X-Processed-Doc-Id', 'X-Processed-GridFS-Id']
-}));
+// CORS configuration: allowlist via env var or localhost during development
+// Set CORS_ALLOWED_ORIGINS as a comma-separated list of allowed origins.
+// Example: CORS_ALLOWED_ORIGINS=https://example.com,https://sub.example.com
+const rawAllowed = process.env.CORS_ALLOWED_ORIGINS || 'http://localhost:3000';
+const allowedOrigins = rawAllowed.split(',').map(s => s.trim()).filter(Boolean);
+
+app.use((req, res, next) => {
+  // If no Origin header (server-to-server or same-origin), continue
+  const origin = req.headers.origin;
+  if (!origin) return next();
+
+  if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    // Expose custom headers so the browser/axios can read them
+    res.setHeader('Access-Control-Expose-Headers', 'Authorization, X-Filled-File-Id, X-Generated-Doc-Id, X-Processed-Doc-Id, X-Processed-GridFS-Id');
+    if (req.method === 'OPTIONS') return res.sendStatus(204);
+    return next();
+  }
+
+  // Not allowed origin
+  res.status(403).send('CORS origin denied');
+});
 
 // Serve static files from client and its subfolders
 const path = require('path');
@@ -80,22 +97,52 @@ mongoose.connection.on('connected', async () => {
       try { await db.createCollection(chunksName); } catch (e) { console.warn('createCollection chunks failed', e && e.message); }
     }
 
-    // Ensure indexes on files collection
+    // Ensure indexes on files collection and unique index on chunks (idempotent)
     try {
       const filesColl = db.collection(filesName);
-      await filesColl.createIndex({ filename: 1 });
-      await filesColl.createIndex({ uploadDate: 1 });
-      await filesColl.createIndex({ 'metadata.sourceFileId': 1 });
-    } catch (e) {
-      console.warn('Failed to create indexes on processed_documents.files', e && e.message);
-    }
-
-    // Ensure unique index on chunks (files_id + n)
-    try {
       const chunksColl = db.collection(chunksName);
-      await chunksColl.createIndex({ files_id: 1, n: 1 }, { unique: true });
+
+      async function ensureIndexExists(coll, key, opts) {
+        try {
+          const existing = await coll.indexes();
+          const has = existing.some(ix => {
+            // compare keys
+            const ixKeys = ix.key || {};
+            const wantKeys = key || {};
+            const ixKeyNames = Object.keys(ixKeys).sort();
+            const wantKeyNames = Object.keys(wantKeys).sort();
+            if (ixKeyNames.length !== wantKeyNames.length) return false;
+            for (let i = 0; i < ixKeyNames.length; i++) {
+              const k = ixKeyNames[i];
+              if (k !== wantKeyNames[i]) return false;
+              if (ixKeys[k] !== wantKeys[k]) return false;
+            }
+            return true;
+          });
+          if (!has) {
+            await coll.createIndex(key, opts || {});
+            console.log('Created index on', coll.collectionName, JSON.stringify(key), opts || {});
+          } else {
+            // already exists
+            // console.log('Index already exists on', coll.collectionName, JSON.stringify(key));
+          }
+        } catch (err) {
+          // Ignore duplicate index errors and log others
+          if (err && (err.code === 11000 || /index already exists/i.test(err.message))) {
+            // harmless if the same index exists
+          } else {
+            console.warn(`Failed to ensure index ${JSON.stringify(key)} on ${coll.collectionName}:`, err && err.message);
+          }
+        }
+      }
+
+      await ensureIndexExists(filesColl, { filename: 1 });
+      await ensureIndexExists(filesColl, { uploadDate: 1 });
+      await ensureIndexExists(filesColl, { 'metadata.sourceFileId': 1 });
+
+      await ensureIndexExists(chunksColl, { files_id: 1, n: 1 }, { unique: true });
     } catch (e) {
-      console.warn('Failed to create index on processed_documents.chunks', e && e.message);
+      console.warn('Failed to create/check indexes on processed_documents collections', e && e.message);
     }
 
     console.log('Ensured processed_documents GridFS bucket collections and indexes.');

@@ -17,6 +17,7 @@ const Inbox: React.FC = () => {
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   // Make messages list fullscreen by default
   const [listFullscreen, setListFullscreen] = useState(true);
+  const [isMobile, setIsMobile] = useState<boolean>(typeof window !== 'undefined' ? window.innerWidth <= 720 : false);
   const [replyText, setReplyText] = useState<string>('');
   const [fileList, setFileList] = useState<any[]>([]);
   const [loadingThread, setLoadingThread] = useState<boolean>(false);
@@ -48,6 +49,31 @@ const Inbox: React.FC = () => {
       })
       .finally(() => setLoading(false));
   }, []);
+
+  // Track mobile breakpoint and auto-collapse the list on small screens
+  useEffect(() => {
+    const onResize = () => {
+      try {
+        setIsMobile(window.innerWidth <= 720);
+      } catch (e) {
+        // ignore
+      }
+    };
+    onResize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  useEffect(() => {
+    if (isMobile) {
+      setLeftCollapsed(true);
+      // ensure when selecting a thread the conversation shows
+      setListFullscreen(false);
+    } else {
+      setLeftCollapsed(false);
+      setListFullscreen(true);
+    }
+  }, [isMobile]);
 
   // Filtering and search logic
   const filteredInquiries = inquiries.filter(inquiry => {
@@ -89,6 +115,8 @@ const Inbox: React.FC = () => {
     setLoadingThread(true);
     // ensure the conversation panel is visible when opening a thread
     setListFullscreen(false);
+    // keep the left conversation list collapsed on mobile when a thread is opened
+    setLeftCollapsed(true);
     setTimeout(() => {
       setSelectedInquiry(inquiry);
       setLoadingThread(false);
@@ -111,7 +139,7 @@ const Inbox: React.FC = () => {
   // Lightweight replacement for AntD Comment to avoid import/type issues
   const MessageComment: React.FC<{ author?: string; avatar?: React.ReactNode; content?: React.ReactNode; datetime?: React.ReactNode; align?: 'left'|'right' }> = ({ author, avatar, content, datetime, align = 'left' }) => (
     <div style={{ display: 'flex', justifyContent: align === 'left' ? 'flex-start' : 'flex-end' }}>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', maxWidth: '80%' }}>
+      <div className={styles['message-container']}>
         {align === 'left' && avatar}
         <div>
           <div style={{ fontSize: 13, fontWeight: 600 }}>{author}</div>
@@ -135,7 +163,7 @@ const Inbox: React.FC = () => {
   };
 
   return (
-  <div style={{ minHeight: '100vh', background: '#f0f4f8', padding: '24px', fontFamily: 'Poppins, Arial, sans-serif', position: 'relative' }}>
+  <div className={styles.inboxPage} style={{ minHeight: '100vh', background: '#f0f4f8', padding: '24px', fontFamily: 'Poppins, Arial, sans-serif', position: 'relative' }}>
       <Card
         style={{ maxWidth: 1200, margin: '0 auto', borderRadius: 18, boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.08)', padding: 0, background: '#fff' }}
         bodyStyle={{ padding: 0, background: '#fff' }}
@@ -183,7 +211,7 @@ const Inbox: React.FC = () => {
             <div style={{ display: 'flex', gap: 16 }}>
             {/* Conversation list (collapsible) */}
             {!leftCollapsed ? (
-              <div style={{ flex: listFullscreen ? 1 : '0 0 300px', maxHeight: listFullscreen ? 'calc(100vh - 220px)' : 500, overflowY: 'auto', position: 'relative' }}>
+              <div className={styles.conversationList} style={{ flex: listFullscreen ? 1 : '0 0 300px', maxHeight: listFullscreen ? 'calc(100vh - 220px)' : 500, overflowY: 'auto', position: 'relative' }}>
                 <Button
                   type="text"
                   onClick={() => setLeftCollapsed(true)}
@@ -216,24 +244,25 @@ const Inbox: React.FC = () => {
 
                 const isSelected = selectedInquiry && selectedInquiry._id === inquiry._id;
 
-                return (
+                    return (
                   <List.Item
+                    className={styles.listItem}
                     style={{ marginBottom: 8, background: isSelected ? '#f7fbff' : '#fff', borderRadius: 12, border: '1px solid #e6edf3', boxShadow: '0 1px 4px rgba(31,38,135,0.04)', cursor: 'pointer' }}
                     onClick={() => openThread(inquiry)}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', padding: '12px 10px', gap: 10 }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                          <span style={{ fontSize: 18 }}>{typeIcon}</span>
-                          <Typography.Text strong style={{ fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{inquiry.residentName || inquiry.username || (inquiry.createdBy && (inquiry.createdBy.fullName || inquiry.createdBy.username)) || 'Unknown'}</Typography.Text>
-                          <Typography.Text type="secondary" style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>— {inquiry.subject || 'No subject'}</Typography.Text>
-                          <span style={{ marginLeft: 'auto', fontSize: 11, color: '#888' }}>{inquiry.createdAt ? timeAgo(inquiry.createdAt) : ''}</span>
+                    <div className={styles.listItemInner}>
+                      <div className={styles.listItemMain}>
+                        <div className={styles.listItemHeader}>
+                          <span className={styles.typeIcon} aria-hidden>{typeIcon}</span>
+                          <Typography.Text strong className={styles.listItemName}>{inquiry.residentName || inquiry.username || (inquiry.createdBy && (inquiry.createdBy.fullName || inquiry.createdBy.username)) || 'Unknown'}</Typography.Text>
+                          <Typography.Text type="secondary" className={styles.listItemSubject}>— {inquiry.subject || 'No subject'}</Typography.Text>
+                          <span className={styles.listItemTime}>{inquiry.createdAt ? timeAgo(inquiry.createdAt) : ''}</span>
                           {statusTag ? React.cloneElement(statusTag as any, { style: { fontSize: 11, padding: '0 6px', marginLeft: 8 } }) : null}
                         </div>
-                        <div style={{ marginTop: 6 }}>
-                          <Typography.Text type="secondary" style={{ display: 'block', margin: 0, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inquiry.message}</Typography.Text>
+                        <div className={styles.listItemPreview}>
+                          <Typography.Text type="secondary" className={styles.listItemPreviewText}>{inquiry.message}</Typography.Text>
                         </div>
-                        <div style={{ marginTop: 6 }}>
+                        <div className={styles.listItemResponses}>
                           {Array.isArray(inquiry.responses) && inquiry.responses.length > 0 ? (
                             <Typography.Text type="secondary" style={{ fontSize: 12 }}>{inquiry.responses.length} response(s)</Typography.Text>
                           ) : (
@@ -241,7 +270,7 @@ const Inbox: React.FC = () => {
                           )}
                         </div>
                       </div>
-                      <div style={{ flexShrink: 0, marginLeft: 10 }}>
+                      <div className={styles.listItemAvatar}>
                         {(() => {
                           const displayName = inquiry.residentName || inquiry.username || (inquiry.createdBy && (inquiry.createdBy.fullName || inquiry.createdBy.username)) || inquiry.subject || 'Unknown';
                           const initial = (displayName && displayName !== 'Unknown') ? getInitial(displayName, '?') : '?';
@@ -303,7 +332,7 @@ const Inbox: React.FC = () => {
 
             {!listFullscreen && (<div style={{ flex: 1 }}>)
               {/* Make conversation panel visually blend into the page by removing card background/shadow */}
-              <Card
+              <Card className={styles.conversationCard}
                 style={{ borderRadius: 12, height: '100%', background: 'transparent', boxShadow: 'none', border: 'none' }}
                 bodyStyle={{ display: 'flex', flexDirection: 'column', padding: 0, gap: 10, background: 'transparent' }}
               >
@@ -358,18 +387,18 @@ const Inbox: React.FC = () => {
                                       const filename = a.name || a.filename || 'attachment';
                                       const isImage = (a.contentType && a.contentType.startsWith('image/')) || /\.(jpe?g|png|gif|webp)$/i.test(filename);
                                       return (
-                                        <div key={i}>
-                                          {isImage ? (
-                                            <a href={url} target="_blank" rel="noreferrer">
-                                              <img src={url} alt={filename} style={{ maxWidth: 220, maxHeight: 140, borderRadius: 8, objectFit: 'cover', border: '1px solid #f0f0f0' }} />
-                                            </a>
-                                          ) : (
-                                            <div>
-                                              <a href={url} target="_blank" rel="noreferrer">{filename}</a>
-                                              {a.size ? <span style={{ marginLeft: 8, color: '#888', fontSize: 12 }}>({Math.round(a.size/1024)} KB)</span> : null}
+                                            <div key={i}>
+                                              {isImage ? (
+                                                <a href={url} target="_blank" rel="noreferrer">
+                                                  <img src={url} alt={filename} className={styles.chatImage} />
+                                                </a>
+                                              ) : (
+                                                <div>
+                                                  <a href={url} target="_blank" rel="noreferrer">{filename}</a>
+                                                  {a.size ? <span style={{ marginLeft: 8, color: '#888', fontSize: 12 }}>({Math.round(a.size/1024)} KB)</span> : null}
+                                                </div>
+                                              )}
                                             </div>
-                                          )}
-                                        </div>
                                       );
                                     })}
                                   </div>
@@ -483,17 +512,17 @@ const Inbox: React.FC = () => {
                                       const isImage = (a.contentType && a.contentType.startsWith('image/')) || /\.(jpe?g|png|gif|webp)$/i.test(filename);
                                       return (
                                         <div key={i}>
-                                          {isImage ? (
-                                            <a href={url} target="_blank" rel="noreferrer">
-                                              <img src={url} alt={filename} style={{ maxWidth: 220, maxHeight: 140, borderRadius: 8, objectFit: 'cover', border: '1px solid #f0f0f0' }} />
-                                            </a>
-                                          ) : (
+                                              {isImage ? (
+                                                <a href={url} target="_blank" rel="noreferrer">
+                                                  <img src={url} alt={filename} className={styles.chatImage} />
+                                                </a>
+                                              ) : (
                                             <div>
                                               <a href={url} target="_blank" rel="noreferrer">{filename}</a>
                                               {a.size ? <span style={{ marginLeft: 8, color: '#888', fontSize: 12 }}>({Math.round(a.size/1024)} KB)</span> : null}
                                             </div>
-                                          )}
-                                        </div>
+                                              )}
+                                            </div>
                                       );
                                     })}
                                   </div>
@@ -508,9 +537,9 @@ const Inbox: React.FC = () => {
                       <div ref={messagesEndRef} />
                     </div>
 
-                    <div style={{ marginTop: 0, flexShrink: 0 }}>
+                    <div style={{ marginTop: 0, flexShrink: 0 }} className={styles.replyBarWrap}>
                       {/* Reply bar fixed at bottom of the conversation card */}
-                      <div style={{ background: '#fff', paddingTop: 4, paddingBottom: 4, borderTop: '1px solid #f0f0f0', display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+                      <div className={styles.replyBar} style={{ background: '#fff', paddingTop: 4, paddingBottom: 4, borderTop: '1px solid #f0f0f0', display: 'flex', alignItems: 'flex-end', gap: 8 }}>
                         {/* Auto-resizing textarea implemented with a controlled textarea and a simple resize handler */}
                         <textarea
                           value={replyText}
@@ -582,6 +611,7 @@ const Inbox: React.FC = () => {
                                 setReplyLoading(r => ({ ...r, [sendingKey]: false }));
                               }
                             }}
+                            className={styles.sendButton}
                             style={{
                               background: '#0ea5a3',
                               color: '#fff',

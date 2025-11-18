@@ -8,6 +8,13 @@
   word-break: break-word;
   position: relative;
 }
+
+.message-container {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  max-width: 80%;
+}
 .left {
   background: #e6f7ff;
   color: #1890ff;
@@ -39,4 +46,225 @@
 }
 .status-awaiting {
   color: #faad14;
+}
+
+/* Responsive adjustments for mobile */
+@media (max-width: 600px) {
+  .message-container {
+    max-width: 100%;
+    flex-direction: row;
+  }
+  .chat-bubble {
+    max-width: calc(100% - 64px);
+    font-size: 14px;
+    padding: 10px 14px;
+    border-radius: 12px;
+  }
+  .chat-bubble img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+  }
+}
+
+/* Responsive chat image used in inbox message threads */
+.chatImage {
+  max-width: 220px;
+  max-height: 140px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid #f0f0f0;
+  display: block;
+}
+
+@media (max-width: 600px) {
+  .chatImage {
+    max-width: 100%;
+    height: auto;
+  }
+}
+
+/* Page-level layout tweaks */
+.inboxPage {
+  padding: 16px !important;
+}
+
+/* Conversation list container */
+.conversationList {
+  transition: all 180ms ease;
+}
+
+/* Conversation panel/card */
+.conversationCard {
+  padding: 10px;
+}
+
+/* Reply bar wrapper and controls */
+.replyBarWrap {
+  padding: 6px 8px;
+}
+.replyBar {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+.sendButton {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px 10px !important;
+  border-radius: 10px !important;
+}
+
+/* Mobile specific adjustments */
+@media (max-width: 480px) {
+  .message-container {
+    gap: 6px;
+    align-items: center;
+  }
+
+  .message-container .ant-avatar {
+    width: 36px !important;
+    height: 36px !important;
+    line-height: 36px !important;
+    font-size: 13px !important;
+  }
+
+  .chat-bubble {
+    font-size: 14px;
+    padding: 8px 12px;
+    border-radius: 12px;
+  }
+
+  .inboxPage .ant-list-item {
+    padding: 8px !important;
+    margin-bottom: 10px !important;
+  }
+
+  .conversationCard {
+    padding: 8px !important;
+  }
+
+  .replyBar {
+    padding: 6px !important;
+  }
+
+  textarea {
+    font-size: 14px !important;
+    padding: 8px 10px !important;
+  }
+
+  /* Make chat images scale nicely and stack */
+  .chatImage {
+    max-width: 100% !important;
+    height: auto !important;
+    border-radius: 6px !important;
+  }
+
+  /* Ensure the send button fits and is not too tall */
+  .sendButton {
+    min-width: 40px !important;
+    min-height: 40px !important;
+    padding: 6px 8px !important;
+    font-size: 16px !important;
+  }
+}
+
+/* New list item structure styles for better mobile wrapping */
+.listItem {
+  padding: 0;
+}
+.listItemInner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 10px;
+}
+.listItemMain {
+  flex: 1;
+  min-width: 0;
+}
+.listItemHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.typeIcon {
+  font-size: 18px;
+}
+.listItemName {
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.listItemSubject {
+  font-size: 12px;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.listItemTime {
+  margin-left: 8px;
+  font-size: 11px;
+  color: #888;
+}
+.listItemPreview {
+  margin-top: 6px;
+}
+.listItemPreviewText {
+  display: block;
+  margin: 0;
+  font-size: 13px;
+  color: #555;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.listItemResponses {
+  margin-top: 6px;
+}
+.listItemAvatar {
+  flex-shrink: 0;
+  margin-left: 10px;
+}
+
+@media (max-width: 720px) {
+  .listItemInner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 10px;
+  }
+  .listItemHeader {
+    gap: 6px;
+    align-items: center;
+  }
+  .listItemName, .listItemSubject {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: initial;
+  }
+  .listItemPreviewText {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .listItemAvatar {
+    margin-left: 0;
+    align-self: flex-start;
+  }
+  .conversationList {
+    max-height: none !important;
+  }
+  .conversationCard {
+    padding: 8px !important;
+  }
+  .replyBarWrap {
+    padding: 6px 6px !important;
+  }
 }

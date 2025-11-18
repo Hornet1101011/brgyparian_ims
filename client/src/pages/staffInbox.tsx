@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Layout, Card, List, Typography, Spin, Result, Divider, Avatar, Row, Col, Space, Badge, Select, Tabs, Input, Tag, Button, Modal, message as antdMessage } from 'antd';
+import styles from './staffInbox.module.css';
 import { InboxOutlined, SendOutlined, CheckOutlined, PlusOutlined } from '@ant-design/icons';
 import { contactAPI, adminAPI } from '../services/api';
 
@@ -340,8 +341,8 @@ const StaffInbox: React.FC = () => {
           {loading ? <Spin /> : filtered.length === 0 ? (
             <Result icon={<InboxOutlined />} title="No inquiries" subTitle="There are no inquiries to show." />
           ) : (
-            <div style={{ display: 'flex', gap: 16 }}>
-              <div style={{ width: 320, maxHeight: 520, overflowY: 'auto' }}>
+            <div className={styles.container}>
+              <div className={styles.listPanel}>
                 <List
                   dataSource={filtered}
                   renderItem={inquiry => (
@@ -362,7 +363,7 @@ const StaffInbox: React.FC = () => {
                 />
               </div>
 
-              <div style={{ flex: 1 }}>
+              <div className={styles.threadPanel}>
                 <Card style={{ borderRadius: 8 }} bodyStyle={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 12 }}>
                   {selectedInquiry ? (
                     <>
@@ -485,7 +486,7 @@ const StaffInbox: React.FC = () => {
                         <div ref={messagesEndRef} />
                       </div>
 
-                      <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
+                      <div className={styles.replyBar}>
                         <textarea
                           value={replyText}
                           onChange={e => {
@@ -501,7 +502,7 @@ const StaffInbox: React.FC = () => {
                             }
                           }}
                           placeholder="Type your reply..."
-                          style={{ flex: 1, minHeight: 40, maxHeight: 200, padding: 10, borderRadius: 8, resize: 'none' }}
+                          className={styles.replyTextarea}
                         />
                         <Button type="primary" icon={<SendOutlined />} loading={!!(selectedInquiry && replyLoading[selectedInquiry._id])} onClick={handleSendReply} />
                         <Button icon={<CheckOutlined />} onClick={handleResolve}>Resolve</Button>

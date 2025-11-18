@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import React, { useEffect, useState } from 'react';
 import './DocumentProcessingHighlight.css';
+import styles from './DocumentProcessing.module.css';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Card, Typography, Row, Col, Modal, Spin, Table, Input, Tooltip, Tag, Space, Button, Radio, Select, DatePicker, notification } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
@@ -22,6 +23,7 @@ const DocumentProcessing: React.FC = () => {
   const [previewRequests, setPreviewRequests] = useState<any[]>([]);
   const [previewTemplateHtml, setPreviewTemplateHtml] = useState<string>('');
   const [previewSelectedRequestId, setPreviewSelectedRequestId] = useState<string | null>(null);
+  const [showPreviewRequests, setShowPreviewRequests] = useState<boolean>(true);
   const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const highlightTimeoutRef = useRef<number | null>(null);
   const [residentInfo, setResidentInfo] = useState<any>(null);
@@ -383,39 +385,39 @@ const DocumentProcessing: React.FC = () => {
  
   if (loading) {
     return (
-      <div style={{ width: '100%', minHeight: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div className={styles.loadingWrap}>
         <Spin size="large" />
       </div>
     );
   }
 
   return (
-    <div style={{ maxWidth: 2000, margin: '12px auto', padding: '16px 24px' }}>
-  <Typography.Title level={3} style={{ marginBottom: 12, marginTop: 0 }}></Typography.Title>
+    <div className={styles.wrapper}>
+      <Typography.Title level={3} className={styles.pageTitle}></Typography.Title>
       {/* Document Processing Table */}
       <Card title="Document Processing" extra={
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div className={styles.controls}>
           <Input
             prefix={<SearchOutlined />}
             placeholder="Search documents"
-            style={{ width: 420 }}
+            className={styles.controlInput}
             value={filterQuery}
             onChange={(e) => setFilterQuery(e.target.value)}
             onPressEnter={() => {}}
           />
-          <Select allowClear placeholder="Document Type" style={{ width: 160 }} value={filterType} onChange={(v) => setFilterType(v)}>
+          <Select allowClear placeholder="Document Type" className={styles.controlSelect} value={filterType} onChange={(v) => setFilterType(v)}>
             {requestedTypes.map((t) => <Select.Option key={t} value={t}>{t}</Select.Option>)}
           </Select>
-          <Select allowClear placeholder="Status" style={{ width: 140 }} value={filterStatus} onChange={(v) => setFilterStatus(v)}>
+          <Select allowClear placeholder="Status" className={styles.controlSelect} value={filterStatus} onChange={(v) => setFilterStatus(v)}>
             <Select.Option value="pending">Pending</Select.Option>
             <Select.Option value="approved">Approved</Select.Option>
             <Select.Option value="rejected">Rejected</Select.Option>
           </Select>
-          <DatePicker.RangePicker onChange={(vals) => setFilterRange(vals)} />
+          <DatePicker.RangePicker className={styles.controlDate} onChange={(vals) => setFilterRange(vals)} />
         </div>
       }>
         {isMobile ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className={styles.mobileList}>
             {files.filter((file: any) => {
               // client-side filtering
               if (filterQuery && !(file.filename || '').toLowerCase().includes(filterQuery.toLowerCase())) return false;
@@ -439,31 +441,29 @@ const DocumentProcessing: React.FC = () => {
               const primary = getPrimaryRequest(file._id);
               const status = primary?.status || '';
               return (
-                <Card key={file._id} size="small" ref={(el: any) => { /* mobile cards keyed by primary request id if exists */
-                  const primary = getPrimaryRequest(file._id);
-                  const rid = primary && (primary._id || primary.requestId);
-                  if (rid) rowRefs.current[rid] = el;
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                      {icon}
-                      <div>
-                        <Tooltip title={name}><div style={{ maxWidth: 220, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600 }}>{name.replace(/\.docx$/i, '')}</div></Tooltip>
-                        <div style={{ fontSize: 12, color: '#666' }}>{file.type || 'Unknown'}</div>
+                  <Card key={file._id} size="small" className={styles.mobileCard} ref={(el: any) => { /* mobile cards keyed by primary request id if exists */
+                    const primary = getPrimaryRequest(file._id);
+                    const rid = primary && (primary._id || primary.requestId);
+                    if (rid) rowRefs.current[rid] = el;
+                  }}>
+                    <div className={styles.mobileCardRow}>
+                      <div className={styles.mobileMeta}>
+                        <div className={styles.iconWrap}>{icon}</div>
+                        <div className={styles.mobileTitleWrap}>
+                          <Tooltip title={name}><div className={styles.mobileTitle}>{name.replace(/\.docx$/i, '')}</div></Tooltip>
+                          <div className={styles.mobileSubtitle}>{file.type || 'Unknown'}</div>
+                        </div>
+                      </div>
+                      <div className={styles.mobileActions}>
+                        <Tag className={styles.statusTag} color={status === 'pending' ? 'orange' : status === 'approved' ? 'green' : status === 'rejected' ? 'red' : 'default'}>{(status || '').toUpperCase()}</Tag>
+                        <div className={styles.actionButtons}><Button size="small" icon={<EyeOutlined />} onClick={() => openPreview(file)}>{isMobile ? null : 'Preview'}</Button></div>
+                        <div className={styles.uploadDate}>{file.uploadDate ? formatDateUtil(file.uploadDate) : ''}</div>
                       </div>
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
-                      <Tag color={status === 'pending' ? 'orange' : status === 'approved' ? 'green' : status === 'rejected' ? 'red' : 'default'}>{(status || '').toUpperCase()}</Tag>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <Button size="small" icon={<EyeOutlined />} onClick={() => openPreview(file)}>Preview</Button>
-                      </div>
-                      <div style={{ fontSize: 11, color: '#999' }}>{file.uploadDate ? formatDateUtil(file.uploadDate) : ''}</div>
-                    </div>
-                  </div>
-                </Card>
-              );
+                  </Card>
+                );
             })}
-          </div>
+            </div>
         ) : (
           <Table
             rowKey={(record) => record._id}
@@ -540,10 +540,7 @@ const DocumentProcessing: React.FC = () => {
               }
             ]}
             // Attach a rowClassName and onRow so we can populate rowRefs for direct scrolling/highlighting
-            rowClassName={(record) => {
-              // Attach a data attribute later via onRow
-              return '';
-            }}
+            rowClassName={(record) => ''}
             onRow={(record) => {
               const primary = getPrimaryRequest(record._id);
               const rid = primary && (primary._id || primary.requestId);
@@ -565,7 +562,7 @@ const DocumentProcessing: React.FC = () => {
         width={800}
       >
         {selectedFile ? (
-          <div style={{ minWidth: 700 }}>
+          <div className={styles.modalContent}>
             <Table
               dataSource={[
                       {
@@ -690,45 +687,62 @@ const DocumentProcessing: React.FC = () => {
         open={previewVisible}
         onCancel={() => setPreviewVisible(false)}
         footer={null}
-        width={900}
+        width={isMobile ? '100%' : 900}
+        bodyStyle={{ padding: isMobile ? 10 : undefined }}
       >
         {previewLoading ? (
           <Spin />
         ) : (
           <>
-            <div style={{ minHeight: 300 }} dangerouslySetInnerHTML={{ __html: previewHtml }} />
-            {/* Request selector inside preview (select which request to render) */}
-            <div style={{ marginTop: 12, padding: 8, border: '1px solid #eee', borderRadius: 6 }}>
-              <div style={{ marginBottom: 8, fontWeight: 600 }}>Select Request to Preview</div>
-              <div style={{ maxHeight: 300, overflowY: 'auto', paddingRight: 6 }}>
-                <Radio.Group
-                  value={previewSelectedRequestId}
-                  onChange={async (e) => {
-                    const newId = e.target.value as string;
-                    setPreviewSelectedRequestId(newId);
-                    // re-render preview for selected request
-                    await renderPreviewForRequest(newId);
-                  }}
-                  style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
-                >
-                  {previewRequests && previewRequests.length ? previewRequests.map((r: any) => (
-                    <Radio key={(r._id || r.requestId)} value={(r._id || r.requestId)}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                        <div>
-                          <div style={{ fontWeight: 600 }}>{r.username || r.requesterName || 'Unknown'}</div>
-                          <div style={{ fontSize: 12, color: '#666' }}>{r.createdAt ? formatDateUtil(r.createdAt) : ''}</div>
-                        </div>
-                        <div style={{ alignSelf: 'center' }}>{(r.notes && r.notes.toString().toLowerCase().includes('priority')) || r.priority ? <Tag color="red">PRIORITY</Tag> : null}</div>
-                      </div>
-                    </Radio>
-                  )) : <div style={{ color: '#666' }}>No pending requests available for this file.</div>}
-                </Radio.Group>
+            {/* Mobile toggle to show/hide the request selector to give more space to preview */}
+            {isMobile ? (
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                <Button size="small" onClick={() => setShowPreviewRequests((s) => !s)}>{showPreviewRequests ? 'Hide Requests' : 'Show Requests'}</Button>
               </div>
+            ) : null}
+
+            <div className={styles.previewWrapper}>
+              <div className={styles.previewPane}>
+                <div className={styles.previewHtml} dangerouslySetInnerHTML={{ __html: previewHtml }} />
+              </div>
+
+              {showPreviewRequests ? (
+                <div className={styles.requestPane}>
+                  <div style={{ marginTop: isMobile ? 6 : 12, padding: 8, border: '1px solid #eee', borderRadius: 6 }}>
+                    <div style={{ marginBottom: 8, fontWeight: 600 }}>Select Request to Preview</div>
+                    <div style={{ maxHeight: 300, overflowY: 'auto', paddingRight: 6 }}>
+                      <Radio.Group
+                        value={previewSelectedRequestId}
+                        onChange={async (e) => {
+                          const newId = e.target.value as string;
+                          setPreviewSelectedRequestId(newId);
+                          // re-render preview for selected request
+                          await renderPreviewForRequest(newId);
+                        }}
+                        style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+                      >
+                        {previewRequests && previewRequests.length ? previewRequests.map((r: any) => (
+                          <Radio key={(r._id || r.requestId)} value={(r._id || r.requestId)}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                              <div>
+                                <div style={{ fontWeight: 600 }}>{r.username || r.requesterName || 'Unknown'}</div>
+                                <div style={{ fontSize: 12, color: '#666' }}>{r.createdAt ? formatDateUtil(r.createdAt) : ''}</div>
+                              </div>
+                              <div style={{ alignSelf: 'center' }}>{(r.notes && r.notes.toString().toLowerCase().includes('priority')) || r.priority ? <Tag color="red">PRIORITY</Tag> : null}</div>
+                            </div>
+                          </Radio>
+                        )) : <div style={{ color: '#666' }}>No pending requests available for this file.</div>}
+                      </Radio.Group>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16, gap: 12 }}>
-                      {/* Complete button removed; Generate will also mark request complete after successful generation */}
+
+            <div className={styles.previewFooter}>
+              {/* Complete button removed; Generate will also mark request complete after successful generation */}
               <button
-                style={{ background: '#43D96B', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 24px', cursor: 'pointer', fontWeight: 600 }}
+                className={styles.generateButton}
                 onClick={async () => {
                   if (!selectedFile) return;
                   try {
@@ -868,7 +882,7 @@ const DocumentProcessing: React.FC = () => {
                     console.error('Generation error', err);
                     alert('Failed to generate filled document.');
                   }
-                  setPreviewVisible(false);
+                    setPreviewVisible(false);
                 }}
               >Generate</button>
             </div>

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import './DocumentRequestForm.css';
 import { documentsAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { 
@@ -66,6 +67,8 @@ const DocumentRequestForm: React.FC = () => {
   const [lastRequestId, setLastRequestId] = useState<string | null>(null);
   const [verificationModalOpen, setVerificationModalOpen] = useState(false);
   const [uploadList, setUploadList] = useState<any[]>([]);
+  const [pendingVerification, setPendingVerification] = useState<any | null>(null);
+  const [pendingModalOpen, setPendingModalOpen] = useState(false);
   const { user: authUser, setUser } = useAuth();
 
   useEffect(() => {
@@ -82,6 +85,23 @@ const DocumentRequestForm: React.FC = () => {
       }
     };
     fetchFiles();
+    // load any pending verification requests for this user so pending UI is persistent
+    (async () => {
+      try {
+        const api = await import('../services/api');
+        const myReqs = await api.verificationAPI.getMyRequests();
+        if (Array.isArray(myReqs) && myReqs.length > 0) {
+          // prefer the most recent pending request
+          const pending = myReqs.find((r: any) => r.status === 'pending') || myReqs[0];
+          if (pending) {
+            setPendingVerification(pending);
+            setPendingModalOpen(true);
+          }
+        }
+      } catch (e) {
+        // ignore errors (user may be guest)
+      }
+    })();
   }, []);
 
   const handleCardClick = async (file: FileData) => {
@@ -157,6 +177,11 @@ const DocumentRequestForm: React.FC = () => {
       const data = res && res.data ? res.data : null;
       message.success('Verification documents uploaded. Admin will review shortly.');
       setVerificationModalOpen(false);
+      // If server returned the verification request, show pending UI so resident can cancel
+      if (data && data.verificationRequest) {
+        setPendingVerification(data.verificationRequest);
+        setPendingModalOpen(true);
+      }
       // Optionally refresh user profile from server so verified flag may be updated later
       try {
         const { authService } = await import('../services/api');
@@ -168,6 +193,26 @@ const DocumentRequestForm: React.FC = () => {
     } catch (err) {
       console.error('Upload error', err);
       message.error('Upload failed');
+    }
+  };
+
+  const handleCancelVerification = async () => {
+    if (!pendingVerification || !pendingVerification._id) return;
+    try {
+      const api = await import('../services/api');
+      await api.verificationAPI.cancelRequest(pendingVerification._id);
+      message.success('Verification request cancelled');
+      setPendingVerification(null);
+      setPendingModalOpen(false);
+      // refresh profile
+      try {
+        const { authService } = await import('../services/api');
+        const profile = await authService.getCurrentUser();
+        if (profile && setUser) setUser(profile as any);
+      } catch (e) {}
+    } catch (err) {
+      console.error('Failed to cancel verification', err);
+      message.error('Failed to cancel verification');
     }
   };
 
@@ -231,29 +276,31 @@ const DocumentRequestForm: React.FC = () => {
             style={{ width: '100%' }}
           />
         </Col>
-        <Col xs={24} sm={16} md={10} lg={8}>
-          <Space>
-            <Select
-              defaultValue="all"
-              style={{ width: 220 }}
-              onChange={value => setSelectedCategory(value)}
-            >
-              <Select.Option value="all">All Categories</Select.Option>
-              <Select.Option value="personal">Personal Documents</Select.Option>
-              <Select.Option value="business">Business Documents</Select.Option>
-              <Select.Option value="certificates">Certificates</Select.Option>
-            </Select>
-            <Select
-              defaultValue="name"
-              style={{ width: 160 }}
-              onChange={value => setSortBy(value as 'name' | 'date' | 'type')}
-            >
-              <Select.Option value="name">Sort by Name</Select.Option>
-              <Select.Option value="date">Sort by Date</Select.Option>
-              <Select.Option value="type">Sort by Type</Select.Option>
-            </Select>
-          </Space>
-        </Col>
+          <Col xs={24} sm={16} md={10} lg={8}>
+            <div className="filter-controls">
+              <Select
+                defaultValue="all"
+                className="filter-select category-select"
+                style={{ width: 220 }}
+                onChange={value => setSelectedCategory(value)}
+              >
+                <Select.Option value="all">All Categories</Select.Option>
+                <Select.Option value="personal">Personal Documents</Select.Option>
+                <Select.Option value="business">Business Documents</Select.Option>
+                <Select.Option value="certificates">Certificates</Select.Option>
+              </Select>
+              <Select
+                defaultValue="name"
+                className="filter-select sort-select"
+                style={{ width: 160 }}
+                onChange={value => setSortBy(value as 'name' | 'date' | 'type')}
+              >
+                <Select.Option value="name">Sort by Name</Select.Option>
+                <Select.Option value="date">Sort by Date</Select.Option>
+                <Select.Option value="type">Sort by Type</Select.Option>
+              </Select>
+            </div>
+          </Col>
       </Row>
 
       {/* Documents Grid */}
@@ -413,6 +460,37 @@ const DocumentRequestForm: React.FC = () => {
         >
           <Button icon={<UploadOutlined />}>Select ID files (max 2)</Button>
         </Upload>
+      </Modal>
+      {/* Pending verification modal (shows after uploading) */}
+      <Modal
+        title="Verification Pending"
+        open={pendingModalOpen}
+        onCancel={() => setPendingModalOpen(false)}
+        footer={[
+          <Button key="close" onClick={() => setPendingModalOpen(false)}>Close</Button>,
+          <Button key="cancel" danger onClick={handleCancelVerification}>Cancel Verification</Button>
+        ]}
+        width={600}
+      >
+        {pendingVerification ? (
+          <div>
+            <p>Your verification request is pending review by an administrator.</p>
+            <p>Submitted: {new Date(pendingVerification.createdAt).toLocaleString()}</p>
+            {Array.isArray(pendingVerification.files) && pendingVerification.files.length > 0 ? (
+              <div>
+                <p>Uploaded files:</p>
+                <ul>
+                  {pendingVerification.files.map((f: any, idx: number) => (
+                    <li key={idx}>{f}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            <p>You can cancel this request while it's pending. Cancelling will remove the request and delete the uploaded files.</p>
+          </div>
+        ) : (
+          <p>No pending verification.</p>
+        )}
       </Modal>
     </div>
   );

@@ -1,0 +1,108 @@
+.container {
+  display: flex;
+  gap: 16px;
+}
+
+.listPanel {
+  width: 320px;
+  max-height: 520px;
+  overflow-y: auto;
+}
+
+.threadPanel {
+  flex: 1;
+}
+
+.replyBar {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  align-items: center;
+  background: transparent;
+}
+
+.replyTextarea {
+  flex: 1;
+  min-height: 40px;
+  max-height: 200px;
+  padding: 10px;
+  border-radius: 8px;
+  resize: none;
+  border: 1px solid #d9d9d9;
+  font-size: 14px;
+}
+
+/* Make the list items and avatars a bit tighter on smaller screens */
+.listPanel .ant-list-item {
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.listPanel .ant-list-item-meta-title {
+  font-size: 14px;
+}
+
+.listPanel .ant-list-item-meta-description,
+.listPanel .ant-list-item .ant-typography {
+  font-size: 12px;
+  color: #666;
+}
+
+.threadPanel .ant-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+}
+
+.threadPanel img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+
+@media (max-width: 900px) {
+  .container {
+    flex-direction: column;
+  }
+  .listPanel {
+    width: 100%;
+    max-height: 260px;
+  }
+  .threadPanel {
+    width: 100%;
+  }
+  .replyBar {
+    position: sticky;
+    bottom: 0;
+    padding: 8px 0;
+    background: #fff;
+    box-shadow: 0 -6px 14px rgba(0,0,0,0.06);
+    z-index: 5;
+  }
+  .replyTextarea {
+    min-height: 48px;
+  }
+}
+
+@media (max-width: 480px) {
+  .listPanel {
+    max-height: 220px;
+  }
+  .listPanel .ant-list-item-meta-title {
+    font-size: 13px;
+  }
+  .listPanel .ant-list-item-meta-description {
+    font-size: 12px;
+  }
+  .threadPanel .ant-avatar {
+    width: 40px !important;
+    height: 40px !important;
+  }
+  .threadPanel .ant-typography {
+    font-size: 14px;
+  }
+  .replyBar button.ant-btn {
+    padding: 6px 8px;
+  }
+}

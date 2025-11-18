@@ -1,0 +1,22 @@
+.filter-controls{
+  display:flex;
+  gap:8px;
+  align-items:center;
+}
+
+.filter-select{
+  /* allow selects to shrink if needed */
+  min-width:0;
+}
+
+/* On small screens stack the controls vertically */
+@media (max-width: 600px){
+  .filter-controls{
+    display:flex;
+    flex-direction:column;
+    align-items:stretch;
+  }
+  .filter-select{
+    width:100% !important;
+  }
+}

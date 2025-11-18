@@ -65,6 +65,12 @@ const io = new SocketIOServer(httpServer, {
   }
 });
 
+// In-memory buffer of recent Origin headers for debugging (kept small)
+const RECENT_ORIGINS_MAX = 100;
+type RecentOrigin = { origin: string; ts: number };
+const recentOrigins: RecentOrigin[] = [];
+const DEBUG_ORIGINS = String(process.env.DEBUG_ORIGINS || '').toLowerCase() === 'true' || process.env.NODE_ENV !== 'production';
+
 // Middleware
 // Configure CORS: allow one or more frontend origins via FRONTEND_URLS or FRONTEND_URL
 // Accepts comma-separated list in FRONTEND_URLS or a single FRONTEND_URL.
@@ -75,7 +81,15 @@ app.use((req, res, next) => {
   const origin = (req.headers.origin as string) || '';
 
   // Debug log to help diagnose CORS issues in production (safe to remove later)
-  if (origin) console.debug('Incoming request Origin:', origin);
+  if (origin) {
+    console.debug('Incoming request Origin:', origin);
+    try {
+      recentOrigins.push({ origin, ts: Date.now() });
+      if (recentOrigins.length > RECENT_ORIGINS_MAX) recentOrigins.shift();
+    } catch (e) {
+      // ignore
+    }
+  }
 
   // If no Origin header present (server-to-server or curl), allow the request
   if (!origin) {

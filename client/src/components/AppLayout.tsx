@@ -1,5 +1,6 @@
 import './responsive-system-title.css';
 import React, { useState, useEffect } from 'react';
+import { Tag, Modal, message } from 'antd';
 import { Layout, Menu, Button, Space, Dropdown, Avatar } from 'antd';
 import {
   LogoutOutlined,
@@ -86,11 +87,7 @@ const navConfig: {
       icon: <TeamOutlined />,
       label: 'User Management',
     },
-    {
-      key: '/admin/activity',
-      icon: <FileSearchOutlined />,
-      label: 'Activity Logs',
-    },
+    // Activity Logs menu removed from admin sidebar per request
     {
       key: '/admin/statistics',
       icon: <BarChartOutlined />,
@@ -145,7 +142,7 @@ type AppLayoutProps = {
 const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, setUser } = useAuth();
   // Prefer the context user but fall back to a persisted full profile in localStorage
   let displayUser: any = user;
   if (!displayUser) {
@@ -160,6 +157,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   // Utility bar quick actions removed: online/status and dark-mode switch removed
   // You can expand these as needed for your system
   const [residentImageSrc, setResidentImageSrc] = useState<string | null>(null);
+  const [verificationStatus, setVerificationStatus] = useState<{ verified?: boolean; pending?: boolean; request?: any } | null>(null);
+  const [verificationModalVisible, setVerificationModalVisible] = useState(false);
   // Start collapsed by default so the navigation is compact on initial load.
   const [collapsed, setCollapsed] = useState(true);
 
@@ -196,6 +195,41 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       } catch (err) {
         // ignore
       }
+      // also load verification status for current user so we can show indicator in header
+      try {
+        const api = await import('../services/api');
+        const myReqs = await api.verificationAPI.getMyRequests();
+        const pending = Array.isArray(myReqs) ? myReqs.find((r: any) => r.status === 'pending') : null;
+        setVerificationStatus({ verified: displayUser?.verified, pending: !!pending, request: pending || (Array.isArray(myReqs) && myReqs[0]) });
+      } catch (e) {
+        // ignore
+      }
+      // start polling for verification status and profile updates every 10s
+      const startVerificationPolling = () => {
+        try {
+          const id = setInterval(async () => {
+            try {
+              const api = await import('../services/api');
+              const myReqs = await api.verificationAPI.getMyRequests();
+              const pending = Array.isArray(myReqs) ? myReqs.find((r: any) => r.status === 'pending') : null;
+              let profile: any = null;
+              try {
+                profile = await api.authService.getCurrentUser();
+              } catch (e) {
+                // ignore
+              }
+              setVerificationStatus({ verified: profile?.verified ?? displayUser?.verified, pending: !!pending, request: pending || (Array.isArray(myReqs) && myReqs[0]) });
+              if (profile && setUser) setUser(profile as any);
+            } catch (e) {
+              // ignore poll errors
+            }
+          }, 10000);
+          try { (window as any).__verifPollId = id; } catch (e) {}
+        } catch (e) {
+          // ignore
+        }
+      };
+      startVerificationPolling();
     })();
     const handler = (e: Event) => {
       try {
@@ -213,7 +247,10 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       }
     };
     window.addEventListener('userProfileUpdated', handler as EventListener);
-    return () => window.removeEventListener('userProfileUpdated', handler as EventListener);
+    return () => {
+      window.removeEventListener('userProfileUpdated', handler as EventListener);
+      try { clearInterval((window as any).__verifPollId); } catch (e) {}
+    };
   }, []);
 
   // Close dropdown on outside click
@@ -285,10 +322,12 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       )}
   <Layout style={{ marginLeft: user ? (collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH) : 0 }}>
         <Header
+          className="app-header"
           style={{
             height: HEADER_HEIGHT,
             background: '#fff',
             display: 'flex',
+            flexWrap: 'nowrap',
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: '0 32px',
@@ -333,7 +372,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
               Barangay Information <span style={{ fontWeight: 800 }}>Management System</span>
             </span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, position: 'relative', marginRight: 8 }}>
+          <div className="header-controls" style={{ display: 'flex', alignItems: 'center', gap: 16, position: 'relative', marginRight: 8 }}>
             <span style={{ marginRight: 8 }}>
               <DateTimeDisplay />
             </span>
@@ -346,6 +385,20 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                 />
               )}
             </Space>
+            {/* Verification status indicator (clickable) */}
+            {displayUser && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ cursor: 'pointer' }} onClick={() => setVerificationModalVisible(true)}>
+                  {verificationStatus?.verified ? (
+                    <Tag color="green">Verified</Tag>
+                  ) : verificationStatus?.pending ? (
+                    <Tag color="orange">Verification Pending</Tag>
+                  ) : (
+                    <Tag color="default">Unverified</Tag>
+                  )}
+                </div>
+              </div>
+            )}
             {/* profile avatar (notification bell removed) */}
             <Dropdown
               popupRender={() => (
@@ -375,6 +428,59 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                   ))}
                 </Avatar>
             </Dropdown>
+            {/* Verification modal opened from header */}
+            <Modal
+              title="Verification Status"
+              open={verificationModalVisible}
+              onCancel={() => setVerificationModalVisible(false)}
+              footer={null}
+            >
+              {verificationStatus?.request ? (
+                <div>
+                  <p>
+                    Status: {verificationStatus.request.status}
+                  </p>
+                  <p>Submitted: {new Date(verificationStatus.request.createdAt).toLocaleString()}</p>
+                  {Array.isArray(verificationStatus.request.files) && verificationStatus.request.files.length > 0 && (
+                    <div>
+                      <p>Uploaded files:</p>
+                      <ul>
+                        {verificationStatus.request.files.map((f: any, i: number) => <li key={i}>{f}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                    <Button onClick={() => setVerificationModalVisible(false)}>Close</Button>
+                    <Button danger onClick={async () => {
+                      try {
+                        const api = await import('../services/api');
+                        await api.verificationAPI.cancelRequest(verificationStatus.request._id);
+                        message.success('Verification request cancelled');
+                        setVerificationModalVisible(false);
+                        // refresh profile and verification status
+                        try {
+                          const api2 = await import('../services/api');
+                          const profile = await api2.authService.getCurrentUser();
+                          if (profile && setUser) setUser(profile as any);
+                          const myReqs = await api2.verificationAPI.getMyRequests();
+                          const pending = Array.isArray(myReqs) ? myReqs.find((r: any) => r.status === 'pending') : null;
+                          setVerificationStatus({ verified: profile?.verified, pending: !!pending, request: pending || (Array.isArray(myReqs) && myReqs[0]) });
+                        } catch (e) {
+                          // ignore
+                        }
+                      } catch (e) {
+                        console.error('Failed to cancel verification', e);
+                        message.error('Failed to cancel verification');
+                      }
+                    }}>Cancel Verification</Button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <p>{verificationStatus?.verified ? 'Your account is verified.' : 'No pending verification request.'}</p>
+                </div>
+              )}
+            </Modal>
           </div>
   </Header>
   {/* Divider line below header */}

@@ -1,0 +1,148 @@
+.wrapper {
+  padding: 2rem;
+  background: #f3f4f6;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px #e5e7eb;
+  max-width: 1200px;
+  margin: 2rem auto;
+}
+.heading {
+  font-weight: 700;
+  font-size: 1.5rem;
+  margin-bottom: 1.25rem;
+  color: #0f172a;
+}
+.grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 1.5rem;
+}
+.card {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+  color: #374151;
+  width: 100%;
+  max-width: 520px;
+  min-height: 88px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  position: relative;
+}
+.icon {
+  width: 48px;
+  height: 48px;
+  margin-right: 16px;
+  flex: 0 0 auto;
+}
+.cardBody {
+  flex: 1 1 auto;
+}
+.cardTitle {
+  display: block;
+  font-weight: 700;
+  font-size: 1.05rem;
+  margin-bottom: 6px;
+  color: #111827;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+.previewModal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 4px 32px rgba(0,0,0,0.18);
+  padding: 20px;
+  z-index: 1000;
+  min-width: 360px;
+  max-width: 90vw;
+  max-height: 80vh;
+  overflow: auto;
+}
+.previewHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.previewTitle {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+.previewClose {
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.uploadWrap {
+  margin-top: 2rem;
+  display: flex;
+  justify-content: flex-start;
+}
+
+@media (max-width: 900px) {
+  .card {
+    max-width: 100%;
+    padding: 0.9rem 1rem;
+  }
+  .icon {
+    width: 44px;
+    height: 44px;
+    margin-right: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .wrapper {
+    padding: 1rem;
+    margin: 1rem;
+  }
+  .heading {
+    font-size: 1.15rem;
+  }
+  .card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .icon {
+    margin-right: 0;
+  }
+  .cardTitle {
+    white-space: normal;
+    font-size: 1rem;
+  }
+  .actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .previewModal {
+    padding: 12px;
+    min-width: 0;
+    width: calc(100% - 24px);
+    left: 50%;
+  }
+  .previewClose {
+    padding: 6px 8px;
+  }
+  .uploadWrap {
+    justify-content: stretch;
+  }
+}

@@ -435,8 +435,8 @@ const InquiryForm: React.FC = () => {
                       const isImage = (f.type && f.type.startsWith('image/')) || /\.(jpe?g|png)$/i.test(name);
                       const isPdf = (f.type === 'application/pdf') || /\.pdf$/i.test(name);
                       return (
-                        <div key={f.uid || f.name} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', border: '1px solid #f0f0f0', borderRadius: 8, marginBottom: 8 }}>
-                          <div style={{ width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fafafa', borderRadius: 6 }}>
+                        <div key={f.uid || f.name} className="inquiry-file-item" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', border: '1px solid #f0f0f0', borderRadius: 8, marginBottom: 8 }}>
+                          <div className="inquiry-file-thumb" style={{ width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fafafa', borderRadius: 6 }}>
                             {isImage ? (
                               <img src={f.preview || (f.originFileObj && URL.createObjectURL(f.originFileObj))} alt={name} style={{ maxWidth: 44, maxHeight: 44, borderRadius: 4 }} />
                             ) : isPdf ? (
@@ -449,7 +449,7 @@ const InquiryForm: React.FC = () => {
                             <div style={{ fontWeight: 600 }}>{name}</div>
                             <div style={{ color: '#8c8c8c', fontSize: 12 }}>{formatBytes(size)}</div>
                           </div>
-                          <div style={{ display: 'flex', gap: 8 }}>
+                          <div className="inquiry-file-actions" style={{ display: 'flex', gap: 8 }}>
                             <Button type="link" onClick={() => {
                               // preview
                               const url = f.url || f.preview || (f.originFileObj && URL.createObjectURL(f.originFileObj));

@@ -22,3 +22,42 @@
   min-height: 120px !important;
   font-size: 16px;
 }
+
+/* File list responsive behavior */
+.inquiry-file-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.inquiry-file-thumb img {
+  max-width: 44px;
+  max-height: 44px;
+  border-radius: 4px;
+}
+.inquiry-file-actions {
+  display: flex;
+  gap: 8px;
+}
+
+@media (max-width: 600px) {
+  .inquiry-file-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .inquiry-file-thumb {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    padding: 6px 0;
+  }
+  .inquiry-file-thumb img {
+    max-width: 80%;
+    height: auto;
+  }
+  .inquiry-file-actions {
+    width: 100%;
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 6px;
+  }
+}

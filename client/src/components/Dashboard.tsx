@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Row, Col, Card, Typography, Button, List, Spin, Divider, Tag, Badge, Statistic, Space, Modal, Table, Upload, message as antdMessage, Tooltip, Checkbox } from 'antd';
 import { FileTextOutlined, MailOutlined, NotificationOutlined, UploadOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import AvatarImage from './AvatarImage';
+import styles from './dashboard.module.css';
 import { getAbsoluteApiUrl } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { documentsAPI, contactAPI } from '../services/api';
@@ -183,6 +184,7 @@ const Dashboard: React.FC = () => {
         {/* Hero Card Section */}
         {user?.role === 'resident' && (
           <Card
+            className={styles.residentCard}
             style={{
               width: '100%',
               margin: '0 auto 32px',
@@ -207,13 +209,13 @@ const Dashboard: React.FC = () => {
               opacity: 0.18,
               zIndex: 0
             }} />
-            <Row align="middle" style={{ minHeight: 170, padding: '32px 32px', position: 'relative', zIndex: 1 }} justify="space-between">
+            <Row align="middle" className={styles.heroRow} style={{ minHeight: 170, padding: '32px 32px', position: 'relative', zIndex: 1 }} justify="space-between">
               <Col xs={24} md={14} style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 18, width: '100%', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-                    <div style={{ width: 96, height: 96, borderRadius: 12, overflow: 'hidden', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
+                    <div className="avatarContainer">
                       {residentImageSrc ? (
-                        <img src={residentImageSrc} alt={user?.fullName || user?.username || 'avatar'} style={{ width: 96, height: 96, objectFit: 'cover', borderRadius: 12 }} />
+                        <img src={residentImageSrc} alt={user?.fullName || user?.username || 'avatar'} />
                       ) : (
                         <AvatarImage user={(() => {
                           let displayUser = user;
@@ -229,21 +231,7 @@ const Dashboard: React.FC = () => {
                       <button
                         onClick={() => navigate('/profile')}
                         title="Edit profile"
-                        style={{
-                          position: 'absolute',
-                          right: 6,
-                          bottom: 6,
-                          width: 28,
-                          height: 28,
-                          borderRadius: 14,
-                          background: '#fff',
-                          border: '1px solid #e8e8e8',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
-                          cursor: 'pointer'
-                        }}
+                        className="editButton"
                       >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                           <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z" fill="#595959"/>
@@ -251,9 +239,9 @@ const Dashboard: React.FC = () => {
                         </svg>
                       </button>
                     </div>
-                    <div>
-                      <Typography.Title level={3} style={{ marginBottom: 0, fontWeight: 800 }}>{user?.fullName ?? user?.username ?? user?.email ?? ''}</Typography.Title>
-                      <Typography.Text type="secondary" style={{ fontSize: 18 }}>
+                    <div className="userInfo">
+                      <Typography.Title level={3} className="userName" style={{ marginBottom: 0, fontWeight: 800 }}>{user?.fullName ?? user?.username ?? user?.email ?? ''}</Typography.Title>
+                      <Typography.Text type="secondary" className="userMeta">
                         Barangay ID: {user?.barangayID ?? (() => {
                           try {
                             const stored = localStorage.getItem('userProfile');
@@ -265,7 +253,7 @@ const Dashboard: React.FC = () => {
                           return 'N/A';
                         })()}
                       </Typography.Text>
-                      <div style={{ marginTop: 8 }}><Typography.Text type="secondary">{new Date().toLocaleString()}</Typography.Text></div>
+                      <div style={{ marginTop: 8 }}><Typography.Text type="secondary" className="userMeta">{new Date().toLocaleString()}</Typography.Text></div>
                     </div>
                   </div>
                 </div>

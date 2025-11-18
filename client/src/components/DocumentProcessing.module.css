@@ -1,0 +1,292 @@
+/* DocumentProcessing.module.css
+   Mobile-first responsive styles for DocumentProcessing
+*/
+.wrapper {
+  max-width: 1200px;
+  margin: 12px auto;
+  padding: 12px 16px;
+}
+.pageTitle {
+  margin: 0 0 8px 0;
+}
+.loadingWrap {
+  width: 100%;
+  min-height: 300px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.controlInput {
+  width: 420px;
+}
+.controlSelect {
+  width: 160px;
+}
+.controlDate {
+  min-width: 220px;
+}
+
+/* Mobile list and card styles */
+.mobileList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.mobileCard {
+  padding: 8px;
+  border-radius: 8px;
+}
+.mobileCardRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+.mobileMeta {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex: 1 1 auto;
+}
+.iconWrap {
+  font-size: 20px;
+  width: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.mobileTitleWrap {
+  min-width: 0;
+}
+.mobileTitle {
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+.mobileSubtitle {
+  font-size: 12px;
+  color: #666;
+}
+.mobileActions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 90px;
+}
+.statusTag {
+  font-weight: 700;
+}
+.actionButtons button {
+  padding: 4px 8px;
+}
+.uploadDate {
+  font-size: 11px;
+  color: #999;
+}
+
+/* Modal content sizing */
+.modalContent {
+  min-width: 480px;
+}
+
+/* Preview layout: side-by-side preview + request selector */
+.previewWrapper {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.previewPane {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.requestPane {
+  width: 320px;
+  flex: 0 0 320px;
+}
+
+.previewHtml {
+  min-height: 280px;
+}
+
+.previewFooter {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+  gap: 12px;
+}
+.generateButton {
+  background: #43D96B;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 18px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+/* Responsive adjustments */
+@media (max-width: 720px) {
+  .controlInput { width: 100%; }
+  .controlSelect { width: 48%; }
+  .controlDate { width: 48%; }
+  .modalContent { min-width: 100%; }
+  .previewHtml { min-height: 220px; }
+  .generateButton { padding: 8px 14px; }
+  .requestPane { width: 260px; flex: 0 0 260px; }
+}
+
+@media (max-width: 480px) {
+  .controls { gap: 6px; }
+  .controlSelect { width: 100%; }
+  .controlDate { width: 100%; }
+  .mobileTitle { font-size: 14px; }
+  .iconWrap { width: 30px; font-size: 18px; }
+  .mobileCardRow { flex-direction: column; align-items: flex-start; }
+  .mobileActions { flex-direction: row; align-items: center; gap: 8px; min-width: auto; }
+  .requestPane { display: none; }
+  .previewWrapper { flex-direction: column; }
+  .previewHtml { min-height: 260px; }
+}
+.wrapper {
+  max-width: 1200px;
+  margin: 12px auto;
+  padding: 12px 16px;
+}
+.pageTitle {
+  margin: 0 0 8px 0;
+}
+.loadingWrap {
+  width: 100%;
+  min-height: 300px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.controlInput {
+  width: 420px;
+}
+.controlSelect {
+  width: 160px;
+}
+.controlDate {
+  min-width: 220px;
+}
+
+/* Mobile list */
+.mobileList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.mobileCard {
+  padding: 8px;
+  border-radius: 8px;
+}
+.mobileCardRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+.mobileMeta {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex: 1 1 auto;
+}
+.iconWrap {
+  font-size: 20px;
+  width: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.mobileTitleWrap {
+  min-width: 0;
+}
+.mobileTitle {
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+.mobileSubtitle {
+  font-size: 12px;
+  color: #666;
+}
+.mobileActions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 90px;
+}
+.statusTag {
+  font-weight: 700;
+}
+.actionButtons button {
+  padding: 4px 8px;
+}
+.uploadDate {
+  font-size: 11px;
+  color: #999;
+}
+
+/* Modal content sizing */
+.modalContent {
+  min-width: 480px;
+}
+
+.previewHtml {
+  min-height: 280px;
+}
+
+.previewFooter {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+  gap: 12px;
+}
+.generateButton {
+  background: #43D96B;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 18px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+/* Responsive adjustments */
+@media (max-width: 720px) {
+  .controlInput { width: 100%; }
+  .controlSelect { width: 48%; }
+  .controlDate { width: 48%; }
+  .modalContent { min-width: 100%; }
+  .previewHtml { min-height: 220px; }
+  .generateButton { padding: 8px 14px; }
+}
+
+@media (max-width: 480px) {
+  .controls { gap: 6px; }
+  .controlSelect { width: 100%; }
+  .controlDate { width: 100%; }
+  .mobileTitle { font-size: 14px; }
+  .iconWrap { width: 30px; font-size: 18px; }
+}
