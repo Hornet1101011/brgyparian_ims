@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Button, Tooltip, Upload, message } from 'antd';
 import { UploadOutlined, EyeOutlined, DownloadOutlined, DeleteOutlined, FileWordOutlined } from '@ant-design/icons';
+import { axiosInstance, axiosPublic } from '../services/api';
 
 const getLabel = (filename?: string) =>
   filename ? filename.replace(/_/g, " ").replace(/\.docx$/, "") : "Untitled";
@@ -19,8 +20,7 @@ const TemplatesManager: React.FC = () => {
     // Fetch files from Templates folder
     const fetchTemplatesFolderFiles = async () => {
       try {
-        const res = await fetch('/api/templates/list');
-        const data = await res.json();
+        await axiosPublic.get('/templates/list');
       } catch (err) {
         // Ignore error for now
       }
@@ -28,14 +28,12 @@ const TemplatesManager: React.FC = () => {
     const fetchTemplates = async () => {
       setLoading(true);
       setError(null);
-      try {
-        const res = await fetch('/api/documents/list');
-        if (!res.ok) throw new Error('Failed to fetch templates');
-        const files = await res.json();
-        setTemplateList(files);
-      } catch (err) {
-        setError('Could not load templates.');
-      }
+        try {
+          const res = await axiosPublic.get('/documents/list');
+          setTemplateList(res.data || []);
+        } catch (err) {
+          setError('Could not load templates.');
+        }
       setLoading(false);
     };
     fetchTemplates();
@@ -91,13 +89,12 @@ const TemplatesManager: React.FC = () => {
                         }
                         setPreviewId(file._id);
                         setHtmlContent('');
-                        try {
-                          const res = await fetch(`/api/documents/preview/${file._id}?format=html`);
-                          const html = await res.text();
-                          setHtmlContent(html);
-                        } catch (err) {
-                          setHtmlContent('<div style="color:red">Failed to load preview.</div>');
-                        }
+                          try {
+                            const res = await axiosPublic.get(`/documents/preview/${file._id}?format=html`, { responseType: 'text' });
+                            setHtmlContent(res.data || '');
+                          } catch (err) {
+                            setHtmlContent('<div style="color:red">Failed to load preview.</div>');
+                          }
                       }}
                     >Preview</Button>
                   </Tooltip>
@@ -108,9 +105,8 @@ const TemplatesManager: React.FC = () => {
                       onClick={async () => {
                         setDownloadError(null);
                         try {
-                          const res = await fetch(`/api/documents/original/${file._id}`);
-                          if (!res.ok) throw new Error('Download failed');
-                          const blob = await res.blob();
+                          const res = await axiosInstance.get(`/documents/original/${file._id}`, { responseType: 'blob' });
+                          const blob = res.data;
                           const url = window.URL.createObjectURL(blob);
                           const a = document.createElement('a');
                           a.href = url;
@@ -132,20 +128,19 @@ const TemplatesManager: React.FC = () => {
                       onClick={async () => {
                         setLoading(true);
                         setError(null);
-                        try {
-                          const res = await fetch(`/api/documents/file/${file._id}`, { method: 'DELETE' });
-                          const data = await res.json();
-                          if (data.success) {
-                            // Refresh list
-                            const resList = await fetch('/api/documents/list');
-                            const files = await resList.json();
-                            setTemplateList(files);
-                          } else {
+                          try {
+                            const res = await axiosInstance.delete(`/documents/file/${file._id}`);
+                            const data = res.data;
+                            if (data && data.success) {
+                              // Refresh list
+                              const resList = await axiosPublic.get('/documents/list');
+                              setTemplateList(resList.data || []);
+                            } else {
+                              setError('Delete failed.');
+                            }
+                          } catch (err) {
                             setError('Delete failed.');
                           }
-                        } catch (err) {
-                          setError('Delete failed.');
-                        }
                         setLoading(false);
                       }}
                     >Remove</Button>
@@ -198,17 +193,15 @@ const TemplatesManager: React.FC = () => {
             setError(null);
             const formData = new FormData();
             formData.append('file', file);
-            try {
-              const res = await fetch('/api/documents/upload', {
-                method: 'POST',
-                body: formData,
+              try {
+              const res = await axiosInstance.post('/documents/upload', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
               });
-              const data = await res.json();
-              if (data.success) {
+              const data = res.data;
+              if (data && data.success) {
                 // Refresh list
-                const resList = await fetch('/api/documents/list');
-                const files = await resList.json();
-                setTemplateList(files);
+                const resList = await axiosPublic.get('/documents/list');
+                setTemplateList(resList.data || []);
                 message.success('Upload successful');
                 onSuccess && onSuccess('ok');
               } else {
