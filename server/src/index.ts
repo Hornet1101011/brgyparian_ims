@@ -190,7 +190,22 @@ mongoose.connection.on('connected', async () => {
       // Load all model files under server/src/models so Mongoose registers them
       const modelsDir = path.join(__dirname, 'models');
       if (fs.existsSync(modelsDir)) {
-        const modelFiles = fs.readdirSync(modelsDir).filter(f => f.endsWith('.js') || f.endsWith('.ts'));
+        const allFiles = fs.readdirSync(modelsDir);
+        // Build a basename -> filename map so we don't require the same model twice
+        // (e.g. Official.ts and Official.js both present). Prefer .js over .ts when both exist.
+        const modelFileMap = new Map<string, string>();
+        for (const f of allFiles) {
+          if (!f.endsWith('.js') && !f.endsWith('.ts')) continue;
+          const base = path.basename(f, path.extname(f));
+          const existing = modelFileMap.get(base);
+          if (!existing) {
+            modelFileMap.set(base, f);
+          } else {
+            // If an existing .ts is present and current is .js, prefer the .js file
+            if (existing.endsWith('.ts') && f.endsWith('.js')) modelFileMap.set(base, f);
+          }
+        }
+        const modelFiles = Array.from(modelFileMap.values());
         // Require each model file to ensure it's registered with mongoose
         for (const mf of modelFiles) {
           try {
@@ -234,8 +249,42 @@ mongoose.connection.on('connected', async () => {
           const model = mongoose.model(mName as any) as any;
           if (typeof model.createIndexes === 'function') {
             console.log(`Creating indexes for model: ${mName}`);
-            // createIndexes is idempotent and will not duplicate indexes
-            await model.createIndexes();
+            try {
+              // Try the normal route first
+              await model.createIndexes();
+            } catch (idxErr) {
+              // Some MongoDB deployments (or older server versions) may not support
+              // certain partialFilterExpression operators like $ne/$not. Attempt
+              // a fallback: create indexes manually after sanitizing options.
+              console.warn(`createIndexes() failed for model ${mName}:`, idxErr && (idxErr as Error).message);
+              const schemaIndexes: Array<any> = model.schema && typeof model.schema.indexes === 'function' ? model.schema.indexes() : [];
+              for (const [fields, options] of schemaIndexes) {
+                // Clone options to avoid mutating schema
+                const safeOptions = Object.assign({}, options || {});
+                // If partialFilterExpression present and may contain unsupported operators,
+                // remove it and use sparse:true as a safe fallback (idempotent behavior).
+                if (safeOptions && safeOptions.partialFilterExpression) {
+                  console.warn(`Sanitizing partialFilterExpression for index on model ${mName}`);
+                  delete safeOptions.partialFilterExpression;
+                  // If neither sparse nor unique present, leave as-is. If unique required, keep it.
+                  if (safeOptions.sparse === undefined) safeOptions.sparse = true;
+                }
+                // Ensure we don't pass background option to createIndex for server compatibility
+                if (safeOptions && safeOptions.background !== undefined) delete safeOptions.background;
+                // Create index on the underlying collection
+                try {
+                  await model.collection.createIndex(fields, safeOptions || undefined);
+                } catch (createSingleErr: any) {
+                  const msg = (createSingleErr && createSingleErr.message) || String(createSingleErr);
+                  // If an index with the same name already exists, ignore and continue.
+                  if (/An existing index has the same name/.test(msg) || /same name as the requested index/.test(msg) || /already exists/.test(msg)) {
+                    console.log(`Index already exists for model ${mName} fields=${JSON.stringify(fields)} - skipping`);
+                  } else {
+                    console.warn(`Fallback index creation failed for model ${mName} fields=${JSON.stringify(fields)}:`, msg);
+                  }
+                }
+              }
+            }
           }
         } catch (idxErr) {
           console.warn(`Failed to create indexes for model ${mName}:`, idxErr && (idxErr as Error).message);
