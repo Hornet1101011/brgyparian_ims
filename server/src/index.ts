@@ -53,21 +53,59 @@ if (process.env.FRONTEND_URL && !process.env.BASE_URL) process.env.BASE_URL = pr
 
 const app = express();
 app.set('trust proxy', 1); // Trust only the first proxy (safer for local dev)
+// Support multiple allowed frontend origins via FRONTEND_URLS (comma-separated)
+const rawFrontend = process.env.FRONTEND_URLS || process.env.FRONTEND_URL || 'http://localhost:3000';
+const FRONTEND_ORIGINS = rawFrontend.split(',').map(s => s.trim()).filter(Boolean);
+
 const httpServer = createServer(app);
 const io = new SocketIOServer(httpServer, {
   cors: {
-    origin: '*',
+    origin: FRONTEND_ORIGINS.includes('*') ? '*': FRONTEND_ORIGINS,
     methods: ['GET', 'POST']
   }
 });
 
 // Middleware
-// Configure CORS: allow the frontend origin from env var or default to localhost
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
-app.use(cors({
-  origin: FRONTEND_URL,
-  credentials: true
-}));
+// Configure CORS: allow one or more frontend origins via FRONTEND_URLS or FRONTEND_URL
+// Accepts comma-separated list in FRONTEND_URLS or a single FRONTEND_URL.
+// Custom CORS middleware: explicitly set a single Access-Control-Allow-Origin
+// header (prevents the server or proxies from returning multiple comma-separated values).
+app.use((req, res, next) => {
+  const origin = (req.headers.origin as string) || '';
+
+  // If no Origin header present (server-to-server or curl), allow the request
+  if (!origin) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+    return next();
+  }
+
+  // If '*' present in allowed origins, allow any origin
+  if (FRONTEND_ORIGINS.includes('*')) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+    if (req.method === 'OPTIONS') return res.sendStatus(204);
+    return next();
+  }
+
+  // Only allow a single matching origin value
+  if (FRONTEND_ORIGINS.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+    if (req.method === 'OPTIONS') return res.sendStatus(204);
+    return next();
+  }
+
+  // Origin not allowed
+  res.setHeader('Access-Control-Allow-Origin', 'null');
+  return res.status(403).send('CORS origin forbidden');
+});
 app.use(cookieParser());
 app.use(express.json());
 import expressStatic from 'express';

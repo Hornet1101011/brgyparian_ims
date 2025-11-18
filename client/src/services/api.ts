@@ -64,7 +64,12 @@ export const staffRegister = async (data: any) => {
 // Allow an override via REACT_APP_API_URL for cases where the API is hosted
 // on a different origin (useful for staging). Default to the relative `/api`
 // so the CRA dev proxy forwards requests to the backend in development.
-export const API_URL = process.env.REACT_APP_API_URL || '/api';
+// Resolve API URL in this order:
+// 1. runtime config served from /config.json (globalThis.__APP_CONFIG__.API_BASE)
+// 2. build-time env var REACT_APP_API_URL
+// 3. fallback to relative '/api' so dev proxy works
+const runtimeCfg = (globalThis as any).__APP_CONFIG__;
+export const API_URL = (runtimeCfg && runtimeCfg.API_BASE) || process.env.REACT_APP_API_URL || '/api';
 
 const axiosInstance = axios.create({
   baseURL: API_URL,

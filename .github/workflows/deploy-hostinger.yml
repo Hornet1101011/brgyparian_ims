@@ -1,0 +1,39 @@
+name: Build and Deploy Frontend to Hostinger
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Install and build client
+      working-directory: client
+      run: |
+        npm ci
+        npm run build
+
+    - name: Upload build to Hostinger via SFTP
+      uses: appleboy/scp-action@v0.1.2
+      with:
+        host: ${{ secrets.HOSTINGER_HOST }}
+        username: ${{ secrets.HOSTINGER_USERNAME }}
+        password: ${{ secrets.HOSTINGER_PASSWORD }}
+        port: ${{ secrets.HOSTINGER_PORT }}
+        source: "client/build/*"
+        target: ${{ secrets.HOSTINGER_TARGET_DIR }}
+
+    - name: Done
+      run: echo "Frontend build uploaded to Hostinger"

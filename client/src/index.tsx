@@ -3,19 +3,35 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
 import './i18n';
-import App from './App';
 import reportWebVitals from './reportWebVitals';
 
-const root = ReactDOM.createRoot(
-  document.getElementById('root') as HTMLElement
-);
-root.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
+// Load runtime config (from /config.json) before rendering the app so
+// the app can use a runtime API URL without rebuilding.
+async function bootstrap() {
+  try {
+    const cfgModule = await import('./runtimeConfig');
+    if (cfgModule && typeof cfgModule.loadRuntimeConfig === 'function') {
+      await cfgModule.loadRuntimeConfig();
+    }
+  } catch (e) {
+    console.warn('Failed to load runtime config (continuing):', e);
+  }
 
-// If you want to start measuring performance in your app, pass a function
-// to log results (for example: reportWebVitals(console.log))
-// or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
-reportWebVitals();
+  // Dynamically import App after runtime config is loaded so modules that
+  // read window.__APP_CONFIG__ at import-time will pick up the value.
+  const AppModule = await import('./App');
+  const App = AppModule.default;
+
+  const root = ReactDOM.createRoot(
+    document.getElementById('root') as HTMLElement
+  );
+  root.render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>
+  );
+
+  reportWebVitals();
+}
+
+bootstrap();
