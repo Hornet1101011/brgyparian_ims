@@ -184,6 +184,47 @@ mongoose.connection.on('connected', async () => {
         console.warn(`Error ensuring bucket ${bucketName}:`, bucketErr && bucketErr.message);
       }
     }
+
+    // Also ensure regular application collections exist for all Mongoose models.
+    try {
+      // Load all model files under server/src/models so Mongoose registers them
+      const modelsDir = path.join(__dirname, 'models');
+      if (fs.existsSync(modelsDir)) {
+        const modelFiles = fs.readdirSync(modelsDir).filter(f => f.endsWith('.js') || f.endsWith('.ts'));
+        // Require each model file to ensure it's registered with mongoose
+        for (const mf of modelFiles) {
+          try {
+            // Use require so both CJS and transpiled TS modules load
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            require(path.join(modelsDir, mf));
+          } catch (reqErr) {
+            console.warn('Failed to require model file', mf, reqErr && (reqErr as Error).message);
+          }
+        }
+
+        // For each registered model, ensure its collection exists
+        const modelNames = mongoose.modelNames();
+        for (const mName of modelNames) {
+          try {
+            const model = mongoose.model(mName as any);
+            const collName = model.collection && model.collection.name ? model.collection.name : (mName.toLowerCase() + 's');
+            const collList2 = await db.listCollections({ name: collName }).toArray();
+            if (!collList2 || collList2.length === 0) {
+              try {
+                console.log('Creating collection for model', mName, '->', collName);
+                await db.createCollection(collName);
+              } catch (cErr) {
+                console.warn('Failed to create collection', collName, cErr && (cErr as Error).message);
+              }
+            }
+          } catch (mErr) {
+            console.warn('Error ensuring collection for model', mName, mErr && (mErr as Error).message);
+          }
+        }
+      }
+    } catch (modelEnsureErr) {
+      console.warn('Failed to ensure model collections', modelEnsureErr && (modelEnsureErr as Error).message);
+    }
   } catch (err: any) {
     console.error('Error ensuring processed_documents bucket', err && err.message);
   }
