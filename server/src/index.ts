@@ -225,6 +225,25 @@ mongoose.connection.on('connected', async () => {
     } catch (modelEnsureErr) {
       console.warn('Failed to ensure model collections', modelEnsureErr && (modelEnsureErr as Error).message);
     }
+
+    // Explicitly create indexes for all registered models so indexes exist immediately.
+    try {
+      const modelNames = mongoose.modelNames();
+      for (const mName of modelNames) {
+        try {
+          const model = mongoose.model(mName as any) as any;
+          if (typeof model.createIndexes === 'function') {
+            console.log(`Creating indexes for model: ${mName}`);
+            // createIndexes is idempotent and will not duplicate indexes
+            await model.createIndexes();
+          }
+        } catch (idxErr) {
+          console.warn(`Failed to create indexes for model ${mName}:`, idxErr && (idxErr as Error).message);
+        }
+      }
+    } catch (createIdxErr) {
+      console.warn('Error creating model indexes at startup:', createIdxErr && (createIdxErr as Error).message);
+    }
   } catch (err: any) {
     console.error('Error ensuring processed_documents bucket', err && err.message);
   }
