@@ -3,6 +3,8 @@ import mongoose, { Document } from 'mongoose';
 export interface IVerificationRequest extends Document {
   userId: mongoose.Types.ObjectId;
   files: string[]; // stored file paths
+  /** ObjectIds of uploaded files stored in GridFS */
+  gridFileIds?: mongoose.Types.ObjectId[];
   status: 'pending' | 'approved' | 'rejected';
   createdAt: Date;
   reviewedAt?: Date;

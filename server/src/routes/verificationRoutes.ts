@@ -198,7 +198,8 @@ router.delete('/requests/:id', auth, async (req, res) => {
       console.warn('Error cleaning GridFS files for verification request', e && (e as Error).message);
     }
 
-    await vr.remove();
+    // use model-level delete to satisfy TypeScript typings and avoid deprecated instance.remove
+    await VerificationRequest.deleteOne({ _id: vr._id });
     return res.json({ message: 'Verification request cancelled' });
   } catch (err) {
     console.error('Error cancelling verification request', err);
@@ -258,8 +259,8 @@ router.post('/admin/requests/:id/reject', auth, authorize('admin'), async (req, 
       console.warn('Error cleaning GridFS files for verification request', e && (e as Error).message);
     }
 
-    // remove request
-    await vr.remove();
+    // remove request (use model-level delete to satisfy typings)
+    await VerificationRequest.deleteOne({ _id: vr._id });
 
     // ensure user is not marked verified
     const user = await User.findById(vr.userId) as any;
