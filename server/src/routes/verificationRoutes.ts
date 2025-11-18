@@ -6,6 +6,7 @@ import { Readable } from 'stream';
 import { auth, authorize } from '../middleware/auth';
 import { VerificationRequest } from '../models/VerificationRequest';
 import mongoose from 'mongoose';
+import { ensureBucket, getBucket } from '../utils/gridfs';
 import { Message } from '../models/Message';
 import { User } from '../models/User';
 
@@ -21,17 +22,22 @@ router.post('/upload', auth, upload.array('ids', 2), async (req: any, res) => {
     if (!user) return res.status(401).json({ message: 'Unauthorized' });
     // For memory storage, each file has a buffer and originalname
     const filenames: string[] = [];
-    const db = (mongoose.connection.db as any);
+    // Prefer using shared GridFSBucket instance
+    const bucket = ensureBucket('verificationRequests');
     const mongodb = await import('mongodb');
-    const GridFSBucket = mongodb.GridFSBucket;
     const ObjectId = mongodb.ObjectId;
-    const bucket = new GridFSBucket(db, { bucketName: 'verificationRequests' });
+    if (!bucket) {
+      console.warn('verificationRequests GridFS bucket not available');
+    }
     const gridIds: any[] = [];
     for (const f of (req.files || [])) {
       try {
         const originalName = f.originalname || `file_${Date.now()}`;
         filenames.push(originalName);
         const readable = Readable.from(f.buffer);
+        if (!bucket) {
+          throw new Error('GridFS bucket not available');
+        }
         const uploadStream = bucket.openUploadStream(originalName, {
           metadata: { uploadedBy: user._id }
         });

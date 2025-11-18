@@ -10,6 +10,7 @@ import fs from 'fs';
 import path from 'path';
 import mongoose from 'mongoose';
 import { GridFSBucket, ObjectId } from 'mongodb';
+import { getBucket, ensureBucket } from '../utils/gridfs';
 import sharp from 'sharp';
 
 const router = Router();
@@ -42,18 +43,8 @@ const upload = multer({
 		cb(null, true);
 	}
 });
-// GridFSBucket for avatars (initialized when mongoose connection opens)
-let avatarsBucket: GridFSBucket | null = null;
-mongoose.connection.on('open', () => {
-	// @ts-ignore
-	const db = (mongoose.connection.db as any);
-	try {
-		avatarsBucket = new GridFSBucket(db, { bucketName: 'avatars' });
-		console.log('Avatars GridFSBucket initialized');
-	} catch (err) {
-		console.error('Failed to initialize avatars GridFSBucket', err);
-	}
-});
+// Avatars GridFSBucket is provided by `server/src/utils/gridfs.ts`.
+// Routes should call `ensureBucket('avatars')` or `getBucket('avatars')`.
 
 // Log all incoming requests for debugging
 router.use((req, res, next) => {
@@ -219,8 +210,9 @@ router.post('/personal-info/avatar', auth, upload.single('avatar'), async (req: 
 		// Upload processed buffer to GridFS only (no disk copy). Store the GridFS id and expose a stream URL.
 		let gridFsId: ObjectId | undefined;
 		const filename = `avatar_${Date.now()}.jpg`;
-		if (avatarsBucket) {
-			try {
+		try {
+			const avatarsBucket = ensureBucket('avatars');
+			if (avatarsBucket) {
 				const uploadStream = avatarsBucket.openUploadStream(filename, {
 					contentType: 'image/jpeg',
 					metadata: { userId: user._id }
@@ -231,18 +223,21 @@ router.post('/personal-info/avatar', auth, upload.single('avatar'), async (req: 
 					uploadStream.end(processedBuffer);
 				});
 				gridFsId = uploadStream.id as ObjectId;
-			} catch (err) {
-				console.warn('Failed to write avatar to GridFS:', err);
+			} else {
+				console.warn('GridFS avatarsBucket not available; skipping GridFS save');
 			}
-		} else {
-			console.warn('GridFS avatarsBucket not initialized; cannot save avatar to GridFS');
+		} catch (err) {
+			console.warn('Failed to write avatar to GridFS:', err && (err as Error).message);
 		}
 
 		// If resident had a previous avatar stored in GridFS, attempt cleanup (best-effort)
-		if (resident.profileImageId && avatarsBucket) {
+		if (resident.profileImageId) {
 			try {
-				const prevId = new ObjectId(resident.profileImageId);
-				await avatarsBucket.delete(prevId);
+				const avatarsBucket = getBucket('avatars');
+				if (avatarsBucket && resident.profileImageId) {
+					const prevId = new ObjectId(resident.profileImageId);
+					await avatarsBucket.delete(prevId);
+				}
 			} catch (err) {
 				console.warn('Failed to delete previous avatar from GridFS (continuing):', err);
 			}
@@ -266,7 +261,6 @@ router.post('/personal-info/avatar', auth, upload.single('avatar'), async (req: 
 			resident.profileImageId = gridFsId.toString();
 			resident.profileImage = `/api/resident/personal-info/avatar/${resident.profileImageId}`;
 		} else {
-			// fallback: no gridfs -> clear image fields
 			resident.profileImageId = resident.profileImageId || undefined;
 			resident.profileImage = resident.profileImage || undefined;
 		}
@@ -341,6 +335,7 @@ router.get('/profile', auth, async (req: any, res) => {
 router.get('/personal-info/avatar/:id', async (req: any, res) => {
 	try {
 		const id = req.params.id;
+		const avatarsBucket = getBucket('avatars');
 		if (!avatarsBucket) return res.status(503).json({ message: 'Avatar service not available' });
 		let _id: ObjectId;
 		try {

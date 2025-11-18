@@ -135,40 +135,55 @@ mongoose.connection.on('connected', async () => {
       console.warn('MongoDB db not available to ensure processed_documents bucket');
       return;
     }
-    const filesName = 'processed_documents.files';
-    const chunksName = 'processed_documents.chunks';
+    // Ensure a set of GridFS buckets exist and have expected indexes.
+    const bucketsToEnsure = [
+      'documents',
+      'processed_documents',
+      'avatars',
+      'verificationRequests',
+      'barangayOfficials'
+    ];
 
     const collList = await db.listCollections({}).toArray();
     const collNames = collList.map((c: any) => c.name);
 
-    if (!collNames.includes(filesName)) {
-      console.log('Creating collection', filesName);
-      try { await db.createCollection(filesName); } catch (e: any) { console.warn('createCollection files failed', e && e.message); }
-    }
-    if (!collNames.includes(chunksName)) {
-      console.log('Creating collection', chunksName);
-      try { await db.createCollection(chunksName); } catch (e: any) { console.warn('createCollection chunks failed', e && e.message); }
-    }
+    for (const bucketName of bucketsToEnsure) {
+      const filesNameBucket = `${bucketName}.files`;
+      const chunksNameBucket = `${bucketName}.chunks`;
+      try {
+        if (!collNames.includes(filesNameBucket)) {
+          console.log('Creating collection', filesNameBucket);
+          try { await db.createCollection(filesNameBucket); } catch (e: any) { console.warn('createCollection files failed', e && e.message); }
+        }
+        if (!collNames.includes(chunksNameBucket)) {
+          console.log('Creating collection', chunksNameBucket);
+          try { await db.createCollection(chunksNameBucket); } catch (e: any) { console.warn('createCollection chunks failed', e && e.message); }
+        }
 
-    // Ensure indexes on files collection
-    try {
-      const filesColl = db.collection(filesName);
-      await filesColl.createIndex({ filename: 1 });
-      await filesColl.createIndex({ uploadDate: 1 });
-      await filesColl.createIndex({ 'metadata.sourceFileId': 1 });
-    } catch (e: any) {
-      console.warn('Failed to create indexes on processed_documents.files', e && e.message);
-    }
+        // Ensure common indexes on files collection
+        try {
+          const filesColl = db.collection(filesNameBucket);
+          await filesColl.createIndex({ filename: 1 });
+          await filesColl.createIndex({ uploadDate: 1 });
+          // some buckets may use metadata.sourceFileId
+          await filesColl.createIndex({ 'metadata.sourceFileId': 1 });
+        } catch (e: any) {
+          console.warn(`Failed to create indexes on ${filesNameBucket}`, e && e.message);
+        }
 
-    // Ensure unique index on chunks (files_id + n)
-    try {
-      const chunksColl = db.collection(chunksName);
-      await chunksColl.createIndex({ files_id: 1, n: 1 }, { unique: true });
-    } catch (e: any) {
-      console.warn('Failed to create index on processed_documents.chunks', e && e.message);
-    }
+        // Ensure unique index on chunks (files_id + n) as required by GridFS
+        try {
+          const chunksColl = db.collection(chunksNameBucket);
+          await chunksColl.createIndex({ files_id: 1, n: 1 }, { unique: true });
+        } catch (e: any) {
+          console.warn(`Failed to create index on ${chunksNameBucket}`, e && e.message);
+        }
 
-    console.log('Ensured processed_documents GridFS bucket collections and indexes.');
+        console.log(`Ensured GridFS bucket collections and indexes for '${bucketName}'`);
+      } catch (bucketErr: any) {
+        console.warn(`Error ensuring bucket ${bucketName}:`, bucketErr && bucketErr.message);
+      }
+    }
   } catch (err: any) {
     console.error('Error ensuring processed_documents bucket', err && err.message);
   }

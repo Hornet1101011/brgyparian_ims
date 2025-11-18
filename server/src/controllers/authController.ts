@@ -161,7 +161,7 @@ export const register = async (req: Request, res: Response, next: unknown) => {
     }
 
     // Generate token
-    const token = generateToken({ _id: user._id as string, role: user.role, username: user.username });
+    const token = generateToken({ _id: String(user._id), role: user.role, username: user.username });
 
     // Update last login
     user.lastLogin = new Date();
@@ -247,7 +247,7 @@ export const login = async (req: Request, res: Response) => {
     }
 
     // Generate token
-    const token = generateToken({ _id: user._id as string, role: user.role, username: user.username });
+    const token = generateToken({ _id: String(user._id), role: user.role, username: user.username });
 
     // Update last login
     user.lastLogin = new Date();
