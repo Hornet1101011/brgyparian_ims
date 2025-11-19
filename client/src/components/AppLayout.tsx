@@ -236,71 +236,119 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   // Open SSE EventSource to receive real-time verification/profile updates
   useEffect(() => {
     let es: EventSource | null = null;
+    let shouldReconnect = true;
+    let retryCount = 0;
+
+    const maxRetries = 6;
+    const baseDelay = 1000; // 1s
+
+    const attachListeners = (source: EventSource) => {
+      const onConnected = (ev: MessageEvent) => {
+        try {
+          const d = JSON.parse((ev as any).data || '{}');
+          setVerificationStatus(prev => ({ ...(prev || {}), verified: !!d.verified }));
+          // reset retry count on successful connect
+          retryCount = 0;
+        } catch (e) {}
+      };
+      const onReq = (ev: MessageEvent) => {
+        try {
+          const payload = JSON.parse((ev as any).data || '{}');
+          setVerificationStatus({ verified: (user as any)?.verified, pending: true, request: payload });
+        } catch (e) {}
+      };
+      const onReqUpdated = (ev: MessageEvent) => {
+        try {
+          const payload = JSON.parse((ev as any).data || '{}');
+          setVerificationStatus({ verified: (user as any)?.verified, pending: payload?.status === 'pending', request: payload });
+        } catch (e) {}
+      };
+      const onReqDeleted = (_ev: MessageEvent) => {
+        try {
+          setVerificationStatus(prev => ({ ...(prev || {}), pending: false, request: null }));
+        } catch (e) {}
+      };
+      const onProfile = (ev: MessageEvent) => {
+        try {
+          const payload = JSON.parse((ev as any).data || '{}');
+          if (payload && typeof payload.verified !== 'undefined') {
+            setVerificationStatus(prev => ({ ...(prev || {}), verified: !!payload.verified }));
+            try {
+              if (setUser) {
+                const updated = user ? { ...user, verified: !!payload.verified } : { ...(displayUser || {}), verified: !!payload.verified };
+                setUser(updated as any);
+              }
+            } catch (e) {}
+          }
+        } catch (e) {}
+      };
+
+      source.addEventListener('connected', onConnected);
+      source.addEventListener('verification-request', onReq);
+      source.addEventListener('verification-request-updated', onReqUpdated);
+      source.addEventListener('verification-request-deleted', onReqDeleted);
+      source.addEventListener('profile', onProfile);
+
+      source.onerror = () => {
+        try { console.warn('SSE error, will attempt reconnect'); } catch (e) {}
+        // close and schedule reconnect
+        try { source.close(); } catch (e) {}
+        scheduleReconnect();
+      };
+
+      // cleanup helper
+      return () => {
+        try {
+          source.removeEventListener('connected', onConnected as any);
+          source.removeEventListener('verification-request', onReq as any);
+          source.removeEventListener('verification-request-updated', onReqUpdated as any);
+          source.removeEventListener('verification-request-deleted', onReqDeleted as any);
+          source.removeEventListener('profile', onProfile as any);
+        } catch (e) {}
+        try { source.close(); } catch (e) {}
+      };
+    };
+
+    let cleanupListeners: (() => void) | null = null;
+
+    const scheduleReconnect = () => {
+      if (!shouldReconnect) return;
+      if (retryCount >= maxRetries) {
+        try { console.warn('SSE max retry reached'); } catch (e) {}
+        return;
+      }
+      const delay = Math.round(baseDelay * Math.pow(2, retryCount) * (0.8 + Math.random() * 0.4));
+      retryCount += 1;
+      try { console.info('SSE reconnect scheduled in', delay, 'ms'); } catch (e) {}
+      setTimeout(() => {
+        if (!shouldReconnect) return;
+        try {
+          const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+          const base = getAbsoluteApiUrl('/verification/stream');
+          const url = token ? `${base}?token=${encodeURIComponent(token)}` : base;
+          es = new EventSource(url);
+          cleanupListeners = attachListeners(es);
+        } catch (e) {
+          scheduleReconnect();
+        }
+      }, delay);
+    };
+
+    // initial connect
     try {
-      // Prefer using the absolute API URL helper so EventSource targets correct host/origin
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
       const base = getAbsoluteApiUrl('/verification/stream');
       const url = token ? `${base}?token=${encodeURIComponent(token)}` : base;
       es = new EventSource(url);
+      cleanupListeners = attachListeners(es);
     } catch (e) {
-      es = null;
+      scheduleReconnect();
     }
-    if (!es) return;
-
-    const onConnected = (ev: MessageEvent) => {
-      try {
-        const d = JSON.parse((ev as any).data || '{}');
-        setVerificationStatus(prev => ({ ...(prev || {}), verified: !!d.verified }));
-      } catch (e) {}
-    };
-    const onReq = (ev: MessageEvent) => {
-      try {
-        const payload = JSON.parse((ev as any).data || '{}');
-        setVerificationStatus({ verified: (user as any)?.verified, pending: true, request: payload });
-      } catch (e) {}
-    };
-    const onReqUpdated = (ev: MessageEvent) => {
-      try {
-        const payload = JSON.parse((ev as any).data || '{}');
-        setVerificationStatus({ verified: (user as any)?.verified, pending: payload?.status === 'pending', request: payload });
-      } catch (e) {}
-    };
-    const onReqDeleted = (_ev: MessageEvent) => {
-      try {
-        setVerificationStatus(prev => ({ ...(prev || {}), pending: false, request: null }));
-      } catch (e) {}
-    };
-    const onProfile = (ev: MessageEvent) => {
-      try {
-        const payload = JSON.parse((ev as any).data || '{}');
-        if (payload && typeof payload.verified !== 'undefined') {
-          setVerificationStatus(prev => ({ ...(prev || {}), verified: !!payload.verified }));
-          try {
-            if (setUser) {
-              const updated = user ? { ...user, verified: !!payload.verified } : { ...(displayUser || {}), verified: !!payload.verified };
-              setUser(updated as any);
-            }
-          } catch (e) {}
-        }
-      } catch (e) {}
-    };
-
-    es.addEventListener('connected', onConnected);
-    es.addEventListener('verification-request', onReq);
-    es.addEventListener('verification-request-updated', onReqUpdated);
-    es.addEventListener('verification-request-deleted', onReqDeleted);
-    es.addEventListener('profile', onProfile);
-
-    es.onerror = (err) => { try { console.warn('SSE error', err); } catch (e) {} };
 
     return () => {
-      try {
-        es.removeEventListener('connected', onConnected as any);
-        es.removeEventListener('verification-request', onReq as any);
-        es.removeEventListener('verification-request-updated', onReqUpdated as any);
-        es.removeEventListener('verification-request-deleted', onReqDeleted as any);
-        es.removeEventListener('profile', onProfile as any);
-      } catch (e) {}
+      // prevent further reconnects
+      shouldReconnect = false;
+      try { if (cleanupListeners) cleanupListeners(); } catch (e) {}
       try { es?.close(); } catch (e) {}
     };
   }, [setUser, (user as any)?.verified]);
