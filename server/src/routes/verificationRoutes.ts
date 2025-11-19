@@ -330,11 +330,6 @@ router.post('/admin/requests/:id/approve', auth, authorize('admin'), async (req,
     const { id } = req.params;
     const vr = await VerificationRequest.findById(id);
     if (!vr) return res.status(404).json({ message: 'Verification request not found' });
-    vr.status = 'approved';
-    vr.reviewedAt = new Date();
-    vr.reviewerId = (req as any).user._id;
-    await vr.save();
-
     // set user verified
     const user = await User.findById(vr.userId) as any;
     if (user) {
@@ -342,13 +337,40 @@ router.post('/admin/requests/:id/approve', auth, authorize('admin'), async (req,
       await user.save();
     }
 
-    // notify the owner about profile update and the updated request
+    // delete associated GridFS files (we keep behaviour similar to reject)
+    try {
+      const bucket = ensureBucket('verificationRequests');
+      const mongodb = await import('mongodb');
+      const ObjectId = mongodb.ObjectId;
+      if (bucket && Array.isArray(vr.gridFileIds)) {
+        for (const fid of vr.gridFileIds) {
+          try {
+            const fileId = typeof fid === 'string' ? new ObjectId(fid) : fid;
+            // @ts-ignore
+            await bucket.delete(fileId);
+          } catch (e) {
+            console.warn('Failed to delete GridFS file during approve cleanup', fid, e && (e as Error).message);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Error cleaning GridFS files for verification request during approve', e && (e as Error).message);
+    }
+
+    // remove the verification request after successful approval
+    try {
+      await VerificationRequest.deleteOne({ _id: vr._id });
+    } catch (e) {
+      console.warn('Failed to delete verification request after approve', vr._id, e && (e as Error).message);
+    }
+
+    // notify owner about profile update and that their request is removed
     try {
       sendToUser(String(vr.userId), 'profile', { verified: true });
-      sendToUser(String(vr.userId), 'verification-request-updated', vr);
+      sendToUser(String(vr.userId), 'verification-request-deleted', { requestId: id });
     } catch (e) {}
 
-    return res.json({ message: 'Verification request approved' });
+    return res.json({ message: 'Verification request approved and removed' });
   } catch (err) {
     console.error('Error approving verification request', err);
     return res.status(500).json({ message: 'Error', error: String(err) });
