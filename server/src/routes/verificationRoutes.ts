@@ -9,7 +9,7 @@ import mongoose from 'mongoose';
 import { ensureBucket, getBucket } from '../utils/gridfs';
 import { Message } from '../models/Message';
 import { User } from '../models/User';
-import { sendToUser, addClient, removeClient } from '../utils/sse';
+import { sendToUser, addClient, removeClient } from '../utils/sse.js';
 
 const router = express.Router();
 

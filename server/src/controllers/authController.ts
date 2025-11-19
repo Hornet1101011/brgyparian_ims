@@ -4,7 +4,7 @@ import { User } from '../models/User';
 import { Notification } from '../models/Notification';
 import { Resident } from '../models/Resident';
 import jwt from 'jsonwebtoken';
-import { validateEmail, validatePassword } from '../utils/validation';
+import { validateEmail, validatePassword } from '../utils/validation.js';
 
 // Types for request bodies
 interface RegisterRequest {

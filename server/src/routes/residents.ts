@@ -10,7 +10,7 @@ import fs from 'fs';
 import path from 'path';
 import mongoose from 'mongoose';
 import { GridFSBucket, ObjectId } from 'mongodb';
-import { getBucket, ensureBucket } from '../utils/gridfs';
+import { getBucket, ensureBucket } from '../utils/gridfs.js';
 import sharp from 'sharp';
 
 const router = Router();
