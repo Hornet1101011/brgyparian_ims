@@ -33,13 +33,6 @@ const DateTimeDisplay: React.FC = () => {
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
-
-  // Auto-close verification modal when user becomes verified via polling
-  useEffect(() => {
-    if (verificationStatus?.verified) {
-      setVerificationModalVisible(false);
-    }
-  }, [verificationStatus?.verified]);
   const pad = (n: number) => n.toString().padStart(2, '0');
   const date = `${pad(now.getMonth() + 1)}/${pad(now.getDate())}/${now.getFullYear()}`;
   const time = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
@@ -211,32 +204,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       } catch (e) {
         // ignore
       }
-      // start polling for verification status and profile updates every 10s
-      const startVerificationPolling = () => {
-        try {
-          const id = setInterval(async () => {
-            try {
-              const api = await import('../services/api');
-              const myReqs = await api.verificationAPI.getMyRequests();
-              const pending = Array.isArray(myReqs) ? myReqs.find((r: any) => r.status === 'pending') : null;
-              let profile: any = null;
-              try {
-                profile = await api.authService.getCurrentUser();
-              } catch (e) {
-                // ignore
-              }
-              setVerificationStatus({ verified: profile?.verified ?? displayUser?.verified, pending: !!pending, request: pending || (Array.isArray(myReqs) && myReqs[0]) });
-              if (profile && setUser) setUser(profile as any);
-            } catch (e) {
-              // ignore poll errors
-            }
-          }, 10000);
-          try { (window as any).__verifPollId = id; } catch (e) {}
-        } catch (e) {
-          // ignore
-        }
-      };
-      startVerificationPolling();
+      // verification status will be updated via server-sent events (SSE)
     })();
     const handler = (e: Event) => {
       try {
@@ -259,6 +227,83 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       try { clearInterval((window as any).__verifPollId); } catch (e) {}
     };
   }, []);
+
+  // Auto-close verification modal when user becomes verified
+  useEffect(() => {
+    if (verificationStatus?.verified) setVerificationModalVisible(false);
+  }, [verificationStatus?.verified]);
+
+  // Open SSE EventSource to receive real-time verification/profile updates
+  useEffect(() => {
+    let es: EventSource | null = null;
+    try {
+      // Prefer using the absolute API URL helper so EventSource targets correct host/origin
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      const base = getAbsoluteApiUrl('/verification/stream');
+      const url = token ? `${base}?token=${encodeURIComponent(token)}` : base;
+      es = new EventSource(url);
+    } catch (e) {
+      es = null;
+    }
+    if (!es) return;
+
+    const onConnected = (ev: MessageEvent) => {
+      try {
+        const d = JSON.parse((ev as any).data || '{}');
+        setVerificationStatus(prev => ({ ...(prev || {}), verified: !!d.verified }));
+      } catch (e) {}
+    };
+    const onReq = (ev: MessageEvent) => {
+      try {
+        const payload = JSON.parse((ev as any).data || '{}');
+        setVerificationStatus({ verified: (user as any)?.verified, pending: true, request: payload });
+      } catch (e) {}
+    };
+    const onReqUpdated = (ev: MessageEvent) => {
+      try {
+        const payload = JSON.parse((ev as any).data || '{}');
+        setVerificationStatus({ verified: (user as any)?.verified, pending: payload?.status === 'pending', request: payload });
+      } catch (e) {}
+    };
+    const onReqDeleted = (_ev: MessageEvent) => {
+      try {
+        setVerificationStatus(prev => ({ ...(prev || {}), pending: false, request: null }));
+      } catch (e) {}
+    };
+    const onProfile = (ev: MessageEvent) => {
+      try {
+        const payload = JSON.parse((ev as any).data || '{}');
+        if (payload && typeof payload.verified !== 'undefined') {
+          setVerificationStatus(prev => ({ ...(prev || {}), verified: !!payload.verified }));
+          try {
+            if (setUser) {
+              const updated = user ? { ...user, verified: !!payload.verified } : { ...(displayUser || {}), verified: !!payload.verified };
+              setUser(updated as any);
+            }
+          } catch (e) {}
+        }
+      } catch (e) {}
+    };
+
+    es.addEventListener('connected', onConnected);
+    es.addEventListener('verification-request', onReq);
+    es.addEventListener('verification-request-updated', onReqUpdated);
+    es.addEventListener('verification-request-deleted', onReqDeleted);
+    es.addEventListener('profile', onProfile);
+
+    es.onerror = (err) => { try { console.warn('SSE error', err); } catch (e) {} };
+
+    return () => {
+      try {
+        es.removeEventListener('connected', onConnected as any);
+        es.removeEventListener('verification-request', onReq as any);
+        es.removeEventListener('verification-request-updated', onReqUpdated as any);
+        es.removeEventListener('verification-request-deleted', onReqDeleted as any);
+        es.removeEventListener('profile', onProfile as any);
+      } catch (e) {}
+      try { es?.close(); } catch (e) {}
+    };
+  }, [setUser, (user as any)?.verified]);
 
   // Close dropdown on outside click
   // Removed notification dropdown logic
