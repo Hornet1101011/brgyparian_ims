@@ -188,26 +188,72 @@ router.get('/file/:id', auth, authorize('admin'), async (req, res) => {
 });
 
 // SSE endpoint: client opens EventSource to receive verification/profile updates for the current user
-router.get('/stream', auth, async (req, res) => {
+// EventSource does not support custom headers, so accept a `token` query param as fallback.
+router.get('/stream', async (req, res) => {
   try {
+    // Prepare SSE response headers early so that even auth failures return a consistent MIME
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     try { res.flushHeaders?.(); } catch (e) {}
-    const user = (req as any).user;
-    if (!user) return res.status(401).end();
-    const userId = String(user._id);
-    addClient(userId, res as any);
+
+    // Try to resolve user from Authorization header, cookie, or query token
+    let token = req.header('Authorization')?.replace('Bearer ', '');
+    if (!token && req.cookies && (req.cookies as any).token) token = (req.cookies as any).token;
+    if (!token && (req.query && req.query.token)) token = String(req.query.token);
+
+    if (!token) {
+      // Send a structured SSE error then close
+      try {
+        res.write(`event: error\n`);
+        res.write(`data: ${JSON.stringify({ message: 'Please authenticate' })}\n\n`);
+      } catch (e) {}
+      return res.end();
+    }
+
     try {
-      res.write(`event: connected\n`);
-      res.write(`data: ${JSON.stringify({ connected: true, verified: !!user.verified })}\n\n`);
-    } catch (e) {}
-    req.on('close', () => {
-      try { removeClient(userId, res as any); } catch (e) {}
-    });
+      const decoded = require('jsonwebtoken').verify(token, process.env.JWT_SECRET || 'defaultsecret') as { _id: string };
+      const { User } = require('../models/User');
+      const userDoc = await User.findOne({ _id: decoded._id });
+      if (!userDoc) {
+        res.write(`event: error\n`);
+        res.write(`data: ${JSON.stringify({ message: 'Please authenticate' })}\n\n`);
+        return res.end();
+      }
+      const user = {
+        _id: userDoc._id,
+        username: userDoc.username,
+        barangayID: userDoc.barangayID,
+        email: userDoc.email,
+        address: userDoc.address,
+        contactNumber: userDoc.contactNumber,
+        role: userDoc.role,
+        isActive: userDoc.isActive,
+        department: userDoc.department,
+        fullName: userDoc.fullName,
+        verified: userDoc.verified || false,
+      } as any;
+
+      const userId = String(user._id);
+      addClient(userId, res as any);
+      try {
+        res.write(`event: connected\n`);
+        res.write(`data: ${JSON.stringify({ connected: true, verified: !!user.verified })}\n\n`);
+      } catch (e) {}
+      req.on('close', () => {
+        try { removeClient(userId, res as any); } catch (e) {}
+      });
+    } catch (e) {
+      // Token verify failed
+      try {
+        res.write(`event: error\n`);
+        res.write(`data: ${JSON.stringify({ message: 'Please authenticate' })}\n\n`);
+      } catch (ee) {}
+      return res.end();
+    }
   } catch (err) {
     console.error('SSE stream error', err);
-    try { res.status(500).end(); } catch (e) {}
+    try { res.end(); } catch (e) {}
   }
 });
 
