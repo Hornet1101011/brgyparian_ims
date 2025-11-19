@@ -35,6 +35,18 @@ const documentRequestSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  // Reference to requesting user when available
+  requesterId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false,
+    index: true
+  },
+  requesterFullName: {
+    type: String,
+    required: false,
+    trim: true
+  },
   barangayID: {
     type: String,
     required: false // Not all requests may have this, but we want to save it if present

@@ -298,9 +298,36 @@ export const createDocumentRequest = async (req: any, res: Response) => {
   try {
   const { type, purpose, fieldValues } = req.body;
     const user = (req as any).user;
-    // Use username and barangayID from user object
-    const username = user?.username || 'Unknown';
-    const barangayID = user?.barangayID || 'Unknown';
+    // Resolve requester information from authenticated user or by lookup
+    let username = 'Unknown';
+    let barangayID = 'Unknown';
+    let requesterId: any = null;
+    let requesterFullName: string | undefined = undefined;
+    try {
+      const UserModel = require('../models/User').User;
+      if (user && user._id) {
+        const found = await UserModel.findById(user._id).lean();
+        if (found) {
+          username = found.username || (found.fullName ? found.fullName : username);
+          barangayID = found.barangayID || barangayID;
+          requesterId = found._id;
+          requesterFullName = found.fullName;
+        }
+      } else if (req.body.requesterUsername || req.body.requesterEmail) {
+        const query: any = {};
+        if (req.body.requesterUsername) query.username = req.body.requesterUsername;
+        if (req.body.requesterEmail) query.email = req.body.requesterEmail;
+        const found = await UserModel.findOne({ $or: [ { username: query.username }, { email: query.email } ] }).lean();
+        if (found) {
+          username = found.username || (found.fullName ? found.fullName : username);
+          barangayID = found.barangayID || barangayID;
+          requesterId = found._id;
+          requesterFullName = found.fullName;
+        }
+      }
+    } catch (lookupErr) {
+      console.warn('User lookup failed during document request creation:', String(lookupErr));
+    }
 
     // Create the document request
     const docReqData: any = {
@@ -308,6 +335,8 @@ export const createDocumentRequest = async (req: any, res: Response) => {
       purpose,
       username,
       barangayID,
+      requesterId: requesterId || undefined,
+      requesterFullName: requesterFullName || undefined,
       status: 'pending',
       paymentStatus: 'pending',
       fieldValues: fieldValues || {}
@@ -354,11 +383,20 @@ export const getMyDocumentRequests = async (req: any, res: Response) => {
     if (!req.user || !req.user._id) {
       return res.status(401).json({ message: "Unauthorized: No user found" });
     }
-    // Find document requests by username and barangayID
+    // Find document requests for this authenticated user. Prefer requesterId if stored.
     const user = req.user;
-    const documentRequests = await DocumentRequest.find({ username: user.username, barangayID: user.barangayID })
+    const query: any = {};
+    if (user && user._id) {
+      // Try to match requesterId or fallback to username/barangayID
+      query.$or = [ { requesterId: user._id }, { username: user.username, barangayID: user.barangayID } ];
+    } else {
+      query.username = user.username;
+      query.barangayID = user.barangayID;
+    }
+    const documentRequests = await DocumentRequest.find(query)
       .sort({ dateRequested: -1 })
-      .populate('processedBy', 'fullName');
+      .populate('processedBy', 'fullName')
+      .populate('requesterId', 'fullName username barangayID');
 
     res.json(documentRequests);
   } catch (error) {
@@ -377,7 +415,8 @@ export const getAllDocumentRequests = async (req: any, res: Response) => {
 
     const documentRequests = await DocumentRequest.find(query)
       .sort({ dateRequested: -1 })
-      .populate('processedBy', 'fullName username barangayID');
+      .populate('processedBy', 'fullName username barangayID')
+      .populate('requesterId', 'fullName username barangayID');
     res.json(documentRequests);
   } catch (error) {
     res.status(500).json({

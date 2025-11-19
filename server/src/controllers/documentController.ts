@@ -158,20 +158,76 @@ export const generateFilledDocument = async (req: Request, res: Response) => {
           res.set('X-Transaction-Code', data.qr || data.transactionCode);
         }
 
-        // Attempt to persist the generated copy into the processed_documents GridFS bucket so
-        // generated copies are stored safely (avoids inline BSON size issues and keeps them separate).
-        // default filename (fallback) - may be overridden below if transactionCode is present
+        // Persist the generated copy into the processed_documents GridFS bucket
+        // but first check for an existing processed metadata record so we don't
+        // create duplicate GridFS files. If a processed copy exists for the
+        // same source template or request, stream that file instead of uploading
+        // a new one. This guarantees a single copy per source/request.
         let filename = `filled_${fileId}.docx`;
         try {
           const filesDb = (require('mongoose').connection.db as any);
           if (filesDb) {
             const { GridFSBucket } = require('mongodb');
-            const { Readable } = require('stream');
             const processedBucket = new GridFSBucket(filesDb, { bucketName: 'processed_documents' });
 
-            // Prefer transactionCode (if it was set from a DocumentRequest) for filename, otherwise fall back to filled_<fileId>.docx
+            // Build a query that identifies a processed copy for this source
+            // Prefer requestId and sourceTemplateId for deterministic matching.
+            const ProcessedDocument = (() => {
+              try { return require('../../models/ProcessedDocument'); } catch (e) { return null; }
+            })();
+
+            const pdQuery: any = {};
+            if (require('mongoose').Types.ObjectId.isValid(fileId)) pdQuery.sourceTemplateId = require('mongoose').Types.ObjectId(fileId);
+            if (req.body && req.body.requestId && require('mongoose').Types.ObjectId.isValid(req.body.requestId)) pdQuery.requestId = require('mongoose').Types.ObjectId(req.body.requestId);
+            // If neither template nor request is present, fallback to filename/metadata match
             const safeTx = (data && data.transactionCode) ? String(data.transactionCode).replace(/[^a-zA-Z0-9-_.]/g, '_') : null;
             filename = safeTx ? `${safeTx}.docx` : `filled_${fileId}.docx`;
+            if (!pdQuery.sourceTemplateId && !pdQuery.requestId) {
+              pdQuery.filename = filename;
+              pdQuery['metadata.sourceFileId'] = fileId;
+            }
+
+            // If ProcessedDocument model available, try to find existing
+            let existingProcessed: any = null;
+            if (ProcessedDocument) {
+              try {
+                existingProcessed = await ProcessedDocument.findOne(pdQuery).lean();
+              } catch (e) {
+                existingProcessed = null;
+              }
+            }
+
+            if (existingProcessed && existingProcessed.gridFsFileId) {
+              // Stream existing GridFS file to the response to avoid creating duplicates
+              try {
+                try { res.set('X-Processed-Doc-Id', String(existingProcessed._id)); } catch (e) {}
+                try { res.set('X-Processed-GridFS-Id', String(existingProcessed.gridFsFileId)); } catch (e) {}
+                const oid = existingProcessed.gridFsFileId;
+                // If gridFsFileId is an ObjectId string, convert to ObjectId
+                const { ObjectId } = require('mongodb');
+                let _idToStream = oid;
+                try { _idToStream = require('mongoose').Types.ObjectId.isValid(oid) ? ObjectId(String(oid)) : oid; } catch (e) { _idToStream = oid; }
+                const downloadStream = processedBucket.openDownloadStream(_idToStream);
+                downloadStream.on('error', (err: any) => {
+                  console.warn('Error streaming existing processed GridFS file, will fallback to sending generated buffer:', err && (err.message || err));
+                  // Fallback: send the freshly generated buffer
+                  res.set({
+                    'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                    'Content-Disposition': `attachment; filename="${filename}"`,
+                  });
+                  res.send(filledBuffer);
+                });
+                // Pipe and return
+                res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+                return downloadStream.pipe(res);
+              } catch (streamErr) {
+                console.warn('Failed to stream existing processed file (continuing to upload new):', String(streamErr));
+                existingProcessed = null;
+              }
+            }
+
+            // No existing processed file found (or streaming failed) -> upload
+            const { Readable } = require('stream');
             const readable = new Readable();
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
@@ -194,38 +250,31 @@ export const generateFilledDocument = async (req: Request, res: Response) => {
 
             // Best-effort: create small metadata records referencing the GridFS file id
             try {
-              const GeneratedDocument = require('../../models/GeneratedDocument');
-              const genMeta = new GeneratedDocument({
-                filename,
-                contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                size: filledBuffer.length,
-                gridFsFileId: savedId,
-                metadata: { sourceFileId: fileId },
-                sourceTemplateId: require('mongoose').Types.ObjectId.isValid(fileId) ? require('mongoose').Types.ObjectId(fileId) : undefined,
-                requestId: req.body && req.body.requestId ? (require('mongoose').Types.ObjectId.isValid(req.body.requestId) ? require('mongoose').Types.ObjectId(req.body.requestId) : undefined) : undefined,
-                uploadedBy: req.user && req.user._id ? req.user._id : undefined
-              });
-              try {
-                const savedGen = await genMeta.save();
-                try { res.set('X-Generated-Doc-Id', String(savedGen._id)); } catch (e) {}
-              } catch (metaErr) {
-                console.warn('Failed to save generated document metadata (continuing):', metaErr && (metaErr as any).message ? (metaErr as any).message : metaErr);
+              const GeneratedDocument = (() => { try { return require('../../models/GeneratedDocument'); } catch (e) { return null; } })();
+              if (GeneratedDocument) {
+                const genMeta = new GeneratedDocument({
+                  filename,
+                  contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                  size: filledBuffer.length,
+                  gridFsFileId: savedId,
+                  metadata: { sourceFileId: fileId },
+                  sourceTemplateId: require('mongoose').Types.ObjectId.isValid(fileId) ? require('mongoose').Types.ObjectId(fileId) : undefined,
+                  requestId: req.body && req.body.requestId ? (require('mongoose').Types.ObjectId.isValid(req.body.requestId) ? require('mongoose').Types.ObjectId(req.body.requestId) : undefined) : undefined,
+                  uploadedBy: req.user && req.user._id ? req.user._id : undefined
+                });
+                try {
+                  const savedGen = await genMeta.save();
+                  try { res.set('X-Generated-Doc-Id', String(savedGen._id)); } catch (e) {}
+                } catch (metaErr) {
+                  console.warn('Failed to save generated document metadata (continuing):', metaErr && (metaErr as any).message ? (metaErr as any).message : metaErr);
+                }
               }
             } catch (metaErr2) {
               console.warn('GeneratedDocument model not found or create failed (continuing):', metaErr2 && (metaErr2 as any).message ? (metaErr2 as any).message : metaErr2);
             }
 
             try {
-              const ProcessedDocument = require('../../models/ProcessedDocument');
-              const pdQuery: any = {};
-              if (require('mongoose').Types.ObjectId.isValid(fileId)) pdQuery.sourceTemplateId = require('mongoose').Types.ObjectId(fileId);
-              if (req.body && req.body.requestId && require('mongoose').Types.ObjectId.isValid(req.body.requestId)) pdQuery.requestId = require('mongoose').Types.ObjectId(req.body.requestId);
-              if (!pdQuery.sourceTemplateId && !pdQuery.requestId) {
-                pdQuery.filename = filename;
-                pdQuery['metadata.sourceFileId'] = fileId;
-              }
-              const existingProcessed = await ProcessedDocument.findOne(pdQuery).lean();
-              if (!existingProcessed) {
+              if (ProcessedDocument) {
                 const newProcessed = new ProcessedDocument({
                   filename,
                   contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -242,8 +291,6 @@ export const generateFilledDocument = async (req: Request, res: Response) => {
                 } catch (procSaveErr) {
                   console.warn('Failed to save processed document metadata (continuing):', (procSaveErr && (procSaveErr as any).message) || procSaveErr);
                 }
-              } else {
-                try { res.set('X-Processed-Doc-Id', String(existingProcessed._id)); } catch (e) {}
               }
             } catch (procErr) {
               console.warn('ProcessedDocument model not available or save failed (continuing):', (procErr && (procErr as any).message) || procErr);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Row, Col, Statistic, List, Typography, Space, Avatar, Spin, Button, Modal, Input, Collapse, Tag, Empty, Badge, Timeline, Drawer, Table, notification } from 'antd';
+import { Card, Row, Col, Statistic, List, Typography, Space, Avatar, Spin, Button, Modal, Input, Collapse, Tag, Empty, Badge, Timeline, Drawer, Table, notification, Grid } from 'antd';
 import {
   HourglassOutlined,
   CaretUpOutlined,
@@ -103,6 +103,10 @@ const StaffDashboard: React.FC = () => {
   const [docsModalVisible, setDocsModalVisible] = useState(false);
   const [allDocuments, setAllDocuments] = useState<any[]>([]);
   const [docsLoading, setDocsLoading] = useState(false);
+  const [previewVisible, setPreviewVisible] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState<any | null>(null);
+  const [docsSearch, setDocsSearch] = useState<string>('');
+  const screens = Grid.useBreakpoint();
 
   // Group document requests by type for processing
   const requestsByCategory: { [type: string]: DocumentRequest[] } = {};
@@ -1092,27 +1096,108 @@ const StaffDashboard: React.FC = () => {
           title={`Processed Documents (${allDocuments.length})`}
           onCancel={() => { setDocsModalVisible(false); }}
           footer={null}
-          width={900}
+          width={screens.xs ? '95%' : screens.md ? 1000 : 1200}
+          bodyStyle={{ padding: '12px 18px' }}
         >
           <Spin spinning={docsLoading}>
+            <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexDirection: screens.xs ? 'column' : 'row', alignItems: screens.xs ? 'stretch' : 'center' }}>
+              <Input.Search
+                placeholder="Search by title, filename, transaction code or uploader"
+                allowClear
+                enterButton={false}
+                onSearch={(v) => setDocsSearch(String(v || '').trim())}
+                onChange={(e) => setDocsSearch(e.target.value)}
+                style={{ maxWidth: 420, flex: 1 }}
+                value={docsSearch}
+              />
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                <Button onClick={() => { setDocsSearch(''); }}>Clear</Button>
+                <Button type="primary" onClick={() => { setAllDocuments(allDocuments.slice().sort((a,b) => new Date(b.createdAt||0).getTime() - new Date(a.createdAt||0).getTime())); }}>Sort Newest</Button>
+              </div>
+            </div>
+
             <Table
-              dataSource={allDocuments}
+              dataSource={allDocuments.filter(d => {
+                if (!docsSearch) return true;
+                const q = docsSearch.toLowerCase();
+                const candidates = [d.title, d.filename, d.name, d.transactionCode, d.transactioncode, (d.uploadedBy && (d.uploadedBy.username || d.uploadedBy.name)) || d.uploadedBy || ''];
+                return candidates.some((c: any) => c && String(c).toLowerCase().includes(q));
+              })}
               rowKey={(r: any) => r._id || r.id || r.filename}
               pagination={{ pageSize: 10 }}
+              scroll={{ x: 'max-content' }}
               columns={[
-                { title: 'Title', dataIndex: 'title', key: 'title', render: (t: any, r: any) => t || r.filename || r.name || 'Untitled' },
-                { title: 'Date', dataIndex: 'createdAt', key: 'createdAt', render: (d: any) => formatDate(d) },
                 {
-                  title: 'Action',
+                  title: 'Title',
+                  dataIndex: 'title',
+                  key: 'title',
+                  render: (t: any, r: any) => (
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                      <Avatar size={36} icon={<FileTextOutlined />} />
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t || r.filename || r.name || 'Untitled'}</div>
+                        <div style={{ fontSize: 12, color: '#888' }}>{r.sourceTemplateName || r.templateName || ''}</div>
+                      </div>
+                    </div>
+                  )
+                },
+                { title: 'Transaction', dataIndex: 'transactionCode', key: 'transactionCode', responsive: ['sm'], render: (v: any) => v || '-' },
+                { title: 'Uploaded By', dataIndex: 'uploadedBy', key: 'uploadedBy', responsive: ['md'], render: (u: any) => (u && (u.username || u.name)) || (typeof u === 'string' ? u : '-') },
+                { title: 'Date', dataIndex: 'createdAt', key: 'createdAt', responsive: ['sm'], render: (d: any) => formatDate(d) },
+                {
+                  title: 'Actions',
                   key: 'action',
-                  width: 120,
+                  width: 220,
                   render: (_: any, rec: any) => (
-                    <Button type="link" onClick={() => handleDownloadProcessed(rec)}>Download</Button>
+                    <Space>
+                      <Button size="small" onClick={() => handleDownloadProcessed(rec)}>Download</Button>
+                      <Button size="small" onClick={() => { setPreviewDoc(rec); setPreviewVisible(true); }}>Preview</Button>
+                      { (rec.transactionCode || rec.transactioncode) && (
+                        <Button size="small" onClick={() => { navigator.clipboard?.writeText(rec.transactionCode || rec.transactioncode || ''); notification.success({ message: 'Copied', description: 'Transaction code copied to clipboard' }); }}>Copy TX</Button>
+                      ) }
+                    </Space>
                   )
                 }
               ]}
             />
           </Spin>
+          {/* Preview Drawer for a processed document */}
+          <Drawer
+            title={previewDoc ? (previewDoc.title || previewDoc.filename || 'Document') : 'Document'}
+            placement="right"
+            onClose={() => { setPreviewVisible(false); setPreviewDoc(null); }}
+            open={previewVisible}
+            width={screens.xs ? '95%' : 560}
+          >
+            {previewDoc ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontWeight: 700 }}>{previewDoc.title || previewDoc.filename || 'Untitled'}</div>
+                    <div style={{ fontSize: 12, color: '#888' }}>{previewDoc.sourceTemplateName || previewDoc.templateName || ''}</div>
+                  </div>
+                  <div>
+                    <Button onClick={() => handleDownloadProcessed(previewDoc)} type="primary">Download</Button>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <Tag color="blue">Created: {formatDate(previewDoc.createdAt)}</Tag>
+                  {previewDoc.transactionCode && <Tag color="purple">TX: {previewDoc.transactionCode}</Tag>}
+                  {previewDoc.uploadedBy && <Tag>By: {(previewDoc.uploadedBy.username || previewDoc.uploadedBy.name) || previewDoc.uploadedBy}</Tag>}
+                </div>
+
+                <div style={{ color: '#444', fontSize: 13 }}>
+                  <div style={{ marginBottom: 8 }}>{previewDoc.description || previewDoc.notes || ''}</div>
+                  <div style={{ marginTop: 8 }}>
+                    <Button type="link" onClick={() => { navigator.clipboard?.writeText(previewDoc.transactionCode || ''); notification.success({ message: 'Copied', description: 'Transaction code copied' }); }}>Copy Transaction Code</Button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div>No document selected</div>
+            )}
+          </Drawer>
           <Modal
             title="Manage Inquiries"
             open={manageModalVisible}
