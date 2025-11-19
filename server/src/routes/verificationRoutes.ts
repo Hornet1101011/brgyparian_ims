@@ -9,6 +9,7 @@ import mongoose from 'mongoose';
 import { ensureBucket, getBucket } from '../utils/gridfs';
 import { Message } from '../models/Message';
 import { User } from '../models/User';
+import { sendToUser, addClient, removeClient } from '../utils/sse';
 
 const router = express.Router();
 
@@ -20,6 +21,10 @@ router.post('/upload', auth, upload.array('ids', 2), async (req: any, res) => {
   try {
     const user = (req.user as any);
     if (!user) return res.status(401).json({ message: 'Unauthorized' });
+    // If user is already verified, do not accept new verification uploads
+    if (user.verified) {
+      return res.status(400).json({ message: 'User already verified' });
+    }
     // For memory storage, each file has a buffer and originalname
     const filenames: string[] = [];
     // Prefer using shared GridFSBucket instance
@@ -57,6 +62,11 @@ router.post('/upload', auth, upload.array('ids', 2), async (req: any, res) => {
   const vr = new VerificationRequest({ userId: user._id, files: filenames, gridFileIds: gridIds, status: 'pending' });
     await vr.save();
 
+    // notify the owner via SSE that a verification request was created
+    try {
+      sendToUser(String(user._id), 'verification-request', vr);
+    } catch (e) {}
+
     // Notify all admins by creating Message entries
     const admins = await User.find({ role: 'admin' });
   const residentName = (user.fullName || user.username || user.email || 'Resident');
@@ -92,6 +102,39 @@ router.get('/requests/my', auth, async (req, res) => {
   try {
     const user = (req as any).user;
     if (!user) return res.status(401).json({ message: 'Unauthorized' });
+    // If the user's profile is already verified, ensure no pending requests remain
+    if (user.verified) {
+      try {
+        // find any pending requests and remove their files + docs
+        const pending = await VerificationRequest.find({ userId: user._id, status: 'pending' });
+        const mongodb = await import('mongodb');
+        const ObjectId = mongodb.ObjectId;
+        const bucket = ensureBucket('verificationRequests');
+        for (const vr of pending) {
+          if (Array.isArray(vr.gridFileIds) && bucket) {
+            for (const fid of vr.gridFileIds) {
+              try {
+                const fileId = typeof fid === 'string' ? new ObjectId(fid) : fid;
+                // @ts-ignore
+                await bucket.delete(fileId);
+              } catch (e) {
+                console.warn('Failed to delete GridFS file during cleanup', fid, e && (e as Error).message);
+              }
+            }
+          }
+          try {
+            await VerificationRequest.deleteOne({ _id: vr._id });
+          } catch (e) {
+            console.warn('Failed to delete verification request during cleanup', vr._id, e && (e as Error).message);
+          }
+          try { sendToUser(String(user._id), 'verification-request-deleted', { requestId: String(vr._id) }); } catch (e) {}
+        }
+      } catch (e) {
+        console.warn('Error cleaning up pending verification requests for verified user', e && (e as Error).message);
+      }
+      return res.json([]);
+    }
+
     const reqs = await VerificationRequest.find({ userId: user._id }).sort({ createdAt: -1 });
     return res.json(reqs);
   } catch (err) {
@@ -141,6 +184,30 @@ router.get('/file/:id', auth, authorize('admin'), async (req, res) => {
   } catch (err) {
     console.error('Error streaming verification file', err);
     res.status(500).send('Error');
+  }
+});
+
+// SSE endpoint: client opens EventSource to receive verification/profile updates for the current user
+router.get('/stream', auth, async (req, res) => {
+  try {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    try { res.flushHeaders?.(); } catch (e) {}
+    const user = (req as any).user;
+    if (!user) return res.status(401).end();
+    const userId = String(user._id);
+    addClient(userId, res as any);
+    try {
+      res.write(`event: connected\n`);
+      res.write(`data: ${JSON.stringify({ connected: true, verified: !!user.verified })}\n\n`);
+    } catch (e) {}
+    req.on('close', () => {
+      try { removeClient(userId, res as any); } catch (e) {}
+    });
+  } catch (err) {
+    console.error('SSE stream error', err);
+    try { res.status(500).end(); } catch (e) {}
   }
 });
 
@@ -200,6 +267,10 @@ router.delete('/requests/:id', auth, async (req, res) => {
 
     // use model-level delete to satisfy TypeScript typings and avoid deprecated instance.remove
     await VerificationRequest.deleteOne({ _id: vr._id });
+    // notify owner that their request was removed
+    try {
+      sendToUser(String(user._id), 'verification-request-deleted', { requestId: id });
+    } catch (e) {}
     return res.json({ message: 'Verification request cancelled' });
   } catch (err) {
     console.error('Error cancelling verification request', err);
@@ -224,6 +295,12 @@ router.post('/admin/requests/:id/approve', auth, authorize('admin'), async (req,
       user.set('verified', true);
       await user.save();
     }
+
+    // notify the owner about profile update and the updated request
+    try {
+      sendToUser(String(vr.userId), 'profile', { verified: true });
+      sendToUser(String(vr.userId), 'verification-request-updated', vr);
+    } catch (e) {}
 
     return res.json({ message: 'Verification request approved' });
   } catch (err) {
@@ -268,6 +345,12 @@ router.post('/admin/requests/:id/reject', auth, authorize('admin'), async (req, 
       user.set('verified', false);
       await user.save();
     }
+
+    // notify owner about deletion and profile update (unverified)
+    try {
+      sendToUser(String(vr.userId), 'verification-request-deleted', { requestId: id });
+      sendToUser(String(vr.userId), 'profile', { verified: false });
+    } catch (e) {}
 
     return res.json({ message: 'Verification request rejected and removed' });
   } catch (err) {
