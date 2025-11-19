@@ -33,6 +33,13 @@ const DateTimeDisplay: React.FC = () => {
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Auto-close verification modal when user becomes verified via polling
+  useEffect(() => {
+    if (verificationStatus?.verified) {
+      setVerificationModalVisible(false);
+    }
+  }, [verificationStatus?.verified]);
   const pad = (n: number) => n.toString().padStart(2, '0');
   const date = `${pad(now.getMonth() + 1)}/${pad(now.getDate())}/${now.getFullYear()}`;
   const time = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;

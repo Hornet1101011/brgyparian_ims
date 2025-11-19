@@ -71,6 +71,15 @@ const DocumentRequestForm: React.FC = () => {
   const [pendingModalOpen, setPendingModalOpen] = useState(false);
   const { user: authUser, setUser } = useAuth();
 
+  // If the user's verified flag changes to true, close any pending verification UI
+  useEffect(() => {
+    if (authUser && authUser.verified) {
+      setPendingVerification(null);
+      setPendingModalOpen(false);
+      setVerificationModalOpen(false);
+    }
+  }, [authUser?.verified]);
+
   useEffect(() => {
     const fetchFiles = async () => {
       setLoading(true);
