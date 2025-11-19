@@ -1,6 +1,5 @@
 import './responsive-system-title.css';
 import React, { useState, useEffect } from 'react';
-import { Tag, Modal, message } from 'antd';
 import { Layout, Menu, Button, Space, Dropdown, Avatar } from 'antd';
 import {
   LogoutOutlined,
@@ -157,8 +156,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   // Utility bar quick actions removed: online/status and dark-mode switch removed
   // You can expand these as needed for your system
   const [residentImageSrc, setResidentImageSrc] = useState<string | null>(null);
-  const [verificationStatus, setVerificationStatus] = useState<{ verified?: boolean; pending?: boolean; request?: any } | null>(null);
-  const [verificationModalVisible, setVerificationModalVisible] = useState(false);
+  
   // Start collapsed by default so the navigation is compact on initial load.
   const [collapsed, setCollapsed] = useState(true);
 
@@ -195,16 +193,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       } catch (err) {
         // ignore
       }
-      // also load verification status for current user so we can show indicator in header
-      try {
-        const api = await import('../services/api');
-        const myReqs = await api.verificationAPI.getMyRequests();
-        const pending = Array.isArray(myReqs) ? myReqs.find((r: any) => r.status === 'pending') : null;
-        setVerificationStatus({ verified: displayUser?.verified, pending: !!pending, request: pending || (Array.isArray(myReqs) && myReqs[0]) });
-      } catch (e) {
-        // ignore
-      }
-      // verification status will be updated via server-sent events (SSE)
+      // verification status intentionally omitted (feature temporarily disabled)
     })();
     const handler = (e: Event) => {
       try {
@@ -228,130 +217,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     };
   }, []);
 
-  // Auto-close verification modal when user becomes verified
-  useEffect(() => {
-    if (verificationStatus?.verified) setVerificationModalVisible(false);
-  }, [verificationStatus?.verified]);
-
-  // Open SSE EventSource to receive real-time verification/profile updates
-  useEffect(() => {
-    let es: EventSource | null = null;
-    let shouldReconnect = true;
-    let retryCount = 0;
-
-    const maxRetries = 6;
-    const baseDelay = 1000; // 1s
-
-    const attachListeners = (source: EventSource) => {
-      const onConnected = (ev: MessageEvent) => {
-        try {
-          const d = JSON.parse((ev as any).data || '{}');
-          setVerificationStatus(prev => ({ ...(prev || {}), verified: !!d.verified }));
-          // reset retry count on successful connect
-          retryCount = 0;
-        } catch (e) {}
-      };
-      const onReq = (ev: MessageEvent) => {
-        try {
-          const payload = JSON.parse((ev as any).data || '{}');
-          setVerificationStatus({ verified: (user as any)?.verified, pending: true, request: payload });
-        } catch (e) {}
-      };
-      const onReqUpdated = (ev: MessageEvent) => {
-        try {
-          const payload = JSON.parse((ev as any).data || '{}');
-          setVerificationStatus({ verified: (user as any)?.verified, pending: payload?.status === 'pending', request: payload });
-        } catch (e) {}
-      };
-      const onReqDeleted = (_ev: MessageEvent) => {
-        try {
-          setVerificationStatus(prev => ({ ...(prev || {}), pending: false, request: null }));
-        } catch (e) {}
-      };
-      const onProfile = (ev: MessageEvent) => {
-        try {
-          const payload = JSON.parse((ev as any).data || '{}');
-          if (payload && typeof payload.verified !== 'undefined') {
-            setVerificationStatus(prev => ({ ...(prev || {}), verified: !!payload.verified }));
-            try {
-              if (setUser) {
-                const updated = user ? { ...user, verified: !!payload.verified } : { ...(displayUser || {}), verified: !!payload.verified };
-                setUser(updated as any);
-              }
-            } catch (e) {}
-          }
-        } catch (e) {}
-      };
-
-      source.addEventListener('connected', onConnected);
-      source.addEventListener('verification-request', onReq);
-      source.addEventListener('verification-request-updated', onReqUpdated);
-      source.addEventListener('verification-request-deleted', onReqDeleted);
-      source.addEventListener('profile', onProfile);
-
-      source.onerror = () => {
-        try { console.warn('SSE error, will attempt reconnect'); } catch (e) {}
-        // close and schedule reconnect
-        try { source.close(); } catch (e) {}
-        scheduleReconnect();
-      };
-
-      // cleanup helper
-      return () => {
-        try {
-          source.removeEventListener('connected', onConnected as any);
-          source.removeEventListener('verification-request', onReq as any);
-          source.removeEventListener('verification-request-updated', onReqUpdated as any);
-          source.removeEventListener('verification-request-deleted', onReqDeleted as any);
-          source.removeEventListener('profile', onProfile as any);
-        } catch (e) {}
-        try { source.close(); } catch (e) {}
-      };
-    };
-
-    let cleanupListeners: (() => void) | null = null;
-
-    const scheduleReconnect = () => {
-      if (!shouldReconnect) return;
-      if (retryCount >= maxRetries) {
-        try { console.warn('SSE max retry reached'); } catch (e) {}
-        return;
-      }
-      const delay = Math.round(baseDelay * Math.pow(2, retryCount) * (0.8 + Math.random() * 0.4));
-      retryCount += 1;
-      try { console.info('SSE reconnect scheduled in', delay, 'ms'); } catch (e) {}
-      setTimeout(() => {
-        if (!shouldReconnect) return;
-        try {
-          const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-          const base = getAbsoluteApiUrl('/verification/stream');
-          const url = token ? `${base}?token=${encodeURIComponent(token)}` : base;
-          es = new EventSource(url);
-          cleanupListeners = attachListeners(es);
-        } catch (e) {
-          scheduleReconnect();
-        }
-      }, delay);
-    };
-
-    // initial connect
-    try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-      const base = getAbsoluteApiUrl('/verification/stream');
-      const url = token ? `${base}?token=${encodeURIComponent(token)}` : base;
-      es = new EventSource(url);
-      cleanupListeners = attachListeners(es);
-    } catch (e) {
-      scheduleReconnect();
-    }
-
-    return () => {
-      // prevent further reconnects
-      shouldReconnect = false;
-      try { if (cleanupListeners) cleanupListeners(); } catch (e) {}
-      try { es?.close(); } catch (e) {}
-    };
-  }, [setUser, (user as any)?.verified]);
+  // SSE for verification/profile updates is disabled while feature is paused
 
   // Close dropdown on outside click
   // Removed notification dropdown logic
@@ -485,20 +351,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                 />
               )}
             </Space>
-            {/* Verification status indicator (clickable) */}
-            {displayUser && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ cursor: 'pointer' }} onClick={() => setVerificationModalVisible(true)}>
-                  {verificationStatus?.verified ? (
-                    <Tag color="green">Verified</Tag>
-                  ) : verificationStatus?.pending ? (
-                    <Tag color="orange">Verification Pending</Tag>
-                  ) : (
-                    <Tag color="default">Unverified</Tag>
-                  )}
-                </div>
-              </div>
-            )}
+            {/* Verification status indicator removed while feature is paused */}
             {/* profile avatar (notification bell removed) */}
             <Dropdown
               popupRender={() => (
@@ -528,59 +381,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                   ))}
                 </Avatar>
             </Dropdown>
-            {/* Verification modal opened from header */}
-            <Modal
-              title="Verification Status"
-              open={verificationModalVisible}
-              onCancel={() => setVerificationModalVisible(false)}
-              footer={null}
-            >
-              {verificationStatus?.request ? (
-                <div>
-                  <p>
-                    Status: {verificationStatus.request.status}
-                  </p>
-                  <p>Submitted: {new Date(verificationStatus.request.createdAt).toLocaleString()}</p>
-                  {Array.isArray(verificationStatus.request.files) && verificationStatus.request.files.length > 0 && (
-                    <div>
-                      <p>Uploaded files:</p>
-                      <ul>
-                        {verificationStatus.request.files.map((f: any, i: number) => <li key={i}>{f}</li>)}
-                      </ul>
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-                    <Button onClick={() => setVerificationModalVisible(false)}>Close</Button>
-                    <Button danger onClick={async () => {
-                      try {
-                        const api = await import('../services/api');
-                        await api.verificationAPI.cancelRequest(verificationStatus.request._id);
-                        message.success('Verification request cancelled');
-                        setVerificationModalVisible(false);
-                        // refresh profile and verification status
-                        try {
-                          const api2 = await import('../services/api');
-                          const profile = await api2.authService.getCurrentUser();
-                          if (profile && setUser) setUser(profile as any);
-                          const myReqs = await api2.verificationAPI.getMyRequests();
-                          const pending = Array.isArray(myReqs) ? myReqs.find((r: any) => r.status === 'pending') : null;
-                          setVerificationStatus({ verified: profile?.verified, pending: !!pending, request: pending || (Array.isArray(myReqs) && myReqs[0]) });
-                        } catch (e) {
-                          // ignore
-                        }
-                      } catch (e) {
-                        console.error('Failed to cancel verification', e);
-                        message.error('Failed to cancel verification');
-                      }
-                    }}>Cancel Verification</Button>
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <p>{verificationStatus?.verified ? 'Your account is verified.' : 'No pending verification request.'}</p>
-                </div>
-              )}
-            </Modal>
+            {/* Verification modal removed while feature is paused */}
           </div>
   </Header>
   {/* Divider line below header */}

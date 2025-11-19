@@ -433,7 +433,13 @@ const SystemSettings: React.FC = () => {
             <Button variant="text" onClick={() => antdMessage.info('When disabled, all pending verification requests will be deleted on the server.')}>More info</Button>
           </Box>
           {(settings as any).enableVerifications === false && (
-            <Alert severity="warning">Disabling verifications will permanently delete pending verification requests and uploaded files when you save changes.</Alert>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}> 
+              <Alert severity="warning">Disabling verifications will permanently delete pending verification requests and uploaded files when you save changes.</Alert>
+              {/* If settings haven't been loaded from server yet, indicate the default state */}
+              {!loading && !originalSettingsRef.current && (
+                <Alert severity="info">Resident verifications are currently disabled by default. Enable them to allow residents to submit verification requests.</Alert>
+              )}
+            </Box>
           )}
 
           <Divider sx={{ my: 3 }} />

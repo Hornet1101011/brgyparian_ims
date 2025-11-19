@@ -8,7 +8,6 @@ import {
   FilterOutlined, 
   SortAscendingOutlined,
   MoreOutlined,
-  UploadOutlined,
   EyeOutlined,
   DownloadOutlined,
   DeleteOutlined
@@ -29,8 +28,7 @@ import {
   Modal,
   Form,
   Empty,
-  DatePicker,
-  Upload
+  DatePicker
 } from 'antd';
 // upload icon already imported above
 
@@ -65,20 +63,14 @@ const DocumentRequestForm: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [lastRequestId, setLastRequestId] = useState<string | null>(null);
-  const [verificationModalOpen, setVerificationModalOpen] = useState(false);
-  const [uploadList, setUploadList] = useState<any[]>([]);
-  const [pendingVerification, setPendingVerification] = useState<any | null>(null);
-  const [pendingModalOpen, setPendingModalOpen] = useState(false);
-  const { user: authUser, setUser } = useAuth();
 
-  // If the user's verified flag changes to true, close any pending verification UI
-  useEffect(() => {
-    if ((authUser as any)?.verified) {
-      setPendingVerification(null);
-      setPendingModalOpen(false);
-      setVerificationModalOpen(false);
-    }
-  }, [authUser]);
+  const { user: authUser, setUser } = useAuth();
+  // Make currentUser available everywhere in the component
+  const currentUser = authUser || (() => {
+    try { const stored = localStorage.getItem('userProfile'); return stored ? JSON.parse(stored) : null; } catch { return null; }
+  })();
+
+  // Verification popups disabled while the feature is paused
 
   useEffect(() => {
     const fetchFiles = async () => {
@@ -94,34 +86,15 @@ const DocumentRequestForm: React.FC = () => {
       }
     };
     fetchFiles();
-    // load any pending verification requests for this user so pending UI is persistent
-    (async () => {
-      try {
-        const api = await import('../services/api');
-        const myReqs = await api.verificationAPI.getMyRequests();
-        if (Array.isArray(myReqs) && myReqs.length > 0) {
-          // prefer the most recent pending request
-          const pending = myReqs.find((r: any) => r.status === 'pending') || myReqs[0];
-          if (pending) {
-            setPendingVerification(pending);
-            setPendingModalOpen(true);
-          }
-        }
-      } catch (e) {
-        // ignore errors (user may be guest)
-      }
-    })();
+    // pending verification checks are disabled while feature is paused
   }, []);
 
   const handleCardClick = async (file: FileData) => {
     const currentUser = authUser || (() => {
       try { const stored = localStorage.getItem('userProfile'); return stored ? JSON.parse(stored) : null; } catch { return null; }
     })();
-    // If resident and not verified, prompt verification upload
-    if (currentUser && currentUser.role === 'resident' && !currentUser.verified) {
-      setVerificationModalOpen(true);
-      return;
-    }
+    // If resident and not verified, normally we'd prompt for verification.
+    // That behavior is currently disabled while verification is paused.
     setModalDocName(file.filename.replace(/\.docx$/i, ''));
     try {
       const api = await import('../services/api');
@@ -172,80 +145,28 @@ const DocumentRequestForm: React.FC = () => {
     }
   };
 
-  // Upload verification IDs
-  const handleUploadSubmit = async () => {
-    if (uploadList.length < 1) {
-      message.warning('Please select at least one ID to upload');
-      return;
-    }
-    const form = new FormData();
-    uploadList.slice(0, 2).forEach((f, idx) => form.append('ids', f.originFileObj || f));
-    try {
-      const api = await import('../services/api');
-      const res = await api.axiosInstance.post('/verification/upload', form, { headers: { 'Content-Type': 'multipart/form-data' } });
-      const data = res && res.data ? res.data : null;
-      message.success('Verification documents uploaded. Admin will review shortly.');
-      setVerificationModalOpen(false);
-      // If server returned the verification request, show pending UI so resident can cancel
-      if (data && data.verificationRequest) {
-        setPendingVerification(data.verificationRequest);
-        setPendingModalOpen(true);
-      }
-      // Optionally refresh user profile from server so verified flag may be updated later
-      try {
-        const { authService } = await import('../services/api');
-        const profile = await authService.getCurrentUser();
-        if (profile && setUser) setUser(profile as any);
-      } catch (e) {
-        // ignore
-      }
-    } catch (err) {
-      console.error('Upload error', err);
-      message.error('Upload failed');
-    }
-  };
-
-  const handleCancelVerification = async () => {
-    if (!pendingVerification || !pendingVerification._id) return;
-    try {
-      const api = await import('../services/api');
-      await api.verificationAPI.cancelRequest(pendingVerification._id);
-      message.success('Verification request cancelled');
-      setPendingVerification(null);
-      setPendingModalOpen(false);
-      // refresh profile
-      try {
-        const { authService } = await import('../services/api');
-        const profile = await authService.getCurrentUser();
-        if (profile && setUser) setUser(profile as any);
-      } catch (e) {}
-    } catch (err) {
-      console.error('Failed to cancel verification', err);
-      message.error('Failed to cancel verification');
-    }
-  };
-
+  // Minimal action menu for each document card
   const getActionMenu = (file: FileData) => [
-    {
-      key: 'view',
-      icon: <EyeOutlined />,
-      label: 'View'
-    },
-    {
-      key: 'download',
-      icon: <DownloadOutlined />,
-      label: 'Download'
-    },
-    {
-      key: 'delete',
-      icon: <DeleteOutlined />,
-      label: 'Delete'
-    }
+    { key: 'view', icon: <EyeOutlined />, label: 'View' },
+    { key: 'download', icon: <DownloadOutlined />, label: 'Download' },
   ];
 
+  // Filter and sort files for display
   const filteredFiles = files
     .filter(file => {
-      const name = file.filename.toLowerCase();
+      // Hide generated/processed copies from the templates list so only
+      // the canonical templates are shown in the UI. Generated files saved
+      // by the server often use names like `filled_<id>.docx` or a
+      // transaction-code-style name that starts with the year (e.g. `2025-...`).
+      // Exclude those patterns here so generated copies remain only in the
+      // `processed_documents` bucket and don't appear in the templates grid.
+      const fname = file.filename || '';
+      // Exclude obvious filled/generate file names
+      if (/^filled_/i.test(fname)) return false;
+      // Exclude filenames that start with a year-like transaction code
+      if (/^\d{4}-/.test(fname)) return false;
+
+      const name = fname.toLowerCase();
       const search = searchTerm.toLowerCase();
       const categoryMatch = selectedCategory === 'all' || file.category === selectedCategory;
       return name.includes(search) && categoryMatch;
@@ -285,31 +206,31 @@ const DocumentRequestForm: React.FC = () => {
             style={{ width: '100%' }}
           />
         </Col>
-          <Col xs={24} sm={16} md={10} lg={8}>
-            <div className="filter-controls">
-              <Select
-                defaultValue="all"
-                className="filter-select category-select"
-                style={{ width: 220 }}
-                onChange={value => setSelectedCategory(value)}
-              >
-                <Select.Option value="all">All Categories</Select.Option>
-                <Select.Option value="personal">Personal Documents</Select.Option>
-                <Select.Option value="business">Business Documents</Select.Option>
-                <Select.Option value="certificates">Certificates</Select.Option>
-              </Select>
-              <Select
-                defaultValue="name"
-                className="filter-select sort-select"
-                style={{ width: 160 }}
-                onChange={value => setSortBy(value as 'name' | 'date' | 'type')}
-              >
-                <Select.Option value="name">Sort by Name</Select.Option>
-                <Select.Option value="date">Sort by Date</Select.Option>
-                <Select.Option value="type">Sort by Type</Select.Option>
-              </Select>
-            </div>
-          </Col>
+        <Col xs={24} sm={16} md={10} lg={8}>
+          <div className="filter-controls">
+            <Select
+              defaultValue="all"
+              className="filter-select category-select"
+              style={{ width: 220 }}
+              onChange={value => setSelectedCategory(value)}
+            >
+              <Select.Option value="all">All Categories</Select.Option>
+              <Select.Option value="personal">Personal Documents</Select.Option>
+              <Select.Option value="business">Business Documents</Select.Option>
+              <Select.Option value="certificates">Certificates</Select.Option>
+            </Select>
+            <Select
+              defaultValue="name"
+              className="filter-select sort-select"
+              style={{ width: 160 }}
+              onChange={value => setSortBy(value as 'name' | 'date' | 'type')}
+            >
+              <Select.Option value="name">Sort by Name</Select.Option>
+              <Select.Option value="date">Sort by Date</Select.Option>
+              <Select.Option value="type">Sort by Type</Select.Option>
+            </Select>
+          </div>
+        </Col>
       </Row>
 
       {/* Documents Grid */}
@@ -375,17 +296,10 @@ const DocumentRequestForm: React.FC = () => {
             onFinish={async (values: FormValues) => {
               setSubmitLoading(true);
               try {
-                // convert any dayjs/date picker values to MM/DD/YYYY strings
                 const processedFields: Record<string, any> = { ...values.fields };
                 Object.entries(processedFields).forEach(([k, v]) => {
-                  // dayjs/date-picker values have a `format` function
                   if (v && typeof (v as any).format === 'function') {
-                    // format to MM/DD/YYYY for consistency with UI
-                    try {
-                      processedFields[k] = (v as any).format('MM/DD/YYYY');
-                    } catch (e) {
-                      processedFields[k] = String(v);
-                    }
+                    try { processedFields[k] = (v as any).format('MM/DD/YYYY'); } catch (e) { processedFields[k] = String(v); }
                   }
                 });
 
@@ -394,7 +308,9 @@ const DocumentRequestForm: React.FC = () => {
                   documentType: modalDocName,
                   purpose: values.purpose,
                   fileId: files.find((f) => f.filename.replace(/\.docx$/i, '') === modalDocName)?._id,
-                  fieldValues: processedFields
+                  fieldValues: processedFields,
+                  username: (authUser && authUser.username) || (currentUser && currentUser.username) || undefined,
+                  barangayID: (authUser && authUser.barangayID) || (currentUser && currentUser.barangayID) || undefined
                 };
                 const result = await documentsAPI.requestDocument(payload);
                 message.success('Request submitted successfully!');
@@ -417,7 +333,7 @@ const DocumentRequestForm: React.FC = () => {
                   <Input.TextArea rows={4} placeholder="Enter the purpose of your request" />
                 </Form.Item>
               </Col>
-              
+
               {selectedFields.map((field, idx) => (
                 <Col xs={24} sm={12} key={idx}>
                   <Form.Item
@@ -425,80 +341,19 @@ const DocumentRequestForm: React.FC = () => {
                     label={field}
                     rules={[{ required: true, message: `Please enter ${field}` }]}
                   >
-                    {
-                      // If the field name looks like a date (contains 'date', 'dob', 'birth', or 'issued'), show a calendar picker
-                      /date|dob|birth|issued/i.test(field)
-                        ? <DatePicker style={{ width: '100%' }} format="MM/DD/YYYY" />
-                        : <Input placeholder={`Enter ${field}`} />
-                    }
+                    { /date|dob|birth|issued/i.test(field) ? <DatePicker style={{ width: '100%' }} format="MM/DD/YYYY" /> : <Input placeholder={`Enter ${field}`} /> }
                   </Form.Item>
                 </Col>
               ))}
-              
+
               <Col span={24} style={{ textAlign: 'right' }}>
                 <Space>
-                  <Button onClick={() => setModalOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="primary" htmlType="submit" loading={submitLoading}>
-                    Submit Request
-                  </Button>
+                  <Button onClick={() => setModalOpen(false)}>Cancel</Button>
+                  <Button type="primary" htmlType="submit" loading={submitLoading}>Submit Request</Button>
                 </Space>
               </Col>
             </Row>
           </Form>
-        )}
-      </Modal>
-      {/* Verification Upload Modal for unverified residents */}
-      <Modal
-        title="Account Verification"
-        open={verificationModalOpen}
-        onCancel={() => setVerificationModalOpen(false)}
-        onOk={handleUploadSubmit}
-        okText="Upload"
-        width={600}
-      >
-        <p>Please upload up to two valid government IDs to verify your account. Admin will review and approve.</p>
-        <Upload
-          multiple
-          accept="image/*,application/pdf"
-          beforeUpload={() => false}
-          fileList={uploadList as any}
-          onChange={({ fileList: newList }) => setUploadList(newList)}
-          maxCount={2}
-        >
-          <Button icon={<UploadOutlined />}>Select ID files (max 2)</Button>
-        </Upload>
-      </Modal>
-      {/* Pending verification modal (shows after uploading) */}
-      <Modal
-        title="Verification Pending"
-        open={pendingModalOpen}
-        onCancel={() => setPendingModalOpen(false)}
-        footer={[
-          <Button key="close" onClick={() => setPendingModalOpen(false)}>Close</Button>,
-          <Button key="cancel" danger onClick={handleCancelVerification}>Cancel Verification</Button>
-        ]}
-        width={600}
-      >
-        {pendingVerification ? (
-          <div>
-            <p>Your verification request is pending review by an administrator.</p>
-            <p>Submitted: {new Date(pendingVerification.createdAt).toLocaleString()}</p>
-            {Array.isArray(pendingVerification.files) && pendingVerification.files.length > 0 ? (
-              <div>
-                <p>Uploaded files:</p>
-                <ul>
-                  {pendingVerification.files.map((f: any, idx: number) => (
-                    <li key={idx}>{f}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-            <p>You can cancel this request while it's pending. Cancelling will remove the request and delete the uploaded files.</p>
-          </div>
-        ) : (
-          <p>No pending verification.</p>
         )}
       </Modal>
     </div>

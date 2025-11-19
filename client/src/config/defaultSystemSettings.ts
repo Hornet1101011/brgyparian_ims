@@ -7,6 +7,8 @@ const defaultSystemSettings = {
   maintainanceMode: false,
   allowNewRegistrations: true,
   requireEmailVerification: true,
+  // Default: resident verifications are disabled by default. Admins can enable from System Settings.
+  enableVerifications: false,
   maxDocumentRequests: 5,
   documentProcessingDays: 3,
   // Allow creation of multiple accounts from the same IP and the maximum allowed
