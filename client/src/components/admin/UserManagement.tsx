@@ -92,6 +92,7 @@ const UserManagement: React.FC = () => {
           email: user.email,
           role: user.role,
           isActive: user.isActive,
+          verified: !!user.verified,
           createdAt: user.createdAt,
           lastLogin: user.lastLogin,
           avatar: user.avatar || null,
@@ -180,6 +181,26 @@ const UserManagement: React.FC = () => {
     } catch (err) {
       console.error('Failed to demote user', err);
       message.error('Failed to demote user');
+    }
+  };
+
+  // Toggle verified flag for a user (admin action)
+  const handleToggleVerified = async (userId: string, currentVerified: boolean) => {
+    if (!userId) return;
+    try {
+      const action = currentVerified ? 'Unverify' : 'Mark as Verified';
+      message.loading({ content: `${action}...`, key: 'verify' });
+      // Use verificationAPI to toggle verified flag on server
+      await (await import('../../services/api')).verificationAPI.verifyUser(userId, !currentVerified);
+      message.success({ content: `${action} succeeded`, key: 'verify', duration: 2 });
+      // Refresh user list and selected user view
+      await fetchUsers();
+      if (selectedUser && selectedUser._id === userId) {
+        setSelectedUser((prev: any) => prev ? { ...prev, verified: !currentVerified } : prev);
+      }
+    } catch (err) {
+      console.error('Failed to toggle verified', err);
+      message.error('Failed to update verification status');
     }
   };
 
@@ -286,6 +307,17 @@ const UserManagement: React.FC = () => {
               </Menu.Item>
               <Menu.Item key="deactivate" icon={<StopOutlined />} onClick={() => { /* Deactivate logic */ }}>
                 Deactivate
+              </Menu.Item>
+              <Menu.Item key="toggleVerified" icon={<CheckOutlined />} onClick={async () => {
+                if (!record || !record._id) { message.error('No user selected'); return; }
+                const confirmText = record.verified ? `Mark ${record.fullName || record.email} as unverified?` : `Mark ${record.fullName || record.email} as verified?`;
+                Modal.confirm({
+                  title: record.verified ? 'Unverify user' : 'Verify user',
+                  content: confirmText,
+                  onOk: async () => { await handleToggleVerified(record._id, !!record.verified); }
+                });
+              }}>
+                {record.verified ? 'Unverify' : 'Verify'}
               </Menu.Item>
               <Menu.Item key="disable_now" icon={<StopOutlined />} onClick={async () => {
                 if (!record || !record._id) { message.error('No user selected'); return; }
@@ -490,6 +522,7 @@ const UserManagement: React.FC = () => {
                 <Typography.Title level={5} style={{ margin: 0 }}>{selectedUser.fullName}</Typography.Title>
                 <div style={{ marginTop: 4 }}>
                   <Tag color={selectedUser.isActive ? 'green' : 'red'} style={{ marginRight: 8 }}>{selectedUser.isActive ? 'Active' : 'Inactive'}</Tag>
+                  <Tag color={selectedUser.verified ? 'green' : 'default'} style={{ marginRight: 8 }}>{selectedUser.verified ? 'Verified' : 'Unverified'}</Tag>
                   <Tag color={selectedUser.role === 'admin' ? 'magenta' : selectedUser.role === 'staff' ? 'blue' : 'green'}>{(selectedUser.role ? (selectedUser.role.charAt(0).toUpperCase() + selectedUser.role.slice(1)) : '')}</Tag>
                 </div>
                 {selectedUser.barangayId && (

@@ -459,7 +459,7 @@ const admin = {
 
   updateSystemSettings: async (settings: SystemSettings): Promise<void> => {
     try {
-      const response = await axiosInstance.put('/admin/settings', settings);
+      const response = await axiosInstance.patch('/admin/settings', settings);
       await localDB.saveSettings(settings);
       return response.data;
     } catch (error) {
@@ -471,8 +471,8 @@ const admin = {
       // If the dev proxy isn't forwarding (requests hit :3000 and return 404),
       // try a direct request to the backend API base as a fallback.
       try {
-        // Attempt direct PUT using configured API base
-        const resp = await axiosInstance.put('/admin/settings', settings, { withCredentials: true });
+        // Attempt direct PATCH using configured API base
+        const resp = await axiosInstance.patch('/admin/settings', settings, { withCredentials: true });
         // persist locally as well
         try { await localDB.saveSettings(settings); } catch (e) {}
         return resp.data;

@@ -10,6 +10,10 @@ import {
   Divider,
   Alert,
   CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import TestEmailModal from '../TestEmailModal';
 import { adminAPI } from '../../services/api';
@@ -30,6 +34,7 @@ interface SystemSettings {
   maintainanceMode: boolean;
   allowNewRegistrations: boolean;
   requireEmailVerification: boolean;
+  enableVerifications?: boolean;
   maxDocumentRequests: number;
   documentProcessingDays: number;
   // new rate-limiting settings
@@ -58,6 +63,7 @@ const SystemSettings: React.FC = () => {
   const [settings, setSettings] = useState<SystemSettings>(() => ({ ...defaultSystemSettings } as SystemSettings));
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [confirmDisableOpen, setConfirmDisableOpen] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [testModalOpen, setTestModalOpen] = useState(false);
@@ -185,11 +191,11 @@ const SystemSettings: React.FC = () => {
   };
 
   // Save system settings (used by Save Changes button)
-  const handleSave = async () => {
+  // Internal save implementation (performs actual API call)
+  const performSave = async () => {
     try {
       setSaving(true);
       setError(null);
-      // Normalize numeric fields
       // Normalize numeric fields and map client keys to server-side field names
       const payload: any = {
         ...settings,
@@ -218,7 +224,33 @@ const SystemSettings: React.FC = () => {
       setSaving(false);
       window.setTimeout(() => setSuccess(false), 2000);
     }
-  }
+  };
+
+  // Public handler invoked by Save button. If the admin is disabling verifications
+  // (enableVerifications toggled from true -> false), show a confirmation dialog
+  // to prevent accidental destructive cleanup on the server.
+  const handleSave = async () => {
+    try {
+      // Determine if we are flipping enableVerifications from true -> false
+      const prev = originalSettingsRef.current;
+      const prevEnabled = prev ? Boolean((prev as any).enableVerifications) : true;
+      const nowEnabled = Boolean((settings as any).enableVerifications);
+      if (prevEnabled && nowEnabled === false) {
+        // Show confirmation dialog
+        setConfirmDisableOpen(true);
+        return;
+      }
+      // Otherwise proceed directly
+      await performSave();
+    } catch (e) {
+      console.error('handleSave error', e);
+    }
+  };
+
+  const confirmAndSave = async () => {
+    setConfirmDisableOpen(false);
+    await performSave();
+  };
 
   // Manual save for officials (fallback)
   const handleManualSaveOfficials = async () => {
@@ -382,6 +414,27 @@ const SystemSettings: React.FC = () => {
         </Box>
 
         <TestEmailModal open={testModalOpen} onClose={() => setTestModalOpen(false)} contactEmail={settings.contactEmail} />
+
+          <Divider sx={{ my: 3 }} />
+          {/* Verification Settings */}
+          <Typography variant="subtitle1" gutterBottom>
+            Resident Verifications
+          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={Boolean((settings as any).enableVerifications)}
+                  onChange={(e) => setSettings((prev) => ({ ...(prev as any), enableVerifications: e.target.checked } as any))}
+                />
+              }
+              label="Enable Resident Verifications"
+            />
+            <Button variant="text" onClick={() => antdMessage.info('When disabled, all pending verification requests will be deleted on the server.')}>More info</Button>
+          </Box>
+          {(settings as any).enableVerifications === false && (
+            <Alert severity="warning">Disabling verifications will permanently delete pending verification requests and uploaded files when you save changes.</Alert>
+          )}
 
           <Divider sx={{ my: 3 }} />
           {/* Barangay Officials Section */}
@@ -757,6 +810,18 @@ const SystemSettings: React.FC = () => {
           </Button>
         </Box>
       </Paper>
+      <Dialog open={confirmDisableOpen} onClose={() => setConfirmDisableOpen(false)}>
+        <DialogTitle>Disable Resident Verifications?</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Disabling resident verifications will permanently delete all pending verification requests and their uploaded files on the server. This action cannot be undone. Are you sure you want to proceed?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmDisableOpen(false)} disabled={saving}>Cancel</Button>
+          <Button onClick={() => confirmAndSave()} color="error" disabled={saving}>Yes, disable and save</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

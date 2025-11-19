@@ -44,6 +44,8 @@ const systemSettingSchema = new Schema<ISystemSetting>({
   maintenanceMode: { type: Boolean, default: false },
   allowRegistrations: { type: Boolean, default: true },
   requireEmailVerification: { type: Boolean, default: true },
+  // Toggle to enable/disable resident verification workflow (uploads, admin review, popups)
+  enableVerifications: { type: Boolean, default: true },
   maxDocumentRequestsPerUser: { type: Number, default: 5 },
   documentProcessingDays: { type: Number, default: 3 },
   systemNotice: { type: String },

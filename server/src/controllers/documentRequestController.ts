@@ -202,7 +202,8 @@ export const generateFilledDocument = async (req, res) => {
           if (!filesDb) {
             console.error('No DB connection available for GridFS upload');
           }
-          const documentsBucket = new GridFSBucket(filesDb as any, { bucketName: 'documents' });
+          // Save generated files into the dedicated processed_documents GridFS bucket
+          const documentsBucket = new GridFSBucket(filesDb as any, { bucketName: 'processed_documents' });
 
           // Create a readable stream from the buffer
           const readable = new Readable();
@@ -224,6 +225,26 @@ export const generateFilledDocument = async (req, res) => {
                 // uploadStream.id is a MongoDB ObjectId - cast to mongoose.Types.ObjectId
                 documentRequest.filledFileId = (uploadStream.id as unknown) as mongoose.Types.ObjectId;
                 await documentRequest.save();
+
+                // Best-effort: also create a ProcessedDocument metadata record so processed files
+                // are searchable in the processed_documents collection
+                try {
+                  const ProcessedDocument = require('../../models/ProcessedDocument');
+                  const pd = new ProcessedDocument({
+                    filename,
+                    contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                    size: filledBuffer.length,
+                    gridFsFileId: uploadStream.id,
+                    metadata: { sourceRequestId: documentRequest._id, sourceTemplateId: documentRequest.templateFileId },
+                    sourceTemplateId: documentRequest.templateFileId,
+                    requestId: documentRequest._id,
+                    uploadedBy: documentRequest.username || undefined
+                  });
+                  try { await pd.save(); } catch (pdErr) { console.warn('Failed to save ProcessedDocument metadata:', pdErr && pdErr.message ? pdErr.message : pdErr); }
+                } catch (pdErr) {
+                  // model may not exist or save failed; log and continue
+                  console.warn('ProcessedDocument model not available or save failed:', pdErr && pdErr.message ? pdErr.message : pdErr);
+                }
 
                 // Emit socket event notifying about completed generation
                 try { io.emit('documentGenerated', { requestId: id, filledFileId: uploadStream.id, filename }); } catch (e) { /* ignore */ }

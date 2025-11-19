@@ -10,6 +10,7 @@ import { ensureBucket, getBucket } from '../utils/gridfs';
 import { Message } from '../models/Message';
 import { User } from '../models/User';
 import { sendToUser, addClient, removeClient } from '../utils/sse.js';
+import SystemSettingModel from '../models/SystemSetting';
 
 const router = express.Router();
 
@@ -19,6 +20,15 @@ const upload = multer({ storage: multer.memoryStorage() });
 // POST /api/verification/upload - residents upload up to 2 ID files for verification
 router.post('/upload', auth, upload.array('ids', 2), async (req: any, res) => {
   try {
+    // if verifications are globally disabled, reject uploads
+    try {
+      const settings = await SystemSettingModel.findOne().lean();
+      if (settings && settings.enableVerifications === false) {
+        return res.status(403).json({ message: 'Verifications are currently disabled' });
+      }
+    } catch (se) {
+      // ignore and continue if settings lookup fails
+    }
     const user = (req.user as any);
     if (!user) return res.status(401).json({ message: 'Unauthorized' });
     // If user is already verified, do not accept new verification uploads
@@ -89,6 +99,11 @@ router.post('/upload', auth, upload.array('ids', 2), async (req: any, res) => {
 // Admin: list verification requests
 router.get('/admin/requests', auth, authorize('admin'), async (req, res) => {
   try {
+    // if verifications are disabled, hide requests (return empty list)
+    try {
+      const settings = await SystemSettingModel.findOne().lean();
+      if (settings && settings.enableVerifications === false) return res.json([]);
+    } catch (se) {}
     // populated user fields include verification status; cast to any in controllers to avoid strict IUser typing issues
     const reqs = await VerificationRequest.find().sort({ createdAt: -1 }).populate('userId', 'fullName username barangayID verified');
     res.json(reqs);
@@ -102,6 +117,13 @@ router.get('/requests/my', auth, async (req, res) => {
   try {
     const user = (req as any).user;
     if (!user) return res.status(401).json({ message: 'Unauthorized' });
+    // If verifications are disabled, hide any pending requests and don't prompt residents
+    try {
+      const settings = await SystemSettingModel.findOne().lean();
+      if (settings && settings.enableVerifications === false) {
+        return res.json([]);
+      }
+    } catch (se) {}
     // If the user's profile is already verified, ensure no pending requests remain
     if (user.verified) {
       try {
@@ -146,6 +168,11 @@ router.get('/requests/my', auth, async (req, res) => {
 // Get a specific verification request by id (owner or admin)
 router.get('/requests/:id', auth, async (req, res) => {
   try {
+    // If verifications disabled, respond as not found so UI hides it
+    try {
+      const settings = await SystemSettingModel.findOne().lean();
+      if (settings && settings.enableVerifications === false) return res.status(404).json({ message: 'Not found' });
+    } catch (se) {}
     const { id } = req.params;
     const vr = await VerificationRequest.findById(id).populate('userId', 'fullName username barangayID verified');
     if (!vr) return res.status(404).json({ message: 'Verification request not found' });
@@ -163,6 +190,11 @@ router.get('/requests/:id', auth, async (req, res) => {
 // Admin: stream/download a verification file from GridFS by id
 router.get('/file/:id', auth, authorize('admin'), async (req, res) => {
   try {
+    // If verifications disabled, don't allow file download
+    try {
+      const settings = await SystemSettingModel.findOne().lean();
+      if (settings && settings.enableVerifications === false) return res.status(404).send('Not found');
+    } catch (se) {}
     const { id } = req.params;
     const db = (mongoose.connection.db as any);
     const mongodb = await import('mongodb');
@@ -260,6 +292,11 @@ router.get('/stream', async (req, res) => {
 // Admin: toggle verify user
 router.post('/admin/verify-user/:userId', auth, authorize('admin'), async (req, res) => {
   try {
+    // If verifications are disabled, disallow manual toggles via verify-user endpoint
+    try {
+      const settings = await SystemSettingModel.findOne().lean();
+      if (settings && settings.enableVerifications === false) return res.status(403).json({ message: 'Verifications are disabled' });
+    } catch (se) {}
     const { userId } = req.params;
     const { verified } = req.body;
     const user = await User.findById(userId) as any;
@@ -327,6 +364,11 @@ router.delete('/requests/:id', auth, async (req, res) => {
 // Admin: approve a specific verification request by id
 router.post('/admin/requests/:id/approve', auth, authorize('admin'), async (req, res) => {
   try {
+    // If verifications disabled, prevent approve actions
+    try {
+      const settings = await SystemSettingModel.findOne().lean();
+      if (settings && settings.enableVerifications === false) return res.status(403).json({ message: 'Verifications are disabled' });
+    } catch (se) {}
     const { id } = req.params;
     const vr = await VerificationRequest.findById(id);
     if (!vr) return res.status(404).json({ message: 'Verification request not found' });
@@ -380,6 +422,11 @@ router.post('/admin/requests/:id/approve', auth, authorize('admin'), async (req,
 // Admin: reject a specific verification request by id (delete files and request, leave user unverified)
 router.post('/admin/requests/:id/reject', auth, authorize('admin'), async (req, res) => {
   try {
+    // If verifications disabled, prevent reject actions
+    try {
+      const settings = await SystemSettingModel.findOne().lean();
+      if (settings && settings.enableVerifications === false) return res.status(403).json({ message: 'Verifications are disabled' });
+    } catch (se) {}
     const { id } = req.params;
     const vr = await VerificationRequest.findById(id);
     if (!vr) return res.status(404).json({ message: 'Verification request not found' });

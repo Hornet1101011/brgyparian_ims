@@ -7,6 +7,8 @@ export interface User {
   barangayID: string;
   address: string;
   contactNumber: string;
+  // Whether the user's identity has been verified by an administrator
+  verified?: boolean;
 }
 
 export interface AuthState {

@@ -6,6 +6,9 @@ const SystemSetting = require('../models/SystemSetting');
 const AuditLog = require('../models/AuditLog');
 const nodemailer = require('nodemailer');
 const { createRateLimiter } = require('../middleware/rateLimiter');
+const VerificationRequest = require('../models/VerificationRequest');
+const mongoose = require('mongoose');
+const sse = require('../utils/sse');
 
 // Simple validators
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -117,6 +120,50 @@ router.put('/', isAdmin, async (req, res) => {
     const diff = { before, after: updated.toObject ? updated.toObject() : updated };
     await recordAudit(req.user?._id, 'update_settings', diff, req.ip || req.headers['x-forwarded-for']);
 
+    // If enableVerifications was turned OFF by this update, perform cleanup of pending verification requests
+    try {
+      const beforeEnabled = before && typeof before.enableVerifications !== 'undefined' ? !!before.enableVerifications : true;
+      const afterEnabled = updated && typeof updated.enableVerifications !== 'undefined' ? !!updated.enableVerifications : true;
+      if (beforeEnabled && !afterEnabled) {
+        console.log('Settings: enableVerifications set to false — cleaning up pending verification requests');
+        try {
+          const db = (mongoose.connection && mongoose.connection.db) ? mongoose.connection.db : null;
+          const mongodb = require('mongodb');
+          const GridFSBucket = mongodb.GridFSBucket;
+          const bucket = db ? new GridFSBucket(db, { bucketName: 'verificationRequests' }) : null;
+          const pending = await VerificationRequest.find({ status: 'pending' }).lean();
+          for (const vr of pending) {
+            // delete grid files if present
+            if (vr.gridFileIds && Array.isArray(vr.gridFileIds) && bucket) {
+              for (const fid of vr.gridFileIds) {
+                try {
+                  const oid = typeof fid === 'string' ? new mongodb.ObjectId(fid) : fid;
+                  await bucket.delete(oid);
+                } catch (e) {
+                  console.warn('Failed to delete GridFS file during settings disable cleanup', fid, e && e.message);
+                }
+              }
+            }
+            try {
+              await VerificationRequest.deleteOne({ _id: vr._id });
+            } catch (e) {
+              console.warn('Failed to delete verification request during settings disable cleanup', vr._id, e && e.message);
+            }
+            // notify owner via SSE that their request was removed
+            try {
+              if (vr.userId) sse.sendToUser(String(vr.userId), 'verification-request-deleted', { requestId: String(vr._id) });
+            } catch (e) {
+              console.warn('Failed to send SSE notification during settings disable cleanup', e && e.message);
+            }
+          }
+        } catch (cleanupErr) {
+          console.error('Error during verification cleanup after disable:', cleanupErr && cleanupErr.message);
+        }
+      }
+    } catch (e) {
+      console.warn('Error evaluating enableVerifications change for cleanup', e && e.message);
+    }
+
     return res.json(sanitizeForClient(updated));
   } catch (err) {
     console.error('PUT /api/settings error', err);
@@ -149,6 +196,47 @@ router.patch('/', isAdmin, async (req, res) => {
     const updated = await SystemSetting.findOneAndUpdate({}, { $set: payload }, { new: true, upsert: true, setDefaultsOnInsert: true });
     const diff = { before, after: updated.toObject ? updated.toObject() : updated };
     await recordAudit(req.user?._id, 'patch_settings', diff, req.ip || req.headers['x-forwarded-for']);
+    // If enableVerifications was turned OFF by this patch, perform cleanup of pending verification requests
+    try {
+      const beforeEnabled = before && typeof before.enableVerifications !== 'undefined' ? !!before.enableVerifications : true;
+      const afterEnabled = updated && typeof updated.enableVerifications !== 'undefined' ? !!updated.enableVerifications : true;
+      if (beforeEnabled && !afterEnabled) {
+        console.log('Settings PATCH: enableVerifications set to false — cleaning up pending verification requests');
+        try {
+          const db = (mongoose.connection && mongoose.connection.db) ? mongoose.connection.db : null;
+          const mongodb = require('mongodb');
+          const GridFSBucket = mongodb.GridFSBucket;
+          const bucket = db ? new GridFSBucket(db, { bucketName: 'verificationRequests' }) : null;
+          const pending = await VerificationRequest.find({ status: 'pending' }).lean();
+          for (const vr of pending) {
+            if (vr.gridFileIds && Array.isArray(vr.gridFileIds) && bucket) {
+              for (const fid of vr.gridFileIds) {
+                try {
+                  const oid = typeof fid === 'string' ? new mongodb.ObjectId(fid) : fid;
+                  await bucket.delete(oid);
+                } catch (e) {
+                  console.warn('Failed to delete GridFS file during settings patch disable cleanup', fid, e && e.message);
+                }
+              }
+            }
+            try {
+              await VerificationRequest.deleteOne({ _id: vr._id });
+            } catch (e) {
+              console.warn('Failed to delete verification request during settings patch disable cleanup', vr._id, e && e.message);
+            }
+            try {
+              if (vr.userId) sse.sendToUser(String(vr.userId), 'verification-request-deleted', { requestId: String(vr._id) });
+            } catch (e) {
+              console.warn('Failed to send SSE notification during settings patch disable cleanup', e && e.message);
+            }
+          }
+        } catch (cleanupErr) {
+          console.error('Error during verification cleanup after patch disable:', cleanupErr && cleanupErr.message);
+        }
+      }
+    } catch (e) {
+      console.warn('Error evaluating enableVerifications change for patch cleanup', e && e.message);
+    }
     return res.json(sanitizeForClient(updated));
   } catch (err) {
     console.error('PATCH /api/settings error', err);
