@@ -18,6 +18,8 @@ export interface ISystemSetting extends Document {
   maintenanceMode?: boolean;
   allowRegistrations?: boolean;
   requireEmailVerification?: boolean;
+  // Toggle to enable/disable resident verification workflow (uploads/admin review)
+  enableVerifications?: boolean;
   maxDocumentRequestsPerUser?: number;
   documentProcessingDays?: number;
   systemNotice?: string;

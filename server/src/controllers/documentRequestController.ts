@@ -62,7 +62,8 @@ export const generateFilledDocument = async (req, res) => {
     const chunks: Buffer[] = [];
     downloadStream.on('data', (chunk) => chunks.push(chunk));
     downloadStream.on('error', (err) => {
-      return res.status(500).json({ message: 'Error reading template file', error: err.message });
+      const msg = (err as any)?.message ?? String(err);
+      return res.status(500).json({ message: 'Error reading template file', error: msg });
     });
     downloadStream.on('end', async () => {
       try {
@@ -90,7 +91,8 @@ export const generateFilledDocument = async (req, res) => {
         try {
           doc.render();
         } catch (error) {
-          return res.status(500).json({ message: 'Error rendering document', error: (error as Error).message });
+          const msg = (error as any)?.message ?? String(error);
+          return res.status(500).json({ message: 'Error rendering document', error: msg });
         }
         let filledBuffer = doc.getZip().generate({ type: 'nodebuffer' });
         // Also perform a literal replacement inside the docx's word/document.xml for any remaining [qr] markers
@@ -163,16 +165,18 @@ export const generateFilledDocument = async (req, res) => {
                 // Simpler approach: replace <w:t>tx</w:t> occurrences with drawingXml (inside w:r)
                 const textRunRegex = new RegExp(`<w:t[^>]*>${tx.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}<\\/w:t>`, 'g');
                 xmlText = xmlText.replace(textRunRegex, drawingXml);
-              } catch (embedErr) {
-                console.error('Error embedding QR image in docx:', embedErr);
-              }
+                } catch (embedErr) {
+                  const msg = (embedErr as any)?.message ?? String(embedErr);
+                  console.error('Error embedding QR image in docx:', msg);
+                }
 
               zip.file('word/document.xml', xmlText);
               filledBuffer = await zip.generateAsync({ type: 'nodebuffer' });
             }
           }
         } catch (zipErr) {
-          console.error('Error performing literal [qr] replacement inside docx zip:', zipErr);
+          const msg = (zipErr as any)?.message ?? String(zipErr);
+          console.error('Error performing literal [qr] replacement inside docx zip:', msg);
           // fallback: keep original filledBuffer
         }
 
@@ -217,7 +221,8 @@ export const generateFilledDocument = async (req, res) => {
 
           readable.pipe(uploadStream)
             .on('error', (err) => {
-              console.error('Error uploading filled document to GridFS:', err);
+              const msg = (err as any)?.message ?? String(err);
+              console.error('Error uploading filled document to GridFS:', msg);
             })
             .on('finish', async () => {
               try {
@@ -240,16 +245,18 @@ export const generateFilledDocument = async (req, res) => {
                     requestId: documentRequest._id,
                     uploadedBy: documentRequest.username || undefined
                   });
-                  try { await pd.save(); } catch (pdErr) { console.warn('Failed to save ProcessedDocument metadata:', pdErr && pdErr.message ? pdErr.message : pdErr); }
+                  try { await pd.save(); } catch (pdErr) { const msg = (pdErr as any)?.message ?? String(pdErr); console.warn('Failed to save ProcessedDocument metadata:', msg); }
                 } catch (pdErr) {
                   // model may not exist or save failed; log and continue
-                  console.warn('ProcessedDocument model not available or save failed:', pdErr && pdErr.message ? pdErr.message : pdErr);
+                  const msg = (pdErr as any)?.message ?? String(pdErr);
+                  console.warn('ProcessedDocument model not available or save failed:', msg);
                 }
 
                 // Emit socket event notifying about completed generation
                 try { io.emit('documentGenerated', { requestId: id, filledFileId: uploadStream.id, filename }); } catch (e) { /* ignore */ }
               } catch (err) {
-                console.error('Error saving filledFileId to DocumentRequest:', err);
+                const msg = (err as any)?.message ?? String(err);
+                console.error('Error saving filledFileId to DocumentRequest:', msg);
               }
             });
 
@@ -264,7 +271,8 @@ export const generateFilledDocument = async (req, res) => {
           });
           res.send(filledBuffer);
         } catch (err) {
-          console.error('Error while saving filled document to GridFS:', err);
+          const msg = (err as any)?.message ?? String(err);
+          console.error('Error while saving filled document to GridFS:', msg);
           // Fallback: still return the file
           res.set({
             'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -273,11 +281,13 @@ export const generateFilledDocument = async (req, res) => {
           res.send(filledBuffer);
         }
       } catch (error) {
-        res.status(500).json({ message: 'Error processing filled document', error: (error as Error).message });
+        const msg = (error as any)?.message ?? String(error);
+        res.status(500).json({ message: 'Error processing filled document', error: msg });
       }
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error generating filled document', error: ((error as Error)?.message) || error });
+    const msg = (error as any)?.message ?? String(error);
+    res.status(500).json({ message: 'Error generating filled document', error: msg });
   }
 };
 import { User } from '../models/User';
