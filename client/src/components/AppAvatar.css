@@ -1,0 +1,41 @@
+/* AppAvatar styles: square icon-like avatar with responsive sizes */
+.app-avatar {
+  --app-avatar-size: 36px;
+  width: var(--app-avatar-size);
+  height: var(--app-avatar-size);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 10px; /* icon-like rounded rectangle */
+  background: #1890ff;
+  color: #fff;
+}
+
+.app-avatar--small { --app-avatar-size: 28px; }
+.app-avatar--default { --app-avatar-size: 36px; }
+.app-avatar--large { --app-avatar-size: 56px; }
+
+.app-avatar__img,
+.app-avatar > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.app-avatar__content {
+  width: 100%;
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+
+/* Responsive adjustments for small screens */
+@media (max-width: 480px) {
+  .app-avatar--small { --app-avatar-size: 24px; }
+  .app-avatar--default { --app-avatar-size: 32px; }
+  .app-avatar--large { --app-avatar-size: 48px; }
+}
