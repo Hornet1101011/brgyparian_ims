@@ -85,12 +85,22 @@ export const updateStaff = async (req: Request, res: Response) => {
       updates.password = await bcrypt.hash(updates.password, salt);
     }
 
-    // Update staff details
-    const updatedStaff = await User.findByIdAndUpdate(
-      staffId,
-      { $set: updates },
-      { new: true }
-    ).select('-password');
+    // Update staff details (catch duplicate-key errors defensively)
+    let updatedStaff: any = null;
+    try {
+      updatedStaff = await User.findByIdAndUpdate(
+        staffId,
+        { $set: updates },
+        { new: true }
+      ).select('-password');
+    } catch (err: any) {
+      if (handleSaveError(err, res)) return;
+      if (err && err.code === 11000) {
+        const e: any = err;
+        return res.status(409).json({ message: 'Duplicate key error', keyValue: e.keyValue || {} });
+      }
+      throw err;
+    }
 
     // Audit log for role change
     if (updates.role) {
