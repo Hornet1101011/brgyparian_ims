@@ -22,7 +22,8 @@ router.get('/:id/raw', requireAuth, async (req, res) => {
     const db = mongoose.connection.db;
     if (!db) return res.status(500).json({ success: false, message: 'Database not available' });
 
-    const bucket = new GridFSBucket(db, { bucketName: 'documents' });
+    // Generated files are stored in the `processed_documents` GridFS bucket
+    const bucket = new GridFSBucket(db, { bucketName: 'processed_documents' });
     const fileId = meta.gridFsFileId;
     try {
       res.set('Content-Type', meta.contentType || 'application/octet-stream');
