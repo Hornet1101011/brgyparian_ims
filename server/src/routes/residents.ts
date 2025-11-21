@@ -87,18 +87,40 @@ router.get('/personal-info', auth, async (req: any, res) => {
 				: [];
 			const first = parts.length > 0 ? parts[0] : (user.username || 'N/A');
 			const last = parts.length > 1 ? parts.slice(1).join(' ') : 'N/A';
-			resident = new Resident({
-				userId: user._id,
-				barangayID: user.barangayID,
-				username: user.username,
-				firstName: first,
-				lastName: last,
-				email: user.email || '',
-				contactNumber: user.contactNumber || '',
-				address: user.address || '',
-			});
-			await resident.save();
-			console.log('Auto-created resident record for user:', user.username);
+				resident = new Resident({
+					userId: user._id,
+					barangayID: user.barangayID,
+					username: user.username,
+					firstName: first,
+					lastName: last,
+					email: user.email || '',
+					contactNumber: user.contactNumber || '',
+					address: user.address || '',
+				});
+				try {
+					await resident.save();
+					console.log('Auto-created resident record for user:', user.username);
+				} catch (saveErr: any) {
+					// Handle duplicate-key race where another request inserted the same resident concurrently
+					if (saveErr && (saveErr.code === 11000 || saveErr.code === 'E11000')) {
+						console.warn('Duplicate key while auto-creating resident, attempting fallback lookup', saveErr.keyValue || saveErr);
+						const fallback = await Resident.findOne({
+							$or: [
+								{ userId: user._id },
+								{ barangayID: user.barangayID },
+								{ email: user.email },
+								{ username: user.username }
+							]
+						});
+						if (fallback) {
+							resident = fallback;
+						} else {
+							throw saveErr;
+						}
+					} else {
+						throw saveErr;
+					}
+				}
 		}
 		res.json(resident);
 	} catch (error) {
@@ -139,11 +161,53 @@ router.put('/personal-info', auth, async (req: any, res) => {
 				return res.status(400).json({ message: 'userId is required' });
 			}
 			resident = new Resident(residentData);
-			await resident.save();
-			console.log('Created new resident container for user:', user.email);
+			try {
+				await resident.save();
+				console.log('Created new resident container for user:', user.email);
+			} catch (saveErr: any) {
+				if (saveErr && (saveErr.code === 11000 || saveErr.code === 'E11000')) {
+					console.warn('Duplicate key while creating resident in PUT /personal-info; attempting fallback lookup', saveErr.keyValue || saveErr);
+					const fallback = await Resident.findOne({
+						$or: [
+							{ userId: user._id },
+							{ barangayID: residentData.barangayID },
+							{ email: residentData.email },
+							{ username: residentData.username }
+						]
+					});
+					if (fallback) {
+						resident = fallback;
+					} else {
+						throw saveErr;
+					}
+				} else {
+					throw saveErr;
+				}
+			}
 		} else {
 			Object.assign(resident, residentData);
-			await resident.save();
+			try {
+				await resident.save();
+			} catch (saveErr: any) {
+				if (saveErr && (saveErr.code === 11000 || saveErr.code === 'E11000')) {
+					console.warn('Duplicate key while updating resident in PUT /personal-info; attempting fallback lookup', saveErr.keyValue || saveErr);
+					const fallback = await Resident.findOne({
+						$or: [
+							{ userId: user._id },
+							{ barangayID: residentData.barangayID },
+							{ email: residentData.email },
+							{ username: residentData.username }
+						]
+					});
+					if (fallback) {
+						resident = fallback;
+					} else {
+						throw saveErr;
+					}
+				} else {
+					throw saveErr;
+				}
+			}
 		}
 		res.json(resident);
 	} catch (error: any) {
@@ -190,7 +254,28 @@ router.post('/personal-info/avatar', auth, upload.single('avatar'), async (req: 
 				contactNumber: user.contactNumber || '',
 				address: user.address || ''
 			});
-			await resident.save();
+			try {
+				await resident.save();
+			} catch (saveErr: any) {
+				if (saveErr && (saveErr.code === 11000 || saveErr.code === 'E11000')) {
+					console.warn('Duplicate key while auto-creating resident in avatar upload; attempting fallback lookup', saveErr.keyValue || saveErr);
+					const fallback = await Resident.findOne({
+						$or: [
+							{ userId: user._id },
+							{ barangayID: user.barangayID },
+							{ email: user.email },
+							{ username: user.username }
+						]
+					});
+					if (fallback) {
+						resident = fallback;
+					} else {
+						throw saveErr;
+					}
+				} else {
+					throw saveErr;
+				}
+			}
 		}
 		// Ensure required name fields exist on the found resident to avoid validation errors when saving
 		if ((!resident.firstName || resident.firstName === '') || (!resident.lastName || resident.lastName === '')) {
@@ -279,7 +364,28 @@ router.post('/personal-info/avatar', auth, upload.single('avatar'), async (req: 
 			resident.profileImageId = resident.profileImageId || undefined;
 			resident.profileImage = resident.profileImage || undefined;
 		}
-		await resident.save();
+		try {
+			await resident.save();
+		} catch (saveErr: any) {
+			if (saveErr && (saveErr.code === 11000 || saveErr.code === 'E11000')) {
+				console.warn('Duplicate key while saving resident after avatar upload; attempting fallback lookup', saveErr.keyValue || saveErr);
+				const fallback = await Resident.findOne({
+					$or: [
+						{ userId: user._id },
+						{ barangayID: resident.barangayID },
+						{ email: resident.email },
+						{ username: resident.username }
+					]
+				});
+				if (fallback) {
+					resident = fallback;
+				} else {
+					throw saveErr;
+				}
+			} else {
+				throw saveErr;
+			}
+		}
 
 		// Also update the user's profileImage so both records point to the same avatar
 		try {

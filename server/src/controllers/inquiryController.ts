@@ -18,6 +18,7 @@ import { Inquiry } from '../models/Inquiry';
 import { io } from '../index';
 import { User } from '../models/User';
 import { Message } from '../models/Message';
+import { handleSaveError } from '../utils/handleSaveError';
 
 export const createInquiry = async (req: any, res: Response, next: NextFunction) => {
   try {
@@ -131,7 +132,13 @@ export const createInquiry = async (req: any, res: Response, next: NextFunction)
         uploadedAt: new Date()
       }));
     }
-    await inquiry.save();
+    try {
+      await inquiry.save();
+    } catch (err) {
+      if (handleSaveError(err, res)) return;
+      console.error('Error creating inquiry:', err);
+      return res.status(500).json({ message: 'Error creating inquiry', error: err });
+    }
     // Notify assigned staff
     const Notification = require('../../models/Notification');
     if (Array.isArray(assignedTo)) {
@@ -249,7 +256,13 @@ module.exports = {
 
     inquiry.responses?.push(responseEntry);
 
-    await inquiry.save();
+    try {
+      await inquiry.save();
+    } catch (err) {
+      if (handleSaveError(err, res)) return;
+      console.error('Error saving inquiry response:', err);
+      return res.status(500).json({ message: 'Error adding response', error: err });
+    }
 
     // Find the resident user by username and barangayID
     const { username, barangayID } = inquiry;

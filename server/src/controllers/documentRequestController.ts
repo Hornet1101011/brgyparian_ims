@@ -225,39 +225,49 @@ export const generateFilledDocument = async (req, res) => {
               console.error('Error uploading filled document to GridFS:', msg);
             })
             .on('finish', async () => {
-              try {
-                // Persist the file id to the document request
-                // uploadStream.id is a MongoDB ObjectId - cast to mongoose.Types.ObjectId
-                documentRequest.filledFileId = (uploadStream.id as unknown) as mongoose.Types.ObjectId;
-                await documentRequest.save();
-
-                // Best-effort: also create a ProcessedDocument metadata record so processed files
-                // are searchable in the processed_documents collection
                 try {
-                  const ProcessedDocument = require('../../models/ProcessedDocument');
-                  const pd = new ProcessedDocument({
-                    filename,
-                    contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                    size: filledBuffer.length,
-                    gridFsFileId: uploadStream.id,
-                    metadata: { sourceRequestId: documentRequest._id, sourceTemplateId: documentRequest.templateFileId },
-                    sourceTemplateId: documentRequest.templateFileId,
-                    requestId: documentRequest._id,
-                    uploadedBy: documentRequest.username || undefined
-                  });
-                  try { await pd.save(); } catch (pdErr) { const msg = (pdErr as any)?.message ?? String(pdErr); console.warn('Failed to save ProcessedDocument metadata:', msg); }
-                } catch (pdErr) {
-                  // model may not exist or save failed; log and continue
-                  const msg = (pdErr as any)?.message ?? String(pdErr);
-                  console.warn('ProcessedDocument model not available or save failed:', msg);
-                }
+                  // Persist the file id to the document request
+                  // uploadStream.id is a MongoDB ObjectId - cast to mongoose.Types.ObjectId
+                  documentRequest.filledFileId = (uploadStream.id as unknown) as mongoose.Types.ObjectId;
+                  try {
+                    await documentRequest.save();
+                  } catch (saveErr) {
+                    // Response has already been sent by this point; don't try to send another response.
+                    if (handleSaveError(saveErr)) {
+                      console.warn('Duplicate key when saving filledFileId to DocumentRequest (ignored)');
+                    } else {
+                      const msg = (saveErr as any)?.message ?? String(saveErr);
+                      console.error('Error saving filledFileId to DocumentRequest:', msg);
+                    }
+                  }
 
-                // Emit socket event notifying about completed generation
-                try { io.emit('documentGenerated', { requestId: id, filledFileId: uploadStream.id, filename }); } catch (e) { /* ignore */ }
-              } catch (err) {
-                const msg = (err as any)?.message ?? String(err);
-                console.error('Error saving filledFileId to DocumentRequest:', msg);
-              }
+                  // Best-effort: also create a ProcessedDocument metadata record so processed files
+                  // are searchable in the processed_documents collection
+                  try {
+                    const ProcessedDocument = require('../../models/ProcessedDocument');
+                    const pd = new ProcessedDocument({
+                      filename,
+                      contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                      size: filledBuffer.length,
+                      gridFsFileId: uploadStream.id,
+                      metadata: { sourceRequestId: documentRequest._id, sourceTemplateId: documentRequest.templateFileId },
+                      sourceTemplateId: documentRequest.templateFileId,
+                      requestId: documentRequest._id,
+                      uploadedBy: documentRequest.username || undefined
+                    });
+                    try { await pd.save(); } catch (pdErr) { const msg = (pdErr as any)?.message ?? String(pdErr); console.warn('Failed to save ProcessedDocument metadata:', msg); }
+                  } catch (pdErr) {
+                    // model may not exist or save failed; log and continue
+                    const msg = (pdErr as any)?.message ?? String(pdErr);
+                    console.warn('ProcessedDocument model not available or save failed:', msg);
+                  }
+
+                  // Emit socket event notifying about completed generation
+                  try { io.emit('documentGenerated', { requestId: id, filledFileId: uploadStream.id, filename }); } catch (e) { /* ignore */ }
+                } catch (err) {
+                  const msg = (err as any)?.message ?? String(err);
+                  console.error('Error saving filledFileId to DocumentRequest:', msg);
+                }
             });
 
           // Return file to client while upload happens in background (upload finishes very quickly)
@@ -293,6 +303,7 @@ export const generateFilledDocument = async (req, res) => {
 import { User } from '../models/User';
 import { Log } from '../models/Log';
 import { io } from '../index';
+import { handleSaveError } from '../utils/handleSaveError';
 
 export const createDocumentRequest = async (req: any, res: Response) => {
   try {
@@ -365,7 +376,13 @@ export const createDocumentRequest = async (req: any, res: Response) => {
 
     documentRequest.paymentAmount = paymentAmounts[type];
 
-    await documentRequest.save();
+    try {
+      await documentRequest.save();
+    } catch (err) {
+      if (handleSaveError(err, res)) return; // handled as 409
+      console.error('Error saving documentRequest during creation:', err);
+      return res.status(500).json({ message: 'Error creating document request', error: (err as Error).message });
+    }
     res.status(201).json({
       message: 'Document request created successfully',
       documentRequest

@@ -4,6 +4,7 @@ import { PasswordResetToken } from '../models/PasswordResetToken';
 import { sendMail } from '../services/EmailService';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
+import { handleSaveError } from '../utils/handleSaveError';
 
 // POST /api/auth/forgot-password
 export async function forgotPassword(req: Request, res: Response) {
@@ -109,7 +110,13 @@ export async function resetPassword(req: Request, res: Response) {
     const salt = await bcrypt.genSalt(12);
     const hash = await bcrypt.hash(password, salt);
     user.password = hash;
-    await user.save();
+    try {
+      await user.save();
+    } catch (err) {
+      if (handleSaveError(err, res)) return;
+      console.error('Error saving user during resetPassword:', err);
+      return res.status(500).json({ message: 'Server error' });
+    }
 
     // remove token document
     await PasswordResetToken.deleteOne({ _id: tokenDoc._id });
@@ -182,7 +189,13 @@ export async function verifyOtpAndEmailNewPassword(req: Request, res: Response) 
     const salt = await bcrypt.genSalt(12);
     const hash = await bcrypt.hash(newPassword, salt);
     user.password = hash;
-    await user.save();
+    try {
+      await user.save();
+    } catch (err) {
+      if (handleSaveError(err, res)) return;
+      console.error('Error saving user during verifyOtp:', err);
+      return res.status(500).json({ message: 'Server error' });
+    }
 
     // delete token so it cannot be reused
     await PasswordResetToken.deleteOne({ _id: tokenDoc._id });

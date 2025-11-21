@@ -16,6 +16,9 @@ router.post('/', auth, async (req, res) => {
   }
 });
 
+// duplicate-key helper
+const { handleSaveError } = require('../utils/handleSaveError');
+
 // Get notifications for a user
 router.get('/:userId', auth, async (req, res) => {
   try {
@@ -55,7 +58,12 @@ router.post('/approve', auth, async (req, res) => {
     // Promote to staff
     user.role = 'staff';
     user.isActive = true;
-    await user.save();
+    try {
+      await user.save();
+    } catch (saveErr) {
+      if (handleSaveError(saveErr, res)) return;
+      throw saveErr;
+    }
     // Mark notification as read (or remove)
     await Notification.findByIdAndDelete(notificationId);
     // Optionally, send a confirmation message to the user

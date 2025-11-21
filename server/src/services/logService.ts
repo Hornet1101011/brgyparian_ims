@@ -28,5 +28,16 @@ export async function saveStaffActivityLog({
     actor,
     target
   });
-  await log.save();
+  try {
+    await log.save();
+  } catch (err) {
+    // Logging should never throw; swallow duplicate-key or other save errors
+    try {
+      const { handleSaveError } = require('../utils/handleSaveError');
+      handleSaveError(err);
+    } catch (e) {
+      console.warn('logService.saveStaffActivityLog: failed to handle save error', e);
+    }
+    console.warn('Failed to save log (continuing):', err && (err as any).message ? (err as any).message : err);
+  }
 }

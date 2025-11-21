@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcrypt';
 import { User } from '../models/User';
+import { handleSaveError } from './handleSaveError';
 
 async function createAdmin() {
   // Connect to MongoDB first
@@ -32,8 +33,16 @@ async function createAdmin() {
     email: DEFAULT_ADMIN_EMAIL,
     barangayID: DEFAULT_ADMIN_BARANGAY_ID,
   });
-  await admin.save();
-  console.log(`Admin created: username=${DEFAULT_ADMIN_USERNAME}, password=${DEFAULT_ADMIN_PASSWORD}`);
+  try {
+    await admin.save();
+    console.log(`Admin created: username=${DEFAULT_ADMIN_USERNAME}, password=${DEFAULT_ADMIN_PASSWORD}`);
+  } catch (err: any) {
+    if (handleSaveError(err)) {
+      console.warn('Admin already exists (duplicate key) - skipping creation');
+      return;
+    }
+    throw err;
+  }
 }
 
 createAdmin().then(() => mongoose.disconnect());

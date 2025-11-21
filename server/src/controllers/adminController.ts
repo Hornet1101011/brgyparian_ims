@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { User } from '../models/User';
 import { IUser } from '../models/User';
 import { Log } from '../models/Log';
+import { handleSaveError } from '../utils/handleSaveError';
 
 interface StaffCreateRequest {
   firstName: string;
@@ -46,14 +47,22 @@ export const createStaff = async (req: Request, res: Response) => {
       isActive: true
     });
 
-    await user.save();
-
+    try {
+      await user.save();
+    } catch (err: any) {
+      if (handleSaveError(err, res)) return;
+      throw err;
+    }
     res.status(201).json({
       message: 'Staff account created successfully',
       user: user.userInfo
     });
   } catch (error) {
     console.error('Error creating staff account:', error);
+    if (error && (error as any).code === 11000) {
+      const e: any = error;
+      return res.status(409).json({ message: 'Duplicate key error', keyValue: e.keyValue || {} });
+    }
     res.status(500).json({ message: 'Server error' });
   }
 };

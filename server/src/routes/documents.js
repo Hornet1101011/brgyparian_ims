@@ -259,6 +259,7 @@ try {
   const multer = require('multer');
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB limit
   const DocumentModel = require('../../models/Document');
+  const { handleSaveError } = require('../utils/handleSaveError');
 
   router.post('/upload-inline', requireAuth, isAdmin, upload.single('file'), async (req, res) => {
     try {
@@ -284,7 +285,13 @@ try {
         uploadedBy: req.user && req.user._id ? req.user._id : undefined
       });
 
-      await doc.save();
+      try {
+        await doc.save();
+      } catch (err) {
+        if (handleSaveError && handleSaveError(err, res)) return; // send 409 if duplicate-key
+        console.error('upload-inline error saving document model', err);
+        return res.status(500).json({ success: false, message: 'Failed to save file inline', error: err.message });
+      }
       return res.json({ success: true, id: doc._id });
     } catch (err) {
       console.error('upload-inline error', err);

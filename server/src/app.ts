@@ -212,4 +212,8 @@ app.use('/api/notifications', notificationRoutes);
 // Verification routes for resident ID uploads and admin verification actions
 app.use('/api/verification', verificationRoutes);
 
+// Centralized error handler (must be registered after all routes)
+import errorHandler from './middleware/errorHandler';
+app.use(errorHandler);
+
 export default app;

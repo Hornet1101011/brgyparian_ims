@@ -625,7 +625,8 @@ const DocumentProcessing: React.FC = () => {
       >
         <div>
           <div style={{ marginBottom: 8 }}>A copy of the generated document was saved.</div>
-          {generatedCopyId ? (
+          {/* Only show generated-documents link when there is no processed copy available */}
+          {generatedCopyId && !processedDocId ? (
             <div style={{ marginBottom: 10 }}>
               <div style={{ marginBottom: 6 }}><strong>Generated metadata ID:</strong> <code>{generatedCopyId}</code></div>
               <div>

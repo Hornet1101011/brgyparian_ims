@@ -177,6 +177,11 @@ export const register = async (req: Request, res: Response, next: unknown) => {
     });
   } catch (error) {
     console.error('Registration error:', error);
+    // If this is a duplicate-key error from Mongo, return 409 Conflict with details
+    if (error && (error as any).code === 11000) {
+      const e: any = error;
+      return res.status(409).json({ message: 'Duplicate key error', keyValue: e.keyValue || {} });
+    }
     res.status(500).json({
       message: 'Error during registration',
       error: (error as Error).message

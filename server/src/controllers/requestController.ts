@@ -3,6 +3,7 @@ import { Request as ServiceRequest } from '../models/Request';
 import { User, UserRole } from '../models/User';
 import { Notification } from '../models/Notification';
 import { Message } from '../models/Message';
+import { handleSaveError } from '../utils/handleSaveError';
 
 export const createRequest = async (req: Request, res: Response) => {
   try {
@@ -10,7 +11,13 @@ export const createRequest = async (req: Request, res: Response) => {
       ...req.body,
       requestedBy: (req as any).user?._id,
     });
-    await request.save();
+    try {
+      await request.save();
+    } catch (err) {
+      if (handleSaveError(err, res)) return;
+      console.error('Error creating request:', err);
+      return res.status(500).json({ message: 'Error creating request', error: err });
+    }
     res.status(201).json(request);
   } catch (error) {
     res.status(500).json({ message: 'Error creating request', error });
@@ -71,8 +78,13 @@ export const addComment = async (req: Request, res: Response) => {
       createdBy: (req as any).user._id,
       createdAt: new Date(),
     });
-
-    await request.save();
+    try {
+      await request.save();
+    } catch (err) {
+      if (handleSaveError(err, res)) return;
+      console.error('Error saving request comment:', err);
+      return res.status(500).json({ message: 'Error adding comment', error: err });
+    }
     res.json(request);
   } catch (error) {
     res.status(500).json({ message: 'Error adding comment', error });
@@ -96,19 +108,37 @@ export const approveRequest = async (req: Request, res: Response) => {
     if (user.role === UserRole.STAFF) {
       serviceReq.status = 'approved';
       serviceReq.assignedTo = (req as any).user?._id;
-      await serviceReq.save();
+      try {
+        await serviceReq.save();
+      } catch (err) {
+        if (handleSaveError(err, res)) return;
+        console.error('Error saving service request (already staff path):', err);
+        return res.status(500).json({ message: 'Error updating request', error: err });
+      }
       return res.json({ message: 'User already staff; request marked approved', request: serviceReq });
     }
 
     // Promote to staff
-  (user as any).role = UserRole.STAFF;
+    (user as any).role = UserRole.STAFF;
     user.isActive = true;
-    await user.save();
+    try {
+      await user.save();
+    } catch (err) {
+      if (handleSaveError(err, res)) return;
+      console.error('Error promoting user to staff:', err);
+      return res.status(500).json({ message: 'Error promoting user', error: err });
+    }
 
   // Update request status
-  serviceReq.status = 'approved';
+    serviceReq.status = 'approved';
     serviceReq.assignedTo = (req as any).user?._id;
-    await serviceReq.save();
+    try {
+      await serviceReq.save();
+    } catch (err) {
+      if (handleSaveError(err, res)) return;
+      console.error('Error saving service request after promotion:', err);
+      return res.status(500).json({ message: 'Error updating request', error: err });
+    }
 
     // Remove any notifications that referenced this request (cleanup)
     try {

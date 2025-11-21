@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { Guest } from '../models/Guest';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
+import { handleSaveError } from '../utils/handleSaveError';
 
 export const createGuest = async (req: Request, res: Response) => {
   try {
@@ -12,7 +13,13 @@ export const createGuest = async (req: Request, res: Response) => {
     // generate a secure session token for guest
     const sessionToken = crypto.randomBytes(24).toString('hex');
     const guest = new Guest({ name, contactNumber, email, intent, sessionToken });
-    await guest.save();
+    try {
+      await guest.save();
+    } catch (err: any) {
+      if (handleSaveError(err, res)) return;
+      console.error('Failed to save guest:', err);
+      return res.status(500).json({ message: 'Failed to create guest', error: err.message });
+    }
     // create a short-lived JWT so the guest can be treated like a limited user on the client
     const tokenPayload = {
       _id: (guest as any)._id.toString(),

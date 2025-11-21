@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { Readable } from 'stream';
 import { auth, authorize } from '../middleware/auth';
+import { handleSaveError } from '../utils/handleSaveError';
 import { VerificationRequest } from '../models/VerificationRequest';
 import mongoose from 'mongoose';
 import { ensureBucket, getBucket } from '../utils/gridfs';
@@ -70,7 +71,12 @@ router.post('/upload', auth, upload.array('ids', 2), async (req: any, res) => {
     }
 
   const vr = new VerificationRequest({ userId: user._id, files: filenames, gridFileIds: gridIds, status: 'pending' });
-    await vr.save();
+    try {
+      await vr.save();
+    } catch (err: any) {
+      if (handleSaveError(err, res)) return;
+      throw err;
+    }
 
     // notify the owner via SSE that a verification request was created
     try {
@@ -376,7 +382,12 @@ router.post('/admin/requests/:id/approve', auth, authorize('admin'), async (req,
     const user = await User.findById(vr.userId) as any;
     if (user) {
       user.set('verified', true);
-      await user.save();
+      try {
+        await user.save();
+      } catch (err: any) {
+        if (handleSaveError(err, res)) return res.status(500).json({ message: 'Error updating user verification' });
+        throw err;
+      }
     }
 
     // delete associated GridFS files (we keep behaviour similar to reject)
@@ -458,7 +469,12 @@ router.post('/admin/requests/:id/reject', auth, authorize('admin'), async (req, 
     const user = await User.findById(vr.userId) as any;
     if (user) {
       user.set('verified', false);
-      await user.save();
+      try {
+        await user.save();
+      } catch (err: any) {
+        if (handleSaveError(err, res)) return res.status(500).json({ message: 'Error updating user verification' });
+        throw err;
+      }
     }
 
     // notify owner about deletion and profile update (unverified)

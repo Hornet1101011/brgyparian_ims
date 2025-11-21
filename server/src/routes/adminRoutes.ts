@@ -10,6 +10,7 @@ import { User, UserRole } from '../models/User';
 import { Resident } from '../models/Resident';
 import { isAdmin } from '../middleware/authMiddleware';
 import { getAllLogs } from '../controllers/logController';
+import { handleSaveError } from '../utils/handleSaveError';
 
 // Get staff applicants (users with role: 'staff' and isActive: false)
 router.get('/staff-applications', async (req, res) => {
@@ -140,7 +141,13 @@ router.post('/announcements', isAdmin, upload.single('image'), async (req, res) 
 			}
 		}
 		const ann = new Announcement(annData);
-		await ann.save();
+		try {
+			await ann.save();
+		} catch (err: any) {
+			if (handleSaveError && handleSaveError(err, res)) return;
+			console.error('Failed to create announcement:', err);
+			return res.status(500).json({ message: 'Failed to create announcement', error: err && err.message ? err.message : err });
+		}
 		res.json({ message: 'Announcement created', announcement: ann });
 	} catch (err) {
 		console.error('Failed to create announcement', err);
@@ -243,7 +250,13 @@ router.post(
 				const fileId = file._id;
 				resident.profileImage = `/api/resident/personal-info/avatar/${fileId}`;
 				resident.profileImageId = fileId.toString();
-				await resident.save();
+						try {
+							await resident.save();
+						} catch (err: any) {
+							if (handleSaveError && handleSaveError(err, res)) return;
+							console.error('Failed to save resident in admin route:', err);
+							return res.status(500).json({ message: 'Failed to save resident', error: err && err.message ? err.message : err });
+						}
 
 				// update linked user if exists
 				if (resident.userId) {
@@ -251,7 +264,13 @@ router.post(
 					if (user) {
 						user.profileImage = resident.profileImage;
 						user.profileImageId = resident.profileImageId;
-						await user.save();
+						try {
+							await user.save();
+						} catch (err: any) {
+							if (handleSaveError && handleSaveError(err, res)) return;
+							console.error('Failed to save user (adminRoutes):', err);
+							return res.status(500).json({ message: 'Failed to save user', error: err && err.message ? err.message : err });
+						}
 					}
 				}
 
@@ -317,7 +336,20 @@ router.patch('/users/:id/disable', isAdmin, async (req, res) => {
 			if (isNaN(dt.getTime())) return res.status(400).json({ message: 'Invalid suspendedUntil date' });
 			user.suspendedUntil = dt;
 		}
-		await user.save();
+		try {
+			try {
+				await user.save();
+			} catch (err: any) {
+				if (handleSaveError && handleSaveError(err, res)) return;
+				console.error('Failed to save user (adminRoutes):', err);
+				return res.status(500).json({ message: 'Failed to save user', error: err && err.message ? err.message : err });
+			}
+		} catch (saveErr: any) {
+			if (saveErr && saveErr.code === 11000) {
+				return res.status(409).json({ message: 'Duplicate key error', keyValue: saveErr.keyValue || {} });
+			}
+			throw saveErr;
+		}
 		return res.json({ message: 'User disabled', user: user.userInfo });
 	} catch (err) {
 		console.error('Failed to disable user', err);
@@ -335,7 +367,20 @@ router.patch('/users/:id/enable', isAdmin, async (req, res) => {
 
 		user.isActive = true;
 		user.suspendedUntil = null;
-		await user.save();
+		try {
+			try {
+				await user.save();
+			} catch (err: any) {
+				if (handleSaveError && handleSaveError(err, res)) return;
+				console.error('Failed to save user (adminRoutes):', err);
+				return res.status(500).json({ message: 'Failed to save user', error: err && err.message ? err.message : err });
+			}
+		} catch (saveErr: any) {
+			if (saveErr && saveErr.code === 11000) {
+				return res.status(409).json({ message: 'Duplicate key error', keyValue: saveErr.keyValue || {} });
+			}
+			throw saveErr;
+		}
 		return res.json({ message: 'User enabled', user: user.userInfo });
 	} catch (err) {
 		console.error('Failed to enable user', err);
@@ -366,7 +411,20 @@ router.put('/users/:id', isAdmin, async (req, res) => {
 			}
 		}
 
-		await user.save();
+		try {
+			try {
+				await user.save();
+			} catch (err: any) {
+				if (handleSaveError && handleSaveError(err, res)) return;
+				console.error('Failed to save user (adminRoutes):', err);
+				return res.status(500).json({ message: 'Failed to save user', error: err && err.message ? err.message : err });
+			}
+		} catch (saveErr: any) {
+			if (saveErr && saveErr.code === 11000) {
+				return res.status(409).json({ message: 'Duplicate key error', keyValue: saveErr.keyValue || {} });
+			}
+			throw saveErr;
+		}
 		return res.json({ message: 'User updated', user: user.userInfo });
 	} catch (err) {
 		console.error('Failed to update user', err);
@@ -407,7 +465,13 @@ router.put('/resident/:id', isAdmin, async (req, res) => {
 				resident[key] = req.body[key];
 			}
 		}
-		await resident.save();
+		try {
+			await resident.save();
+		} catch (err: any) {
+			if (handleSaveError && handleSaveError(err, res)) return;
+			console.error('Failed to save resident (adminRoutes):', err);
+			return res.status(500).json({ message: 'Failed to save resident', error: err && err.message ? err.message : err });
+		}
 		return res.json({ message: 'Resident updated', resident });
 	} catch (err) {
 		console.error('Failed to update resident', err);
@@ -439,7 +503,13 @@ router.put('/announcements/:id', isAdmin, upload.single('image'), async (req, re
 				ann.imageContentType = req.file.mimetype || ann.imageContentType;
 			} catch (e) { console.warn('Failed to read new file into buffer', e); }
 		}
-		await ann.save();
+		try {
+			await ann.save();
+		} catch (err: any) {
+			if (handleSaveError && handleSaveError(err, res)) return;
+			console.error('Failed to save announcement (adminRoutes):', err);
+			return res.status(500).json({ message: 'Failed to save announcement', error: err && err.message ? err.message : err });
+		}
 		res.json({ message: 'Announcement updated', announcement: ann });
 	} catch (err) {
 		console.error('Failed to update announcement', err);
