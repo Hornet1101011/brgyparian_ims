@@ -24,6 +24,33 @@ export const validateBarangayID = (barangayID: string): boolean => {
   return barangayIDRegex.test(barangayID);
 };
 
+// Normalize barangayID to canonical presentation without changing the format parts.
+// This will trim whitespace, collapse separators to single hyphens, lowercase the prefix
+// and uppercase the suffix portion. If normalization cannot be reasonably applied,
+// the original trimmed value is returned so validation can decide.
+export const normalizeBarangayID = (raw?: string): string | undefined => {
+  if (!raw) return raw;
+  let s = String(raw).trim();
+  if (!s) return s;
+
+  // Remove internal whitespace
+  s = s.replace(/\s+/g, '');
+  // Replace underscores or multiple hyphens with a single hyphen
+  s = s.replace(/[_]+/g, '-').replace(/[-]{2,}/g, '-');
+
+  // Try to extract prefix, year, suffix (suffix expected 6 alnum characters)
+  const m = s.match(/([A-Za-z]+)[-]?(\d{4})[-]?([A-Za-z0-9]{4,6})$/);
+  if (m) {
+    const prefix = m[1].toLowerCase();
+    const year = m[2];
+    const suffix = m[3].toUpperCase();
+    return `${prefix}-${year}-${suffix}`;
+  }
+
+  // If we couldn't parse, return the trimmed original so validation will catch it.
+  return s;
+};
+
 // Phone number validation (PH format)
 export const validatePhoneNumber = (phoneNumber: string): boolean => {
   const phoneRegex = /^(\+63|0)[0-9]{10}$/;

@@ -72,7 +72,16 @@ export interface IResident extends MongooseDocument {
 }
 const ResidentSchema = new Schema<IResident>({
   userId: { type: Schema.Types.ObjectId, ref: 'User' },
-  barangayID: { type: String, required: true },
+  barangayID: {
+    type: String,
+    required: true,
+    trim: true,
+    set: (v: any) => require('../utils/validation').normalizeBarangayID(v),
+    validate: {
+      validator: (v: any) => require('../utils/validation').validateBarangayID(v),
+      message: 'Invalid barangayID format'
+    }
+  },
   username: { type: String },
   firstName: { type: String, required: true },
   middleName: { type: String },

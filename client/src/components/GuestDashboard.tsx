@@ -87,7 +87,7 @@ const GuestDashboard: React.FC = () => {
 					const r1 = await (await import('../services/api')).residentPersonalInfoAPI.getPersonalInfo();
 					const data = r1;
 					if (data?.profileImage) {
-						const url = data.profileImage.startsWith('http') ? data.profileImage : `${window.location.origin}${data.profileImage}`;
+						const url = data.profileImage.startsWith('http') ? data.profileImage : getAbsoluteApiUrl(data.profileImage);
 						setResidentImageSrc(url);
 						return;
 					}
@@ -104,7 +104,7 @@ const GuestDashboard: React.FC = () => {
 					const r2 = await api.default.get('/resident/profile');
 					const data2 = r2.data;
 					if (data2?.profileImage) {
-						const url2 = data2.profileImage.startsWith('http') ? data2.profileImage : `${window.location.origin}${data2.profileImage}`;
+						const url2 = data2.profileImage.startsWith('http') ? data2.profileImage : getAbsoluteApiUrl(data2.profileImage);
 						setResidentImageSrc(url2);
 					} else if (data2?.profileImageId) {
 						setResidentImageSrc(getAbsoluteApiUrl(`/resident/personal-info/avatar/${data2.profileImageId}`));

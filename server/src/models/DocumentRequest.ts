@@ -49,7 +49,13 @@ const documentRequestSchema = new mongoose.Schema({
   },
   barangayID: {
     type: String,
-    required: false // Not all requests may have this, but we want to save it if present
+    required: false, // Not all requests may have this, but we want to save it if present
+    trim: true,
+    set: (v: any) => require('../utils/validation').normalizeBarangayID(v),
+    validate: {
+      validator: (v: any) => (v == null ? true : require('../utils/validation').validateBarangayID(v)),
+      message: 'Invalid barangayID format'
+    }
   },
   purpose: {
     type: String,

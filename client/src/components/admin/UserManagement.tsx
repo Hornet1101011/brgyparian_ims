@@ -944,10 +944,10 @@ const UserManagement: React.FC = () => {
                             if (resp?.resident) {
                               setSelectedResident(resp.resident);
                               setEditFormValues((prev: any) => ({ ...prev, profileImage: resp.resident.profileImage, profileImageId: resp.resident.profileImageId }));
-                              setUploadPreview(resp.resident.profileImage || getAbsoluteApiUrl(`/resident/personal-info/avatar/${resp.fileId}`));
+                              setUploadPreview(resp.resident.profileImage || `${getAbsoluteApiUrl(`/resident/personal-info/avatar/${resp.fileId}`)}?t=${Date.now()}`);
                             } else if (resp?.fileId) {
                               setEditFormValues((prev: any) => ({ ...prev, profileImage: getAbsoluteApiUrl(`/resident/personal-info/avatar/${resp.fileId}`), profileImageId: resp.fileId }));
-                            setUploadPreview(getAbsoluteApiUrl(`/resident/personal-info/avatar/${resp.fileId}`));
+                              setUploadPreview(`${getAbsoluteApiUrl(`/resident/personal-info/avatar/${resp.fileId}`)}?t=${Date.now()}`);
                             }
                             setUploadProgress(100);
                             message.success('Avatar uploaded');
@@ -967,7 +967,7 @@ const UserManagement: React.FC = () => {
                       <Button type="default">Choose Image</Button>
                     </Upload>
                     {uploading && <div style={{ marginTop: 8 }}>Uploading: {uploadProgress}%</div>}
-                    {uploadPreview && <div style={{ marginTop: 8 }}><img src={uploadPreview} alt="preview" style={{ maxWidth: 120, maxHeight: 120, borderRadius: 6 }} /></div>}
+                    {uploadPreview && <div style={{ marginTop: 8 }}><img src={typeof uploadPreview === 'string' && !uploadPreview.startsWith('http') ? getAbsoluteApiUrl(uploadPreview) : uploadPreview} alt="preview" style={{ maxWidth: 120, maxHeight: 120, borderRadius: 6 }} /></div>}
                   </Form.Item>
                 </Col>
                 <Col span={12}>

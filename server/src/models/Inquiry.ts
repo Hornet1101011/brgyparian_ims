@@ -67,6 +67,12 @@ const inquirySchema = new mongoose.Schema({
   barangayID: {
     type: String,
     required: true,
+    trim: true,
+    set: (v: any) => require('../utils/validation').normalizeBarangayID(v),
+    validate: {
+      validator: (v: any) => require('../utils/validation').validateBarangayID(v),
+      message: 'Invalid barangayID format'
+    }
   },
   assignedTo: [{
     type: mongoose.Schema.Types.ObjectId,

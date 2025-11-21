@@ -103,6 +103,11 @@ const userSchema = new mongoose.Schema({
     required: [true, 'Barangay ID is required'],
     unique: true,
     trim: true,
+    set: (v: any) => require('../utils/validation').normalizeBarangayID(v),
+    validate: {
+      validator: (v: any) => require('../utils/validation').validateBarangayID(v),
+      message: 'Invalid barangayID format'
+    }
   },
   isActive: {
     type: Boolean,

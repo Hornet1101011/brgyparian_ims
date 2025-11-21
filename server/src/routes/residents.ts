@@ -15,6 +15,21 @@ import sharp from 'sharp';
 
 const router = Router();
 
+// Public endpoint: get a few residents with avatars for preview (no auth, minimal fields)
+router.get('/with-avatars', async (req, res) => {
+	try {
+		const limit = Math.max(1, Math.min(10, parseInt(req.query.limit as string) || 5));
+		// Only select residents with a profileImageId
+		const residents = await Resident.find({ profileImageId: { $exists: true, $ne: null } })
+			.select('_id fullName username profileImageId profileImage')
+			.limit(limit)
+			.lean();
+		res.json(residents);
+	} catch (err) {
+		res.status(500).json({ message: 'Failed to fetch resident avatars', error: String(err) });
+	}
+});
+
 // Ensure uploads directory exists
 const uploadsDir = path.join(process.cwd(), 'uploads', 'residents');
 if (!fs.existsSync(uploadsDir)) {

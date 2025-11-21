@@ -217,6 +217,33 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     };
   }, []);
 
+    // Resolve a single avatar source for header display
+    const avatarSrc: string | null = (() => {
+      try {
+        // residentImageSrc takes precedence (fetched from resident personal info)
+        if (residentImageSrc) return residentImageSrc;
+        const u = displayUser as any;
+        if (!u) return null;
+        // Prefer explicit profileImage URL
+        if (u.profileImage) {
+          return u.profileImage.startsWith('http') ? u.profileImage : `${window.location.origin}${u.profileImage}`;
+        }
+        // Legacy field
+        if (u.profilePicture) {
+          return u.profilePicture.startsWith('http') ? u.profilePicture : `${window.location.origin}${u.profilePicture}`;
+        }
+        // If we have a GridFS id, construct the streaming URL
+        if (u.profileImageId) {
+          return getAbsoluteApiUrl(`/resident/personal-info/avatar/${u.profileImageId}`);
+        }
+        // Some users may have `avatar` with a full URL
+        if (u.avatar) return u.avatar.startsWith('http') ? u.avatar : `${window.location.origin}${u.avatar}`;
+      } catch (err) {
+        // ignore and fall back to null
+      }
+      return null;
+    })();
+
   // SSE for verification/profile updates is disabled while feature is paused
 
   // Close dropdown on outside click
@@ -371,15 +398,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
               placement="bottomRight"
               trigger={['click']}
             >
-                <Avatar size={36} shape="circle">
-                  {residentImageSrc ? (
-                    <img src={residentImageSrc} alt={displayUser?.fullName || displayUser?.username || 'avatar'} width={36} height={36} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} />
-                  ) : (displayUser && (displayUser.profileImage || displayUser.profilePicture || displayUser.profileImageId) ? (
-                    <AvatarImage user={displayUser} size={36} />
-                  ) : (
-                    <UserOutlined />
-                  ))}
-                </Avatar>
+                <Avatar size={36} shape="circle" src={avatarSrc ?? undefined} icon={!avatarSrc ? <UserOutlined /> : undefined} />
             </Dropdown>
             {/* Verification modal removed while feature is paused */}
           </div>

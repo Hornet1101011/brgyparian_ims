@@ -3,7 +3,7 @@ import { Layout, Card, List, Typography, Spin, Empty, message as antdMessage, Di
 import { EyeOutlined, EyeInvisibleOutlined, DeleteOutlined, DownloadOutlined, InboxOutlined, SendOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
 import styles from './inbox.module.css';
 import { InboxFilters, defaultFilterState, FilterState } from './inbox-filters';
-import { contactAPI } from '../services/api';
+import { contactAPI, getAbsoluteApiUrl } from '../services/api';
 
 const Inbox: React.FC = () => {
   const [loading, setLoading] = useState(true);
@@ -389,8 +389,8 @@ const Inbox: React.FC = () => {
                                       return (
                                             <div key={i}>
                                               {isImage ? (
-                                                <a href={url} target="_blank" rel="noreferrer">
-                                                  <img src={url} alt={filename} className={styles.chatImage} />
+                                                <a href={typeof url === 'string' && !url.startsWith('http') ? getAbsoluteApiUrl(url) : url} target="_blank" rel="noreferrer">
+                                                  <img src={typeof url === 'string' && !url.startsWith('http') ? getAbsoluteApiUrl(url) : url} alt={filename} className={styles.chatImage} />
                                                 </a>
                                               ) : (
                                                 <div>
@@ -513,9 +513,9 @@ const Inbox: React.FC = () => {
                                       return (
                                         <div key={i}>
                                               {isImage ? (
-                                                <a href={url} target="_blank" rel="noreferrer">
-                                                  <img src={url} alt={filename} className={styles.chatImage} />
-                                                </a>
+                                                  <a href={typeof url === 'string' && !url.startsWith('http') ? getAbsoluteApiUrl(url) : url} target="_blank" rel="noreferrer">
+                                                    <img src={typeof url === 'string' && !url.startsWith('http') ? getAbsoluteApiUrl(url) : url} alt={filename} className={styles.chatImage} />
+                                                  </a>
                                               ) : (
                                             <div>
                                               <a href={url} target="_blank" rel="noreferrer">{filename}</a>

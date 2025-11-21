@@ -3,6 +3,7 @@ import './Profile.css';
 import { Button, Form, Input, message, Upload, Alert, Modal } from 'antd';
 import { UserOutlined, MailOutlined, HomeOutlined, PhoneOutlined, UploadOutlined } from '@ant-design/icons';
 import AvatarImage from './AvatarImage';
+import { getAbsoluteApiUrl } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { axiosInstance } from '../services/api';
 import dayjs from 'dayjs';
@@ -53,7 +54,7 @@ const Profile: React.FC<ProfileProps> = ({ profile, onProfileUpdate }) => {
       .then(res => {
         userForm.setFieldsValue(res.data || {});
         if (res.data?.profileImage) {
-          const url = res.data.profileImage.startsWith('http') ? res.data.profileImage : `${window.location.origin}${res.data.profileImage}`;
+          const url = res.data.profileImage.startsWith('http') ? res.data.profileImage : getAbsoluteApiUrl(res.data.profileImage);
           setAvatarPreview(url);
         }
       })
@@ -63,7 +64,7 @@ const Profile: React.FC<ProfileProps> = ({ profile, onProfileUpdate }) => {
       .then(res => {
         residentForm.setFieldsValue(res.data || {});
         if (res.data?.profileImage) {
-          const url = res.data.profileImage.startsWith('http') ? res.data.profileImage : `${window.location.origin}${res.data.profileImage}`;
+          const url = res.data.profileImage.startsWith('http') ? res.data.profileImage : getAbsoluteApiUrl(res.data.profileImage);
           setAvatarPreview(url);
         }
       })
@@ -119,7 +120,7 @@ const Profile: React.FC<ProfileProps> = ({ profile, onProfileUpdate }) => {
       if (updated) {
         residentForm.setFieldsValue(updated || {});
         if (updated.profileImage) {
-          const url = updated.profileImage.startsWith('http') ? updated.profileImage : `${window.location.origin}${updated.profileImage}`;
+          const url = updated.profileImage.startsWith('http') ? updated.profileImage : `${getAbsoluteApiUrl(updated.profileImage)}?t=${Date.now()}`;
           setAvatarPreview(url);
         }
         setResidentMissing(false);

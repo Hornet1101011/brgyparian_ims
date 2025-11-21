@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { Layout, Card, List, Typography, Spin, Result, Divider, Avatar, Row, Col, Space, Badge, Select, Tabs, Input, Tag, Button, Modal, message as antdMessage } from 'antd';
 import styles from './staffInbox.module.css';
 import { InboxOutlined, SendOutlined, CheckOutlined, PlusOutlined } from '@ant-design/icons';
-import { contactAPI, adminAPI } from '../services/api';
+import { contactAPI, adminAPI, getAbsoluteApiUrl } from '../services/api';
 
 type FilterState = {
   status: string;
@@ -386,9 +386,9 @@ const StaffInbox: React.FC = () => {
                                 const isImage = (a.contentType && a.contentType.startsWith('image/')) || /\.(jpe?g|png|gif|webp)$/i.test(filename);
                                 return (
                                   <div key={i}>
-                                    {isImage ? (
-                                      <a href={url} target="_blank" rel="noreferrer">
-                                        <img src={url} alt={filename} style={{ maxWidth: 220, maxHeight: 140, borderRadius: 8, objectFit: 'cover', border: '1px solid #f0f0f0' }} />
+                                      {isImage ? (
+                                      <a href={typeof url === 'string' && !url.startsWith('http') ? getAbsoluteApiUrl(url) : url} target="_blank" rel="noreferrer">
+                                        <img src={typeof url === 'string' && !url.startsWith('http') ? getAbsoluteApiUrl(url) : url} alt={filename} style={{ maxWidth: 220, maxHeight: 140, borderRadius: 8, objectFit: 'cover', border: '1px solid #f0f0f0' }} />
                                       </a>
                                     ) : (
                                       <div>
@@ -461,9 +461,9 @@ const StaffInbox: React.FC = () => {
                                         const isImage = (a.contentType && a.contentType.startsWith('image/')) || /\.(jpe?g|png|gif|webp)$/i.test(filename);
                                         return (
                                           <div key={j}>
-                                            {isImage ? (
-                                              <a href={url} target="_blank" rel="noreferrer">
-                                                <img src={url} alt={filename} style={{ maxWidth: 220, maxHeight: 140, borderRadius: 8, objectFit: 'cover', border: '1px solid #f0f0f0' }} />
+                                              {isImage ? (
+                                              <a href={typeof url === 'string' && !url.startsWith('http') ? getAbsoluteApiUrl(url) : url} target="_blank" rel="noreferrer">
+                                                <img src={typeof url === 'string' && !url.startsWith('http') ? getAbsoluteApiUrl(url) : url} alt={filename} style={{ maxWidth: 220, maxHeight: 140, borderRadius: 8, objectFit: 'cover', border: '1px solid #f0f0f0' }} />
                                               </a>
                                             ) : (
                                               <div>

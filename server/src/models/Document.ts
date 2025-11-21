@@ -27,7 +27,15 @@ const documentSchema = new mongoose.Schema({
   isUrgent: { type: Boolean, default: false },
   requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   requestedByName: { type: String },
-  barangayID: { type: String },
+  barangayID: {
+    type: String,
+    trim: true,
+    set: (v: any) => require('../utils/validation').normalizeBarangayID(v),
+    validate: {
+      validator: (v: any) => (v == null ? true : require('../utils/validation').validateBarangayID(v)),
+      message: 'Invalid barangayID format'
+    }
+  },
   dateRequested: { type: Date },
   approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
 }, { timestamps: true });

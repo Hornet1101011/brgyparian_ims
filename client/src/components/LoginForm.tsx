@@ -6,10 +6,38 @@ import { useAuth } from '../contexts/AuthContext';
 import { adminAPI, axiosPublic, axiosInstance, getAbsoluteApiUrl } from '../services/api';
 import getOfficialPhotoSrc, { fetchPublicOfficials, PublicOfficial } from '../utils/officials';
 import StatsPanel from './StatsPanel';
+import AvatarImage from './AvatarImage';
 import './LoginForm.css';
 import { LeftOutlined, RightOutlined } from '@ant-design/icons';
 
 const LoginForm: React.FC = () => {
+    // Resident Avatars preview state
+    const [residentAvatars, setResidentAvatars] = useState<any[]>([]);
+    const [avatarsStatus, setAvatarsStatus] = useState<string>('loading');
+
+    // Fetch a few sample residents with avatars for preview
+    useEffect(() => {
+      let mounted = true;
+      (async () => {
+        setAvatarsStatus('loading');
+        try {
+          // Use public endpoint to fetch residents (limit to 5 with avatars)
+          const resp = await axiosPublic.get('/residents/with-avatars?limit=5');
+          let data = resp.data;
+          if (data && Array.isArray(data.data)) data = data.data;
+          if (!Array.isArray(data)) data = [];
+          // Only keep residents with a profileImageId
+          const filtered = data.filter((r: any) => r.profileImageId);
+          if (mounted) {
+            setResidentAvatars(filtered);
+            setAvatarsStatus(filtered.length > 0 ? 'ok' : 'empty');
+          }
+        } catch (e) {
+          setAvatarsStatus('error');
+        }
+      })();
+      return () => { mounted = false; };
+    }, []);
   const { login, isAuthenticated, user, setUser } = useAuth() as any;
   const [guestModalVisible, setGuestModalVisible] = useState(false);
   const [emergencyModalVisible, setEmergencyModalVisible] = useState(false);
@@ -147,6 +175,23 @@ const LoginForm: React.FC = () => {
                     <Button className="carousel-arrow right" icon={<RightOutlined />} onClick={() => {
                       if (!carouselRef.current) return; carouselRef.current.scrollBy({ left: 240, behavior: 'smooth' });
                     }} />
+                  </div>
+
+                  {/* Resident Avatars Preview */}
+                  <div style={{ marginTop: 32 }}>
+                    <Typography.Title level={4} style={{ marginBottom: 8 }}>Resident Avatars</Typography.Title>
+                    <div style={{ height: 6, background: 'linear-gradient(90deg, rgba(146,84,222,0.12), rgba(22,119,255,0.12))', borderRadius: 4, marginBottom: 12 }} />
+                    <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', minHeight: 60 }}>
+                      {avatarsStatus === 'loading' && <Typography.Text type="secondary">Loading avatars...</Typography.Text>}
+                      {avatarsStatus === 'error' && <Typography.Text type="danger">Failed to load avatars</Typography.Text>}
+                      {avatarsStatus === 'empty' && <Typography.Text type="secondary">No resident avatars to preview</Typography.Text>}
+                      {avatarsStatus === 'ok' && residentAvatars.map(r => (
+                        <div key={r._id} style={{ textAlign: 'center' }}>
+                          <AvatarImage user={r} size={56} />
+                          <div style={{ fontSize: 13, color: '#666', marginTop: 4 }}>{r.fullName || r.username || 'Resident'}</div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </Card>
               </div>
