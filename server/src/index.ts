@@ -420,6 +420,9 @@ try {
 }
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/resident', residentsRoutes);
+// Backward-compatible alias: some clients call the plural '/api/residents'
+// Mount the same router on the plural path to avoid 404s from older clients.
+app.use('/api/residents', residentsRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/activity-logs', activityLogRoutes);
 // Verification routes: resident uploads and admin actions
