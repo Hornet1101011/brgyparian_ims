@@ -184,13 +184,22 @@ userSchema.methods.comparePassword = async function(candidatePassword: string): 
   }
 };
 
-// Static method to find user by email
+// Helper to escape user-supplied strings for use in RegExp
+function escapeRegExp(str: string) {
+  return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Static method to find user by email or username (case-insensitive username)
 userSchema.statics.findByCredentials = async function(login: string) {
-  // Allow login by email or username
+  if (!login) return null;
+  const raw = String(login).trim();
+  const emailCandidate = raw.toLowerCase();
+  // Use a case-insensitive regex for username lookup to avoid accidental case mismatches
+  const usernameRegex = new RegExp(`^${escapeRegExp(raw)}$`, 'i');
   return await this.findOne({
     $or: [
-      { email: login.toLowerCase() },
-      { username: login }
+      { email: emailCandidate },
+      { username: usernameRegex }
     ]
   });
 };

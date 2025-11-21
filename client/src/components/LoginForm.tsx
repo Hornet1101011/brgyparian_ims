@@ -101,8 +101,15 @@ const LoginForm: React.FC = () => {
   const onFinish = async (values: { username: string; password: string }) => {
     setLoading(true);
     try {
+      // Build payload: if the input looks like an email, send it as `email`.
+      // Otherwise send as `identifier` so backend can resolve by username.
+      const raw = (values.username || '').toString().trim();
+      const payload: any = raw.includes('@')
+        ? { email: raw, password: values.password }
+        : { identifier: raw, password: values.password };
+
       // Use axiosInstance so runtime API_BASE is respected and credentials are sent
-      const resp = await axiosInstance.post('/auth/login', { identifier: values.username, password: values.password });
+      const resp = await axiosInstance.post('/auth/login', payload);
       const data = resp && resp.data ? resp.data : {};
 
       if (!resp || resp.status >= 400) {
