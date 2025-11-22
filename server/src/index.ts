@@ -390,6 +390,46 @@ app.get('/api/notifications/fallback', (_req, res) => {
   return res.json([]);
 });
 
+// Helper to require route modules from multiple candidate locations so the
+// server can run both from TypeScript sources during development and from the
+// compiled `dist` folder in production. It tries several paths and returns
+// the first successful require result or null.
+function requireRoute(name: string): any {
+  // Build a list of candidate absolute paths that cover both development
+  // (src/routes) and compiled production (dist/routes) layouts. Also
+  // include relative requires for convenience.
+  const candidates = [
+    // Relative requires (resolved relative to this module)
+    `./routes/${name}`,
+    `../routes/${name}`,
+    // Paths relative to compiled location (dist)
+    path.join(__dirname, 'routes', name),
+    path.join(__dirname, '..', 'routes', name),
+    // Paths relative to process.cwd() — handle both project-root and server subfolder layouts
+    path.join(process.cwd(), 'dist', 'routes', name),
+    path.join(process.cwd(), 'routes', name),
+    path.join(process.cwd(), 'server', 'dist', 'routes', name),
+    path.join(process.cwd(), 'server', 'routes', name),
+  ];
+
+  for (const c of candidates) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const mod = require(c);
+        console.log(`Loaded route ${name} from ${c}`);
+        // If the required module is an ES module with a default export, prefer that.
+        return (mod && (mod.default || (Object.keys(mod).length === 0 && typeof (mod as any).default !== 'undefined'))) ? (mod.default || (mod as any).default) : mod;
+    } catch (e: any) {
+      // Log debug info for why this candidate failed (helps diagnose path resolution issues)
+      console.debug(`requireRoute: failed to require ${c}:`, e && e.message ? e.message : e);
+      // continue to next candidate
+    }
+  }
+
+  console.warn(`Could not resolve route module for ${name} from candidates: ${candidates.join(', ')}`);
+  return null;
+}
+
 app.use('/api/auth', authRoutes);
 app.use('/api/documents', documentRoutes);
 // Mount legacy/test document endpoints under singular `/api/document` to
@@ -400,7 +440,7 @@ try {
   // Use require because the route is implemented in CommonJS under server/src/routes
   // and exports an Express router
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const processedDocs = require('./routes/processedDocuments');
+  const processedDocs = requireRoute('processedDocuments');
   if (processedDocs) app.use('/api/processed-documents', processedDocs);
 } catch (e) {
   console.error('Failed to mount /api/processed-documents routes in src/index.ts', e);
@@ -413,7 +453,7 @@ app.use('/api/admin', adminRoutes);
 // Mount public officials route so unauthenticated pages (login) can fetch officials
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const publicOfficials = require('../routes/publicOfficials');
+  const publicOfficials = requireRoute('publicOfficials');
   if (publicOfficials) app.use('/api/officials', publicOfficials);
 } catch (e) {
   console.error('Failed to mount /api/officials public route in src/index.ts', e);
@@ -428,7 +468,7 @@ app.use('/api/activity-logs', activityLogRoutes);
 // Verification routes: resident uploads and admin actions
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const verificationRoutes = require('./routes/verificationRoutes');
+  const verificationRoutes = requireRoute('verificationRoutes');
   if (verificationRoutes) app.use('/api/verification', verificationRoutes.default || verificationRoutes);
 } catch (e) {
   console.error('Failed to mount /api/verification routes in src/index.ts', e);
@@ -439,14 +479,14 @@ try {
   // and uses middleware/requireAuth which is CommonJS in server root
   // We use .default if it's an ES module
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const settingsRoutes = require('../routes/settingsRoutes');
+  const settingsRoutes = requireRoute('settingsRoutes');
   const requireAuth = require('../middleware/requireAuth');
-  app.use('/api/admin/settings', requireAuth, settingsRoutes);
+  if (settingsRoutes) app.use('/api/admin/settings', requireAuth, settingsRoutes);
   // Mount officials routes (created as CommonJS in server/routes/officials.js)
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const officialsRoutes = require('../routes/officials');
-    app.use('/api/admin/officials', requireAuth, officialsRoutes);
+    const officialsRoutes = requireRoute('officials');
+    if (officialsRoutes) app.use('/api/admin/officials', requireAuth, officialsRoutes);
   } catch (e) {
     console.error('Failed to mount /api/admin/officials routes in src/index.ts', e);
   }

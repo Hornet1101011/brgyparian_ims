@@ -254,11 +254,13 @@ const StatisticsInner: React.FC = () => {
   // build a stable key from query result data to use in deps and memoization
   const chartQueryDataKey = chartQueryResults.map(r => JSON.stringify(r?.data || '')).join('|');
 
+  // `chartQueryDataKey` is a stable fingerprint derived from `chartQueryResults`' data
+  // Include `chartQueryResults` explicitly to satisfy the hook dependency analyzer.
   const chartQueriesMapMemo = useMemo(() => {
     const m: Record<string, any> = {};
     CHART_IDS.forEach((id, idx) => { m[id] = chartQueryResults[idx]; });
     return m;
-  }, [chartQueryDataKey]);
+  }, [chartQueryResults]);
 
   // sync query results into local chartData / loading state for compatibility with existing code paths
   useEffect(() => {
@@ -295,7 +297,7 @@ const StatisticsInner: React.FC = () => {
     });
     setChartData(newData);
     setChartLoading(newLoading);
-  }, [chartQueryDataKey, chartQueriesMapMemo]);
+  }, [chartQueryDataKey, chartQueriesMapMemo, chartIds]);
 
   // When selection changes, trigger refetch for selected charts (chartQueriesMap is memoized above)
   useEffect(() => {
@@ -325,7 +327,7 @@ const StatisticsInner: React.FC = () => {
         prevSelectionRef.current = null;
       }
     }
-  }, [autoEnableWhenData, chartsWithData]);
+  }, [autoEnableWhenData, chartsWithData, selectedCharts]);
 
   // Report generation
   const [reportModalOpen, setReportModalOpen] = useState(false);

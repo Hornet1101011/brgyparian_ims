@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
+import './ResidentPortal.css';
 import { useTranslation } from 'react-i18next';
 import { residentPersonalInfoAPI, axiosInstance } from '../services/api';
 import { AxiosResponse } from 'axios';
-import { Form, Input, Button, Select, Typography, Divider, Row, Col, Card, Space, message, Switch, Upload, Alert } from 'antd';
-import { UploadOutlined } from '@ant-design/icons';
+import { Form, Input, Button, Select, Typography, Row, Col, Card, Space, message, Upload, Alert, Tooltip } from 'antd';
+import { UploadOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import ResidentCreateModal from './ResidentCreateModal';
 import { useAuth } from '../contexts/AuthContext';
 import AvatarImage from './AvatarImage';
@@ -102,33 +103,17 @@ export default function ResidentPortal() {
 	const [residentMissing, setResidentMissing] = useState(false);
 	const [showCreateModal, setShowCreateModal] = useState(false);
 
-	const autoCreateResident = async () => {
-		try {
-			if (!profile) {
-				message.error('Profile not yet loaded. Please try again.');
-				return;
-			}
-			// derive minimal name values
-			const parts = profile.fullName ? profile.fullName.trim().split(' ') : [];
-			const firstName = parts.length ? parts[0] : (profile.username || profile.email || 'Resident');
-			const lastName = parts.length > 1 ? parts.slice(1).join(' ') : '';
-			const payload: any = {
-				firstName,
-				lastName,
-				barangayID: profile.barangayID || '',
-				username: profile.username || '',
-				email: profile.email || ''
-			};
-			const resp = await axiosInstance.put('/resident/personal-info', payload);
-			setPersonalInfo(resp.data);
-			setPersonalForm(resp.data);
-			setResidentMissing(false);
-			message.success('Resident profile created');
-		} catch (err) {
-			console.error('Failed to auto-create resident:', err);
-			message.error('Failed to create resident info. Please fill the form manually.');
-		}
-	};
+	// Verification upload state
+	const [proofFile, setProofFile] = useState<File | null>(null);
+	const [govIdFile, setGovIdFile] = useState<File | null>(null);
+	const [selfieFile, setSelfieFile] = useState<File | null>(null);
+	const [proofList, setProofList] = useState<any[]>([]);
+	const [govIdList, setGovIdList] = useState<any[]>([]);
+	const [selfieList, setSelfieList] = useState<any[]>([]);
+	const [verificationUploading, setVerificationUploading] = useState(false);
+	const previewUrlsRef = useRef<Set<string>>(new Set());
+
+	// autoCreateResident removed (unused in this component)
 
 	const { setUser } = useAuth();
 	// handle avatar upload for resident portal banner
@@ -192,10 +177,10 @@ export default function ResidentPortal() {
 			alert('Failed to register resident.');
 		}
 	};
-	const { t, i18n } = useTranslation();
+	const { t } = useTranslation();
 	const [profile, setProfile] = useState<ResidentProfile | null>(null);
-	const [requests, setRequests] = useState<DocumentRequest[]>([]);
-	const [editing, setEditing] = useState(false);
+	const [, setRequests] = useState<DocumentRequest[]>([]);
+  
 	const [form, setForm] = useState<ResidentProfile | null>(null);
 	const [staffRequestSent, setStaffRequestSent] = useState(false);
 	const [requesting, setRequesting] = useState(false);
@@ -264,6 +249,56 @@ export default function ResidentPortal() {
 		setRequests(res.data);
 	});
 }, []);
+
+// Cleanup any created object URLs for upload previews when component unmounts
+useEffect(() => {
+	const urls = previewUrlsRef.current;
+	return () => {
+		try {
+			urls.forEach((u) => {
+				try { URL.revokeObjectURL(u); } catch (e) {}
+			});
+		} catch (err) {}
+		try { urls.clear(); } catch (e) {}
+	};
+}, []);
+
+	// Handler to upload verification documents (proof, id, selfie)
+	const handleVerificationUpload = async () => {
+		if (!proofFile && !govIdFile && !selfieFile) {
+			message.warning('Please select at least one document to upload');
+			return;
+		}
+		setVerificationUploading(true);
+		setVerificationProgress(0);
+		try {
+			const form = new FormData();
+			if (proofFile) form.append('ids', proofFile, proofFile.name);
+			if (govIdFile) form.append('ids', govIdFile, govIdFile.name);
+			if (selfieFile) form.append('ids', selfieFile, selfieFile.name);
+			await axiosInstance.post('/verification/upload', form, {
+				headers: { 'Content-Type': 'multipart/form-data' },
+				onUploadProgress: (ev: any) => {
+					const loaded = typeof ev?.loaded === 'number' ? ev.loaded : 0;
+					const total = typeof ev?.total === 'number' ? ev.total : 0;
+					if (total > 0) {
+						const pct = Math.min(100, Math.round((loaded / total) * 100));
+						setVerificationProgress(pct);
+					}
+				}
+			});
+			message.success('Verification documents uploaded');
+			// clear selected files
+			setProofFile(null); setGovIdFile(null); setSelfieFile(null);
+			setProofList([]); setGovIdList([]); setSelfieList([]);
+			setVerificationProgress(100);
+		} catch (err) {
+			console.error('Verification upload failed', err);
+			message.error('Failed to upload verification documents');
+		} finally {
+			setVerificationUploading(false);
+		}
+	};
 
 	useEffect(() => {
 		const updateTime = () => {
@@ -400,29 +435,6 @@ export default function ResidentPortal() {
 							variant="outlined"
 						>
 							<div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-								<div style={{ width: 96, height: 96, borderRadius: 12, overflow: 'hidden', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-									{avatarPreview ? (
-										<img src={avatarPreview} alt="avatar" style={{ width: 96, height: 96, objectFit: 'cover' }} />
-																		) : (
-																				<AvatarImage user={(() => {
-																					let displayUser = profile;
-																					if (!displayUser) {
-																						try {
-																							const stored = localStorage.getItem('userProfile');
-																							if (stored) displayUser = JSON.parse(stored);
-																						} catch (err) {}
-																					}
-																					return displayUser;
-																				})()} size={96} />
-																		)}
-								</div>
-								<div>
-									<Typography.Title level={3} style={{ margin: 0, fontWeight: 800 }}>{profile?.username || profile?.email || 'Resident'}</Typography.Title>
-									<Typography.Text type="secondary">Barangay ID: {profile?.barangayID || 'N/A'}</Typography.Text>
-									<div style={{ marginTop: 8 }}><Typography.Text type="secondary">{currentTime}</Typography.Text></div>
-								</div>
-							</div>
-							<div>
 								<Upload
 									showUploadList={false}
 									accept="image/*"
@@ -435,8 +447,184 @@ export default function ResidentPortal() {
 										}
 									}}
 								>
-									<Button icon={<UploadOutlined />}>Replace / Upload Profile Picture</Button>
+									<div
+										className="resident-banner-avatar clickable"
+										role="button"
+										tabIndex={0}
+										aria-label="Upload profile picture"
+										title="Upload profile picture"
+										onKeyDown={(e) => {
+											if (e.key === 'Enter' || e.key === ' ') {
+												(e.target as HTMLElement).click();
+											}
+										}}
+									>
+										{avatarPreview ? (
+											<img src={avatarPreview} alt="avatar" className="resident-banner-avatar__img" />
+										) : (
+											<AvatarImage user={(() => {
+												let displayUser = profile;
+												if (!displayUser) {
+													try {
+														const stored = localStorage.getItem('userProfile');
+														if (stored) displayUser = JSON.parse(stored);
+													} catch (err) {}
+												}
+												return displayUser;
+											})()} size={96} className="resident-banner-avatar__img" />
+										)}
+									</div>
 								</Upload>
+									<div>
+										<Typography.Title level={3} style={{ margin: 0, fontWeight: 800 }}>{profile?.username || profile?.email || 'Resident'}</Typography.Title>
+										<Typography.Text type="secondary">Barangay ID: {profile?.barangayID || 'N/A'}</Typography.Text>
+										<div style={{ marginTop: 8 }}><Typography.Text type="secondary">{currentTime}</Typography.Text></div>
+									</div>
+							</div>
+						</Card>
+
+						{/* Verification Uploads Section (styled like User Info) */}
+						<Card
+							style={{
+								background: 'linear-gradient(135deg, #f8fafc 0%, #e3e6f3 40%, #f6f1f7 100%)',
+								borderRadius: 20,
+								boxShadow: '0 8px 32px #bfc7d6cc',
+								marginBottom: 32,
+								border: 'none',
+								backdropFilter: 'blur(2px)',
+							}}
+							styles={{ body: { padding: 40 } }}
+							variant="outlined"
+						>
+							<div style={{ maxWidth: 900, margin: '0 auto' }}>
+								<Typography.Title level={3} style={{
+									fontWeight: 900,
+									marginBottom: 24,
+									letterSpacing: 1,
+									textAlign: 'left',
+									fontSize: 28,
+									background: 'linear-gradient(90deg, #40c9ff, #e81cff)',
+									WebkitBackgroundClip: 'text',
+									WebkitTextFillColor: 'transparent',
+								}}>Verification Documents</Typography.Title>
+								<Form layout="vertical">
+									<Row gutter={24}>
+										<Col xs={24} sm={24} md={12} lg={8}>
+											<Form.Item label={<div style={{display: 'flex', alignItems: 'center', gap: 8}}>Proof of Residency<Tooltip title="Upload a document showing your address (e.g., utility bill, lease, or bank statement)."><InfoCircleOutlined style={{ color: '#888' }} /></Tooltip></div>}>
+												<Upload
+													accept="image/*,application/pdf"
+													fileList={proofList}
+													beforeUpload={(file) => false}
+													onChange={({ fileList }) => {
+														// revoke existing previews for this slot
+														proofList.forEach((pf: any) => {
+															if (pf && pf.thumbUrl) {
+																try { URL.revokeObjectURL(String(pf.thumbUrl)); } catch (e) {}
+																previewUrlsRef.current.delete(String(pf.thumbUrl));
+															}
+														});
+														const list = (fileList || []).slice(-1);
+														list.forEach((f: any) => {
+															if (f.originFileObj && !f.thumbUrl && f.type && f.type.startsWith('image/')) {
+																const url = URL.createObjectURL(f.originFileObj);
+																f.thumbUrl = url;
+																previewUrlsRef.current.add(url);
+															}
+														});
+														setProofList(list as any[]);
+														setProofFile((list[0] && (list[0].originFileObj as File)) || null);
+													}}
+													listType="picture-card"
+													showUploadList={{ showPreviewIcon: true, showRemoveIcon: true }}
+													maxCount={1}
+												>
+													<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><UploadOutlined /> <span style={{ fontWeight: 600 }}>Select Proof</span></div>
+												</Upload>
+											</Form.Item>
+										</Col>
+										<Col xs={24} sm={24} md={12} lg={8}>
+											<Form.Item label={<div style={{display: 'flex', alignItems: 'center', gap: 8}}>Government-issued ID<Tooltip title="Upload a government-issued ID such as passport, driver's license, or national ID."><InfoCircleOutlined style={{ color: '#888' }} /></Tooltip></div>}>
+												<Upload
+													accept="image/*,application/pdf"
+													fileList={govIdList}
+													beforeUpload={(file) => false}
+													onChange={({ fileList }) => {
+														// revoke existing previews for this slot
+														govIdList.forEach((gf: any) => {
+															if (gf && gf.thumbUrl) {
+																try { URL.revokeObjectURL(String(gf.thumbUrl)); } catch (e) {}
+																previewUrlsRef.current.delete(String(gf.thumbUrl));
+															}
+														});
+														const list = (fileList || []).slice(-1);
+														list.forEach((f: any) => {
+															if (f.originFileObj && !f.thumbUrl && f.type && f.type.startsWith('image/')) {
+																const url = URL.createObjectURL(f.originFileObj);
+																f.thumbUrl = url;
+																previewUrlsRef.current.add(url);
+															}
+														});
+														setGovIdList(list as any[]);
+														setGovIdFile((list[0] && (list[0].originFileObj as File)) || null);
+													}}
+													listType="picture-card"
+													showUploadList={{ showPreviewIcon: true, showRemoveIcon: true }}
+													maxCount={1}
+												>
+													<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><UploadOutlined /> <span style={{ fontWeight: 600 }}>Select ID</span></div>
+												</Upload>
+											</Form.Item>
+										</Col>
+										<Col xs={24} sm={24} md={12} lg={8}>
+											<Form.Item label={<div style={{display: 'flex', alignItems: 'center', gap: 8}}>Selfie with ID<Tooltip title="Take a clear photo of yourself holding your government ID next to your face."><InfoCircleOutlined style={{ color: '#888' }} /></Tooltip></div>}>
+												<Upload
+													accept="image/*"
+													fileList={selfieList}
+													beforeUpload={(file) => false}
+													onChange={({ fileList }) => {
+														// revoke existing previews for this slot
+														selfieList.forEach((sf: any) => {
+															if (sf && sf.thumbUrl) {
+																try { URL.revokeObjectURL(String(sf.thumbUrl)); } catch (e) {}
+																previewUrlsRef.current.delete(String(sf.thumbUrl));
+															}
+														});
+														const list = (fileList || []).slice(-1);
+														list.forEach((f: any) => {
+															if (f.originFileObj && !f.thumbUrl && f.type && f.type.startsWith('image/')) {
+																const url = URL.createObjectURL(f.originFileObj);
+																f.thumbUrl = url;
+																previewUrlsRef.current.add(url);
+															}
+														});
+														setSelfieList(list as any[]);
+														setSelfieFile((list[0] && (list[0].originFileObj as File)) || null);
+													}}
+													listType="picture-card"
+													showUploadList={{ showPreviewIcon: true, showRemoveIcon: true }}
+													maxCount={1}
+												>
+													<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><UploadOutlined /> <span style={{ fontWeight: 600 }}>Select Selfie</span></div>
+												</Upload>
+											</Form.Item>
+										</Col>
+									</Row>
+									<Row gutter={24} style={{ marginTop: 16 }}>
+										<Col span={24} style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+											<Button type="dashed" onClick={() => {
+												// revoke all current preview URLs for verification files
+												[ ...proofList, ...govIdList, ...selfieList ].forEach((f: any) => {
+													if (f && f.thumbUrl) {
+														try { URL.revokeObjectURL(String(f.thumbUrl)); } catch (e) {}
+														previewUrlsRef.current.delete(String(f.thumbUrl));
+													}
+												});
+												setProofFile(null); setGovIdFile(null); setSelfieFile(null); setProofList([]); setGovIdList([]); setSelfieList([]);
+											}}>Clear</Button>
+											<Button type="primary" loading={verificationUploading} disabled={!(proofFile && govIdFile && selfieFile)} onClick={handleVerificationUpload}>Upload Verification Documents</Button>
+										</Col>
+									</Row>
+								</Form>
 							</div>
 						</Card>
 																		{/* Prompt to create resident info if missing */}
@@ -494,16 +682,16 @@ export default function ResidentPortal() {
 																											 {form && (
 																												 <Form layout="vertical">
 															<Row gutter={24}>
-																<Col span={12}><Form.Item label={t('username')}><Input name="username" value={form.username} onChange={handleChangeUser} disabled={!editingUser} /></Form.Item></Col>
-																<Col span={12}><Form.Item label={t('email')}><Input name="email" value={form.email} onChange={handleChangeUser} disabled={!editingUser} /></Form.Item></Col>
+																<Col xs={24} sm={12}><Form.Item label={t('username')}><Input name="username" value={form.username} onChange={handleChangeUser} disabled={!editingUser} /></Form.Item></Col>
+																<Col xs={24} sm={12}><Form.Item label={t('email')}><Input name="email" value={form.email} onChange={handleChangeUser} disabled={!editingUser} /></Form.Item></Col>
 															</Row>
 															<Row gutter={24}>
-																<Col span={12}><Form.Item label={t('address')}><Input name="address" value={form.address} onChange={handleChangeUser} disabled={!editingUser} /></Form.Item></Col>
-																<Col span={12}><Form.Item label={t('contactNumber')}><Input name="contactNumber" value={form.contactNumber} onChange={handleChangeUser} disabled={!editingUser} /></Form.Item></Col>
+																<Col xs={24} sm={12}><Form.Item label={t('address')}><Input name="address" value={form.address} onChange={handleChangeUser} disabled={!editingUser} /></Form.Item></Col>
+																<Col xs={24} sm={12}><Form.Item label={t('contactNumber')}><Input name="contactNumber" value={form.contactNumber} onChange={handleChangeUser} disabled={!editingUser} /></Form.Item></Col>
 															</Row>
 															<Row gutter={24}>
-																<Col span={12}><Form.Item label={t('barangayID') || 'Barangay ID'}><Input name="barangayID" value={form.barangayID} disabled /></Form.Item></Col>
-																<Col span={12}><Form.Item label={t('role') || 'Role'}><Input name="role" value={form.role} disabled /></Form.Item></Col>
+																<Col xs={24} sm={12}><Form.Item label={t('barangayID') || 'Barangay ID'}><Input name="barangayID" value={form.barangayID} disabled /></Form.Item></Col>
+																<Col xs={24} sm={12}><Form.Item label={t('role') || 'Role'}><Input name="role" value={form.role} disabled /></Form.Item></Col>
 															</Row>
 															<Space style={{ marginTop: 24 }}>
 																{editingUser ? (
@@ -565,43 +753,43 @@ export default function ResidentPortal() {
 																WebkitBackgroundClip: 'text',
 																WebkitTextFillColor: 'transparent',
 															}}>Personal Information</Typography.Title>
+															<Row gutter={24}>
+																<Col xs={24} sm={12} md={6}><Form.Item label="First Name"><Input name="firstName" value={personalForm.firstName} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+																<Col xs={24} sm={12} md={6}><Form.Item label="Middle Name"><Input name="middleName" value={personalForm.middleName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+																<Col xs={24} sm={12} md={6}><Form.Item label="Last Name"><Input name="lastName" value={personalForm.lastName} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+																<Col xs={24} sm={12} md={6}><Form.Item label="Age"><Input name="age" type="number" value={personalForm.age || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+															</Row>
+															<Row gutter={16}>
+																<Col xs={24} sm={12} md={6}><Form.Item label="Birth Date"><Input name="birthDate" type="date" value={personalForm.birthDate || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+																<Col xs={24} sm={12} md={6}><Form.Item label="Place of Birth"><Input name="placeOfBirth" value={personalForm.placeOfBirth || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+																<Col xs={24} sm={12} md={6}><Form.Item label="Nationality"><Input name="nationality" value={personalForm.nationality || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+																<Col xs={24} sm={12} md={6}><Form.Item label="Religion"><Input name="religion" value={personalForm.religion || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+															</Row>
+															<Row gutter={16}>
+																<Col xs={24} sm={12} md={6}><Form.Item label="Date of Residency"><Input name="dateOfResidency" type="date" value={personalForm.dateOfResidency || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+																<Col xs={24} sm={12} md={6}><Form.Item label="Sex">
+																		<Select
+																			value={personalForm.sex || ''}
+																			onChange={value => setPersonalForm(prev => prev ? { ...prev, sex: value } : prev)}
+																			disabled={!editingPersonal}
+																		>
+																			<Select.Option value="">Select</Select.Option>
+																			<Select.Option value="Male">Male</Select.Option>
+																			<Select.Option value="Female">Female</Select.Option>
+																			<Select.Option value="Other">Other</Select.Option>
+																		</Select>
+																</Form.Item></Col>
+																<Col xs={24} sm={12} md={6}><Form.Item label="Blood Type"><Input name="bloodType" value={personalForm.bloodType || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+																<Col xs={24} sm={12} md={6}><Form.Item label="Disability Status"><Input name="disabilityStatus" value={personalForm.disabilityStatus || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+															</Row>
+																				<Row gutter={16}>
+																					<Col xs={24} sm={12} md={6}><Form.Item label="Passport Number"><Input name="passportNumber" value={personalForm.passportNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+																					<Col xs={24} sm={12} md={6}><Form.Item label="Government ID Number"><Input name="governmentIdNumber" value={personalForm.governmentIdNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+																					<Col xs={24} sm={12} md={6}><Form.Item label="Occupation"><Input name="occupation" value={personalForm.occupation || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+																					<Col xs={24} sm={12} md={6}><Form.Item label="Educational Attainment"><Input name="educationalAttainment" value={personalForm.educationalAttainment || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+																				</Row>
 															   <Row gutter={16}>
-																   <Col span={6}><Form.Item label="First Name"><Input name="firstName" value={personalForm.firstName} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																   <Col span={6}><Form.Item label="Middle Name"><Input name="middleName" value={personalForm.middleName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																   <Col span={6}><Form.Item label="Last Name"><Input name="lastName" value={personalForm.lastName} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																   <Col span={6}><Form.Item label="Age"><Input name="age" type="number" value={personalForm.age || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   </Row>
-															   <Row gutter={16}>
-																   <Col span={6}><Form.Item label="Birth Date"><Input name="birthDate" type="date" value={personalForm.birthDate || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																   <Col span={6}><Form.Item label="Place of Birth"><Input name="placeOfBirth" value={personalForm.placeOfBirth || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																   <Col span={6}><Form.Item label="Nationality"><Input name="nationality" value={personalForm.nationality || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																   <Col span={6}><Form.Item label="Religion"><Input name="religion" value={personalForm.religion || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   </Row>
-															   <Row gutter={16}>
-																   <Col span={6}><Form.Item label="Date of Residency"><Input name="dateOfResidency" type="date" value={personalForm.dateOfResidency || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																   <Col span={6}><Form.Item label="Sex">
-																		   <Select
-																			   value={personalForm.sex || ''}
-																			   onChange={value => setPersonalForm(prev => prev ? { ...prev, sex: value } : prev)}
-																			   disabled={!editingPersonal}
-																		   >
-																			   <Select.Option value="">Select</Select.Option>
-																			   <Select.Option value="Male">Male</Select.Option>
-																			   <Select.Option value="Female">Female</Select.Option>
-																			   <Select.Option value="Other">Other</Select.Option>
-																		   </Select>
-																   </Form.Item></Col>
-																   <Col span={6}><Form.Item label="Blood Type"><Input name="bloodType" value={personalForm.bloodType || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																   <Col span={6}><Form.Item label="Disability Status"><Input name="disabilityStatus" value={personalForm.disabilityStatus || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   </Row>
-															   <Row gutter={16}>
-																   <Col span={6}><Form.Item label="Passport Number"><Input name="passportNumber" value={personalForm.passportNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																   <Col span={6}><Form.Item label="Government ID Number"><Input name="governmentIdNumber" value={personalForm.governmentIdNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																   <Col span={6}><Form.Item label="Occupation"><Input name="occupation" value={personalForm.occupation || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																   <Col span={6}><Form.Item label="Educational Attainment"><Input name="educationalAttainment" value={personalForm.educationalAttainment || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   </Row>
-															   <Row gutter={16}>
-																   <Col span={8}>
+																   <Col xs={24} sm={24} md={12} lg={8}>
 																	   <Form.Item label="Civil Status">
 																		   <Select
 																			   value={personalForm.civilStatus || ''}
@@ -633,13 +821,13 @@ export default function ResidentPortal() {
 																WebkitTextFillColor: 'transparent',
 															}}>Social Media Information</Typography.Title>
 															   <Row gutter={16}>
-																<Col span={8}><Form.Item label="Facebook"><Input name="facebook" value={personalForm.facebook || ''} onChange={handleChangePersonal} disabled={!editingPersonal} placeholder="Facebook profile/link" /></Form.Item></Col>
-																<Col span={8}><Form.Item label="Valid Email"><Input name="email" type="email" value={personalForm.email || ''} onChange={handleChangePersonal} disabled={!editingPersonal} placeholder="Email address" /></Form.Item></Col>
-																<Col span={8}><Form.Item label="Contact Number"><Input name="contactNumber" type="number" value={personalForm.contactNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} placeholder="Contact No." /></Form.Item></Col>
+																<Col xs={24} sm={24} md={24} lg={8}><Form.Item label="Facebook"><Input name="facebook" value={personalForm.facebook || ''} onChange={handleChangePersonal} disabled={!editingPersonal} placeholder="Facebook profile/link" /></Form.Item></Col>
+																<Col xs={24} sm={24} md={24} lg={8}><Form.Item label="Valid Email"><Input name="email" type="email" value={personalForm.email || ''} onChange={handleChangePersonal} disabled={!editingPersonal} placeholder="Email address" /></Form.Item></Col>
+																<Col xs={24} sm={24} md={24} lg={8}><Form.Item label="Contact Number"><Input name="contactNumber" type="number" value={personalForm.contactNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} placeholder="Contact No." /></Form.Item></Col>
 															</Row>
 															<Row gutter={16}>
-																<Col span={8}><Form.Item label="Emergency Contact"><Input name="emergencyContact" type="number" value={personalForm.emergencyContact || ''} onChange={handleChangePersonal} disabled={!editingPersonal} placeholder="Emergency contact number" /></Form.Item></Col>
-																<Col span={8}><Form.Item label="Landline Number"><Input name="landlineNumber" type="number" value={personalForm.landlineNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} placeholder="Landline number" /></Form.Item></Col>
+																<Col xs={24} sm={24} md={24} lg={12}><Form.Item label="Emergency Contact"><Input name="emergencyContact" type="number" value={personalForm.emergencyContact || ''} onChange={handleChangePersonal} disabled={!editingPersonal} placeholder="Emergency contact number" /></Form.Item></Col>
+																<Col xs={24} sm={24} md={24} lg={12}><Form.Item label="Landline Number"><Input name="landlineNumber" type="number" value={personalForm.landlineNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} placeholder="Landline number" /></Form.Item></Col>
 															</Row>
 														   {/* Family Info Subcategory */}
 														<Typography.Title level={3} style={{
@@ -653,19 +841,19 @@ export default function ResidentPortal() {
 															WebkitTextFillColor: 'transparent',
 														}}>Family Information</Typography.Title>
 														   <Row gutter={16}>
-															   <Col span={6}><Form.Item label="Spouse Name"><Input name="spouseName" value={personalForm.spouseName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col span={6}><Form.Item label="Spouse Middle Name"><Input name="spouseMiddleName" value={personalForm.spouseMiddleName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col span={6}><Form.Item label="Spouse Last Name"><Input name="spouseLastName" value={personalForm.spouseLastName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col span={6}><Form.Item label="Spouse Age"><Input name="spouseAge" type="number" value={personalForm.spouseAge || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+															   <Col xs={24} sm={12} md={6}><Form.Item label="Spouse Name"><Input name="spouseName" value={personalForm.spouseName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+															   <Col xs={24} sm={12} md={6}><Form.Item label="Spouse Middle Name"><Input name="spouseMiddleName" value={personalForm.spouseMiddleName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+															   <Col xs={24} sm={12} md={6}><Form.Item label="Spouse Last Name"><Input name="spouseLastName" value={personalForm.spouseLastName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+															   <Col xs={24} sm={12} md={6}><Form.Item label="Spouse Age"><Input name="spouseAge" type="number" value={personalForm.spouseAge || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
 														   </Row>
 														   <Row gutter={16}>
-															   <Col span={6}><Form.Item label="Spouse Birthdate"><Input name="spouseBirthDate" type="date" value={personalForm.spouseBirthDate || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col span={6}><Form.Item label="Spouse Nationality"><Input name="spouseNationality" value={personalForm.spouseNationality || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col span={6}><Form.Item label="Spouse Occupation"><Input name="spouseOccupation" value={personalForm.spouseOccupation || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col span={6}><Form.Item label="Spouse Contact Number"><Input name="spouseContactNumber" value={personalForm.spouseContactNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+															   <Col xs={24} sm={12} md={6}><Form.Item label="Spouse Birthdate"><Input name="spouseBirthDate" type="date" value={personalForm.spouseBirthDate || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+															   <Col xs={24} sm={12} md={6}><Form.Item label="Spouse Nationality"><Input name="spouseNationality" value={personalForm.spouseNationality || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+															   <Col xs={24} sm={12} md={6}><Form.Item label="Spouse Occupation"><Input name="spouseOccupation" value={personalForm.spouseOccupation || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+															   <Col xs={24} sm={12} md={6}><Form.Item label="Spouse Contact Number"><Input name="spouseContactNumber" value={personalForm.spouseContactNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
 														   </Row>
 														   <Row gutter={16}>
-															   <Col span={6}><Form.Item label="Spouse Status">
+															   <Col xs={24} sm={12} md={6}><Form.Item label="Spouse Status">
 																	   <Select
 																		   value={personalForm.spouseStatus || ''}
 																		   onChange={value => setPersonalForm(prev => prev ? { ...prev, spouseStatus: value } : prev)}
@@ -682,22 +870,22 @@ export default function ResidentPortal() {
 																		   <Select.Option value="Other">Other</Select.Option>
 																	   </Select>
 															   </Form.Item></Col>
-															   <Col span={6}><Form.Item label="Number of Children"><Input name="numberOfChildren" type="number" value={personalForm.numberOfChildren || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col span={6}><Form.Item label="Children's Names"><Input name="childrenNames" value={personalForm.childrenNames || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col span={6}><Form.Item label="Children's Ages"><Input name="childrenAges" value={personalForm.childrenAges || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+															   <Col xs={24} sm={12} md={6}><Form.Item label="Number of Children"><Input name="numberOfChildren" type="number" value={personalForm.numberOfChildren || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+															   <Col xs={24} sm={12} md={6}><Form.Item label="Children's Names"><Input name="childrenNames" value={personalForm.childrenNames || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+															   <Col xs={24} sm={12} md={6}><Form.Item label="Children's Ages"><Input name="childrenAges" value={personalForm.childrenAges || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
 														   </Row>
 														   <Row gutter={16}>
-															   <Col span={6}><Form.Item label="Emergency Contact Name"><Input name="emergencyContactName" value={personalForm.emergencyContactName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col span={6}><Form.Item label="Emergency Contact Relationship"><Input name="emergencyContactRelationship" value={personalForm.emergencyContactRelationship || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+															   <Col xs={24} sm={12} md={6}><Form.Item label="Emergency Contact Name"><Input name="emergencyContactName" value={personalForm.emergencyContactName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+															   <Col xs={24} sm={12} md={6}><Form.Item label="Emergency Contact Relationship"><Input name="emergencyContactRelationship" value={personalForm.emergencyContactRelationship || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
 														   </Row>
 															<Row gutter={16}>
-																<Col span={8}><Form.Item label="Mother's Name"><Input name="motherName" value={personalForm.motherName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																<Col span={8}><Form.Item label="Mother's Age"><Input name="motherAge" type="number" value={personalForm.motherAge || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																<Col span={8}><Form.Item label="Mother's Birthdate"><Input name="motherBirthDate" type="date" value={personalForm.motherBirthDate || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+																<Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Mother's Name"><Input name="motherName" value={personalForm.motherName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+																<Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Mother's Age"><Input name="motherAge" type="number" value={personalForm.motherAge || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+																<Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Mother's Birthdate"><Input name="motherBirthDate" type="date" value={personalForm.motherBirthDate || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
 															</Row>
 															<Row gutter={16}>
-																<Col span={8}><Form.Item label="Mother's Occupation"><Input name="motherOccupation" value={personalForm.motherOccupation || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																<Col span={8}>
+																<Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Mother's Occupation"><Input name="motherOccupation" value={personalForm.motherOccupation || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+																<Col xs={24} sm={24} md={12} lg={8}>
 																	<Form.Item label="Mother's Status">
 																		<Select
 																			value={personalForm.motherStatus || ''}
@@ -718,13 +906,13 @@ export default function ResidentPortal() {
 																</Col>
 															</Row>
 															<Row gutter={16}>
-																<Col span={8}><Form.Item label="Father's Name"><Input name="fatherName" value={personalForm.fatherName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																<Col span={8}><Form.Item label="Father's Age"><Input name="fatherAge" type="number" value={personalForm.fatherAge || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																<Col span={8}><Form.Item label="Father's Birthdate"><Input name="fatherBirthDate" type="date" value={personalForm.fatherBirthDate || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+																<Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Father's Name"><Input name="fatherName" value={personalForm.fatherName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+																<Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Father's Age"><Input name="fatherAge" type="number" value={personalForm.fatherAge || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+																<Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Father's Birthdate"><Input name="fatherBirthDate" type="date" value={personalForm.fatherBirthDate || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
 															</Row>
 															<Row gutter={16}>
-																<Col span={8}><Form.Item label="Father's Occupation"><Input name="fatherOccupation" value={personalForm.fatherOccupation || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																<Col span={8}>
+																<Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Father's Occupation"><Input name="fatherOccupation" value={personalForm.fatherOccupation || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+																<Col xs={24} sm={24} md={12} lg={8}>
 																	<Form.Item label="Father's Status">
 																		<Select
 																			value={personalForm.fatherStatus || ''}
@@ -756,8 +944,8 @@ export default function ResidentPortal() {
 															WebkitTextFillColor: 'transparent',
 														}}>Business Information</Typography.Title>
 														   <Row gutter={16}>
-															   <Col span={8}><Form.Item label="Business Name"><Input name="businessName" value={personalForm.businessName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col span={8}><Form.Item label="Business Type">
+															   <Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Business Name"><Input name="businessName" value={personalForm.businessName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+															   <Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Business Type">
 																   <Select value={personalForm.businessType || ''} onChange={value => setPersonalForm(prev => prev ? { ...prev, businessType: value } : prev)} disabled={!editingPersonal}>
 																	   <Select.Option value="">Select</Select.Option>
 																	   <Select.Option value="Sole Proprietorship">Sole Proprietorship</Select.Option>
@@ -767,27 +955,27 @@ export default function ResidentPortal() {
 																	   <Select.Option value="Other">Other</Select.Option>
 																   </Select>
 															   </Form.Item></Col>
-															   <Col span={8}><Form.Item label="Nature of Business"><Input name="natureOfBusiness" value={personalForm.natureOfBusiness || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+															   <Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Nature of Business"><Input name="natureOfBusiness" value={personalForm.natureOfBusiness || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
 														   </Row>
 														   <Row gutter={16}>
-															   <Col span={8}><Form.Item label="Business Address"><Input name="businessAddress" value={personalForm.businessAddress || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col span={8}><Form.Item label="Date Established"><Input name="dateEstablished" type="date" value={personalForm.dateEstablished || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col span={8}><Form.Item label="TIN"><Input name="tin" value={personalForm.tin || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+															   <Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Business Address"><Input name="businessAddress" value={personalForm.businessAddress || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+															   <Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Date Established"><Input name="dateEstablished" type="date" value={personalForm.dateEstablished || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+															   <Col xs={24} sm={24} md={12} lg={8}><Form.Item label="TIN"><Input name="tin" value={personalForm.tin || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
 														   </Row>
 														   <Row gutter={16}>
-															   <Col span={8}><Form.Item label="DTI/SEC/CDA Registration No."><Input name="registrationNumber" value={personalForm.registrationNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col span={8}><Form.Item label="Business Permit No."><Input name="businessPermitNumber" value={personalForm.businessPermitNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col span={8}><Form.Item label="Barangay Clearance No."><Input name="barangayClearanceNumber" value={personalForm.barangayClearanceNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+															   <Col xs={24} sm={24} md={12} lg={8}><Form.Item label="DTI/SEC/CDA Registration No."><Input name="registrationNumber" value={personalForm.registrationNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+															   <Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Business Permit No."><Input name="businessPermitNumber" value={personalForm.businessPermitNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+															   <Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Barangay Clearance No."><Input name="barangayClearanceNumber" value={personalForm.barangayClearanceNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
 														   </Row>
 														   <Row gutter={16}>
-															   <Col span={8}><Form.Item label="Number of Employees"><Input name="numberOfEmployees" type="number" value={personalForm.numberOfEmployees || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col span={8}><Form.Item label="Capital Investment"><Input name="capitalInvestment" type="number" value={personalForm.capitalInvestment || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col span={8}><Form.Item label="Annual Gross Income"><Input name="annualGrossIncome" type="number" value={personalForm.annualGrossIncome || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+															   <Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Number of Employees"><Input name="numberOfEmployees" type="number" value={personalForm.numberOfEmployees || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+															   <Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Capital Investment"><Input name="capitalInvestment" type="number" value={personalForm.capitalInvestment || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+															   <Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Annual Gross Income"><Input name="annualGrossIncome" type="number" value={personalForm.annualGrossIncome || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
 														   </Row>
 														   <Row gutter={16}>
-															   <Col span={8}><Form.Item label="Contact Person"><Input name="businessContactPerson" value={personalForm.businessContactPerson || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col span={8}><Form.Item label="Contact Number"><Input name="businessContactNumber" value={personalForm.businessContactNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col span={8}><Form.Item label="Email Address"><Input name="businessEmail" type="email" value={personalForm.businessEmail || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+															   <Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Contact Person"><Input name="businessContactPerson" value={personalForm.businessContactPerson || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+															   <Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Contact Number"><Input name="businessContactNumber" value={personalForm.businessContactNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+															   <Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Email Address"><Input name="businessEmail" type="email" value={personalForm.businessEmail || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
 														   </Row>
 														   <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
 															   {editingPersonal ? (
@@ -813,4 +1001,8 @@ export default function ResidentPortal() {
 			</div>
 		);
 }
-export {};
+
+function setVerificationProgress(arg0: number) {
+	throw new Error('Function not implemented.');
+}
+

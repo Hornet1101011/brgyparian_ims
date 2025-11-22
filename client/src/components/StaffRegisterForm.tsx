@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
-import { Form, Input, Button, Select, message, Card } from 'antd';
+import { Form, Input, Button, message, Card } from 'antd';
 import { staffRegister } from '../services/api';
 import { useNavigate } from 'react-router-dom';
-
-const { Option } = Select;
 
 const StaffRegisterForm: React.FC = () => {
   const [loading, setLoading] = useState(false);

@@ -471,16 +471,44 @@ router.get('/personal-info/avatar/:id', async (req: any, res) => {
 		} catch (err) {
 			return res.status(400).json({ message: 'Invalid avatar id' });
 		}
-		const downloadStream = avatarsBucket.openDownloadStream(_id);
-		downloadStream.on('error', err => {
-			console.error('GridFS download error:', err);
-			res.status(404).end();
+
+		// Small SVG placeholder used when avatar is missing.
+		const placeholderSvg = `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">\n  <rect width="100%" height="100%" fill="#E6EEF6"/>\n  <text x="50%" y="54%" font-family="sans-serif" font-size="56" fill="#9AAFC6" text-anchor="middle" dominant-baseline="middle">?</text>\n</svg>`;
+
+		let downloadStream;
+		try {
+			downloadStream = avatarsBucket.openDownloadStream(_id);
+		} catch (err: any) {
+			// Some GridFS implementations may throw synchronously when the file isn't present.
+			console.warn(`[Residents API] Avatar not found (openDownloadStream threw) for id=${id}`);
+			res.setHeader('Content-Type', 'image/svg+xml');
+			return res.status(200).send(placeholderSvg);
+		}
+
+		// Handle stream errors gracefully. If file is not found, serve a small placeholder SVG
+		// so image consumers receive a valid image instead of broken responses.
+		downloadStream.on('error', (err: any) => {
+			const msg = err && err.message ? String(err.message) : String(err);
+			if (!res.headersSent) {
+				if (msg.includes('FileNotFound') || msg.includes('file not found') || (err && err.name === 'MongoRuntimeError')) {
+					console.warn(`[Residents API] Avatar not found for id=${id}`);
+					res.setHeader('Content-Type', 'image/svg+xml');
+					return res.status(200).send(placeholderSvg);
+				}
+				console.error(`[Residents API] GridFS download error for id=${id}:`, err);
+				return res.status(500).json({ message: 'Failed to stream avatar' });
+			}
+			// If headers already sent, just destroy the stream and log the error.
+			console.error(`[Residents API] Stream error after headers sent for id=${id}:`, err);
+			try { downloadStream.destroy(err); } catch (e) { /* ignore */ }
 		});
+
+		// Set a sensible content type; GridFS may contain contentType metadata, but fall back to jpeg.
 		res.setHeader('Content-Type', 'image/jpeg');
 		downloadStream.pipe(res);
 	} catch (err) {
 		console.error('Avatar stream error:', err);
-		res.status(500).json({ message: 'Failed to stream avatar', error: String(err) });
+		if (!res.headersSent) return res.status(500).json({ message: 'Failed to stream avatar', error: String(err) });
 	}
 });
 

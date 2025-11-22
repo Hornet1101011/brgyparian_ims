@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import type { FormInstance } from 'antd';
 import {
   Form,
   Select,
@@ -47,6 +48,8 @@ const InquiryForm: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [form] = Form.useForm();
+  const formRef = React.useRef<FormInstance | null>(null);
+  React.useEffect(() => { formRef.current = form; }, [form]);
   const [subjectCount, setSubjectCount] = React.useState(0);
   const [messageCount, setMessageCount] = React.useState(0);
   const SUBJECT_MAX = 100;
@@ -65,14 +68,14 @@ const InquiryForm: React.FC = () => {
         const parsed = JSON.parse(raw);
         if (parsed) {
           const { type, assignedRole, subject, message, attachments } = parsed;
-          form.setFieldsValue({ type, assignedRole, subject, message });
+          formRef.current?.setFieldsValue({ type, assignedRole, subject, message });
           if (subject) setSubjectCount(subject.length);
           if (message) setMessageCount(message.length);
           if (attachments && Array.isArray(attachments) && attachments.length) {
             // create placeholder file entries (no preview available)
             const restored = attachments.map((name: string, idx: number) => ({ uid: `restored-${idx}`, name }));
             setFileListState(restored);
-            form.setFieldsValue({ attachment: restored });
+            formRef.current?.setFieldsValue({ attachment: restored });
           }
           // set step based on restored values
           if (subject && message && (assignedRole || type)) setCurrentStep(2);
@@ -90,7 +93,7 @@ const InquiryForm: React.FC = () => {
   React.useEffect(() => {
     const saveDraft = () => {
       try {
-        const values = form.getFieldsValue(true);
+        const values = formRef.current?.getFieldsValue(true) || {};
         const draft = {
           type: values.type || null,
           assignedRole: values.assignedRole || null,
@@ -114,7 +117,7 @@ const InquiryForm: React.FC = () => {
       window.removeEventListener('beforeunload', onUnload);
       // final save
       try {
-        const values = form.getFieldsValue(true);
+        const values = formRef.current?.getFieldsValue(true) || {};
         const draft = {
           type: values.type || null,
           assignedRole: values.assignedRole || null,
@@ -182,12 +185,7 @@ const InquiryForm: React.FC = () => {
     antdMessage.error('Please complete all required fields');
   };
 
-  // Simple beforeUpload to prevent automatic upload — we keep files in form state
-  const beforeUpload = (file: File) => {
-    const isAllowed = file.size / 1024 / 1024 < 5; // < 5MB
-    if (!isAllowed) antdMessage.error('File must be smaller than 5MB');
-    return false; // prevent auto upload
-  };
+  // Note: Upload components use `beforeUpload={() => false}` inline to prevent auto upload.
 
   return (
     <div style={{ maxWidth: 900, margin: '32px auto', padding: '0 12px' }}>
@@ -198,7 +196,7 @@ const InquiryForm: React.FC = () => {
           background: 'linear-gradient(90deg, rgba(64,169,255,0.08) 0%, rgba(146,84,222,0.06) 100%)',
           padding: '16px 24px',
         }}
-        bodyStyle={{ padding: 24 }}
+        styles={{ body: { padding: 24 } }}
         bordered={false}
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

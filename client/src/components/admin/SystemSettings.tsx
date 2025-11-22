@@ -20,12 +20,13 @@ import { adminAPI } from '../../services/api';
 import axios from 'axios';
 import { API_URL } from '../../services/api';
 import { UploadOutlined, UsergroupAddOutlined, DeleteOutlined } from '@ant-design/icons';
-import { Upload as AntdUpload, message as antdMessage, Row, Col, Card, Form as AntdForm, Input as AntdInput, Avatar, Carousel, Divider as AntdDivider, notification, Button as AntdButton } from 'antd';
+import { Upload as AntdUpload, message as antdMessage } from 'antd';
+import AppAvatar from '../AppAvatar';
 // framer-motion removed to avoid dependency conflicts; use CSS transitions for preview
 import defaultSystemSettings from '../../config/defaultSystemSettings';
 import getOfficialPhotoSrc from '../../utils/officials';
 
-interface SystemSettings {
+interface SystemSettingsData {
   siteName: string;
   barangayName: string;
   barangayAddress: string;
@@ -60,12 +61,12 @@ interface Official {
 }
 
 const SystemSettings: React.FC = () => {
-  const [settings, setSettings] = useState<SystemSettings>(() => ({ ...defaultSystemSettings } as SystemSettings));
+  const [settings, setSettings] = useState<SystemSettingsData>(() => ({ ...defaultSystemSettings } as SystemSettingsData));
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [confirmDisableOpen, setConfirmDisableOpen] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [, setSuccess] = useState(false);
+  const [, setError] = useState<string | null>(null);
   const [testModalOpen, setTestModalOpen] = useState(false);
   // Officials state
   const [officials, setOfficials] = useState<Official[]>([]);
@@ -73,27 +74,29 @@ const SystemSettings: React.FC = () => {
   const [savingOfficials, setSavingOfficials] = useState(false);
   const [manualSaveError, setManualSaveError] = useState<string | null>(null);
   const autoSaveTimers = useRef<Record<string, number>>({});
-  const [officialSaveStatus, setOfficialSaveStatus] = useState<Record<string, 'idle'|'saving'|'saved'|'error'>>({});
+  // officialSaveStatus state removed (not referenced)
   const previewUrlsRef = useRef<Record<string, string>>({});
   const previewContainerRef = useRef<HTMLDivElement | null>(null);
   const prevOfficialsCountRef = useRef(0);
   const [highlightedIds, setHighlightedIds] = useState<string[]>([]);
   const highlightTimeouts = useRef<Record<string, number>>({});
-  const originalSettingsRef = useRef<SystemSettings | null>(null);
-  const [dirty, setDirty] = useState(false);
+  const originalSettingsRef = useRef<SystemSettingsData | null>(null);
+  const [, setDirty] = useState(false);
 
   // helper to make MUI InputLabel shrink when the field has content or a non-empty value
-  const inputLabelShrink = (val: any) => ({ InputLabelProps: { shrink: val !== undefined && val !== null && val !== '' } });
+  // (removed unused helper to silence lint)
 
   useEffect(() => {
     const ac = new AbortController();
     fetchSettings(ac.signal);
+    // capture a snapshot of preview URLs now so cleanup uses a stable reference
+    const currentPreviewUrls = previewUrlsRef.current;
     return () => {
       // cancel pending fetch
       try { ac.abort(); } catch (e) {}
-      // revoke any created object URLs
+      // revoke any created object URLs captured at effect execution time
       try {
-        Object.values(previewUrlsRef.current).forEach(u => {
+        Object.values(currentPreviewUrls).forEach(u => {
           try { URL.revokeObjectURL(u); } catch (e) {}
         });
       } catch (e) {}
@@ -141,7 +144,7 @@ const SystemSettings: React.FC = () => {
     setLoading(true);
     try {
       // primary attempt using adminAPI (uses axiosInstance and auth interceptors)
-      let sys: SystemSettings | null = null;
+      let sys: SystemSettingsData | null = null;
       try {
         sys = await adminAPI.getSystemSettings();
       } catch (err) {
@@ -208,7 +211,7 @@ const SystemSettings: React.FC = () => {
         ...(typeof (settings as any).maxAccountsPerIP !== 'undefined'
           ? { maxAccountsPerIP: Number((settings as any).maxAccountsPerIP) || 1 }
           : {}),
-      } as SystemSettings;
+      } as SystemSettingsData;
 
       await adminAPI.updateSystemSettings(payload);
       // optimistic: update original copy and clear dirty flag
@@ -385,7 +388,7 @@ const SystemSettings: React.FC = () => {
           <TextField
             label="SMTP Host"
             value={(settings as any).smtp?.host || ''}
-            onChange={(e) => setSettings((prev) => ({ ...(prev as any), smtp: { ...(prev as any).smtp, host: e.target.value } }) as SystemSettings)}
+            onChange={(e) => setSettings((prev) => ({ ...(prev as any), smtp: { ...(prev as any).smtp, host: e.target.value } }) as SystemSettingsData)}
             variant="outlined"
             InputLabelProps={{ shrink: true }}
             fullWidth
@@ -394,7 +397,7 @@ const SystemSettings: React.FC = () => {
             label="SMTP Port"
             type="number"
             value={(settings as any).smtp?.port || ''}
-            onChange={(e) => setSettings((prev) => ({ ...(prev as any), smtp: { ...(prev as any).smtp, port: parseInt(e.target.value || '0') } }) as SystemSettings)}
+            onChange={(e) => setSettings((prev) => ({ ...(prev as any), smtp: { ...(prev as any).smtp, port: parseInt(e.target.value || '0') } }) as SystemSettingsData)}
             variant="outlined"
             InputLabelProps={{ shrink: true }}
             fullWidth
@@ -402,14 +405,14 @@ const SystemSettings: React.FC = () => {
           <TextField
             label="SMTP User"
             value={(settings as any).smtp?.user || ''}
-            onChange={(e) => setSettings((prev) => ({ ...(prev as any), smtp: { ...(prev as any).smtp, user: e.target.value } }) as SystemSettings)}
+            onChange={(e) => setSettings((prev) => ({ ...(prev as any), smtp: { ...(prev as any).smtp, user: e.target.value } }) as SystemSettingsData)}
             variant="outlined"
             InputLabelProps={{ shrink: true }}
             fullWidth
           />
           <Box sx={{ display: 'flex', gap: 2 }}>
             <Button variant="outlined" onClick={() => setTestModalOpen(true)}>Send Test Email</Button>
-            <Button variant="text" onClick={() => setSettings((prev) => ({ ...(prev as any), smtp: { ...(prev as any).smtp, password: '' } }) as SystemSettings)}>Clear SMTP Password</Button>
+            <Button variant="text" onClick={() => setSettings((prev) => ({ ...(prev as any), smtp: { ...(prev as any).smtp, password: '' } }) as SystemSettingsData)}>Clear SMTP Password</Button>
           </Box>
         </Box>
 
@@ -633,7 +636,7 @@ const SystemSettings: React.FC = () => {
                                 flex: '0 0 auto'
                               }}
                             >
-                              <Avatar size={80} src={getOfficialPhotoSrc(off as any)} style={{ margin: '0 auto', boxShadow: '0 6px 18px rgba(0,0,0,0.06)' }} />
+                              <AppAvatar size={80} src={getOfficialPhotoSrc(off as any)} style={{ margin: '0 auto', boxShadow: '0 6px 18px rgba(0,0,0,0.06)' }} />
                               <div style={{ marginTop: 8 }}>
                                 <div style={{ fontWeight: 600, fontSize: 14 }}>{off.name || '—'}</div>
                                 <div style={{ color: '#888', fontSize: 12 }}>{off.title}</div>
@@ -708,7 +711,7 @@ const SystemSettings: React.FC = () => {
               control={
                 <Switch
                   checked={(settings as any).allowMultipleAccountsPerIP}
-                  onChange={(e) => setSettings({ ...settings, allowMultipleAccountsPerIP: e.target.checked } as SystemSettings)}
+                  onChange={(e) => setSettings({ ...settings, allowMultipleAccountsPerIP: e.target.checked } as SystemSettingsData)}
                 />
               }
               label="Allow multiple accounts per IP"
@@ -719,7 +722,7 @@ const SystemSettings: React.FC = () => {
                 type="number"
                 size="small"
                 value={(settings as any).maxAccountsPerIP ?? 1}
-                onChange={(e) => setSettings({ ...settings, maxAccountsPerIP: parseInt(e.target.value || '1') } as SystemSettings)}
+                onChange={(e) => setSettings({ ...settings, maxAccountsPerIP: parseInt(e.target.value || '1') } as SystemSettingsData)}
                 variant="outlined"
                 InputLabelProps={{ shrink: true }}
                 inputProps={{ min: 1, max: 100 }}

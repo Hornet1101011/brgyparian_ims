@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Typography, Button, List, Spin, Divider, Tag, Badge, Statistic, Space, Modal, Table, Upload, message as antdMessage, Tooltip, Checkbox } from 'antd';
-import { FileTextOutlined, MailOutlined, NotificationOutlined, UploadOutlined, QuestionCircleOutlined } from '@ant-design/icons';
+import { Row, Col, Card, Typography, Button, Badge, Modal, Table, Tooltip, Checkbox } from 'antd';
+import { FileTextOutlined, MailOutlined, NotificationOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import AvatarImage from './AvatarImage';
 import styles from './dashboard.module.css';
 import { getAbsoluteApiUrl } from '../services/api';
@@ -21,24 +21,14 @@ interface DocumentRequest {
 }
 
 const Dashboard: React.FC = () => {
-  const { user, setUser } = useAuth();
-  // Prefer the in-memory user from AuthContext, but fall back to localStorage's userProfile
-  const currentUser = user ?? (() => {
-    try {
-      const stored = localStorage.getItem('userProfile');
-      return stored ? JSON.parse(stored) : null;
-    } catch (e) {
-      return null;
-    }
-  })();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [residentImageSrc, setResidentImageSrc] = useState<string | null>(null);
-  const [currentTime, setCurrentTime] = useState<string>(() => new Date().toLocaleString());
+  const [, setCurrentTime] = useState<string>(() => new Date().toLocaleString());
   const [documents, setDocuments] = useState<DocumentRequest[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [, setLoading] = useState(true);
   const [announcementsCount, setAnnouncementsCount] = useState<number>(0);
-  const [announcementsLoading, setAnnouncementsLoading] = useState<boolean>(false);
+  const [, setAnnouncementsLoading] = useState<boolean>(false);
   const [inquiriesCount, setInquiriesCount] = useState<number>(0);
   const [pendingModalVisible, setPendingModalVisible] = useState(false);
   const [pendingRequestsList, setPendingRequestsList] = useState<any[]>([]);
@@ -197,7 +187,7 @@ const Dashboard: React.FC = () => {
               overflow: 'hidden',
               minHeight: 170
             }}
-            bodyStyle={{ padding: 0 }}
+            styles={{ body: { padding: 0 } }}
           >
             {/* Subtle pattern/gradient background */}
             <div style={{
@@ -213,9 +203,9 @@ const Dashboard: React.FC = () => {
               <Col xs={24} md={14} style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 18, width: '100%', justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-                    <div className="avatarContainer">
+                    <div className={styles.avatarContainer}>
                       {residentImageSrc ? (
-                        <img src={residentImageSrc} alt={user?.fullName || user?.username || 'avatar'} />
+                        <img className={styles.avatarImg} src={residentImageSrc} alt={user?.fullName || user?.username || 'avatar'} />
                       ) : (
                         <AvatarImage user={(() => {
                           let displayUser = user;
@@ -231,7 +221,7 @@ const Dashboard: React.FC = () => {
                       <button
                         onClick={() => navigate('/profile')}
                         title="Edit profile"
-                        className="editButton"
+                        className={styles.editButton}
                       >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                           <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z" fill="#595959"/>
@@ -239,9 +229,9 @@ const Dashboard: React.FC = () => {
                         </svg>
                       </button>
                     </div>
-                    <div className="userInfo">
-                      <Typography.Title level={3} className="userName" style={{ marginBottom: 0, fontWeight: 800 }}>{user?.fullName ?? user?.username ?? user?.email ?? ''}</Typography.Title>
-                      <Typography.Text type="secondary" className="userMeta">
+                    <div className={styles.userInfo}>
+                      <Typography.Title level={3} className={styles.userName} style={{ marginBottom: 0, fontWeight: 800 }}>{user?.fullName ?? user?.username ?? user?.email ?? ''}</Typography.Title>
+                      <Typography.Text type="secondary" className={styles.userMeta}>
                         Barangay ID: {user?.barangayID ?? (() => {
                           try {
                             const stored = localStorage.getItem('userProfile');
@@ -253,7 +243,7 @@ const Dashboard: React.FC = () => {
                           return 'N/A';
                         })()}
                       </Typography.Text>
-                      <div style={{ marginTop: 8 }}><Typography.Text type="secondary" className="userMeta">{new Date().toLocaleString()}</Typography.Text></div>
+                      <div style={{ marginTop: 8 }}><Typography.Text type="secondary" className={styles.userMeta}>{new Date().toLocaleString()}</Typography.Text></div>
                     </div>
                   </div>
                 </div>
@@ -295,7 +285,7 @@ const Dashboard: React.FC = () => {
                   setPendingLoading(false);
                 }
               }}
-              bodyStyle={{ padding: 24 }}
+              styles={{ body: { padding: 24 } }}
               onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-6px) scale(1.03)'}
               onMouseLeave={e => e.currentTarget.style.transform = 'none'}
             >
@@ -320,7 +310,7 @@ const Dashboard: React.FC = () => {
                 padding: 0,
                 cursor: 'pointer'
               }}
-              bodyStyle={{ padding: 24 }}
+              styles={{ body: { padding: 24 } }}
               onClick={async () => {
                 setApprovedModalVisible(true);
                 setApprovedLoading(true);
@@ -365,7 +355,7 @@ const Dashboard: React.FC = () => {
                 cursor: 'pointer'
               }}
               onClick={() => navigate('/inbox')}
-              bodyStyle={{ padding: 24 }}
+              styles={{ body: { padding: 24 } }}
               onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-6px) scale(1.03)'}
               onMouseLeave={e => e.currentTarget.style.transform = 'none'}
             >
@@ -391,7 +381,7 @@ const Dashboard: React.FC = () => {
                 padding: 0,
                 cursor: 'pointer'
               }}
-              bodyStyle={{ padding: 24 }}
+              styles={{ body: { padding: 24 } }}
               onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-6px) scale(1.03)'}
               onMouseLeave={e => e.currentTarget.style.transform = 'none'}
             >
@@ -412,7 +402,7 @@ const Dashboard: React.FC = () => {
         {/* Pending Requests Modal */}
         <Modal
           title="Pending Requests"
-          visible={pendingModalVisible}
+          open={pendingModalVisible}
           onCancel={() => setPendingModalVisible(false)}
           footer={null}
           width={800}
@@ -447,7 +437,7 @@ const Dashboard: React.FC = () => {
         {/* Approved Requests Modal */}
         <Modal
           title="Approved Documents"
-          visible={approvedModalVisible}
+          open={approvedModalVisible}
           onCancel={() => setApprovedModalVisible(false)}
           footer={null}
           width={1000}
@@ -494,7 +484,7 @@ const Dashboard: React.FC = () => {
         {/* Resident Tool Tips Modal */}
         <Modal
           title="Resident Tool Tips"
-          visible={tipsModalVisible}
+          open={tipsModalVisible}
           onCancel={() => setTipsModalVisible(false)}
           footer={(
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>

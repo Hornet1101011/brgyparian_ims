@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import templatesData from "../data/templates.json";
+import { FaFileWord } from "react-icons/fa";
 
 // Define the expected type for templatesData
 type TemplatesJson = string[] | { templates: string[] };
@@ -11,7 +12,6 @@ const templatesDataTyped = templatesData as unknown as TemplatesJson;
 const templates: string[] = Array.isArray(templatesDataTyped)
   ? templatesDataTyped
   : templatesDataTyped.templates;
-import { FaFileWord } from "react-icons/fa";
 
 const FileWordIcon = FaFileWord as unknown as React.FC<{ size?: number; className?: string }>;
 const getLabel = (filename: string) => filename.replace(/_/g, " ").replace(/\.docx$/, "");

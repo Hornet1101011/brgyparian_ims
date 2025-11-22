@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { Card, Input, Upload, Button, message, Typography, List, Popconfirm, Image, Modal, Space, Tooltip } from 'antd';
+import { Card, Input, Upload, Button, message, Typography, List, Popconfirm, Image, Modal, Tooltip } from 'antd';
 import { UploadOutlined, CheckCircleOutlined, CloseCircleOutlined, DeleteOutlined, EyeOutlined, EditOutlined } from '@ant-design/icons';
 import { adminAPI, getAbsoluteApiUrl } from '../../services/api';
 
@@ -19,7 +19,7 @@ const Announcements: React.FC = () => {
 
   const { user } = useAuth();
 
-  const loadAnns = async () => {
+  const loadAnns = React.useCallback(async () => {
     // Avoid calling admin endpoint when user isn't admin or no token available
     if (!user || user.role !== 'admin') return;
     const token = localStorage.getItem('token');
@@ -42,14 +42,14 @@ const Announcements: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
   // Load admin announcements only when we have an authenticated admin user
   useEffect(() => {
     if (user?.role === 'admin') {
       loadAnns();
     }
-  }, [user]);
+  }, [loadAnns, user?.role]);
 
   const beforeUpload = (f: File) => {
     // accept only images

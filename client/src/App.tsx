@@ -12,7 +12,7 @@ import Layout from './components/Layout';
 import PrivateRoute from './components/PrivateRoute';
 import StaffRoute from './components/StaffRoute';
 import AdminRoute from './components/AdminRoute';
-import MinimalChart from './components/MinimalChart';
+// MinimalChart unused — import removed to satisfy ESLint
 
 // Pages
 import LoginForm from './components/LoginForm';

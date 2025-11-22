@@ -47,7 +47,6 @@ const StatsPanel: React.FC = () => {
   if (!stats) return <div style={{ textAlign: 'center' }}><Typography.Text type="secondary">No statistics available</Typography.Text></div>;
 
   const users = stats.users || {};
-  const documents = stats.documents || {};
   const filesCount = stats.filesCount ?? 0;
 
   // Arrange items so that with a 3-column layout the Documents tile falls under Admins
@@ -61,7 +60,7 @@ const StatsPanel: React.FC = () => {
   ];
 
   return (
-    <Card className="glass-card stats-card" bordered={false} style={{ width: '100%' }}>
+    <Card className="glass-card stats-card" style={{ width: '100%' }}>
       <Typography.Title level={4}>Quick Stats</Typography.Title>
       <div style={{ height: 6, background: 'linear-gradient(90deg, rgba(22,119,255,0.08), rgba(146,84,222,0.08))', borderRadius: 4, marginBottom: 12 }} />
 

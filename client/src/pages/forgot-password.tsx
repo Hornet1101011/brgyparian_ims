@@ -7,7 +7,6 @@ const ForgotPassword: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<'request' | 'otp' | 'reset' | 'done'>('request');
   const [contact, setContact] = useState('');
-  const [otp, setOtp] = useState('');
   const [token, setToken] = useState('');
   const navigate = useNavigate();
 
@@ -15,8 +14,7 @@ const ForgotPassword: React.FC = () => {
   const onRequest = async (values: { contact: string }) => {
     setLoading(true);
     try {
-      const res = await axiosPublic.post('/auth/forgot-password', { contact: values.contact });
-      const data = res.data;
+      await axiosPublic.post('/auth/forgot-password', { contact: values.contact });
       setContact(values.contact);
       setStep('otp');
       message.success('OTP sent to your email or phone.');
@@ -32,7 +30,7 @@ const ForgotPassword: React.FC = () => {
     setLoading(true);
     try {
       const res = await axiosPublic.post('/auth/verify-otp', { contact, otp: values.otp });
-      const data = res.data;
+      const data = res && res.data ? res.data : {};
       setToken(data.token); // token for password reset
       setStep('reset');
       message.success('OTP verified. You may now reset your password.');
@@ -47,8 +45,7 @@ const ForgotPassword: React.FC = () => {
   const onResetPassword = async (values: { password: string }) => {
     setLoading(true);
     try {
-      const res = await axiosPublic.post('/auth/reset-password', { token, password: values.password });
-      const data = res.data;
+      await axiosPublic.post('/auth/reset-password', { token, password: values.password });
       setStep('done');
       message.success('Password reset successful! You may now log in.');
     } catch (error: any) {

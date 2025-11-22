@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Layout, Card, List, Typography, Spin, Empty, message as antdMessage, Divider, Avatar, Row, Col, Space, Badge, Select, Input, Collapse, Button, Tag, Upload, Popconfirm, Result, Skeleton, Tooltip } from 'antd';
-import { EyeOutlined, EyeInvisibleOutlined, DeleteOutlined, DownloadOutlined, InboxOutlined, SendOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
+import { Card, List, Typography, Spin, message as antdMessage, Divider, Row, Col, Select, Input, Button, Tag, Result, Tooltip } from 'antd';
+import AppAvatar from '../components/AppAvatar';
+import { InboxOutlined, SendOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
 import styles from './inbox.module.css';
-import { InboxFilters, defaultFilterState, FilterState } from './inbox-filters';
+import { defaultFilterState, FilterState } from './inbox-filters';
 import { contactAPI, getAbsoluteApiUrl } from '../services/api';
 
 const Inbox: React.FC = () => {
@@ -10,26 +11,27 @@ const Inbox: React.FC = () => {
   const [inquiries, setInquiries] = useState<any[]>([]);
   const [filter, setFilter] = useState<FilterState>(defaultFilterState);
   const [category, setCategory] = useState<string>('All');
-  const [reply, setReply] = useState<{ [id: string]: string }>({});
+  // reply text state
   const [replyLoading, setReplyLoading] = useState<{ [id: string]: boolean }>({});
   const [selectedInquiry, setSelectedInquiry] = useState<any | null>(null);
-  const [threadVisible, setThreadVisible] = useState(false);
+  const [, setThreadVisible] = useState(false);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   // Make messages list fullscreen by default
   const [listFullscreen, setListFullscreen] = useState(true);
   const [isMobile, setIsMobile] = useState<boolean>(typeof window !== 'undefined' ? window.innerWidth <= 720 : false);
   const [replyText, setReplyText] = useState<string>('');
-  const [fileList, setFileList] = useState<any[]>([]);
-  const [loadingThread, setLoadingThread] = useState<boolean>(false);
+  // file list state removed (setter unused)
+  const [, setLoadingThread] = useState<boolean>(false);
   // Ref for auto-scrolling message area
   const messagesEndRef = useRef<HTMLDivElement>(null);
   // read current user profile from localStorage so we can mark replies with the correct author/role
   // Auto-scroll to bottom of message area when selectedInquiry or its responses change
+  const selectedResponsesLength = selectedInquiry?.responses?.length ?? 0;
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [selectedInquiry, selectedInquiry && selectedInquiry.responses && selectedInquiry.responses.length]);
+  }, [selectedInquiry, selectedResponsesLength]);
   const storedProfile = (() => {
     try {
       return localStorage.getItem('userProfile') ? JSON.parse(localStorage.getItem('userProfile') || 'null') : null;
@@ -97,18 +99,7 @@ const Inbox: React.FC = () => {
     return statusMatch && searchMatch && categoryMatch;
   });
 
-  // Inline reply handler (stub)
-  const handleReply = async (id: string) => {
-    setReplyLoading(r => ({ ...r, [id]: true }));
-    try {
-      // TODO: Replace with actual API call
-      await new Promise(res => setTimeout(res, 800));
-      setReply(r => ({ ...r, [id]: '' }));
-      antdMessage.success('Reply sent!');
-    } finally {
-      setReplyLoading(r => ({ ...r, [id]: false }));
-    }
-  };
+  // Inline reply handler removed (unused stub)
 
   const openThread = (inquiry: any) => {
     // simulate loading the thread
@@ -166,7 +157,7 @@ const Inbox: React.FC = () => {
   <div className={styles.inboxPage} style={{ minHeight: '100vh', background: '#f0f4f8', padding: '24px', fontFamily: 'Poppins, Arial, sans-serif', position: 'relative' }}>
       <Card
         style={{ maxWidth: 1200, margin: '0 auto', borderRadius: 18, boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.08)', padding: 0, background: '#fff' }}
-        bodyStyle={{ padding: 0, background: '#fff' }}
+              styles={{ body: { padding: 0, background: '#fff' } }}
       >
         <div style={{ padding: '24px 32px 0 32px' }}>
           <Row gutter={[12, 12]} align="middle" style={{ marginBottom: 12 }}>
@@ -275,9 +266,9 @@ const Inbox: React.FC = () => {
                           const displayName = inquiry.residentName || inquiry.username || (inquiry.createdBy && (inquiry.createdBy.fullName || inquiry.createdBy.username)) || inquiry.subject || 'Unknown';
                           const initial = (displayName && displayName !== 'Unknown') ? getInitial(displayName, '?') : '?';
                           return (
-                            <Avatar style={{ background: '#1890ff', color: '#fff', fontWeight: 700 }} size={36}>
+                            <AppAvatar style={{ background: '#1890ff', color: '#fff', fontWeight: 700 }} size={36}>
                               {initial}
-                            </Avatar>
+                            </AppAvatar>
                           );
                         })()}
                       </div>
@@ -321,7 +312,7 @@ const Inbox: React.FC = () => {
                           }}
                           aria-label={displayName}
                         >
-                          <Avatar style={{ background: '#1890ff', color: '#fff', fontWeight: 700 }} size={36}>{initial}</Avatar>
+                          <AppAvatar style={{ background: '#1890ff', color: '#fff', fontWeight: 700 }} size={36}>{initial}</AppAvatar>
                         </button>
                       </Tooltip>
                     );
@@ -334,7 +325,7 @@ const Inbox: React.FC = () => {
               {/* Make conversation panel visually blend into the page by removing card background/shadow */}
               <Card className={styles.conversationCard}
                 style={{ borderRadius: 12, height: '100%', background: 'transparent', boxShadow: 'none', border: 'none' }}
-                bodyStyle={{ display: 'flex', flexDirection: 'column', padding: 0, gap: 10, background: 'transparent' }}
+                styles={{ body: { display: 'flex', flexDirection: 'column', padding: 0, gap: 10, background: 'transparent' } }}
               >
                 {selectedInquiry ? (
                   <>
@@ -362,7 +353,7 @@ const Inbox: React.FC = () => {
                       {(() => {
                           const displayNameSelected = selectedInquiry.residentName || selectedInquiry.username || (selectedInquiry.createdBy && (selectedInquiry.createdBy.fullName || selectedInquiry.createdBy.username)) || selectedInquiry.subject || 'Unknown';
                         const initial = (displayNameSelected && displayNameSelected !== 'Unknown') ? getInitial(displayNameSelected, '?') : '?';
-                        return <Avatar size={40} style={{ background: '#1890ff' }}>{initial}</Avatar>;
+                        return <AppAvatar size={40} style={{ background: '#1890ff' }}>{initial}</AppAvatar>;
                       })()}
                     </div>
 
@@ -377,7 +368,7 @@ const Inbox: React.FC = () => {
                           return (
                             <MessageComment
                               author={originalSenderName}
-                              avatar={<Avatar style={{ background: '#1890ff' }}>{originalInitial}</Avatar>}
+                              avatar={<AppAvatar style={{ background: '#1890ff' }}>{originalInitial}</AppAvatar>}
                               content={<div style={{ background: '#e6f7ff', padding: 10, borderRadius: 8 }}>
                                 <Typography.Paragraph style={{ margin: 0 }}>{selectedInquiry.message}</Typography.Paragraph>
                                 {selectedInquiry.attachments && selectedInquiry.attachments.length > 0 && (
@@ -492,9 +483,9 @@ const Inbox: React.FC = () => {
                         const align: 'left' | 'right' = (isResidentReply || isCurrentUser) ? 'right' : 'left';
 
                         const avatarNode = (isResidentReply || isCurrentUser) ? (
-                          <Avatar style={{ background: '#1890ff' }}>{getInitial(authorDisplay, 'U')}</Avatar>
+                          <AppAvatar style={{ background: '#1890ff' }}>{getInitial(authorDisplay, 'U')}</AppAvatar>
                         ) : (
-                          <Avatar style={{ background: '#666' }}>{getInitial(authorDisplay, 'B')}</Avatar>
+                          <AppAvatar style={{ background: '#666' }}>{getInitial(authorDisplay, 'B')}</AppAvatar>
                         );
 
                         return (

@@ -13,7 +13,6 @@ import {
   message,
   Select,
   Drawer,
-  Avatar,
   Dropdown,
   Menu,
   DatePicker,
@@ -21,16 +20,15 @@ import {
   Col,
   Breadcrumb,
   Popconfirm,
-  Collapse,
   Modal,
   Tabs,
   Upload,
 } from 'antd';
+import AppAvatar from '../AppAvatar';
 import { EditOutlined, DeleteOutlined, MoreOutlined, EyeOutlined, StopOutlined, CheckOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { SortOrder } from 'antd/es/table/interface';
-import { adminAPI, staffRegister } from '../../services/api';
+import { adminAPI } from '../../services/api';
 import dayjs from 'dayjs';
-import AvatarImage from '../AvatarImage';
 import { getAbsoluteApiUrl } from '../../services/api';
 
 const roleOptions = [
@@ -60,7 +58,6 @@ const UserManagement: React.FC = () => {
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
   const [selectedResident, setSelectedResident] = useState<any | null>(null);
   const [residentLoading, setResidentLoading] = useState(false);
-  const [showFullResident, setShowFullResident] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editUserModalOpen, setEditUserModalOpen] = useState(false);
   const [userFormValues, setUserFormValues] = useState<any>({});
@@ -71,15 +68,7 @@ const UserManagement: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [editFormValues, setEditFormValues] = useState<any>({});
   // Helper to generate a random unique Barangay ID
-  function generateBarangayID() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    const length = Math.floor(Math.random() * 9) + 4; // 4-12
-    let id = '';
-    for (let i = 0; i < length; i++) {
-      id += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return id;
-  }
+  
 
   const fetchUsers = () => {
     setLoading(true);
@@ -229,20 +218,23 @@ const UserManagement: React.FC = () => {
       key: 'fullName',
       render: (text: string, record: any) => (
         <Space>
-          <Avatar style={{ backgroundColor: '#1890ff', verticalAlign: 'middle' }}>
-            {record.avatar ? <AvatarImage src={record.avatar} size={36} /> : (
-              (() => {
-                let displayUser = record;
-                try {
-                  const stored = localStorage.getItem('userProfile');
-                  if (stored) displayUser = JSON.parse(stored);
-                } catch (err) {}
-                return displayUser?.profileImage || displayUser?.profileImageId
-                  ? <AvatarImage user={displayUser} size={36} />
-                  : ((text && text.length > 0) ? text.charAt(0).toUpperCase() : '?');
-              })()
-            )}
-          </Avatar>
+          {(() => {
+            let displayUser = record as any;
+            try {
+              const stored = localStorage.getItem('userProfile');
+              if (stored) displayUser = JSON.parse(stored);
+            } catch (err) {}
+            return (
+              <AppAvatar
+                style={{ backgroundColor: '#1890ff', verticalAlign: 'middle' }}
+                src={record.avatar}
+                user={displayUser}
+                size={36}
+              >
+                {(text && text.length > 0) ? text.charAt(0).toUpperCase() : '?'}
+              </AppAvatar>
+            );
+          })()}
           <b>{text}</b>
         </Space>
       ),
@@ -386,7 +378,7 @@ const UserManagement: React.FC = () => {
     <div>
       <Card
         style={{ marginBottom: 16, borderRadius: 8, background: '#fff' }}
-        bodyStyle={{ padding: 0 }}
+        styles={{ body: { padding: 0 } }}
         bordered={false}
         title={
           <Row align="middle" justify="space-between">
@@ -495,29 +487,22 @@ const UserManagement: React.FC = () => {
           <Space direction="vertical" size="middle" style={{ width: '100%' }}>
             <Row align="middle" gutter={16}>
               <Col>
-                  <Avatar size={64} style={{ backgroundColor: '#1890ff' }}>
-                    {selectedResident && (selectedResident.profileImage || selectedResident.profileImageId) ? (
-                      selectedResident.profileImage ? (
-                        <AvatarImage src={selectedResident.profileImage} size={64} />
-                      ) : (
-                        <AvatarImage src={getAbsoluteApiUrl(`/resident/personal-info/avatar/${selectedResident.profileImageId}`)} size={64} />
-                      )
-                    ) : selectedUser.avatar ? (
-                      <AvatarImage src={selectedUser.avatar} size={64} />
-                    ) : (
-                      (() => {
-                        let displayUser = selectedUser;
-                        try {
-                          const stored = localStorage.getItem('userProfile');
-                          if (stored) displayUser = JSON.parse(stored);
-                        } catch (err) {}
-                        return displayUser?.profileImage || displayUser?.profileImageId
-                          ? <AvatarImage user={displayUser} size={64} />
-                          : ((selectedUser.fullName && selectedUser.fullName.length > 0) ? selectedUser.fullName.charAt(0).toUpperCase() : '?');
-                      })()
-                    )}
-                  </Avatar>
-                </Col>
+                {(() => {
+                  let displayUser = selectedUser as any;
+                  try {
+                    const stored = localStorage.getItem('userProfile');
+                    if (stored) displayUser = JSON.parse(stored);
+                  } catch (err) {}
+                  const src = selectedResident && (selectedResident.profileImage || selectedResident.profileImageId)
+                    ? (selectedResident.profileImage ? selectedResident.profileImage : getAbsoluteApiUrl(`/resident/personal-info/avatar/${selectedResident.profileImageId}`))
+                    : (selectedUser.avatar || null);
+                  return (
+                    <AppAvatar size={64} style={{ backgroundColor: '#1890ff' }} src={src} user={displayUser}>
+                      {(selectedUser.fullName && selectedUser.fullName.length > 0) ? selectedUser.fullName.charAt(0).toUpperCase() : '?'}
+                    </AppAvatar>
+                  );
+                })()}
+              </Col>
               <Col>
                 <Typography.Title level={5} style={{ margin: 0 }}>{selectedUser.fullName}</Typography.Title>
                 <div style={{ marginTop: 4 }}>

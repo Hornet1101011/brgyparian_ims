@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Table, Input, Tag, Badge, Button, Space, Dropdown, Menu, message, Card, Pagination, Grid, Typography, Modal } from 'antd';
+import { Table, Input, Tag, Badge, Button, Space, Dropdown, message, Card, Pagination, Grid, Typography, Modal } from 'antd';
 import type { SortOrder } from 'antd/es/table/interface';
 import type { Key } from 'antd/es/table/interface';
 import { SearchOutlined, DeleteOutlined, CheckCircleOutlined, FilterOutlined } from '@ant-design/icons';
@@ -170,13 +170,7 @@ const NotificationsPage: React.FC = () => {
           onChange={e => setSearch(e.target.value)}
           style={{ marginBottom: 16 }}
         />
-        <Dropdown popupRender={() => (
-            <Menu onClick={({ key }) => setTypeFilter(key)}>
-              {typeOptions.map(opt => (
-                <Menu.Item key={opt.value}>{opt.label}</Menu.Item>
-              ))}
-            </Menu>
-        )}>
+        <Dropdown menu={{ items: typeOptions.map(opt => ({ key: opt.value, label: opt.label })), onClick: ({ key }) => setTypeFilter(key) }}>
           <Button icon={<FilterOutlined />} style={{ marginBottom: 16 }}>
             {typeOptions.find(opt => opt.value === typeFilter)?.label || 'Type'}
           </Button>
@@ -185,7 +179,7 @@ const NotificationsPage: React.FC = () => {
           <Card
             key={n.id}
             style={{ marginBottom: 12, borderLeft: n.read ? '4px solid #52c41a' : '4px solid #1677ff' }}
-            bodyStyle={{ padding: 16 }}
+            styles={{ body: { padding: 16 } }}
           >
             <Space direction="vertical" style={{ width: '100%' }}>
               <Text strong={!n.read}>{n.title}</Text>
@@ -219,13 +213,7 @@ const NotificationsPage: React.FC = () => {
           onChange={e => setSearch(e.target.value)}
           allowClear
         />
-        <Dropdown popupRender={() => (
-            <Menu onClick={({ key }) => setTypeFilter(key)}>
-              {typeOptions.map(opt => (
-                <Menu.Item key={opt.value}>{opt.label}</Menu.Item>
-              ))}
-            </Menu>
-        )}>
+        <Dropdown menu={{ items: typeOptions.map(opt => ({ key: opt.value, label: opt.label })), onClick: ({ key }) => setTypeFilter(key) }}>
           <Button icon={<FilterOutlined />}>{typeOptions.find(opt => opt.value === typeFilter)?.label || 'Type'}</Button>
         </Dropdown>
         <Button

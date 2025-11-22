@@ -56,6 +56,45 @@ router.post('/login', loginLimiter, (req: any, res: Response) => login(req, res)
 // Guest creation (public)
 router.post('/guest', async (req: any, res: Response) => createGuest(req, res));
 
+// Availability check endpoints for real-time validation on client
+// Example: GET /auth/check-username?username=foo
+router.get('/check-username', async (req: any, res: Response) => {
+  try {
+    const username = String(req.query.username || '').trim();
+    if (!username) return res.status(400).json({ message: 'username is required' });
+    const exists = await User.exists({ username: new RegExp(`^${username}$`, 'i') });
+    res.json({ available: !Boolean(exists) });
+  } catch (error) {
+    res.status(500).json({ message: 'Error checking username', error });
+  }
+});
+
+// Example: GET /auth/check-email?email=me@x.com
+router.get('/check-email', async (req: any, res: Response) => {
+  try {
+    const email = String(req.query.email || '').trim();
+    if (!email) return res.status(400).json({ message: 'email is required' });
+    const exists = await User.exists({ email: new RegExp(`^${email}$`, 'i') });
+    res.json({ available: !Boolean(exists) });
+  } catch (error) {
+    res.status(500).json({ message: 'Error checking email', error });
+  }
+});
+
+// Example: GET /auth/check-contact?contact=09171234567
+router.get('/check-contact', async (req: any, res: Response) => {
+  try {
+    const contact = String(req.query.contact || '').trim();
+    if (!contact) return res.status(400).json({ message: 'contact is required' });
+    // Try exact and a digits-only variant to match common stored formats
+    const normalized = contact.replace(/\D/g, '');
+    const exists = await User.exists({ $or: [{ contactNumber: contact }, { contactNumber: normalized }] });
+    res.json({ available: !Boolean(exists) });
+  } catch (error) {
+    res.status(500).json({ message: 'Error checking contact number', error });
+  }
+});
+
 // Protected routes (require authentication)
 router.get('/me', auth, (req: any, res: Response) => getCurrentUser(req, res));
 router.patch('/profile', auth, (req: any, res: Response) => updateProfile(req, res));

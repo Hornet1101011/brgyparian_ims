@@ -240,13 +240,7 @@ interface DocumentRequest {
   barangayID?: string;
 }
 
-interface InquiryRequest {
-  type: string;
-  subject: string;
-  message: string;
-  assignedRole?: string;
-  assignedTo?: string[];
-}
+// (Removed unused interface `InquiryRequest` to reduce lint warnings)
 
 // API implementations
 const auth = {

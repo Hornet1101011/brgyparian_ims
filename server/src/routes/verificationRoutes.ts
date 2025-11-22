@@ -9,6 +9,7 @@ import { VerificationRequest } from '../models/VerificationRequest';
 import mongoose from 'mongoose';
 import { ensureBucket, getBucket } from '../utils/gridfs';
 import { Message } from '../models/Message';
+import { Notification } from '../models/Notification';
 import { User } from '../models/User';
 import { sendToUser, addClient, removeClient } from '../utils/sse.js';
 import SystemSettingModel from '../models/SystemSetting';
@@ -18,8 +19,8 @@ const router = express.Router();
 // Use memory storage so we can stream directly into GridFS (no temporary disk files)
 const upload = multer({ storage: multer.memoryStorage() });
 
-// POST /api/verification/upload - residents upload up to 2 ID files for verification
-router.post('/upload', auth, upload.array('ids', 2), async (req: any, res) => {
+// POST /api/verification/upload - residents upload up to 3 ID files for verification
+router.post('/upload', auth, upload.array('ids', 3), async (req: any, res) => {
   try {
     // if verifications are globally disabled, reject uploads
     try {
@@ -93,6 +94,18 @@ router.post('/upload', auth, upload.array('ids', 2), async (req: any, res) => {
       // Use CommonJS require to get the correct model if necessary
       const Msg = require('../../models/Message');
       await Msg.create({ senderId: user._id, recipientId: admin._id, subject, body: text });
+      try {
+        await Notification.create({
+          user: admin._id,
+          type: 'verification_request',
+          title: subject,
+          message: text,
+          data: { requestId: vr._id?.toString(), userId: user._id.toString() },
+          read: false,
+        });
+      } catch (nerr) {
+        console.warn('Failed to create admin notification for verification request', nerr && (nerr as Error).message);
+      }
     }
 
     return res.json({ message: 'Files uploaded', verificationRequest: vr });
@@ -315,6 +328,19 @@ router.post('/admin/verify-user/:userId', auth, authorize('admin'), async (req, 
       await VerificationRequest.updateMany({ userId: user._id, status: 'pending' }, { status: 'approved', reviewedAt: new Date(), reviewerId: (req as any).user._id });
     }
     const verifiedValue = user.get('verified');
+    // Notify the user that their verified status was changed by admin
+    try {
+      await Notification.create({
+        user: user._id,
+        type: 'verification_manual_update',
+        title: 'Account verified',
+        message: `Your account verified status has been set to ${verifiedValue ? 'true' : 'false'} by an administrator.`,
+        data: { userId: user._id.toString(), verified: !!verifiedValue },
+        read: false,
+      });
+    } catch (nerr) {
+      console.warn('Failed to create notification for user verification toggle', nerr && (nerr as Error).message);
+    }
     return res.json({ message: 'User verification updated', user: { _id: user._id, verified: verifiedValue } });
   } catch (err) {
     res.status(500).json({ message: 'Error updating user verification', error: String(err) });
@@ -423,6 +449,20 @@ router.post('/admin/requests/:id/approve', auth, authorize('admin'), async (req,
       sendToUser(String(vr.userId), 'verification-request-deleted', { requestId: id });
     } catch (e) {}
 
+    // Create a notification for the user to inform them their verification was approved
+    try {
+      await Notification.create({
+        user: vr.userId,
+        type: 'verification_result',
+        title: 'Verification Approved',
+        message: 'Your verification request has been approved by an administrator.',
+        data: { requestId: id, approved: true },
+        read: false,
+      });
+    } catch (nerr) {
+      console.warn('Failed to create user notification for verification approval', nerr && (nerr as Error).message);
+    }
+
     return res.json({ message: 'Verification request approved and removed' });
   } catch (err) {
     console.error('Error approving verification request', err);
@@ -482,6 +522,20 @@ router.post('/admin/requests/:id/reject', auth, authorize('admin'), async (req, 
       sendToUser(String(vr.userId), 'verification-request-deleted', { requestId: id });
       sendToUser(String(vr.userId), 'profile', { verified: false });
     } catch (e) {}
+
+    // Notify the user that their verification request was rejected
+    try {
+      await Notification.create({
+        user: vr.userId,
+        type: 'verification_result',
+        title: 'Verification Rejected',
+        message: 'Your verification request has been reviewed and rejected by an administrator.',
+        data: { requestId: id, approved: false },
+        read: false,
+      });
+    } catch (nerr) {
+      console.warn('Failed to create user notification for verification rejection', nerr && (nerr as Error).message);
+    }
 
     return res.json({ message: 'Verification request rejected and removed' });
   } catch (err) {

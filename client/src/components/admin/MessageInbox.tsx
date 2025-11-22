@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Card, List, Typography, Avatar, Spin, Button, Space } from 'antd';
-import { BellOutlined, TeamOutlined, CheckCircleOutlined, ArrowLeftOutlined } from '@ant-design/icons';
+import { Card, List, Typography, Spin, Button, Space } from 'antd';
+import AppAvatar from '../AppAvatar';
+import { BellOutlined, CheckCircleOutlined, ArrowLeftOutlined } from '@ant-design/icons';
 import { getInbox, axiosInstance } from '../../services/api';
-import { Notification } from '../../types/notification';
 import { useNavigate } from 'react-router-dom';
 
 const { Title, Text } = Typography;
@@ -70,7 +70,7 @@ const MessageInbox: React.FC = () => {
                 ].filter(Boolean)}
               >
                 <List.Item.Meta
-                  avatar={<Avatar icon={<BellOutlined />} style={{ backgroundColor: notification.status === 'read' ? '#8c8c8c' : '#1890ff' }} />}
+                  avatar={<AppAvatar icon={<BellOutlined />} style={{ backgroundColor: notification.status === 'read' ? '#8c8c8c' : '#1890ff' }} />}
                   title={<Text strong>{notification.subject}</Text>}
                   description={
                     <div>

@@ -1,10 +1,9 @@
 import './responsive-system-title.css';
 import React, { useState, useEffect } from 'react';
-import { Layout, Menu, Button, Space, Dropdown, Avatar } from 'antd';
+import { Layout, Menu, Button, Space, Dropdown } from 'antd';
 import {
   LogoutOutlined,
   ClockCircleOutlined,
-  UserOutlined,
   NotificationOutlined,
   SettingOutlined,
   HomeOutlined,
@@ -15,11 +14,10 @@ import {
   BarChartOutlined,
   HistoryOutlined,
   FileDoneOutlined,
-  FileSearchOutlined,
+  
   FileProtectOutlined
-  ,MenuFoldOutlined, MenuUnfoldOutlined
+  ,MenuFoldOutlined, MenuUnfoldOutlined, MenuOutlined, UserOutlined
 } from '@ant-design/icons';
-import AvatarImage from './AvatarImage';
 import { getAbsoluteApiUrl } from '../services/api';
 import './AppLayoutSidebar.css';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -141,16 +139,21 @@ type AppLayoutProps = {
 const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, setUser } = useAuth();
-  // Prefer the context user but fall back to a persisted full profile in localStorage
+  const { user } = useAuth();
+  // Prefer the richer persisted full profile in localStorage when available.
+  // AuthContext keeps a token-decoded user in context; the full profile fetched
+  // from the server is stored in `localStorage.userProfile`. Merge them so
+  // components like this can access avatar/profileImage fields.
   let displayUser: any = user;
-  if (!displayUser) {
-    try {
-      const stored = localStorage.getItem('userProfile');
-      if (stored) displayUser = JSON.parse(stored);
-    } catch (err) {
-      // ignore
+  try {
+    const stored = localStorage.getItem('userProfile');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      // Merge token-decoded user with persisted profile, preferring stored values
+      displayUser = { ...(user || {}), ...(parsed || {}) };
     }
+  } catch (err) {
+    // ignore parse errors and fall back to token-decoded `user`
   }
 
   // Utility bar quick actions removed: online/status and dark-mode switch removed
@@ -217,32 +220,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     };
   }, []);
 
-    // Resolve a single avatar source for header display
-    const avatarSrc: string | null = (() => {
-      try {
-        // residentImageSrc takes precedence (fetched from resident personal info)
-        if (residentImageSrc) return residentImageSrc;
-        const u = displayUser as any;
-        if (!u) return null;
-        // Prefer explicit profileImage URL
-        if (u.profileImage) {
-          return u.profileImage.startsWith('http') ? u.profileImage : `${window.location.origin}${u.profileImage}`;
-        }
-        // Legacy field
-        if (u.profilePicture) {
-          return u.profilePicture.startsWith('http') ? u.profilePicture : `${window.location.origin}${u.profilePicture}`;
-        }
-        // If we have a GridFS id, construct the streaming URL
-        if (u.profileImageId) {
-          return getAbsoluteApiUrl(`/resident/personal-info/avatar/${u.profileImageId}`);
-        }
-        // Some users may have `avatar` with a full URL
-        if (u.avatar) return u.avatar.startsWith('http') ? u.avatar : `${window.location.origin}${u.avatar}`;
-      } catch (err) {
-        // ignore and fall back to null
-      }
-      return null;
-    })();
+    // avatar icons are used instead of image Avatars; keep residentImageSrc for
+    // potential future uses but header will show icons (Menu and Person).
 
   // SSE for verification/profile updates is disabled while feature is paused
 
@@ -344,9 +323,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
               whiteSpace: 'nowrap',
             }}
           >
-            {user && (
-              <Button type="text" onClick={() => setCollapsed(c => !c)} style={{ marginRight: 6 }} icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />} />
-            )}
+            {/* collapse button removed per design — sidebar remains static per current layout */}
             {/* Logo icon (served from public/) */}
             <img src={`${process.env.PUBLIC_URL}/logo-parian2.png`} alt="Logo" style={{ width: 36, height: 36, marginRight: 4 }} />
             <span style={{
@@ -379,27 +356,30 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
               )}
             </Space>
             {/* Verification status indicator removed while feature is paused */}
-            {/* profile avatar (notification bell removed) */}
-            <Dropdown
-              popupRender={() => (
-                <Menu>
-                  <Menu.Item key="profile" icon={<UserOutlined />} onClick={() => navigate('/profile')}>
-                    Profile
-                  </Menu.Item>
-                  <Menu.Item key="settings" icon={<SettingOutlined />} onClick={() => navigate('/admin/settings')}>
-                    Settings
-                  </Menu.Item>
-                  <Menu.Divider />
-                  <Menu.Item key="logout" icon={<LogoutOutlined />} onClick={() => navigate('/logout')}>
-                    Logout
-                  </Menu.Item>
-                </Menu>
-              )}
-              placement="bottomRight"
-              trigger={['click']}
-            >
-                <Avatar size={36} shape="circle" src={avatarSrc ?? undefined} icon={!avatarSrc ? <UserOutlined /> : undefined} />
-            </Dropdown>
+            {/* profile/menu icons (uses icons instead of Avatar) */}
+            {(() => {
+              const items: any[] = [
+                { key: 'profile', icon: <UserOutlined />, label: 'Profile' },
+                ...(user?.role === 'admin' ? [{ key: 'settings', icon: <SettingOutlined />, label: 'Settings' }] : []),
+                { type: 'divider', key: 'divider-1' },
+                { key: 'logout', icon: <LogoutOutlined />, label: 'Logout' },
+              ];
+              return (
+                <Dropdown
+                  menu={{ items, onClick: ({ key }) => {
+                    if (key === 'profile') navigate('/profile');
+                    else if (key === 'settings') navigate('/admin/settings');
+                    else if (key === 'logout') navigate('/logout');
+                  }}}
+                  placement="bottomRight"
+                  trigger={["click"]}
+                >
+                  <div style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8, padding: 2 }}>
+                    <Button type="default" shape="circle" size="small" icon={<MenuOutlined />} />
+                  </div>
+                </Dropdown>
+              );
+            })()}
             {/* Verification modal removed while feature is paused */}
           </div>
   </Header>

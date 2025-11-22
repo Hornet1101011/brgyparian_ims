@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button, Tooltip, Upload, message } from 'antd';
-import { UploadOutlined, EyeOutlined, DownloadOutlined, DeleteOutlined, FileWordOutlined } from '@ant-design/icons';
+import { UploadOutlined, EyeOutlined, DownloadOutlined, DeleteOutlined } from '@ant-design/icons';
 import { axiosInstance, axiosPublic } from '../services/api';
 import styles from './TemplatesManager.module.css';
 
@@ -10,22 +10,13 @@ const getLabel = (filename?: string) =>
 const TemplatesManager: React.FC = () => {
   const [templateList, setTemplateList] = useState<any[]>([]);
   const [previewId, setPreviewId] = useState<string | null>(null);
-  const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
-  const [previewType, setPreviewType] = useState<'html' | 'pdf' | null>(null);
+  // previewType removed (unused)
   const [htmlContent, setHtmlContent] = useState<string>('');
 
   React.useEffect(() => {
-    // Fetch files from Templates folder
-    const fetchTemplatesFolderFiles = async () => {
-      try {
-        await axiosPublic.get('/templates/list');
-      } catch (err) {
-        // Ignore error for now
-      }
-    };
     const fetchTemplates = async () => {
       setLoading(true);
       setError(null);
@@ -45,7 +36,7 @@ const TemplatesManager: React.FC = () => {
       <h2 className={styles.heading}>📂 Templates Manager</h2>
       {/* GridFS Files Section */}
       <div style={{ marginBottom: 32 }}>
-      <h3 style={{ fontWeight: "bold", fontSize: "1.1rem", marginBottom: "0.5rem", color: '#374151' }}></h3>
+      {/* heading intentionally left out */}
         {loading && <div>Loading templates...</div>}
         {error && <div style={{ color: 'red' }}>{error}</div>}
         <div className={styles.grid}>

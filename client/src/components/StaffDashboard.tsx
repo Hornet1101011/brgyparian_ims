@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { Card, Row, Col, Statistic, List, Typography, Space, Avatar, Spin, Button, Modal, Input, Collapse, Tag, Empty, Badge, Timeline, Drawer, Table, notification, Grid } from 'antd';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Card, Row, Col, Statistic, List, Typography, Space, Spin, Button, Modal, Input, Collapse, Tag, Empty, Badge, Drawer, Table, notification, Grid } from 'antd';
+import AppAvatar from './AppAvatar';
 import {
   HourglassOutlined,
   CaretUpOutlined,
@@ -10,17 +11,14 @@ import {
   InboxOutlined,
   RightOutlined,
   FileTextOutlined,
-  ClockCircleOutlined,
+  
   ExclamationCircleOutlined,
   FileDoneOutlined,
-  FileExclamationOutlined,
   MessageOutlined,
   SafetyCertificateOutlined,
   ProfileOutlined,
   FileSearchOutlined,
-  SolutionOutlined,
-  TeamOutlined,
-  MailOutlined
+  MailOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -85,7 +83,7 @@ const StaffDashboard: React.FC = () => {
       notification.error({ message: 'Error', description: msg });
     }
   };
-  const [recentActivity, setRecentActivity] = useState<any[]>([]);
+  
   // Mini announcements (replace Recent Activity)
   const [miniAnns, setMiniAnns] = useState<any[]>([]);
   const [miniLoading, setMiniLoading] = useState(false);
@@ -97,7 +95,7 @@ const StaffDashboard: React.FC = () => {
   const [manageTableData, setManageTableData] = useState<any[] | null>(null);
   const [responseText, setResponseText] = useState('');
   const [documentStatus, setDocumentStatus] = useState('');
-  const [responding, setResponding] = useState(false);
+  const [responding] = useState(false);
   const [completedModalVisible, setCompletedModalVisible] = useState(false);
   // Documents modal state
   const [docsModalVisible, setDocsModalVisible] = useState(false);
@@ -192,7 +190,7 @@ const StaffDashboard: React.FC = () => {
       if (ngfid) tryIds.push(ngfid);
       // de-dupe
       const ids = Array.from(new Set(tryIds));
-      let finalResp: Response | null = null;
+      
       let usedId: string | null = null;
       let lastError: any = null;
 
@@ -272,19 +270,9 @@ const StaffDashboard: React.FC = () => {
     );
   };
 
-  const getActivityIcon = (type: string) => {
-    const iconStyle = { fontSize: '20px' };
-    const iconMap: { [key: string]: React.ReactNode } = {
-      'document_approved': <FileDoneOutlined style={{ ...iconStyle, color: '#52c41a' }} />,
-      'document_rejected': <FileExclamationOutlined style={{ ...iconStyle, color: '#ff4d4f' }} />,
-      'inquiry_responded': <MessageOutlined style={{ ...iconStyle, color: '#1890ff' }} />,
-      'document_submitted': <FileTextOutlined style={{ ...iconStyle, color: '#faad14' }} />,
-      'default': <ClockCircleOutlined style={{ ...iconStyle, color: '#8c8c8c' }} />
-    };
-    return iconMap[type] || iconMap['default'];
-  };
+  
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       // Fetch document records from /documents (not /document-requests/all)
@@ -320,12 +308,25 @@ const StaffDashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
+
+  const fetchMiniAnnouncements = useCallback(async () => {
+    setMiniLoading(true);
+    try {
+      const data = await contactAPI.getAnnouncements();
+      setMiniAnns(Array.isArray(data) ? data.slice(0, 6) : []);
+    } catch (err) {
+      console.error('Failed to load mini announcements', err);
+      setMiniAnns([]);
+    } finally {
+      setMiniLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     fetchData();
     fetchMiniAnnouncements();
-  }, []);
+  }, [fetchData, fetchMiniAnnouncements]);
 
   // Fetch processed documents (from documents collection) and open modal
   const fetchAllProcessedDocuments = async () => {
@@ -365,30 +366,7 @@ const StaffDashboard: React.FC = () => {
     }
   };
 
-  const fetchMiniAnnouncements = async () => {
-    setMiniLoading(true);
-    try {
-      const data = await contactAPI.getAnnouncements();
-      setMiniAnns(Array.isArray(data) ? data.slice(0, 6) : []);
-    } catch (err) {
-      console.error('Failed to load mini announcements', err);
-      setMiniAnns([]);
-    } finally {
-      setMiniLoading(false);
-    }
-  };
-  // Open Manage/Expand modal helper (centralized for logging + notification)
-  const openManageModal = (e?: React.MouseEvent) => {
-    try {
-      if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
-    } catch (err) {}
-    try {
-      console.debug('[StaffDashboard] openManageModal clicked');
-      notification.info({ message: 'Opening Inquiries', description: 'Loading inquiries into the table...', duration: 1.5 });
-    } catch (err) {}
-    setManageTableData(sortByDateDesc(inquiries));
-    setManageModalVisible(true);
-  };
+  
 
   // Handle approve/reject/other document actions from Document Response modal
   const handleDocumentAction = async () => {
@@ -496,9 +474,7 @@ const StaffDashboard: React.FC = () => {
               <Statistic
                 title={
                   <Space>
-                    <Avatar size="small" style={{ backgroundColor: '#fff7e6', color: '#faad14' }}>
-                      <HourglassOutlined style={{ fontSize: '14px' }} />
-                    </Avatar>
+                    <AppAvatar size="small" background="#fff7e6" color="#faad14" icon={<HourglassOutlined style={{ fontSize: '14px' }} />} />
                     <span>Pending Requests</span>
                   </Space>
                 }
@@ -527,9 +503,7 @@ const StaffDashboard: React.FC = () => {
               <Statistic
                 title={
                   <Space>
-                    <Avatar size="small" style={{ backgroundColor: '#e6f7ff', color: '#1890ff' }}>
-                      <FolderOutlined style={{ fontSize: '14px' }} />
-                    </Avatar>
+                    <AppAvatar size="small" background="#e6f7ff" color="#1890ff" icon={<FolderOutlined style={{ fontSize: '14px' }} />} />
                     <span>Total Documents</span>
                   </Space>
                 }
@@ -558,9 +532,7 @@ const StaffDashboard: React.FC = () => {
               <Statistic
                 title={
                   <Space>
-                    <Avatar size="small" style={{ backgroundColor: '#f6ffed', color: '#52c41a' }}>
-                      <CheckCircleOutlined style={{ fontSize: '14px' }} />
-                    </Avatar>
+                    <AppAvatar size="small" background="#f6ffed" color="#52c41a" icon={<CheckCircleOutlined style={{ fontSize: '14px' }} />} />
                     <span>Completed Requests</span>
                   </Space>
                 }
@@ -589,9 +561,7 @@ const StaffDashboard: React.FC = () => {
               <Statistic
                 title={
                   <Space>
-                    <Avatar size="small" style={{ backgroundColor: '#f9f0ff', color: '#722ed1' }}>
-                      <InboxOutlined style={{ fontSize: '14px' }} />
-                    </Avatar>
+                    <AppAvatar size="small" background="#f9f0ff" color="#722ed1" icon={<InboxOutlined style={{ fontSize: '14px' }} />} />
                     <span>Staff Inbox</span>
                   </Space>
                 }
@@ -619,12 +589,12 @@ const StaffDashboard: React.FC = () => {
                 transition: 'all 0.3s',
                 boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
               }}
-              bodyStyle={{ 
+              styles={{ body: { 
                 padding: '0',
                 height: '400px',
                 maxHeight: '400px',
                 overflow: 'hidden'
-              }}
+              } }}
             >
               <Collapse
                 defaultActiveKey={['Certificates']}
@@ -643,9 +613,7 @@ const StaffDashboard: React.FC = () => {
                       header={
                         <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
                           <Space align="center">
-                            <Avatar size="small" style={{ backgroundColor: data.color + '15', color: data.color }}>
-                              {data.icon}
-                            </Avatar>
+                            <AppAvatar size="small" background={data.color + '15'} color={data.color} icon={data.icon} />
                             <span style={{ fontWeight: 500, fontSize: '14px' }}>{category}</span>
                           </Space>
                           <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -709,12 +677,10 @@ const StaffDashboard: React.FC = () => {
                             >
                               <List.Item.Meta
                                 avatar={
-                                  <Avatar
+                                  <AppAvatar
                                     size={36}
-                                    style={{ 
-                                      backgroundColor: statusStyle.bg,
-                                      color: statusStyle.color
-                                    }}
+                                    background={statusStyle.bg}
+                                    color={statusStyle.color}
                                     icon={<FileTextOutlined />}
                                   />
                                 }
@@ -816,12 +782,12 @@ const StaffDashboard: React.FC = () => {
                 boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
                 position: 'relative'
               }}
-              bodyStyle={{ 
+              styles={{ body: { 
                 height: '400px',
                 maxHeight: '400px',
                 padding: 0,
                 overflow: 'hidden'
-              }}
+              } }}
             >
               <div style={{ padding: '0 12px' }}>
                 <Collapse
@@ -884,7 +850,7 @@ const StaffDashboard: React.FC = () => {
                       <List.Item.Meta
                         avatar={
                           <Badge dot={isOpen} color={isOpen && !isViewed ? '#faad14' : '#722ed1'} offset={[-6, 6]}>
-                            <Avatar
+                            <AppAvatar
                               size={40}
                               style={{
                                 backgroundColor: avatarBg,
@@ -894,7 +860,7 @@ const StaffDashboard: React.FC = () => {
                               }}
                             >
                               {letter}
-                            </Avatar>
+                            </AppAvatar>
                           </Badge>
                         }
                         title={
@@ -991,7 +957,6 @@ const StaffDashboard: React.FC = () => {
                         size="small"
                         dataSource={sortByDateDesc(inboxInquiries.filter(i => !(i.status === 'PENDING' || i.status === 'open')))}
                         renderItem={inquiry => {
-                          const isOpen = false;
                           const avatarColor = '#8c8c8c';
                           const avatarBg = '#f5f5f5';
 
@@ -1004,7 +969,7 @@ const StaffDashboard: React.FC = () => {
                             }}
                             >
                               <List.Item.Meta
-                                avatar={<Avatar size={40} style={{ backgroundColor: avatarBg, color: avatarColor, fontSize: 14 }}>{(inquiry.username || 'Unknown').charAt(0).toUpperCase()}</Avatar>}
+                                avatar={<AppAvatar size={40} style={{ backgroundColor: avatarBg, color: avatarColor, fontSize: 14 }}>{(inquiry.username || 'Unknown').charAt(0).toUpperCase()}</AppAvatar>}
                                 title={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                   <div style={{ fontSize: 13, fontWeight: 600 }}>{inquiry.username || 'Unknown User'}</div>
                                   <Tag color="success" style={{ margin: 0, fontSize: 12 }}>{'RESOLVED'}</Tag>
@@ -1097,7 +1062,7 @@ const StaffDashboard: React.FC = () => {
           onCancel={() => { setDocsModalVisible(false); }}
           footer={null}
           width={screens.xs ? '95%' : screens.md ? 1000 : 1200}
-          bodyStyle={{ padding: '12px 18px' }}
+          styles={{ body: { padding: '12px 18px' } }}
         >
           <Spin spinning={docsLoading}>
             <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexDirection: screens.xs ? 'column' : 'row', alignItems: screens.xs ? 'stretch' : 'center' }}>
@@ -1133,7 +1098,7 @@ const StaffDashboard: React.FC = () => {
                   key: 'title',
                   render: (t: any, r: any) => (
                     <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                      <Avatar size={36} icon={<FileTextOutlined />} />
+                      <AppAvatar size={36} icon={<FileTextOutlined />} />
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t || r.filename || r.name || 'Untitled'}</div>
                         <div style={{ fontSize: 12, color: '#888' }}>{r.sourceTemplateName || r.templateName || ''}</div>
@@ -1316,7 +1281,7 @@ const StaffDashboard: React.FC = () => {
           onCancel={() => setCompletedModalVisible(false)}
           footer={null}
           width={1100}
-          bodyStyle={{ padding: 12 }}
+          styles={{ body: { padding: 12 } }}
         >
           <div style={{ overflowX: 'auto' }}>
             {/* Table of completed document requests (horizontally scrollable) */}

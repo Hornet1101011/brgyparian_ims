@@ -3,7 +3,7 @@ import { Row, Col, Form, Input, Button, Card, Typography, message, Modal } from 
 import { UserOutlined, LockOutlined } from '@ant-design/icons';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { adminAPI, axiosPublic, axiosInstance, getAbsoluteApiUrl } from '../services/api';
+import { adminAPI, axiosPublic, axiosInstance } from '../services/api';
 import getOfficialPhotoSrc, { fetchPublicOfficials, PublicOfficial } from '../utils/officials';
 import StatsPanel from './StatsPanel';
 import AvatarImage from './AvatarImage';
@@ -45,7 +45,7 @@ const LoginForm: React.FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [officials, setOfficials] = useState<PublicOfficial[]>([]);
-  const [officialsStatus, setOfficialsStatus] = useState<string>('loading');
+  const [, setOfficialsStatus] = useState<string>('loading');
   const carouselRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -96,7 +96,7 @@ const LoginForm: React.FC = () => {
       }
     })();
     return () => { mounted = false; };
-  }, []);
+  }, [isAuthenticated]);
 
   const onFinish = async (values: { username: string; password: string }) => {
     setLoading(true);
@@ -126,7 +126,22 @@ const LoginForm: React.FC = () => {
       message.success(data.message || 'Login successful!');
       // navigation will occur in the useEffect above after auth state updates
     } catch (err: any) {
-      message.error(err.message || 'Error logging in');
+      // Provide clearer messages based on server response
+      const respErr = err?.response;
+      if (respErr && respErr.status) {
+        if (respErr.status === 401) {
+          message.error('Invalid username/email or password');
+        } else if (respErr.status === 403) {
+          const msg = respErr.data?.message || 'Account is not allowed to login';
+          message.error(msg);
+        } else if (respErr.status === 404) {
+          message.error('Account not found');
+        } else {
+          message.error(respErr.data?.message || 'Login failed');
+        }
+      } else {
+        message.error(err.message || 'Error logging in');
+      }
       console.error('Login error:', err);
     } finally {
       setLoading(false);
@@ -307,7 +322,7 @@ const LoginForm: React.FC = () => {
         }
       }}
     >
-      <Form layout="vertical" form={guestForm}>
+      <Form layout="vertical" form={guestModalVisible ? guestForm : undefined}>
         <Form.Item name="name" label="Full name" rules={[{ required: true, message: 'Please enter your name' }]}>
           <Input placeholder="Your full name" />
         </Form.Item>

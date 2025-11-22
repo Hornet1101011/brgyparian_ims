@@ -1,4 +1,4 @@
-import { getAbsoluteApiUrl, axiosPublic, axiosInstance } from '../services/api';
+import { getAbsoluteApiUrl, axiosPublic } from '../services/api';
 
 export interface OfficialLite {
   _id?: string;

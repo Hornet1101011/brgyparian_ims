@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import './DocumentProcessingHighlight.css';
 import styles from './DocumentProcessing.module.css';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Card, Typography, Row, Col, Modal, Spin, Table, Input, Tooltip, Tag, Space, Button, Radio, Select, DatePicker, notification } from 'antd';
+import { Card, Typography, Modal, Spin, Table, Input, Tooltip, Tag, Space, Button, Radio, Select, DatePicker, notification } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import { FileWordOutlined, FilePdfOutlined, FileImageOutlined, EyeOutlined } from '@ant-design/icons';
 import { documentsAPI, API_URL } from '../services/api';
@@ -25,11 +25,8 @@ const DocumentProcessing: React.FC = () => {
   const [previewSelectedRequestId, setPreviewSelectedRequestId] = useState<string | null>(null);
   const [showPreviewRequests, setShowPreviewRequests] = useState<boolean>(true);
   const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const highlightTimeoutRef = useRef<number | null>(null);
-  const [residentInfo, setResidentInfo] = useState<any>(null);
-  const [requestFieldValues, setRequestFieldValues] = useState<Record<string, string>>({});
   const [prioritizeModalVisible, setPrioritizeModalVisible] = useState(false);
-  const [prioritizeCandidates, setPrioritizeCandidates] = useState<any[]>([]);
+  const [prioritizeCandidates] = useState<any[]>([]);
   const [selectedPriorityRequest, setSelectedPriorityRequest] = useState<string | null>(null);
   const [prioritizeTargetFileId, setPrioritizeTargetFileId] = useState<string | null>(null);
   const [generatedCopyId, setGeneratedCopyId] = useState<string | null>(null);
@@ -45,23 +42,27 @@ const DocumentProcessing: React.FC = () => {
   const openRequestIdFromNav = (location && (location.state as any) && (location.state as any).openRequestId) ? (location.state as any).openRequestId : null;
 
   // Helpers to work with fileRequestMap which stores arrays per file id
-  const getRequestsForFile = (fileId: string) => {
+  const getRequestsForFile = React.useCallback((fileId: string) => {
     const v = fileRequestMap[fileId];
     if (!v) return [];
     return Array.isArray(v) ? v : [v];
-  };
+  }, [fileRequestMap]);
 
   const getPrimaryRequest = (fileId: string) => {
     const arr = getRequestsForFile(fileId);
     return arr.length ? arr[0] : null;
   };
 
-  const getPrioritizedRequest = (fileId: string) => {
+  const getPrioritizedRequest = React.useCallback((fileId: string) => {
     const arr = getRequestsForFile(fileId);
     if (!arr || !arr.length) return null;
     const found = arr.find((r: any) => ((r.notes && r.notes.toString().toLowerCase().includes('priority')) || r.priority === true));
     return found || arr[0];
-  };
+  }, [getRequestsForFile]);
+
+  // refs for functions used by earlier effects to avoid use-before-define lint warnings
+  const handleProcessClickRef = useRef<((file: any) => Promise<void>) | null>(null);
+  const renderPreviewForRequestRef = useRef<((id: string) => Promise<void>) | null>(null);
   // Fetch files and requests and build fileRequestMap. Extracted so we can call it after prioritization.
   const fetchFilesAndRequests = async () => {
     setLoading(true);
@@ -124,11 +125,15 @@ const DocumentProcessing: React.FC = () => {
       if (file) {
         // open preview for that file and request
         setSelectedFile(file);
-        handleProcessClick(file).then(() => {
-          setPreviewSelectedRequestId(openRequestIdFromNav);
-          renderPreviewForRequest(openRequestIdFromNav);
-          setPreviewVisible(true);
-        }).catch(() => {});
+        // call via refs to avoid use-before-define issues
+        (async () => {
+          try {
+            await handleProcessClickRef.current?.(file);
+            setPreviewSelectedRequestId(openRequestIdFromNav);
+            await renderPreviewForRequestRef.current?.(openRequestIdFromNav as string);
+            setPreviewVisible(true);
+          } catch (e) {}
+        })();
       }
     }
     else {
@@ -191,32 +196,11 @@ const DocumentProcessing: React.FC = () => {
     }
     // clear navigation state so it doesn't re-open repeatedly
     try { navigate(location.pathname, { replace: true, state: {} }); } catch (e) {}
-  }, [fileRequestMap, files]);
+  }, [fileRequestMap, files, navigate, location.pathname, openRequestIdFromNav]);
 
-  const handleCardClick = (file: any) => {
-    setSelectedFile(file);
-    setModalVisible(true);
-  };
+  // handleCardClick removed (unused)
 
-  // Prioritize flow: open modal with candidates of same type
-  const openPrioritizeModal = async (record: any) => {
-    // Show only requests associated with this file
-    const requestsForFile = Array.isArray(fileRequestMap[record._id]) ? fileRequestMap[record._id] : (fileRequestMap[record._id] ? [fileRequestMap[record._id]] : []);
-    // Only include candidates that have a concrete request id (avoid using file ids)
-    const candidates = (requestsForFile || [])
-      .map((r: any) => ({
-        fileId: record._id,
-        requesterName: r.username || r.requesterName || 'Unknown',
-        createdAt: r.createdAt || r._created || null,
-        requestId: r._id || r.requestId
-      }))
-      .filter((c: any) => !!(c.requestId));
-
-    setPrioritizeCandidates(candidates);
-    setSelectedPriorityRequest(candidates.length ? candidates[0].requestId : null);
-    setPrioritizeTargetFileId(record._id);
-    setPrioritizeModalVisible(true);
-  };
+  // openPrioritizeModal removed (unused)
 
   const confirmPrioritize = async () => {
     if (!selectedPriorityRequest) {
@@ -308,7 +292,7 @@ const DocumentProcessing: React.FC = () => {
     }
   };
 
-  const handleProcessClick = async (file: any) => {
+  const handleProcessClick = React.useCallback(async (file: any) => {
     setPreviewVisible(true);
     setPreviewLoading(true);
     setPreviewHtml('');
@@ -329,15 +313,18 @@ const DocumentProcessing: React.FC = () => {
       setPreviewTemplateHtml(html);
       // Render preview for the selected/prioritized request
   const selectedReqId = prioritizedPending ? (prioritizedPending._id || prioritizedPending.requestId) : (firstPending?._id || firstPending?.requestId || null);
-      if (selectedReqId) await renderPreviewForRequest(selectedReqId);
+      if (selectedReqId) await renderPreviewForRequestRef.current?.(selectedReqId);
     } catch (err) {
       setPreviewHtml('<div style="color:red">Failed to load preview.</div>');
     }
     setPreviewLoading(false);
-  };
+  }, [getRequestsForFile, getPrioritizedRequest]);
+
+  // assign refs so earlier effects can call the latest implementations
+  handleProcessClickRef.current = handleProcessClick;
 
   // Render previewHtml for a specific request id using cached previewTemplateHtml
-  const renderPreviewForRequest = async (requestId: string) => {
+  const renderPreviewForRequest = React.useCallback(async (requestId: string) => {
     try {
       const req = Object.values(fileRequestMap).flat().find((r: any) => (r._id || r.requestId) === requestId) || null;
   const fieldValues = req?.fieldValues || {};
@@ -373,7 +360,10 @@ const DocumentProcessing: React.FC = () => {
     } catch (err) {
       setPreviewHtml('<div style="color:red">Failed to load preview.</div>');
     }
-  };
+  }, [fileRequestMap, previewTemplateHtml]);
+
+  // assign ref for preview renderer
+  renderPreviewForRequestRef.current = renderPreviewForRequest;
 
   // Open preview for a selected record (used by table Actions)
   const openPreview = async (record: any) => {
@@ -689,7 +679,7 @@ const DocumentProcessing: React.FC = () => {
         onCancel={() => setPreviewVisible(false)}
         footer={null}
         width={isMobile ? '100%' : 900}
-        bodyStyle={{ padding: isMobile ? 10 : undefined }}
+        styles={{ body: { padding: isMobile ? 10 : undefined } }}
       >
         {previewLoading ? (
           <Spin />

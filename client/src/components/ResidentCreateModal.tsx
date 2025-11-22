@@ -57,7 +57,7 @@ const ResidentCreateModal: React.FC<Props> = ({ visible, onClose, onCreated, def
   return (
     <Modal
       title="Create Resident Info"
-      visible={visible}
+      open={visible}
       onOk={handleOk}
       onCancel={() => { form.resetFields(); onClose(); }}
       confirmLoading={submitting}

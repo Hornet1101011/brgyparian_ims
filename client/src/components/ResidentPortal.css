@@ -1,0 +1,38 @@
+/* Constrain banner avatar to fixed size and center contents */
+.resident-banner-avatar {
+  width: 96px;
+  height: 96px;
+  min-width: 96px;
+  min-height: 96px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.resident-banner-avatar__img {
+  width: 96px !important;
+  height: 96px !important;
+  max-width: 96px !important;
+  max-height: 96px !important;
+  object-fit: cover !important;
+  display: block;
+}
+
+@media (max-width: 600px) {
+  .resident-banner-avatar {
+    width: 84px;
+    height: 84px;
+    min-width: 84px;
+    min-height: 84px;
+    border-radius: 10px;
+  }
+  .resident-banner-avatar__img {
+    width: 84px !important;
+    height: 84px !important;
+    max-width: 84px !important;
+    max-height: 84px !important;
+  }
+}

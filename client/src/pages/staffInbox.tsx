@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Layout, Card, List, Typography, Spin, Result, Divider, Avatar, Row, Col, Space, Badge, Select, Tabs, Input, Tag, Button, Modal, message as antdMessage } from 'antd';
+import { Card, List, Typography, Spin, Result, Divider, Row, Col, Select, Tabs, Input, Button, Modal, message as antdMessage } from 'antd';
+import AppAvatar from '../components/AppAvatar';
 import styles from './staffInbox.module.css';
 import { InboxOutlined, SendOutlined, CheckOutlined, PlusOutlined } from '@ant-design/icons';
 import { contactAPI, adminAPI, getAbsoluteApiUrl } from '../services/api';
@@ -25,34 +26,53 @@ const StaffInbox: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    fetchAll();
-    // If navigation state contains an inquiry to open, store it for after fetch
+    // If navigation state contains an inquiry to open, fetch and try to open it.
+    // Prefer fetching all inquiries once and selecting the item; fall back to
+    // fetching a single inquiry if not found. This avoids polling and interval
+    // leaks and keeps dependencies simple (only depends on `location`).
     const state: any = (location && (location as any).state) || {};
-    if (state && state.openInquiryId) {
-      // We'll try to open after loading inquiries
-      const openId = state.openInquiryId;
-      // Wait for fetchAll to populate inquiries, then open
-      const waiter = setInterval(() => {
-        const found = inquiries.find(i => i._id === openId);
-        if (found) {
-          setSelectedInquiry(found);
-          clearInterval(waiter);
-        }
-      }, 200);
-      // As fallback, after 3s, try fetching single inquiry from API
-      setTimeout(async () => {
-        const found = inquiries.find(i => i._id === openId);
-        if (!found) {
+    const openId = state && state.openInquiryId;
+
+    if (openId) {
+      (async () => {
+        setLoading(true);
+        try {
+          // try to load all inquiries first
+          const all = await contactAPI.getAllInquiries();
+          setInquiries(all || []);
+          const found = (all || []).find((i: any) => i._id === openId);
+          if (found) {
+            setSelectedInquiry(found);
+            return;
+          }
+          // fallback: fetch the single inquiry
           try {
             const single = await contactAPI.getInquiryById(openId);
             if (single) setSelectedInquiry(single);
           } catch (e) {
+            // ignore; nothing we can do
+          }
+        } catch (e) {
+          // If bulk fetch failed, still try single-inquiry fetch
+          try {
+            const single = await contactAPI.getInquiryById(openId);
+            if (single) {
+              setSelectedInquiry(single);
+              setInquiries(prev => [single, ...prev]);
+            }
+          } catch (err) {
             // ignore
           }
+        } finally {
+          setLoading(false);
         }
-      }, 3000);
+      })();
+    } else {
+      // no openId requested, perform a normal full load
+      fetchAll();
     }
-  }, []);
+    // only depends on location (i.e. navigation state)
+  }, [location]);
 
   const fetchAll = async () => {
     setLoading(true);
@@ -67,9 +87,13 @@ const StaffInbox: React.FC = () => {
     }
   };
 
+  // Extract number of responses into a stable variable so the effect dependency
+  // array is statically analyzable and ESLint won't complain about complex exprs.
+  const selectedResponsesLength = selectedInquiry?.responses?.length ?? 0;
+
   useEffect(() => {
     if (messagesEndRef.current) messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-  }, [selectedInquiry, selectedInquiry && selectedInquiry.responses && selectedInquiry.responses.length]);
+  }, [selectedInquiry, selectedResponsesLength]);
 
   const timeAgo = (iso?: string) => {
     if (!iso) return '';
@@ -115,8 +139,8 @@ const StaffInbox: React.FC = () => {
       if (selectedInquiry.isNewThread) {
   // Determine recipient username/barangayID from several possible places to avoid falling
   // back to the current staff account (which would make the inquiry show up only on staff)
-  let recipientUsername = selectedInquiry.residentUsername || selectedInquiry.username || selectedInquiry.userName || selectedInquiry.author || selectedInquiry.createdBy && (selectedInquiry.createdBy.username || selectedInquiry.createdBy.userName);
-  let recipientBarangayID = (selectedInquiry as any).residentBarangayID || selectedInquiry.barangayID || (selectedInquiry.createdBy && selectedInquiry.createdBy.barangayID);
+  let recipientUsername = (selectedInquiry.residentUsername || selectedInquiry.username || selectedInquiry.userName || selectedInquiry.author || (selectedInquiry.createdBy && (selectedInquiry.createdBy.username || selectedInquiry.createdBy.userName)));
+  let recipientBarangayID = ((selectedInquiry as any).residentBarangayID || selectedInquiry.barangayID || (selectedInquiry.createdBy && selectedInquiry.createdBy.barangayID));
 
         // If createdBy info exists, try its username/barangayID
         if ((!recipientUsername || recipientUsername === '') && selectedInquiry.createdBy) {
@@ -209,7 +233,7 @@ const StaffInbox: React.FC = () => {
 
   return (
     <div style={{ minHeight: '100vh', background: '#f7f9fb', padding: 24 }}>
-      <Card style={{ maxWidth: 1200, margin: '0 auto', borderRadius: 12 }} bodyStyle={{ padding: 0 }}>
+      <Card style={{ maxWidth: 1200, margin: '0 auto', borderRadius: 12 }} styles={{ body: { padding: 0 } }}>
         <div style={{ padding: 20 }}>
           <Row gutter={[12, 12]} align="middle">
             <Col xs={24} sm={6}>
@@ -286,7 +310,7 @@ const StaffInbox: React.FC = () => {
         <Divider style={{ margin: 0 }} />
         <Modal
           title="Residents"
-          visible={residentsModalVisible}
+          open={residentsModalVisible}
           onCancel={() => setResidentsModalVisible(false)}
           footer={null}
         >
@@ -303,7 +327,7 @@ const StaffInbox: React.FC = () => {
                     const barangayID = (resident as any).barangayID;
                     // Try to find an existing inquiry for this resident by username or display name
                     const found = inquiries.find(i => {
-                      const rn = (i.username || i.residentName || i.createdBy && (i.createdBy.username || '') || '').toString().toLowerCase();
+                      const rn = ((i.username || i.residentName || (i.createdBy && (i.createdBy.username || '')) || '')).toString().toLowerCase();
                       return rn && (username ? rn === (username || '').toString().toLowerCase() : rn === (name || '').toString().toLowerCase());
                     });
                     if (found) {
@@ -328,7 +352,7 @@ const StaffInbox: React.FC = () => {
                     }
                   }}>
                     <List.Item.Meta
-                      avatar={<Avatar style={{ background: '#1890ff' }}>{getInitial(resident.label)}</Avatar>}
+                      avatar={<AppAvatar style={{ background: '#1890ff' }}>{getInitial(resident.label)}</AppAvatar>}
                       title={resident.label}
                     />
                   </List.Item>
@@ -348,7 +372,7 @@ const StaffInbox: React.FC = () => {
                   renderItem={inquiry => (
                     <List.Item onClick={() => openThread(inquiry)} style={{ cursor: 'pointer', marginBottom: 8, borderRadius: 8, padding: 8, border: selectedInquiry && selectedInquiry._id === inquiry._id ? '1px solid #1890ff' : '1px solid #eee' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <Avatar style={{ background: '#1890ff' }}>{getInitial(inquiry.residentName || inquiry.username || inquiry.subject, '?')}</Avatar>
+                        <AppAvatar style={{ background: '#1890ff' }}>{getInitial(inquiry.residentName || inquiry.username || inquiry.subject, '?')}</AppAvatar>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <Typography.Text strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inquiry.residentName || inquiry.username || 'Unknown'}</Typography.Text>
@@ -364,7 +388,7 @@ const StaffInbox: React.FC = () => {
               </div>
 
               <div className={styles.threadPanel}>
-                <Card style={{ borderRadius: 8 }} bodyStyle={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 12 }}>
+                <Card style={{ borderRadius: 8 }} styles={{ body: { display: 'flex', flexDirection: 'column', gap: 12, padding: 12 } }}>
                   {selectedInquiry ? (
                     <>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -372,7 +396,7 @@ const StaffInbox: React.FC = () => {
                           <Typography.Text strong style={{ display: 'block' }}>{selectedInquiry.residentName || selectedInquiry.username || 'Unknown'}</Typography.Text>
                           <Typography.Text type="secondary">{selectedInquiry.createdAt ? new Date(selectedInquiry.createdAt).toLocaleString() : ''}</Typography.Text>
                         </div>
-                        <Avatar size={48} style={{ background: '#1890ff' }}>{getInitial(selectedInquiry.residentName || selectedInquiry.username)}</Avatar>
+                        <AppAvatar size={48} style={{ background: '#1890ff' }}>{getInitial(selectedInquiry.residentName || selectedInquiry.username)}</AppAvatar>
                       </div>
                       <Divider />
                       <div style={{ overflowY: 'auto', maxHeight: 340 }}>
@@ -408,7 +432,7 @@ const StaffInbox: React.FC = () => {
                           let role = (roleRaw || '').toString().toLowerCase();
                           const authorRaw = r.author || r.authorName || r.author_name || r.createdByName || r.createdByFullName || r.userName || r.user || '';
                           const createdById = r.createdBy ? String(r.createdBy) : undefined;
-                          const currentUserId = undefined; // staff view does not mark current user specially here
+                          // staff view does not mark current user specially here
 
                           // Heuristic: if role missing, try to detect resident replies by matching selectedInquiry createdBy/residentId
                           if (!role) {
@@ -441,9 +465,9 @@ const StaffInbox: React.FC = () => {
                           const align: 'left' | 'right' = isResidentReply ? 'right' : 'left';
 
                           const avatarNode = isResidentReply ? (
-                            <Avatar style={{ background: '#1890ff' }}>{getInitial(authorDisplay, 'U')}</Avatar>
+                            <AppAvatar style={{ background: '#1890ff' }}>{getInitial(authorDisplay, 'U')}</AppAvatar>
                           ) : (
-                            <Avatar style={{ background: '#666' }}>{getInitial(authorDisplay, 'B')}</Avatar>
+                            <AppAvatar style={{ background: '#666' }}>{getInitial(authorDisplay, 'B')}</AppAvatar>
                           );
 
                           return (

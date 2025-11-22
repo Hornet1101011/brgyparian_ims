@@ -1,6 +1,4 @@
-.residentCard {
-  /* preserve existing look but allow overrides */
-}
+
 
 .heroRow {
   padding: 24px !important;
@@ -24,6 +22,15 @@
   height: 96px;
   object-fit: cover;
   border-radius: 12px;
+}
+
+/* explicit class for runtime-inserted img elements when using CSS modules */
+.avatarImg {
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+  border-radius: 12px;
+  display: block;
 }
 
 .heroRow .editButton {

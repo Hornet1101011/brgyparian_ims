@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Typography, Button, List, Spin, Divider, Tag, Badge, Statistic, Space, Modal, Table, Upload, message as antdMessage, Tooltip, Checkbox } from 'antd';
-import { FileTextOutlined, MailOutlined, NotificationOutlined, UploadOutlined, QuestionCircleOutlined } from '@ant-design/icons';
-import AvatarImage from './AvatarImage';
+import { Row, Col, Card, Typography, Button, Badge, Modal, Table, Tooltip, Checkbox, Dropdown } from 'antd';
+import { NotificationOutlined, QuestionCircleOutlined, UploadOutlined, MenuOutlined, UserOutlined, SettingOutlined, LogoutOutlined } from '@ant-design/icons';
 import { getAbsoluteApiUrl } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { documentsAPI, contactAPI } from '../services/api';
@@ -19,30 +18,20 @@ interface DocumentRequest {
 }
 
 const GuestDashboard: React.FC = () => {
-	const { user, setUser } = useAuth();
-	// Prefer the in-memory user from AuthContext, but fall back to localStorage's userProfile
-	const currentUser = user ?? (() => {
-		try {
-			const stored = localStorage.getItem('userProfile');
-			return stored ? JSON.parse(stored) : null;
-		} catch (e) {
-			return null;
-		}
-	})();
+	const { user } = useAuth();
 	const navigate = useNavigate();
 	const [residentImageSrc, setResidentImageSrc] = useState<string | null>(null);
-	const [currentTime, setCurrentTime] = useState<string>(() => new Date().toLocaleString());
-	const [documents, setDocuments] = useState<DocumentRequest[]>([]);
-	const [loading, setLoading] = useState(true);
-	const [unreadNotifications, setUnreadNotifications] = useState(0);
+	const [, setCurrentTime] = useState<string>(() => new Date().toLocaleString());
+	const [, setDocuments] = useState<DocumentRequest[]>([]);
+	const [, setLoading] = useState(true);
 	const [announcementsCount, setAnnouncementsCount] = useState<number>(0);
-	const [announcementsLoading, setAnnouncementsLoading] = useState<boolean>(false);
+	const [, setAnnouncementsLoading] = useState<boolean>(false);
 	const [pendingModalVisible, setPendingModalVisible] = useState(false);
-	const [pendingRequestsList, setPendingRequestsList] = useState<any[]>([]);
-	const [pendingLoading, setPendingLoading] = useState(false);
+	const pendingRequestsList: any[] = [];
+	const pendingLoading = false;
 	const [approvedModalVisible, setApprovedModalVisible] = useState(false);
-	const [approvedRequestsList, setApprovedRequestsList] = useState<any[]>([]);
-	const [approvedLoading, setApprovedLoading] = useState(false);
+	const approvedRequestsList: any[] = [];
+	const approvedLoading = false;
 	const [tipsModalVisible, setTipsModalVisible] = useState(false);
 	const [hideTips, setHideTips] = useState<boolean>(() => {
 		try {
@@ -147,8 +136,7 @@ const GuestDashboard: React.FC = () => {
 		fetchAnnouncements();
 	}, [user]);
 
-	const pendingCount = documents.filter(doc => (doc.status || '').toString().toLowerCase() === 'pending').length;
-	const approvedCount = documents.filter(doc => (doc.status || '').toString().toLowerCase() === 'approved').length;
+
 
 	return (
 		<>
@@ -180,7 +168,7 @@ const GuestDashboard: React.FC = () => {
 							overflow: 'hidden',
 							minHeight: 170
 						}}
-						bodyStyle={{ padding: 0 }}
+						styles={{ body: { padding: 0 } }}
 					>
 						{/* Subtle pattern/gradient background */}
 						<div style={{
@@ -200,41 +188,41 @@ const GuestDashboard: React.FC = () => {
 											{residentImageSrc ? (
 												<img src={residentImageSrc} alt={user?.fullName || user?.username || 'avatar'} style={{ width: 96, height: 96, objectFit: 'cover', borderRadius: 12 }} />
 											) : (
-												<AvatarImage user={(() => {
-													let displayUser = user;
-													if (!displayUser) {
-														try {
-															const stored = localStorage.getItem('userProfile');
-															if (stored) displayUser = JSON.parse(stored);
-														} catch (err) {}
-													}
-													return displayUser;
-												})()} size={96} />
+												<div style={{ width: 96, height: 96, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1890ff', borderRadius: 12 }}>
+													<UserOutlined style={{ color: '#fff', fontSize: 44 }} />
+												</div>
 											)}
-											<button
-												onClick={() => navigate('/profile')}
-												title="Edit profile"
-												style={{
-													position: 'absolute',
-													right: 6,
-													bottom: 6,
-													width: 28,
-													height: 28,
-													borderRadius: 14,
-													background: '#fff',
-													border: '1px solid #e8e8e8',
-													display: 'flex',
-													alignItems: 'center',
-													justifyContent: 'center',
-													boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
-													cursor: 'pointer'
-												}}
-											>
-												<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-													<path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z" fill="#595959"/>
-													<path d="M20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="#595959"/>
-												</svg>
-											</button>
+											{/* Menu icon (left/top) - single control that opens profile/actions */}
+											{(() => {
+												const items: any[] = [
+													{ key: 'profile', icon: <UserOutlined />, label: 'Profile' },
+													...((user?.role as any) === 'admin' ? [{ key: 'settings', icon: <SettingOutlined />, label: 'Settings' }] : []),
+													{ type: 'divider', key: 'divider-1' },
+													{ key: 'tips', icon: <QuestionCircleOutlined />, label: 'Tips' },
+													{ key: 'logout', icon: <LogoutOutlined />, label: 'Logout' },
+												];
+												return (
+													<Dropdown
+														menu={{ items, onClick: ({ key }) => {
+															if (key === 'profile') navigate('/profile');
+															else if (key === 'settings') navigate('/admin/settings');
+															else if (key === 'logout') navigate('/logout');
+															else if (key === 'tips') setTipsModalVisible(true);
+														} }}
+														placement="bottomLeft"
+														trigger={["click"]}
+													>
+														<Button
+															type="default"
+															shape="circle"
+															size="small"
+															title="Menu"
+															icon={<MenuOutlined />}
+															style={{ position: 'absolute', left: -12, top: -12, width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+														/>
+													</Dropdown>
+												);
+											})()}
 										</div>
 										<div>
 											<Typography.Title level={3} style={{ marginBottom: 0, fontWeight: 800 }}>{user?.fullName ?? user?.username ?? user?.email ?? ''}</Typography.Title>
@@ -277,7 +265,7 @@ const GuestDashboard: React.FC = () => {
 								padding: 0,
 								cursor: 'pointer'
 							}}
-							bodyStyle={{ padding: 24 }}
+							styles={{ body: { padding: 24 } }}
 							onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-6px) scale(1.03)'}
 							onMouseLeave={e => e.currentTarget.style.transform = 'none'}
 						>
@@ -302,7 +290,7 @@ const GuestDashboard: React.FC = () => {
 								padding: 0,
 								cursor: 'pointer'
 							}}
-							bodyStyle={{ padding: 24 }}
+							styles={{ body: { padding: 24 } }}
 							onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-6px) scale(1.03)'}
 							onMouseLeave={e => e.currentTarget.style.transform = 'none'}
 						>
@@ -323,7 +311,7 @@ const GuestDashboard: React.FC = () => {
 				{/* Pending Requests Modal */}
 				<Modal
 					title="Pending Requests"
-					visible={pendingModalVisible}
+					open={pendingModalVisible}
 					onCancel={() => setPendingModalVisible(false)}
 					footer={null}
 					width={800}
@@ -358,7 +346,7 @@ const GuestDashboard: React.FC = () => {
 				{/* Approved Requests Modal */}
 				<Modal
 					title="Approved Documents"
-					visible={approvedModalVisible}
+					open={approvedModalVisible}
 					onCancel={() => setApprovedModalVisible(false)}
 					footer={null}
 					width={1000}
@@ -405,7 +393,7 @@ const GuestDashboard: React.FC = () => {
 				{/* Resident Tool Tips Modal */}
 				<Modal
 					title="Resident Tool Tips"
-					visible={tipsModalVisible}
+					open={tipsModalVisible}
 					onCancel={() => setTipsModalVisible(false)}
 					footer={(
 						<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>

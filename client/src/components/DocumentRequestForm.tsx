@@ -2,16 +2,7 @@ import React, { useEffect, useState } from 'react';
 import './DocumentRequestForm.css';
 import { documentsAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import { 
-  FileWordOutlined, 
-  SearchOutlined, 
-  FilterOutlined, 
-  SortAscendingOutlined,
-  MoreOutlined,
-  EyeOutlined,
-  DownloadOutlined,
-  DeleteOutlined
-} from '@ant-design/icons';
+import { FileWordOutlined, MoreOutlined, EyeOutlined, DownloadOutlined } from '@ant-design/icons';
 import { 
   Card, 
   Row, 
@@ -23,7 +14,7 @@ import {
   Button, 
   Space,
   Breadcrumb,
-  Menu,
+  
   message,
   Modal,
   Form,
@@ -56,19 +47,16 @@ const DocumentRequestForm: React.FC = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalDocName, setModalDocName] = useState('');
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
-  const [purpose, setPurpose] = useState('');
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [sortBy, setSortBy] = useState<'name' | 'date' | 'type'>('name');
   const [loading, setLoading] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
-  const [lastRequestId, setLastRequestId] = useState<string | null>(null);
+  
 
-  const { user: authUser, setUser } = useAuth();
-  // Make currentUser available everywhere in the component
-  const currentUser = authUser || (() => {
-    try { const stored = localStorage.getItem('userProfile'); return stored ? JSON.parse(stored) : null; } catch { return null; }
-  })();
+  const { user: authUser } = useAuth();
+  // currentUser will be resolved inside handlers when needed
 
   // Verification popups disabled while the feature is paused
 
@@ -90,9 +78,6 @@ const DocumentRequestForm: React.FC = () => {
   }, []);
 
   const handleCardClick = async (file: FileData) => {
-    const currentUser = authUser || (() => {
-      try { const stored = localStorage.getItem('userProfile'); return stored ? JSON.parse(stored) : null; } catch { return null; }
-    })();
     // If resident and not verified, normally we'd prompt for verification.
     // That behavior is currently disabled while verification is paused.
     setModalDocName(file.filename.replace(/\.docx$/i, ''));
@@ -252,7 +237,7 @@ const DocumentRequestForm: React.FC = () => {
                   transition: 'all 0.3s ease',
                   borderRadius: 8
                 }}
-                bodyStyle={{ padding: 16 }}
+                styles={{ body: { padding: 16 } }}
                 onClick={() => handleCardClick(file)}
               >
                 <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: 12 }}>
@@ -309,12 +294,11 @@ const DocumentRequestForm: React.FC = () => {
                   purpose: values.purpose,
                   fileId: files.find((f) => f.filename.replace(/\.docx$/i, '') === modalDocName)?._id,
                   fieldValues: processedFields,
-                  username: (authUser && authUser.username) || (currentUser && currentUser.username) || undefined,
-                  barangayID: (authUser && authUser.barangayID) || (currentUser && currentUser.barangayID) || undefined
+                  username: (authUser && authUser.username) || undefined,
+                  barangayID: (authUser && authUser.barangayID) || undefined
                 };
-                const result = await documentsAPI.requestDocument(payload);
+                await documentsAPI.requestDocument(payload);
                 message.success('Request submitted successfully!');
-                setLastRequestId(result?.documentRequest?._id || result?._id || null);
                 setModalOpen(false);
               } catch (err) {
                 message.error('Failed to submit request.');

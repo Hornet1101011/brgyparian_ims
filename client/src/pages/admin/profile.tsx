@@ -4,7 +4,7 @@ import { axiosInstance } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 
 const AdminProfilePage: React.FC = () => {
-  const { user } = useAuth();
+  useAuth();
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

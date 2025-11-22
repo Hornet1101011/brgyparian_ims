@@ -1,15 +1,14 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, Row, Col, Badge, Statistic, List, Typography, Space, Avatar, Spin, Button, Drawer, Input, Table, Empty, Modal } from 'antd';
+import { Card, Row, Col, List, Typography, Space, Spin, Button, Drawer, Table, Empty, Modal } from 'antd';
+import AppAvatar from '../AppAvatar';
 import {
   UserOutlined,
   BellOutlined,
-  MailOutlined,
   FileTextOutlined,
   TeamOutlined,
-  ClockCircleOutlined,
-  CheckCircleOutlined,
+  
   CheckOutlined,
   ExclamationCircleOutlined
 } from '@ant-design/icons';
@@ -54,8 +53,7 @@ const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [documentsModalVisible, setDocumentsModalVisible] = useState(false);
-  const [documentRequests, setDocumentRequests] = useState<any[]>([]);
+  const [, setDocumentRequests] = useState<any[]>([]);
   const [stats, setStats] = useState<DashboardStats>({
     totalUsers: 0,
     activeUsers: 0,
@@ -65,18 +63,15 @@ const AdminDashboard: React.FC = () => {
     unreadMessages: 0
   });
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [staffAccessNotifs, setStaffAccessNotifs] = useState<Notification[]>([]);
+  const [, setStaffAccessNotifs] = useState<Notification[]>([]);
   const [staffRequests, setStaffRequests] = useState<any[]>([]);
-  const [recentActivity, setRecentActivity] = useState<Activity[]>([]);
+  const [, setRecentActivity] = useState<Activity[]>([]);
   const [verifs, setVerifs] = useState<any[]>([]);
   const [verifsLoading, setVerifsLoading] = useState(false);
   const [verifModalVisible, setVerifModalVisible] = useState(false);
   const [selectedVerif, setSelectedVerif] = useState<any | null>(null);
-  const [selectedInquiry, setSelectedInquiry] = useState<any | null>(null);
-  const [responseText, setResponseText] = useState('');
-  const [responding, setResponding] = useState(false);
-  const [inquiries, setInquiries] = useState<any[]>([]);
-  const [inboxInquiries, setInboxInquiries] = useState<any[]>([]);
+  const [, setInquiries] = useState<any[]>([]);
+  const [, setInboxInquiries] = useState<any[]>([]);
   // Demo data for mini charts
   const usersTrend = [3, 5, 4, 6, 7, 8, 10]; // last 7 days
   const requestsByType = [
@@ -92,41 +87,11 @@ const AdminDashboard: React.FC = () => {
     { type: 'Other', value: 8 },
   ];
 
-  // Pure SVG pie chart for Documents
-  function PieChartSVG({ data, size = 32 }: { data: { type: string; value: number }[]; size?: number }) {
-    const total = data.reduce((sum, d) => sum + d.value, 0);
-    let startAngle = 0;
-    const colors = ['#52c41a', '#73d13d', '#b7eb8f', '#d9f7be'];
-    const center = size / 2;
-    const radius = center - 2;
-    return (
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}> 
-        {data.map((slice, i) => {
-          const angle = (slice.value / total) * Math.PI * 2;
-          const x1 = center + radius * Math.cos(startAngle);
-          const y1 = center + radius * Math.sin(startAngle);
-          const x2 = center + radius * Math.cos(startAngle + angle);
-          const y2 = center + radius * Math.sin(startAngle + angle);
-          const largeArc = angle > Math.PI ? 1 : 0;
-          const pathData = [
-            `M ${center} ${center}`,
-            `L ${x1} ${y1}`,
-            `A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2}`,
-            'Z',
-          ].join(' ');
-          const el = (
-            <path key={i} d={pathData} fill={colors[i % colors.length]} stroke="#fff" strokeWidth="1" />
-          );
-          startAngle += angle;
-          return el;
-        })}
-      </svg>
-    );
-  }
+  // (Removed unused PieChartSVG helper to silence ESLint unused-symbol warnings)
 
 
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     try {
       setLoading(true);
       const statsRes = await adminAPI.getSystemStatistics();
@@ -207,7 +172,7 @@ const AdminDashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
 
   useEffect(() => {
@@ -245,7 +210,7 @@ const AdminDashboard: React.FC = () => {
       }, 30000);
       return () => clearInterval(pollInterval);
     }
-  }, []);
+  }, [fetchDashboardData]);
 
   // Load verification requests (separate from main fetch to keep concerns isolated)
   const loadVerifs = async () => {
@@ -283,19 +248,7 @@ const AdminDashboard: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Mark notification as read
-  const handleMarkAsRead = async (notif: Notification) => {
-    if (!notif._id) return;
-    try {
-      setLoading(true);
-      await notificationAPI.markAsRead(notif._id);
-      await fetchDashboardData();
-    } catch (err) {
-      console.error('Failed to mark as read:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // handleMarkAsRead removed (not referenced in this component)
 
   // Approve staff request
   const handleApproveStaff = async (notif: Notification) => {
@@ -508,39 +461,7 @@ const AdminDashboard: React.FC = () => {
     </Row>
   );
 
-  // Table columns for document requests
-  const documentColumns = [
-    {
-      title: 'Name',
-      dataIndex: 'requestedByName',
-      key: 'requestedByName',
-      render: (text: string) => <span style={{ fontWeight: 600 }}>{text}</span>,
-    },
-    {
-      title: 'Document Type',
-      dataIndex: 'title',
-      key: 'title',
-      render: (text: string) => <span>{text.replace(/_/g, ' ')}</span>,
-    },
-    {
-      title: 'Description',
-      dataIndex: 'description',
-      key: 'description',
-      render: (text: string) => <span style={{ color: '#888' }}>{text}</span>,
-    },
-    {
-      title: 'Status',
-      dataIndex: 'status',
-      key: 'status',
-      render: (text: string) => <span style={{ color: text === 'Completed' ? '#52c41a' : '#faad14' }}>{text || 'Pending'}</span>,
-    },
-    {
-      title: 'Time Requested',
-      dataIndex: 'dateRequested',
-      key: 'dateRequested',
-      render: (text: string) => <span style={{ fontSize: 12, color: '#aaa' }}>{new Date(text).toLocaleString()}</span>,
-    },
-  ];
+  // documentColumns removed (was used only by the removed inbox rendering block)
 
   const renderNotifications = () => (
     <Card
@@ -644,7 +565,7 @@ const AdminDashboard: React.FC = () => {
                 ].filter(Boolean)}
               >
                 <List.Item.Meta
-                  avatar={<Avatar icon={(notification.type || '').toString().toLowerCase().includes('staff') ? <TeamOutlined /> : <BellOutlined />} style={{ backgroundColor: notification.read ? '#8c8c8c' : ((notification.type || '').toString().toLowerCase().includes('staff') ? '#faad14' : '#1890ff') }} />}
+                  avatar={<AppAvatar icon={(notification.type || '').toString().toLowerCase().includes('staff') ? <TeamOutlined /> : <BellOutlined />} style={{ backgroundColor: notification.read ? '#8c8c8c' : ((notification.type || '').toString().toLowerCase().includes('staff') ? '#faad14' : '#1890ff') }} />}
                   title={<Text strong={(notification.type || '').toString().toLowerCase().includes('staff')}>{notification.message}</Text>}
                   description={
                     <div>
@@ -875,67 +796,7 @@ const AdminDashboard: React.FC = () => {
     </Card>
   );
 
-  function renderInbox(): React.ReactNode {
-    return (
-      <Card
-        title={<Space><MailOutlined /> Inquiries Inbox (Assigned to You)</Space>}
-        style={{ marginTop: 0, background: '#fafbfc', borderRadius: 12, boxShadow: '0 2px 8px #d9d9d933', border: '1px solid #f0f0f0', position: 'relative' }}
-  styles={{ body: { padding: 16 } }}
-        size="small"
-        hoverable={false}
-      >
-        {inboxInquiries.length === 0 ? (
-          <Empty
-            image={<MailOutlined style={{ fontSize: 48, color: '#d9d9d9' }} />}
-            description={<span style={{ color: '#888' }}>No assigned inquiries</span>}
-          />
-        ) : (
-          <List
-            dataSource={inboxInquiries}
-            renderItem={(inquiry: any) => (
-              <List.Item
-                actions={[
-                  <Button key="view" type="link" onClick={() => setSelectedInquiry(inquiry)}>
-                    View / Respond
-                  </Button>
-                ]}
-              >
-                <List.Item.Meta
-                  title={<Text strong>{inquiry.subject}</Text>}
-                  description={
-                    <>
-                      <Text type="secondary">{inquiry.type}</Text><br />
-                      <Text>{inquiry.message}</Text><br />
-                      <Text type="secondary">
-                        Submitted by: {inquiry.createdBy?.fullName || inquiry.createdBy?.username || 'Resident'} on {new Date(inquiry.createdAt).toLocaleString()}
-                      </Text>
-                    </>
-                  }
-                />
-              </List.Item>
-            )}
-            size="small"
-          />
-        )}
-    <Button type="link" style={{ position: 'absolute', right: 16, bottom: 8, fontSize: 13, color: '#1890ff' }} onClick={() => navigate('/admin/inquiries')}>View all</Button>
-        <Modal
-          title="Document Requests"
-          open={documentsModalVisible}
-          onCancel={() => setDocumentsModalVisible(false)}
-          footer={null}
-          width={1200}
-        >
-          {/* Modal content here */}
-          <Table
-            columns={documentColumns}
-            dataSource={documentRequests}
-            rowKey={record => record._id || record.dateRequested + record.requestedByName}
-            pagination={{ pageSize: 10 }}
-          />
-        </Modal>
-      </Card>
-    );
-  }
+  // renderInbox removed (not referenced in this component)
 
   return (
     <Spin spinning={loading}>

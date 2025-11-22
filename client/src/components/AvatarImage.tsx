@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { getAbsoluteApiUrl } from '../services/api';
 
 type AvatarSource = {
@@ -25,6 +25,7 @@ type Props = {
 const AvatarImage: React.FC<Props> = ({ user, src, profileImageId, size = 40, alt = '', className, style, cacheBust = false, cacheToken }) => {
   const u = user as any;
   const id = profileImageId || u?.profileImageId || null;
+  const [errored, setErrored] = useState(false);
   let imageSrc = src || u?.profileImage || u?.profilePicture || null;
   // Normalize relative image paths to absolute API URLs so GridFS or server-hosted
   // images are fetched from the configured API origin rather than the current origin.
@@ -38,37 +39,44 @@ const AvatarImage: React.FC<Props> = ({ user, src, profileImageId, size = 40, al
     // ignore and keep original imageSrc
   }
 
-  if (id) {
-    // Use GridFS streaming endpoint. Optionally append a cache-busting token when requested.
-    const base = getAbsoluteApiUrl(`/resident/personal-info/avatar/${id}`);
-    const srcUrl = cacheBust ? `${base}${base.includes('?') ? '&' : '?'}t=${cacheToken ?? Date.now()}` : base;
-    return (
-      <img
-        src={srcUrl}
-        alt={alt || u?.fullName || u?.username || u?.email || 'avatar'}
-        width={size}
-        height={size}
-        style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', ...style }}
-        className={className}
-      />
-    );
+  // Compute effective source URLs deterministically before using hooks
+  let base: string | null = null;
+  let srcUrl: string | null = null;
+  let finalSrc: string | null = null;
+  try {
+    if (id) {
+      base = getAbsoluteApiUrl(`/resident/personal-info/avatar/${id}`);
+      srcUrl = cacheBust ? `${base}${base.includes('?') ? '&' : '?'}t=${cacheToken ?? Date.now()}` : base;
+    }
+  } catch (e) {
+    // ignore
   }
 
-  if (imageSrc) {
-    // Optionally append cache-busting token to server-hosted relative imageSrc
-    let finalSrc = imageSrc;
-    try {
-      if (cacheBust && typeof finalSrc === 'string' && !finalSrc.startsWith('http')) {
-        finalSrc = `${finalSrc}${finalSrc.includes('?') ? '&' : '?'}t=${cacheToken ?? Date.now()}`;
-      }
-    } catch (e) {}
+  try {
+    if (!srcUrl && imageSrc && typeof imageSrc === 'string' && !imageSrc.startsWith('http')) {
+      finalSrc = getAbsoluteApiUrl(imageSrc);
+    } else if (!srcUrl && imageSrc) {
+      finalSrc = imageSrc as string;
+    }
+  } catch (e) {
+    // ignore
+  }
 
+  const currentSrc = srcUrl || finalSrc || null;
+
+  // Reset errored flag whenever the effective source changes
+  useEffect(() => {
+    setErrored(false);
+  }, [currentSrc]);
+
+  if (currentSrc && !errored) {
     return (
       <img
-        src={finalSrc}
+        src={currentSrc}
         alt={alt || u?.fullName || u?.username || u?.email || 'avatar'}
         width={size}
         height={size}
+        onError={() => setErrored(true)}
         style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', ...style }}
         className={className}
       />
