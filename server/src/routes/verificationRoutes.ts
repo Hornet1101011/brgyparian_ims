@@ -627,7 +627,7 @@ router.post('/admin/requests/:id/unapprove', auth, authorize('admin'), async (re
 
     const { id } = req.params;
     // Try to locate a verification request by id to resolve the affected user
-    let vr = null;
+    let vr: any = null;
     try {
       vr = await VerificationRequest.findById(id);
     } catch (e) {
@@ -635,7 +635,7 @@ router.post('/admin/requests/:id/unapprove', auth, authorize('admin'), async (re
     }
 
     // If we couldn't find a request, allow caller to pass a userId in body as fallback
-    const userId = vr ? vr.userId : (req.body && req.body.userId) ? req.body.userId : null;
+    const userId = (vr && (vr as any).userId) ? (vr as any).userId : (req.body && req.body.userId) ? req.body.userId : null;
     if (!userId) return res.status(404).json({ message: 'Verification request or user not found' });
 
     const user = await User.findById(userId) as any;

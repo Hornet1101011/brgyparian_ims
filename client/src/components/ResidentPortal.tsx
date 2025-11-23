@@ -246,9 +246,20 @@ export default function ResidentPortal() {
           });
         }
       });
-	axiosInstance.get('/resident/requests').then((res: AxiosResponse<any>) => {
-		setRequests(res.data);
-	});
+	// Fetch resident requests but quietly ignore 401 (not authenticated) to avoid noisy console errors
+	try {
+		axiosInstance.get('/resident/requests')
+			.then((res: AxiosResponse<any>) => setRequests(res.data))
+			.catch((err) => {
+				if (err && err.response && err.response.status === 401) {
+					// silently ignore unauthorized for this optional endpoint
+					return;
+				}
+				console.warn('Failed to load resident requests', err);
+			});
+	} catch (e) {
+		// ignore
+	}
 
 	// Load current user's verification requests (if any) so we can display pending uploads
 	(async () => {
@@ -299,6 +310,11 @@ useEffect(() => {
 	const handleVerificationUpload = async () => {
 		if (!proofFile && !govIdFile && !selfieFile) {
 			message.warning('Please select at least one document to upload');
+			return;
+		}
+		// If user is already verified, avoid uploading and inform user
+		if (profile && (profile as any).verified) {
+			message.info('Your account is already verified; no need to upload verification documents.');
 			return;
 		}
 		setVerificationUploading(true);
@@ -354,9 +370,16 @@ useEffect(() => {
 				// ignore failures here
 			}
 			setVerificationProgress(100);
-		} catch (err) {
+		} catch (err: any) {
 			console.error('Verification upload failed', err);
-			message.error('Failed to upload verification documents');
+			const serverMsg = err?.response?.data?.message || err?.message;
+			if (err?.response && err.response.status === 400 && serverMsg) {
+				message.error(String(serverMsg));
+			} else if (err?.response && err.response.status === 401) {
+				message.error('Authentication required. Please login and try again.');
+			} else {
+				message.error('Failed to upload verification documents');
+			}
 		} finally {
 			setVerificationUploading(false);
 		}
