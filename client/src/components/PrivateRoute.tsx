@@ -15,6 +15,19 @@ const PrivateRoute: React.FC<PrivateRouteProps> = ({ children }) => {
     return <Navigate to="/login" replace />;
   }
 
+  // If the user is a resident and explicitly not verified, redirect them to their profile/portal
+  // so they can complete verification or wait for admin approval. This prevents residents from
+  // accessing resident-only features (like requesting documents) before verification.
+  try {
+    const isResident = !!(user && (user as any).role === 'resident');
+    const isExplicitlyUnverified = isResident && ((user as any).verified === false);
+    if (isExplicitlyUnverified) {
+      return <Navigate to="/profile" replace />;
+    }
+  } catch (err) {
+    // if any unexpected shape, fall back to normal routing
+  }
+
   return <>{children}</>;
 };
 

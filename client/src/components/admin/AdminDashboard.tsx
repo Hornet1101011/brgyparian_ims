@@ -493,51 +493,7 @@ const AdminDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Always show recent notifications (including verification notifications) below staff requests */}
-      {staffAccessNotifs && staffAccessNotifs.length > 0 ? (
-        <List
-          dataSource={staffAccessNotifs}
-          renderItem={(notification) => (
-            <List.Item
-              actions={[
-                !notification.read && (
-                  <Button
-                    type="primary"
-                    size="small"
-                    icon={<CheckOutlined />}
-                    onClick={() => handleApproveStaff(notification)}
-                  >
-                    Approve
-                  </Button>
-                ),
-              ].filter(Boolean)}
-            >
-              <List.Item.Meta
-                avatar={<AppAvatar icon={<TeamOutlined />} style={{ backgroundColor: notification.read ? '#8c8c8c' : '#faad14' }} />}
-                title={<Text strong>{notification.message}</Text>}
-                description={
-                  <div>
-                    <Text type="secondary">{new Date(notification.createdAt).toLocaleString()}</Text>
-                    {notification.data && (
-                      <div style={{ marginTop: 8 }}>
-                        <Text strong>Full Name:</Text> {notification.data.fullName || notification.data?.userId?.fullName || 'N/A'}<br />
-                        <Text strong>Email:</Text> {notification.data.email || 'N/A'}<br />
-                        <Text strong>Username:</Text> {notification.data.username || notification.data?.userId?.username || 'N/A'}
-                      </div>
-                    )}
-                  </div>
-                }
-              />
-            </List.Item>
-          )}
-          size="small"
-        />
-      ) : (
-        <Empty
-          image={<BellOutlined style={{ fontSize: 48, color: '#d9d9d9' }} />}
-          description={<span style={{ color: '#888' }}>No notifications</span>}
-        />
-      )}
+      {/* Notifications removed from this container to avoid duplicate admin entries */}
   <Button type="link" style={{ position: 'absolute', right: 16, bottom: 8, fontSize: 13, color: '#1890ff' }} onClick={() => navigate('/admin/notifications')}>View all</Button>
     </Card>
   );

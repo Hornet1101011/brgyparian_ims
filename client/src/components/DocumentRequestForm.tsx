@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import './DocumentRequestForm.css';
 import { documentsAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -56,6 +57,21 @@ const DocumentRequestForm: React.FC = () => {
   
 
   const { user: authUser } = useAuth();
+  const navigate = useNavigate();
+
+  // If a resident user is explicitly unverified, redirect them to the resident profile
+  // so they can complete verification or wait for admin approval. This prevents access
+  // to the document request UI until verification completes.
+  useEffect(() => {
+    try {
+      if (authUser && (authUser as any).role === 'resident' && (authUser as any).verified === false) {
+        message.info('Please verify your account or wait for admin approval before requesting documents. Redirecting to your profile...');
+        navigate('/profile', { replace: true });
+      }
+    } catch (err) {
+      // ignore
+    }
+  }, [authUser, navigate]);
   // currentUser will be resolved inside handlers when needed
 
   // Verification popups disabled while the feature is paused
