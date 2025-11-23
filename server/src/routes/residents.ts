@@ -444,6 +444,10 @@ router.get('/profile', auth, async (req: any, res) => {
 			firstName,
 			lastName,
 			department: user.department || '',
+			// Expose verification state so clients can reliably check if the user is verified
+			verified: Boolean(user.verified),
+			verifiedAt: user.verifiedAt || null,
+			verifiedBy: user.verifiedBy || null,
 			profileImage: profileImageUrl,
 			profileImageId,
 			// Do NOT include password

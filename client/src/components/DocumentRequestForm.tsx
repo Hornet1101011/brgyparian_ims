@@ -47,6 +47,7 @@ const DocumentRequestForm: React.FC = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalDocName, setModalDocName] = useState('');
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+  const [showVerifyModal, setShowVerifyModal] = useState(false);
   
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -57,6 +58,8 @@ const DocumentRequestForm: React.FC = () => {
 
   const { user: authUser } = useAuth();
   // currentUser will be resolved inside handlers when needed
+
+  const userIsResidentUnverified = Boolean(authUser && (authUser as any).role === 'resident' && !(authUser as any).verified);
 
   // Verification popups disabled while the feature is paused
 
@@ -78,6 +81,10 @@ const DocumentRequestForm: React.FC = () => {
   }, []);
 
   const handleCardClick = async (file: FileData) => {
+    if (userIsResidentUnverified) {
+      setShowVerifyModal(true);
+      return;
+    }
     // If resident and not verified, normally we'd prompt for verification.
     // That behavior is currently disabled while verification is paused.
     setModalDocName(file.filename.replace(/\.docx$/i, ''));
@@ -220,7 +227,7 @@ const DocumentRequestForm: React.FC = () => {
 
       {/* Documents Grid */}
       <Row gutter={[16, 16]}>
-        {loading ? (
+          {loading ? (
           <Col span={24} style={{ textAlign: 'center', padding: '40px' }}>
             Loading documents...
           </Col>
@@ -229,16 +236,20 @@ const DocumentRequestForm: React.FC = () => {
             No documents found
           </Col>
         ) : (
-          filteredFiles.map((file) => (
+          filteredFiles.map((file) => {
+            const blocked = userIsResidentUnverified;
+            return (
             <Col xs={24} sm={12} md={8} lg={6} key={file._id}>
               <Card
-                hoverable
+                hoverable={!blocked}
                 style={{ 
                   transition: 'all 0.3s ease',
-                  borderRadius: 8
+                  borderRadius: 8,
+                  opacity: blocked ? 0.65 : 1,
+                  cursor: blocked ? 'not-allowed' : 'pointer'
                 }}
                 styles={{ body: { padding: 16 } }}
-                onClick={() => handleCardClick(file)}
+                onClick={() => { if (!blocked) handleCardClick(file); else setShowVerifyModal(true); }}
               >
                 <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: 12 }}>
                   <FileWordOutlined style={{ fontSize: 24, color: '#1890ff', marginRight: 12, marginTop: 4 }} />
@@ -255,13 +266,18 @@ const DocumentRequestForm: React.FC = () => {
                       {new Date(file.uploadDate).toLocaleDateString()} · {Math.round(file.length / 1024)} KB
                     </Text>
                   </div>
-                  <Dropdown menu={{ items: getActionMenu(file) }} trigger={['click']}>
-                    <Button type="text" icon={<MoreOutlined />} onClick={e => e.stopPropagation()} />
-                  </Dropdown>
+                  {blocked ? (
+                    <Button type="text" icon={<MoreOutlined />} disabled onClick={e => e.stopPropagation()} />
+                  ) : (
+                    <Dropdown menu={{ items: getActionMenu(file) }} trigger={['click']}>
+                      <Button type="text" icon={<MoreOutlined />} onClick={e => e.stopPropagation()} />
+                    </Dropdown>
+                  )}
                 </div>
               </Card>
             </Col>
-          ))
+            );
+          })
         )}
       </Row>
 
@@ -339,6 +355,19 @@ const DocumentRequestForm: React.FC = () => {
             </Row>
           </Form>
         )}
+      </Modal>
+
+      {/* Modal prompting unverified resident to verify their profile */}
+      <Modal
+        open={showVerifyModal}
+        onCancel={() => setShowVerifyModal(false)}
+        title="Verification required"
+        footer={[
+          <Button key="cancel" onClick={() => setShowVerifyModal(false)}>Close</Button>,
+          <Button key="profile" type="primary" onClick={() => { setShowVerifyModal(false); window.location.href = '/profile'; }}>Go to Profile</Button>
+        ]}
+      >
+        <p>To request documents you must verify your resident profile. Please visit your profile page and complete the verification steps to unlock this service.</p>
       </Modal>
     </div>
   );

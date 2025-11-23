@@ -38,6 +38,10 @@ export interface IUser extends Document {
   department?: string;
   profileImage?: string;
   profileImageId?: string;
+  // Verification fields
+  verified?: boolean;
+  verifiedAt?: Date | null;
+  verifiedBy?: string | null;
   // Password reset handled by PasswordResetToken model
   userInfo?: {
     id: string;

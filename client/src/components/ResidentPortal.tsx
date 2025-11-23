@@ -4,8 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { residentPersonalInfoAPI, axiosInstance, verificationAPI } from '../services/api';
 import { initNotificationSocket, onNotificationEvent, offNotificationEvent } from '../services/notificationSocket';
 import { AxiosResponse } from 'axios';
-import { Form, Input, Button, Select, Typography, Row, Col, Card, Space, message, Upload, Alert, Tooltip, Progress, Tag } from 'antd';
-import { UploadOutlined, InfoCircleOutlined, CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, SyncOutlined } from '@ant-design/icons';
+import { Form, Input, Button, Select, Typography, Row, Col, Card, Space, message, Upload, Alert, Tooltip, Progress } from 'antd';
+import { UploadOutlined, InfoCircleOutlined, SyncOutlined } from '@ant-design/icons';
 import ResidentCreateModal from './ResidentCreateModal';
 import { useAuth } from '../contexts/AuthContext';
 import AvatarImage from './AvatarImage';
@@ -173,11 +173,7 @@ export default function ResidentPortal() {
 				// Normalize possible response shapes: { user }, { profile }, or raw user
 				const p = (resp.data && ((resp.data as any).user || (resp.data as any).profile)) ? ((resp.data as any).user || (resp.data as any).profile) : resp.data;
 				setProfile(p);
-				// update verification status from authoritative profile
-				try {
-					if (p && (p as any).verified) setVerificationStatus('verified');
-					else setVerificationStatus('unverified');
-				} catch (err) {}
+				// verification status handling removed
 				setForm(p);
 				if (p?.profileImage) {
 					const url = p.profileImage.startsWith('http') ? p.profileImage : `${window.location.origin}${p.profileImage}`;
@@ -212,7 +208,6 @@ export default function ResidentPortal() {
 	};
 	const { t } = useTranslation();
 	const [profile, setProfile] = useState<ResidentProfile | null>(null);
-	const [verificationStatus, setVerificationStatus] = useState<'verified' | 'pending' | 'unverified' | 'unknown'>('unknown');
 	const [, setRequests] = useState<DocumentRequest[]>([]);
   
 	const [form, setForm] = useState<ResidentProfile | null>(null);
@@ -228,11 +223,6 @@ export default function ResidentPortal() {
 	// Fetch resident profile and requests
 	axiosInstance.get('/resident/profile').then((res: AxiosResponse<any>) => {
 		setProfile(res.data);
-		// Set verification status from authoritative profile
-		try {
-			if (res.data && (res.data as any).verified) setVerificationStatus('verified');
-			else setVerificationStatus('unverified');
-		} catch (err) {}
 		setForm(res.data);
 		if (res.data?.profileImage) {
 			const url = res.data.profileImage.startsWith('http') ? res.data.profileImage : `${window.location.origin}${res.data.profileImage}`;
@@ -308,7 +298,6 @@ export default function ResidentPortal() {
 				const pending = reqs.find((r: any) => r.status === 'pending') || reqs[0];
 				if (pending) {
 					// There's a pending verification request
-					setVerificationStatus('pending');
 					const filesMeta: any[] = pending.filesMeta || [];
 					// Map upto three files into proof, govId, selfie by index
 					const makeFileEntry = (fm: any, idx: number) => {
@@ -353,14 +342,7 @@ export default function ResidentPortal() {
 		onNotificationEvent('profile', profileHandler);
 		onNotificationEvent('verification-request-deleted', profileHandler);
 
-		// Fallback: initialize status from localStorage cached profile if available
-		try {
-			const stored = localStorage.getItem('userProfile');
-			if (stored) {
-				const up = JSON.parse(stored || '{}');
-				if (up && up.verified) setVerificationStatus('verified');
-			}
-		} catch (e) {}
+			// Fallback: nothing to initialize from localStorage here
 
 		// store cleanup so outer effect cleanup can run it if needed
 		(window as any).__residentPortalSocketCleanup = () => {
@@ -397,26 +379,7 @@ useEffect(() => {
 	};
 }, []);
 
-// Keep verificationStatus derived from the authoritative profile state so
-// socket merges or any setProfile(...) calls always update the badge.
-useEffect(() => {
-	try {
-		if (!profile) {
-			setVerificationStatus('unknown');
-			return;
-		}
-		const p: any = profile as any;
-		if (p.verified) {
-			setVerificationStatus('verified');
-		} else if (p.verificationRequestStatus === 'pending' || p.verificationStatus === 'pending' || p.status === 'pending') {
-			setVerificationStatus('pending');
-		} else {
-			setVerificationStatus('unverified');
-		}
-	} catch (err) {
-		// ignore
-	}
-}, [profile]);
+// verification status has been removed from this component
 
 	// Handler to upload verification documents (proof, id, selfie)
 	const handleVerificationUpload = async () => {
@@ -638,8 +601,9 @@ useEffect(() => {
 		// Feedback form state
 	// ...existing code...
 
-			return (
-					<div className="max-w-3xl mx-auto p-6">
+			    return (
+				    <>
+				    <div className="max-w-3xl mx-auto p-6">
 						{/* Resident Portal Banner -> avatar + upload */}
 						<Card
 							style={{
@@ -698,24 +662,8 @@ useEffect(() => {
 											)}
 										</div>
 									</Upload>
-									{/* Verification status (uses authoritative profile) */}
-									{(() => {
-										// Treat any truthy `verified` value as verified (handle boolean, string, numeric representations)
-										const isVerified = !!(profile && (profile as any).verified);
-										const hasPending = ((proofList && proofList.length) || (govIdList && govIdList.length) || (selfieList && selfieList.length)) ? true : false;
-										return (
-											<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-												{isVerified ? (
-													<Tag icon={<CheckCircleOutlined />} color="success">Verified</Tag>
-												) : hasPending ? (
-													<Tag icon={<ClockCircleOutlined />} color="orange">Pending Verification</Tag>
-												) : (
-													<Tag icon={<CloseCircleOutlined />} color="default">Not Verified</Tag>
-												)}
-												<Button size="small" icon={<SyncOutlined />} onClick={refreshProfile} aria-label="Refresh verification status" />
-											</div>
-										);
-									})()}
+									{/* Verification status removed; provide a simple refresh control */}
+									{/* removed inline refresh button; using floating refresh control */}
 									<div style={{ marginTop: 4 }}><Typography.Text type="secondary">{currentTime}</Typography.Text></div>
 								</div>
 								{/* Right column: user info */}
@@ -752,25 +700,9 @@ useEffect(() => {
 											WebkitBackgroundClip: 'text',
 											WebkitTextFillColor: 'transparent',
 										}}>Verification Documents</Typography.Title>
-										{/* Verification status tag */}
-										{(verificationStatus) && (
-											<Tag
-												icon={verificationStatus === 'verified' ? <CheckCircleOutlined /> : verificationStatus === 'pending' ? <ClockCircleOutlined /> : <CloseCircleOutlined />}
-												color={verificationStatus === 'verified' ? 'success' : verificationStatus === 'pending' ? 'processing' : 'default'}
-												style={verificationStatus === 'verified' ? { fontWeight: 700, padding: '4px 10px', background: '#f6ffed', color: '#237804', borderRadius: 6 } : { fontWeight: 700, padding: '4px 10px' }}
-											>
-												{verificationStatus === 'verified' ? 'Verified' : verificationStatus === 'pending' ? 'Pending review' : 'Not verified'}
-													</Tag>
-												)}
-										{verificationStatus === 'verified' && (profile as any)?.verifiedAt && (
-											<Typography.Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
-												Verified on {new Date((profile as any).verifiedAt).toLocaleString()}
-											</Typography.Text>
-										)}
+										{/* verification status removed from UI */}
 									</div>
-									<div>
-										<Button size="small" icon={<SyncOutlined />} onClick={refreshProfile}>Sync</Button>
-									</div>
+									{/* removed inline refresh button; using floating refresh control */}
 								</div>
 								<Form layout="vertical">
 									<Row gutter={24}>
@@ -878,7 +810,7 @@ useEffect(() => {
 										</Col>
 									</Row>
 									<Row gutter={24} style={{ marginTop: 16 }}>
-										<Col span={24} style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+										<Col span={24} style={{ display: 'flex', justifyContent: 'flex-start', gap: 12 }}>
 											<Button type="dashed" onClick={() => {
 												// revoke all current preview URLs for verification files
 												[ ...proofList, ...govIdList, ...selfieList ].forEach((f: any) => {
@@ -1281,6 +1213,12 @@ useEffect(() => {
 												)}
 
 			</div>
+
+					{/* Floating refresh button (bottom-left) */}
+					<div style={{ position: 'fixed', left: 16, bottom: 16, zIndex: 1200 }}>
+						<Button type="primary" shape="circle" size="large" icon={<SyncOutlined />} onClick={refreshProfile} aria-label="Refresh profile" />
+					</div>
+					</>
 		);
 }
 
