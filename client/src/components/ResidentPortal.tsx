@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import './ResidentPortal.css';
 import { useTranslation } from 'react-i18next';
 import { residentPersonalInfoAPI, axiosInstance, verificationAPI } from '../services/api';
+import { initNotificationSocket, onNotificationEvent, offNotificationEvent } from '../services/notificationSocket';
 import { AxiosResponse } from 'axios';
 import { Form, Input, Button, Select, Typography, Row, Col, Card, Space, message, Upload, Alert, Tooltip, Progress, Tag } from 'antd';
 import { UploadOutlined, InfoCircleOutlined, CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, SyncOutlined } from '@ant-design/icons';
@@ -169,12 +170,23 @@ export default function ResidentPortal() {
 		try {
 			const resp = await axiosInstance.get('/resident/profile');
 			if (resp && resp.data) {
-				setProfile(resp.data);
-				setForm(resp.data);
-				if (resp.data?.profileImage) {
-					const url = resp.data.profileImage.startsWith('http') ? resp.data.profileImage : `${window.location.origin}${resp.data.profileImage}`;
+				// Normalize possible response shapes: { user }, { profile }, or raw user
+				const p = (resp.data && ((resp.data as any).user || (resp.data as any).profile)) ? ((resp.data as any).user || (resp.data as any).profile) : resp.data;
+				setProfile(p);
+				// update verification status from authoritative profile
+				try {
+					if (p && (p as any).verified) setVerificationStatus('verified');
+					else setVerificationStatus('unverified');
+				} catch (err) {}
+				setForm(p);
+				if (p?.profileImage) {
+					const url = p.profileImage.startsWith('http') ? p.profileImage : `${window.location.origin}${p.profileImage}`;
 					setAvatarPreview(url);
 				}
+				// Also update AuthContext user if available so verification badges across the app stay in sync
+				try {
+					if (typeof setUser === 'function') setUser(p);
+				} catch (e) {}
 				message.success('Profile synchronized');
 			}
 		} catch (err) {
@@ -200,6 +212,7 @@ export default function ResidentPortal() {
 	};
 	const { t } = useTranslation();
 	const [profile, setProfile] = useState<ResidentProfile | null>(null);
+	const [verificationStatus, setVerificationStatus] = useState<'verified' | 'pending' | 'unverified' | 'unknown'>('unknown');
 	const [, setRequests] = useState<DocumentRequest[]>([]);
   
 	const [form, setForm] = useState<ResidentProfile | null>(null);
@@ -215,6 +228,11 @@ export default function ResidentPortal() {
 	// Fetch resident profile and requests
 	axiosInstance.get('/resident/profile').then((res: AxiosResponse<any>) => {
 		setProfile(res.data);
+		// Set verification status from authoritative profile
+		try {
+			if (res.data && (res.data as any).verified) setVerificationStatus('verified');
+			else setVerificationStatus('unverified');
+		} catch (err) {}
 		setForm(res.data);
 		if (res.data?.profileImage) {
 			const url = res.data.profileImage.startsWith('http') ? res.data.profileImage : `${window.location.origin}${res.data.profileImage}`;
@@ -289,6 +307,8 @@ export default function ResidentPortal() {
 				// prefer most recent pending request
 				const pending = reqs.find((r: any) => r.status === 'pending') || reqs[0];
 				if (pending) {
+					// There's a pending verification request
+					setVerificationStatus('pending');
 					const filesMeta: any[] = pending.filesMeta || [];
 					// Map upto three files into proof, govId, selfie by index
 					const makeFileEntry = (fm: any, idx: number) => {
@@ -311,6 +331,46 @@ export default function ResidentPortal() {
 			// ignore — no pending verification found or request failed
 		}
 	})();
+
+	// Initialize notification/socket connection and listen for profile updates
+	try {
+		initNotificationSocket();
+		const profileHandler = (payload: any) => {
+			try {
+				const raw = payload?.data || payload;
+				const updated = raw && (raw.user || raw.profile) ? (raw.user || raw.profile) : raw;
+				if (!updated) return;
+				// Merge partial updates into existing profile
+				setProfile(prev => {
+					const merged = { ...(prev || {}), ...updated } as any;
+					try { if (typeof setUser === 'function') setUser(merged); } catch (err) {}
+					return merged;
+				});
+			} catch (err) {
+				// ignore
+			}
+		};
+		onNotificationEvent('profile', profileHandler);
+		onNotificationEvent('verification-request-deleted', profileHandler);
+
+		// Fallback: initialize status from localStorage cached profile if available
+		try {
+			const stored = localStorage.getItem('userProfile');
+			if (stored) {
+				const up = JSON.parse(stored || '{}');
+				if (up && up.verified) setVerificationStatus('verified');
+			}
+		} catch (e) {}
+
+		// store cleanup so outer effect cleanup can run it if needed
+		(window as any).__residentPortalSocketCleanup = () => {
+			try { offNotificationEvent('profile', profileHandler); } catch (e) {}
+			try { offNotificationEvent('verification-request-deleted', profileHandler); } catch (e) {}
+		};
+	} catch (err) {
+		// ignore socket init failures
+	}
+
 }, []);
 
 // Cleanup any created object URLs for upload previews when component unmounts
@@ -326,6 +386,38 @@ useEffect(() => {
 	};
 }, []);
 
+// Cleanup any socket handlers when component unmounts
+useEffect(() => {
+	return () => {
+		try {
+			const fn = (window as any).__residentPortalSocketCleanup;
+			if (typeof fn === 'function') fn();
+			try { delete (window as any).__residentPortalSocketCleanup; } catch (e) {}
+		} catch (err) {}
+	};
+}, []);
+
+// Keep verificationStatus derived from the authoritative profile state so
+// socket merges or any setProfile(...) calls always update the badge.
+useEffect(() => {
+	try {
+		if (!profile) {
+			setVerificationStatus('unknown');
+			return;
+		}
+		const p: any = profile as any;
+		if (p.verified) {
+			setVerificationStatus('verified');
+		} else if (p.verificationRequestStatus === 'pending' || p.verificationStatus === 'pending' || p.status === 'pending') {
+			setVerificationStatus('pending');
+		} else {
+			setVerificationStatus('unverified');
+		}
+	} catch (err) {
+		// ignore
+	}
+}, [profile]);
+
 	// Handler to upload verification documents (proof, id, selfie)
 	const handleVerificationUpload = async () => {
 		if (!proofFile && !govIdFile && !selfieFile) {
@@ -340,7 +432,8 @@ useEffect(() => {
 		// Double-check the server-side verified status before uploading to avoid a rejected request
 		try {
 			const latestProfileResp = await axiosInstance.get('/resident/profile');
-			const latestProfile = latestProfileResp?.data;
+			const latestProfileRaw = latestProfileResp?.data;
+			const latestProfile = latestProfileRaw && (latestProfileRaw.user || latestProfileRaw.profile) ? (latestProfileRaw.user || latestProfileRaw.profile) : latestProfileRaw;
 			if (latestProfile && (latestProfile as any).verified) {
 				message.info('Your account is already verified; no need to upload verification documents.');
 				return;
@@ -607,7 +700,8 @@ useEffect(() => {
 									</Upload>
 									{/* Verification status (uses authoritative profile) */}
 									{(() => {
-										const isVerified = !!(profile && (profile as any).verified === true);
+										// Treat any truthy `verified` value as verified (handle boolean, string, numeric representations)
+										const isVerified = !!(profile && (profile as any).verified);
 										const hasPending = ((proofList && proofList.length) || (govIdList && govIdList.length) || (selfieList && selfieList.length)) ? true : false;
 										return (
 											<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -646,16 +740,38 @@ useEffect(() => {
 								bordered={false}
 						>
 							<div style={{ maxWidth: 900, margin: '0 auto' }}>
-								<Typography.Title level={3} style={{
-									fontWeight: 900,
-									marginBottom: 24,
-									letterSpacing: 1,
-									textAlign: 'left',
-									fontSize: 28,
-									background: 'linear-gradient(90deg, #40c9ff, #e81cff)',
-									WebkitBackgroundClip: 'text',
-									WebkitTextFillColor: 'transparent',
-								}}>Verification Documents</Typography.Title>
+								<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+									<div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+										<Typography.Title level={3} style={{
+											fontWeight: 900,
+											margin: 0,
+											letterSpacing: 1,
+											textAlign: 'left',
+											fontSize: 28,
+											background: 'linear-gradient(90deg, #40c9ff, #e81cff)',
+											WebkitBackgroundClip: 'text',
+											WebkitTextFillColor: 'transparent',
+										}}>Verification Documents</Typography.Title>
+										{/* Verification status tag */}
+										{(verificationStatus) && (
+											<Tag
+												icon={verificationStatus === 'verified' ? <CheckCircleOutlined /> : verificationStatus === 'pending' ? <ClockCircleOutlined /> : <CloseCircleOutlined />}
+												color={verificationStatus === 'verified' ? 'success' : verificationStatus === 'pending' ? 'processing' : 'default'}
+												style={verificationStatus === 'verified' ? { fontWeight: 700, padding: '4px 10px', background: '#f6ffed', color: '#237804', borderRadius: 6 } : { fontWeight: 700, padding: '4px 10px' }}
+											>
+												{verificationStatus === 'verified' ? 'Verified' : verificationStatus === 'pending' ? 'Pending review' : 'Not verified'}
+													</Tag>
+												)}
+										{verificationStatus === 'verified' && (profile as any)?.verifiedAt && (
+											<Typography.Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
+												Verified on {new Date((profile as any).verifiedAt).toLocaleString()}
+											</Typography.Text>
+										)}
+									</div>
+									<div>
+										<Button size="small" icon={<SyncOutlined />} onClick={refreshProfile}>Sync</Button>
+									</div>
+								</div>
 								<Form layout="vertical">
 									<Row gutter={24}>
 										<Col xs={24} sm={24} md={12} lg={8}>

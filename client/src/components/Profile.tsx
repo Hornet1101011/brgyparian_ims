@@ -26,16 +26,22 @@ const Profile: React.FC<ProfileProps> = ({ profile, onProfileUpdate }) => {
   const [pwdModalVisible, setPwdModalVisible] = useState(false);
   const [pwdLoading, setPwdLoading] = useState(false);
 
+  // verification status removed from this component per request
+
   useEffect(() => {
     let mounted = true;
     axiosInstance.get('/resident/profile')
       .then(res => {
         if (!mounted) return;
-        userForm.setFieldsValue(res.data || {});
-        if (res.data?.profileImage) {
-          const url = res.data.profileImage.startsWith('http') ? res.data.profileImage : getAbsoluteApiUrl(res.data.profileImage);
-          setAvatarPreview(url);
-        }
+        try {
+          const raw = res.data;
+          const p = raw && (raw.user || raw.profile) ? (raw.user || raw.profile) : raw;
+          userForm.setFieldsValue(p || {});
+          if (p?.profileImage) {
+            const url = p.profileImage.startsWith('http') ? p.profileImage : getAbsoluteApiUrl(p.profileImage);
+            setAvatarPreview(url);
+          }
+        } catch (err) {}
       })
       .catch(() => {});
 
@@ -57,6 +63,8 @@ const Profile: React.FC<ProfileProps> = ({ profile, onProfileUpdate }) => {
 
     return () => { mounted = false; };
   }, [userForm, residentForm]);
+
+  // Removed live verification socket listener from this component
 
   const autoCreateResident = async () => {
     try {
@@ -207,6 +215,8 @@ const Profile: React.FC<ProfileProps> = ({ profile, onProfileUpdate }) => {
               </div>
             </div>
           </div>
+
+          
 
           <Form form={userForm} layout="vertical" className="profile-info" disabled={!editMode}>
             <Form.Item name="username" label="Username">
