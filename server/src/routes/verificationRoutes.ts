@@ -613,4 +613,75 @@ router.post('/admin/requests/:id/reject', auth, authorize('admin'), async (req, 
   }
 });
 
+// Admin: unapprove (revert) a previously approved verification. This will
+// mark the user as unverified and attempt to update any related verification
+// request records back to a non-approved state. This is a best-effort revert
+// since approved requests are typically removed during approval.
+router.post('/admin/requests/:id/unapprove', auth, authorize('admin'), async (req, res) => {
+  try {
+    // If verifications are disabled, disallow manual toggles
+    try {
+      const settings = await SystemSettingModel.findOne().lean();
+      if (settings && settings.enableVerifications === false) return res.status(403).json({ message: 'Verifications are disabled' });
+    } catch (se) {}
+
+    const { id } = req.params;
+    // Try to locate a verification request by id to resolve the affected user
+    let vr = null;
+    try {
+      vr = await VerificationRequest.findById(id);
+    } catch (e) {
+      vr = null;
+    }
+
+    // If we couldn't find a request, allow caller to pass a userId in body as fallback
+    const userId = vr ? vr.userId : (req.body && req.body.userId) ? req.body.userId : null;
+    if (!userId) return res.status(404).json({ message: 'Verification request or user not found' });
+
+    const user = await User.findById(userId) as any;
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    // mark user as unverified
+    user.set('verified', false);
+    try {
+      await user.save();
+    } catch (err: any) {
+      if (handleSaveError(err, res)) return res.status(500).json({ message: 'Error updating user verification' });
+      throw err;
+    }
+
+    // Try to revert any verification request records for this user that were marked approved.
+    try {
+      await VerificationRequest.updateMany({ userId: user._id, status: 'approved' }, { status: 'pending', reviewedAt: null, reviewerId: null });
+    } catch (e) {
+      // non-fatal
+      console.warn('Failed to revert verification request states for user', user._id, e && (e as Error).message);
+    }
+
+    // Notify user about manual unverify
+    try {
+      await Notification.create({
+        user: user._id,
+        type: 'verification_manual_update',
+        title: 'Account Unverified',
+        message: 'An administrator has reverted your verified status. Your account is no longer verified.',
+        data: { userId: user._id.toString(), verified: false },
+        read: false,
+      });
+    } catch (nerr) {
+      console.warn('Failed to create notification for user unverify', nerr && (nerr as Error).message);
+    }
+
+    // send SSE profile update
+    try {
+      sendToUser(String(user._id), 'profile', { verified: false });
+    } catch (e) {}
+
+    return res.json({ message: 'User unverified', user: { _id: user._id, verified: false } });
+  } catch (err) {
+    console.error('Error unapproving verification request', err);
+    return res.status(500).json({ message: 'Error', error: String(err) });
+  }
+});
+
 export default router;

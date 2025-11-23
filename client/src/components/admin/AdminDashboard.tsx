@@ -602,12 +602,36 @@ const AdminDashboard: React.FC = () => {
         try { await verificationAPI.approveRequest(reqId); } catch (e) { /* best-effort */ }
         // set the user verified
         if (userId) await verificationAPI.verifyUser(userId, true);
+        // refresh list from server so approved items show as verified in the table/widget
+        await loadVerifs();
       } else if (typeof arg === 'string') {
         await verificationAPI.verifyUser(arg, true);
       }
-      await loadVerifs();
     } catch (err) {
       console.error('Failed to verify user', err);
+    } finally {
+      setVerifsLoading(false);
+    }
+  };
+
+  // Handler to revert an approval (unverify)
+  const handleUnverifyVerif = async (arg: any) => {
+    try {
+      setVerifsLoading(true);
+      if (arg && typeof arg === 'object') {
+        const reqId = arg._id;
+        const userId = arg.userId?._id || arg.userId;
+        // Call the server-side unapprove route if available to revert approval state
+        try { if (reqId) await verificationAPI.unapproveRequest(reqId); } catch (e) { /* best-effort */ }
+        if (userId) await verificationAPI.verifyUser(userId, false);
+        // refresh list from server to reflect unverified status
+        await loadVerifs();
+      } else if (typeof arg === 'string') {
+        await verificationAPI.verifyUser(arg, false);
+        await loadVerifs();
+      }
+    } catch (err) {
+      console.error('Failed to unverify user', err);
     } finally {
       setVerifsLoading(false);
     }
@@ -650,23 +674,66 @@ const AdminDashboard: React.FC = () => {
       ) : (!verifs || verifs.length === 0) ? (
         <Empty description="No verification requests" />
       ) : (
-        <List
-          dataSource={verifs.slice(0, 6)}
-          renderItem={(item: any) => (
-            <List.Item
-              actions={[
-                <Button key="view" size="small" onClick={() => openCheckId(item)}>Check ID</Button>,
-                <Button key="verify" type="primary" size="small" onClick={() => handleApproveVerif(item.userId?._id || item.userId)}>Verify</Button>,
-                <Button key="reject" danger size="small" onClick={() => handleRejectVerif(item.userId?._id || item.userId)}>Reject</Button>
-              ]}
-            >
-              <List.Item.Meta
-                title={<span style={{ fontWeight: 600 }}>{(item.userId && (item.userId.fullName || item.userId.username)) || 'Unknown Resident'}</span>}
-                description={<span style={{ color: '#888' }}>{item.status || 'pending'} · {new Date(item.createdAt).toLocaleString()}</span>}
-              />
-            </List.Item>
-          )}
+        <Table
           size="small"
+          pagination={{ pageSize: 6 }}
+          dataSource={verifs}
+          rowKey={(r: any) => r._id}
+          columns={[
+            {
+              title: 'Resident',
+              key: 'resident',
+              render: (_: any, record: any) => <span style={{ fontWeight: 600 }}>{(record.userId && (record.userId.fullName || record.userId.username)) || 'Unknown Resident'}</span>
+            },
+            {
+              title: 'Status',
+              dataIndex: 'status',
+              key: 'status',
+              render: (val: any) => <span style={{ color: val === 'approved' ? '#167d3b' : '#d48806', fontWeight: 600 }}>{val || 'pending'}</span>
+            },
+            {
+              title: 'Submitted',
+              dataIndex: 'createdAt',
+              key: 'createdAt',
+              render: (val: any) => <span style={{ color: '#888' }}>{val ? new Date(val).toLocaleString() : '-'}</span>
+            },
+            {
+              title: 'Verified',
+              dataIndex: 'approvedAt',
+              key: 'approvedAt',
+              render: (val: any) => <span style={{ color: '#888' }}>{val ? new Date(val).toLocaleString() : '-'}</span>
+            },
+            {
+              title: 'Files',
+              key: 'files',
+              render: (_: any, record: any) => {
+                const files = Array.isArray(record.filesMeta) && record.filesMeta.length ? record.filesMeta
+                  : (Array.isArray(record.gridFileIds) ? record.gridFileIds.map((id: string) => ({ filename: id, gridFileId: id })) : []);
+                return (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {files.map((f: any, i: number) => (
+                      <a key={i} href={getAbsoluteApiUrl(`/verification/file/${f.gridFileId || f.filename}`)} target="_blank" rel="noreferrer">{f.fileType ? `${f.fileType}` : 'Open'}</a>
+                    ))}
+                  </div>
+                );
+              }
+            },
+            {
+              title: 'Action',
+              key: 'action',
+              render: (_: any, record: any) => (
+                <Space>
+                  <Button size="small" onClick={() => openCheckId(record)}>Check ID</Button>
+                  {record.status === 'approved' ? (
+                    <Button size="small" onClick={() => handleUnverifyVerif(record)}>Unverify</Button>
+                  ) : (
+                    <Button type="primary" size="small" onClick={() => handleApproveVerif(record)}>Verify</Button>
+                  )}
+                  {record.status === 'approved' ? null : <Button danger size="small" onClick={() => handleRejectVerif(record)}>Reject</Button>}
+                </Space>
+              )
+            }
+          ]}
         />
       )}
 
@@ -677,23 +744,33 @@ const AdminDashboard: React.FC = () => {
         open={verifModalVisible}
         onCancel={() => setVerifModalVisible(false)}
         footer={null}
-        width={720}
+        width={840}
       >
         {selectedVerif ? (
           <div>
             <p><strong>Resident:</strong> {(selectedVerif.userId && (selectedVerif.userId.fullName || selectedVerif.userId.username)) || 'Unknown'}</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {(selectedVerif.gridFileIds || []).map((id: string) => (
-                <div key={id} style={{ border: '1px solid #f0f0f0', padding: 8, borderRadius: 6 }}>
-                    <div style={{ marginBottom: 8 }}>
-                      <a href={getAbsoluteApiUrl(`/verification/file/${id}`)} target="_blank" rel="noreferrer">Open file in new tab</a>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+              {((selectedVerif.filesMeta && selectedVerif.filesMeta.length) ? selectedVerif.filesMeta : (selectedVerif.gridFileIds || []).map((id: string) => ({ filename: id, gridFileId: id }))).map((f: any, idx: number) => {
+                const fid = f.gridFileId || f.filename;
+                const fileUrl = getAbsoluteApiUrl(`/verification/file/${fid}`);
+                const label = f.fileType ? (f.fileType.charAt(0).toUpperCase() + f.fileType.slice(1)) : (f.filename || 'File');
+                return (
+                  <div key={idx} style={{ border: '1px solid #f0f0f0', padding: 12, borderRadius: 8, background: '#fff' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                      <div style={{ fontWeight: 600 }}>{label}</div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <a href={fileUrl} target="_blank" rel="noreferrer">Open</a>
+                        <a href={fileUrl} download>Download</a>
+                      </div>
                     </div>
-                  {/* inline preview for images if possible */}
-                    <div>
-                      <img src={getAbsoluteApiUrl(`/verification/file/${id}`)} alt="id" style={{ maxWidth: '100%', maxHeight: 400 }} onError={() => { /* ignore errors for non-images */ }} />
+                    <div style={{ textAlign: 'center' }}>
+                      {/* try to render image preview, otherwise show filename */}
+                      <img src={fileUrl} alt={label} style={{ maxWidth: '100%', maxHeight: 360 }} onError={(e) => { const el = e.currentTarget as HTMLImageElement; el.style.display = 'none'; }} />
+                      <div style={{ marginTop: 8, color: '#666', fontSize: 13 }}>{f.filename || fid}</div>
                     </div>
-                </div>
-              ))}
+                  </div>
+                );
+              })}
             </div>
           </div>
         ) : (

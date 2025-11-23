@@ -207,6 +207,8 @@ export const verificationAPI = {
   getFileUrl: (fileId: string) => `${API_URL.replace(/\/$/, '')}/verification/file/${fileId}`,
   // Approve a verification request by request id (admin)
   approveRequest: async (requestId: string) => axiosInstance.post(`/verification/admin/requests/${requestId}/approve`).then(res => res.data),
+  // Unapprove (revert) a previously approved verification request (admin)
+  unapproveRequest: async (requestId: string) => axiosInstance.post(`/verification/admin/requests/${requestId}/unapprove`).then(res => res.data),
   // Reject a verification request by request id (admin)
   rejectRequest: async (requestId: string, reason?: string) => axiosInstance.post(`/verification/admin/requests/${requestId}/reject`, { reason }).then(res => res.data),
   // Resident: cancel their own verification request
