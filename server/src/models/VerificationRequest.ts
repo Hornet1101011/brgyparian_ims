@@ -2,6 +2,7 @@ import mongoose, { Document } from 'mongoose';
 
 export interface IVerificationRequest extends Document {
   userId: mongoose.Types.ObjectId;
+  barangayID?: string;
   files: string[]; // stored file paths
   /** ObjectIds of uploaded files stored in GridFS */
   gridFileIds?: mongoose.Types.ObjectId[];
@@ -13,6 +14,7 @@ export interface IVerificationRequest extends Document {
 
 const verificationRequestSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  barangayID: { type: String, required: false, trim: true },
   files: [{ type: String }],
   gridFileIds: [{ type: mongoose.Schema.Types.ObjectId }],
   status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },

@@ -56,7 +56,7 @@ router.post('/upload', auth, upload.array('ids', 3), async (req: any, res) => {
           throw new Error('GridFS bucket not available');
         }
         const uploadStream = bucket.openUploadStream(originalName, {
-          metadata: { uploadedBy: user._id }
+          metadata: { uploadedBy: user._id, barangayID: user.barangayID }
         });
         await new Promise((resolve, reject) => {
           readable.pipe(uploadStream)
@@ -71,7 +71,7 @@ router.post('/upload', auth, upload.array('ids', 3), async (req: any, res) => {
       }
     }
 
-  const vr = new VerificationRequest({ userId: user._id, files: filenames, gridFileIds: gridIds, status: 'pending' });
+  const vr = new VerificationRequest({ userId: user._id, barangayID: user.barangayID, files: filenames, gridFileIds: gridIds, status: 'pending' });
     try {
       await vr.save();
     } catch (err: any) {

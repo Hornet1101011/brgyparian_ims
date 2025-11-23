@@ -198,6 +198,8 @@ const RegisterForm = () => {
               if (proofFile) formData.append('ids', proofFile, proofFile.name);
               if (govIdFile) formData.append('ids', govIdFile, govIdFile.name);
               if (selfieFile) formData.append('ids', selfieFile, selfieFile.name);
+              // include barangayID so server-side metadata/request can record it (server prefers authenticated user value)
+              if (values.barangayID) formData.append('barangayID', values.barangayID);
               await axiosInstance.post('/verification/upload', formData, {
                 headers,
                 onUploadProgress: (progressEvent: AxiosProgressEvent) => {

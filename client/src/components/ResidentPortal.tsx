@@ -3,7 +3,7 @@ import './ResidentPortal.css';
 import { useTranslation } from 'react-i18next';
 import { residentPersonalInfoAPI, axiosInstance } from '../services/api';
 import { AxiosResponse } from 'axios';
-import { Form, Input, Button, Select, Typography, Row, Col, Card, Space, message, Upload, Alert, Tooltip } from 'antd';
+import { Form, Input, Button, Select, Typography, Row, Col, Card, Space, message, Upload, Alert, Tooltip, Progress } from 'antd';
 import { UploadOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import ResidentCreateModal from './ResidentCreateModal';
 import { useAuth } from '../contexts/AuthContext';
@@ -111,6 +111,7 @@ export default function ResidentPortal() {
 	const [govIdList, setGovIdList] = useState<any[]>([]);
 	const [selfieList, setSelfieList] = useState<any[]>([]);
 	const [verificationUploading, setVerificationUploading] = useState(false);
+	const [verificationProgress, setVerificationProgress] = useState<number>(0);
 	const previewUrlsRef = useRef<Set<string>>(new Set());
 
 	// autoCreateResident removed (unused in this component)
@@ -272,11 +273,14 @@ useEffect(() => {
 		setVerificationUploading(true);
 		setVerificationProgress(0);
 		try {
-			const form = new FormData();
-			if (proofFile) form.append('ids', proofFile, proofFile.name);
-			if (govIdFile) form.append('ids', govIdFile, govIdFile.name);
-			if (selfieFile) form.append('ids', selfieFile, selfieFile.name);
-			await axiosInstance.post('/verification/upload', form, {
+			const formData = new FormData();
+			if (proofFile) formData.append('ids', proofFile, proofFile.name);
+			if (govIdFile) formData.append('ids', govIdFile, govIdFile.name);
+			if (selfieFile) formData.append('ids', selfieFile, selfieFile.name);
+			// include uploader barangayID so GridFS file metadata and request document can record it
+			const brgy = form?.barangayID || profile?.barangayID || '';
+			if (brgy) formData.append('barangayID', brgy);
+			await axiosInstance.post('/verification/upload', formData, {
 				headers: { 'Content-Type': 'multipart/form-data' },
 				onUploadProgress: (ev: any) => {
 					const loaded = typeof ev?.loaded === 'number' ? ev.loaded : 0;
@@ -624,6 +628,20 @@ useEffect(() => {
 											<Button type="primary" loading={verificationUploading} disabled={!(proofFile && govIdFile && selfieFile)} onClick={handleVerificationUpload}>Upload Verification Documents</Button>
 										</Col>
 									</Row>
+													{(verificationUploading || verificationProgress > 0) && (
+														<Row gutter={24} style={{ marginTop: 12 }}>
+															<Col span={24}>
+																<div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+																	<div style={{ flex: 1 }}>
+																		<Progress percent={verificationProgress} status={verificationProgress < 100 ? 'active' : 'success'} strokeColor={{ '0%': '#e81cff', '100%': '#40c9ff' }} />
+																	</div>
+																	<div style={{ minWidth: 110 }}>
+																		<Typography.Text type="secondary">{verificationUploading ? `Uploading (${verificationProgress}%)` : verificationProgress === 100 ? 'Upload complete' : ''}</Typography.Text>
+																	</div>
+																</div>
+															</Col>
+														</Row>
+													)}
 								</Form>
 							</div>
 						</Card>
@@ -1002,7 +1020,5 @@ useEffect(() => {
 		);
 }
 
-function setVerificationProgress(arg0: number) {
-	throw new Error('Function not implemented.');
-}
+
 
