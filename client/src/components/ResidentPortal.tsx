@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import './ResidentPortal.css';
 import { useTranslation } from 'react-i18next';
-import { residentPersonalInfoAPI, axiosInstance, verificationAPI, getInbox } from '../services/api';
+import { residentPersonalInfoAPI, axiosInstance, verificationAPI } from '../services/api';
 import { AxiosResponse } from 'axios';
 import { Form, Input, Button, Select, Typography, Row, Col, Card, Space, message, Upload, Alert, Tooltip, Progress } from 'antd';
 import { UploadOutlined, InfoCircleOutlined } from '@ant-design/icons';
@@ -316,6 +316,21 @@ useEffect(() => {
 		if (profile && (profile as any).verified) {
 			message.info('Your account is already verified; no need to upload verification documents.');
 			return;
+		}
+		// Double-check the server-side verified status before uploading to avoid a rejected request
+		try {
+			const latestProfileResp = await axiosInstance.get('/resident/profile');
+			const latestProfile = latestProfileResp?.data;
+			if (latestProfile && (latestProfile as any).verified) {
+				message.info('Your account is already verified; no need to upload verification documents.');
+				return;
+			}
+		} catch (err: any) {
+			// If unauthorized, surface an auth message; otherwise ignore and continue (server may be temporarily unreachable)
+			if (err?.response && err.response.status === 401) {
+				message.error('Authentication required. Please login and try again.');
+				return;
+			}
 		}
 		setVerificationUploading(true);
 		setVerificationProgress(0);

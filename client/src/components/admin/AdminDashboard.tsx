@@ -12,7 +12,7 @@ import {
   CheckOutlined,
   ExclamationCircleOutlined
 } from '@ant-design/icons';
-import { adminAPI, notificationAPI, contactAPI, requestsAPI, verificationAPI, getAbsoluteApiUrl } from '../../services/api';
+import { adminAPI, notificationAPI, contactAPI, verificationAPI, getAbsoluteApiUrl } from '../../services/api';
 import { documentsAPI } from '../../services/api';
 import { initNotificationSocket, onNotificationEvent, offNotificationEvent } from '../../services/notificationSocket';
 import { Notification } from '../../types/notification';
@@ -63,8 +63,7 @@ const AdminDashboard: React.FC = () => {
     unreadMessages: 0
   });
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [, setStaffAccessNotifs] = useState<Notification[]>([]);
-  const [staffRequests, setStaffRequests] = useState<any[]>([]);
+  const [staffAccessNotifs, setStaffAccessNotifs] = useState<Notification[]>([]);
   const [, setRecentActivity] = useState<Activity[]>([]);
   const [verifs, setVerifs] = useState<any[]>([]);
   const [verifsLoading, setVerifsLoading] = useState(false);
@@ -110,17 +109,10 @@ const AdminDashboard: React.FC = () => {
   const unreadNotifs = notificationsRes.filter((n: Notification) => !n.read);
   setNotifications(unreadNotifs.slice(0, 10)); // show up to 10 unread notifications
 
-  // Define staff access notifications for pendingRequests calculation (accept both types used in DB)
-  const staffApprovalNotifs = unreadNotifs.filter((n: Notification) => (n.type || '').toString().toLowerCase().includes('staff'));
+  // Define staff access notifications for pendingRequests calculation
+  // Only include explicit `staff_approval` notification types here
+  const staffApprovalNotifs = unreadNotifs.filter((n: Notification) => (n.type || '').toString().toLowerCase() === 'staff_approval');
   setStaffAccessNotifs(staffApprovalNotifs);
-
-  // Fetch staff access Requests from the requests collection
-  try {
-    const sreqs = await requestsAPI.getStaffAccessRequests();
-    setStaffRequests(sreqs || []);
-  } catch (err) {
-    setStaffRequests([]);
-  }
 
   // Transform system statistics
   const systemPending = (statsRes.documents?.pending || 0) + staffApprovalNotifs.length;
@@ -144,7 +136,7 @@ const AdminDashboard: React.FC = () => {
         pendingRequests: totalPending,
         totalDocuments: systemTotalDocs,
         completedRequests: statsRes.documents?.completed || 0,
-        unreadMessages: 0 // Set to 0 or fetch from a valid source if available
+        unreadMessages: (unreadNotifs && Array.isArray(unreadNotifs)) ? unreadNotifs.length : 0
       });
 
       // Fetch all resident inquiries for admin inbox
@@ -176,7 +168,6 @@ const AdminDashboard: React.FC = () => {
 
 
   useEffect(() => {
-    // initial fetch
     fetchDashboardData();
 
     // Initialize socket and listen for document-related events to refresh dashboard
@@ -279,21 +270,7 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
-  // Simple UnreadBadge component for displaying a red dot
-  const UnreadBadge: React.FC = () => (
-    <span
-      style={{
-        display: 'inline-block',
-        width: 8,
-        height: 8,
-        borderRadius: '50%',
-        background: '#ff4d4f',
-        marginLeft: 6,
-        verticalAlign: 'middle',
-      }}
-      aria-label="Unread"
-    />
-  );
+  // (Unread badge removed — messages moved to dedicated notifications page)
 
   const kpiCards = [
     {
@@ -389,15 +366,16 @@ const AdminDashboard: React.FC = () => {
       ),
     },
     {
-      label: <span>Messages <UnreadBadge /></span>,
+      label: 'Notifications',
       value: stats.unreadMessages,
-      icon: '✉️',
+      icon: '🔔',
       bg: 'linear-gradient(90deg, #722ed1 0%, #b37feb 100%)',
       color: '#722ed1',
       labelColor: '#f9f0ff',
-      onClick: () => navigate('/admin/messages'),
+      onClick: () => navigate('/admin/notifications'),
       chart: null,
     },
+    // Messages KPI removed — notifications now have a dedicated admin page
   ];
 
   const statCardSubtitles = [
@@ -472,119 +450,93 @@ const AdminDashboard: React.FC = () => {
       hoverable={false}
     >
   {/* Render a dedicated table for unread staff access approval requests */}
-      {staffRequests && staffRequests.length > 0 ? (
-        <Table
-          size="small"
-          pagination={{ pageSize: 5 }}
-          dataSource={staffRequests}
-          rowKey={r => r._id || String(r.createdAt)}
-          columns={[
-            {
-              title: 'Name',
-              dataIndex: 'requestedBy',
-              key: 'requestedBy',
-              render: (text: any, record: any) => {
-                // requestedBy may be a string id, an object, or missing. Prefer data.fullName, requestedByName, then requestedBy.fullName/username, then fallback to string or 'Unknown'
-                const nameFromData = record?.data?.fullName;
-                const nameFromRequestedByName = record?.requestedByName;
-                let nameFromRequestedBy: any = null;
-                if (record?.requestedBy) {
-                  if (typeof record.requestedBy === 'string') nameFromRequestedBy = record.requestedBy;
-                  else if (typeof record.requestedBy === 'object') nameFromRequestedBy = record.requestedBy.fullName || record.requestedBy.username || record.requestedBy._id;
+      {/* Show staff approval notifications (type === 'staff_approval') if present */}
+      {staffAccessNotifs && staffAccessNotifs.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <Table
+            size="small"
+            pagination={{ pageSize: 5 }}
+            dataSource={staffAccessNotifs}
+            rowKey={r => r._id || String(r.createdAt)}
+            columns={[
+              {
+                title: 'Name',
+                key: 'requestedBy',
+                render: (_: any, record: Notification) => {
+                  const d: any = record.data || {};
+                  const nameFromData = d.fullName || (d.userId && (d.userId.fullName || d.userId.username));
+                  const requestedByName = (record as any).requestedByName;
+                  const displayName = nameFromData || (requestedByName || record.message) || 'Unknown';
+                  return <span style={{ fontWeight: 600 }}>{displayName}</span>;
                 }
-                const displayName = nameFromData || nameFromRequestedByName || nameFromRequestedBy || 'Unknown';
-                return <span style={{ fontWeight: 600 }}>{displayName}</span>;
+              },
+              {
+                title: 'Requested At',
+                dataIndex: 'createdAt',
+                key: 'createdAt',
+                render: (val: any, record: Notification) => <span style={{ fontSize: 12, color: '#888' }}>{new Date(record.createdAt || val).toLocaleString()}</span>
+              },
+              {
+                title: 'Actions',
+                key: 'actions',
+                render: (_: any, record: Notification) => (
+                  <Space>
+                    {!record.read && (
+                      <Button type="primary" size="small" onClick={() => handleApproveStaff(record)} icon={<CheckOutlined />}>Approve</Button>
+                    )}
+                    <Button danger size="small" onClick={() => handleRejectStaff(record)} icon={<ExclamationCircleOutlined />}>Reject</Button>
+                  </Space>
+                )
               }
-            },
-            
-            {
-              title: 'Requested At',
-              dataIndex: 'createdAt',
-              key: 'createdAt',
-              render: (val: any) => <span style={{ fontSize: 12, color: '#888' }}>{new Date(val).toLocaleString()}</span>
-            },
-            {
-              title: 'Actions',
-              key: 'actions',
-              render: (_: any, record: any) => (
-                <Space>
-                  {/* If the row is a Request (has _id and type), call requestsAPI.approveRequest */}
+            ]}
+          />
+        </div>
+      )}
+
+      {/* Always show recent notifications (including verification notifications) below staff requests */}
+      {staffAccessNotifs && staffAccessNotifs.length > 0 ? (
+        <List
+          dataSource={staffAccessNotifs}
+          renderItem={(notification) => (
+            <List.Item
+              actions={[
+                !notification.read && (
                   <Button
                     type="primary"
                     size="small"
-                    onClick={async () => {
-                      try {
-                        setLoading(true);
-                        if (record && record.type === 'staff_access' && record._id) {
-                          await requestsAPI.approveRequest(record._id);
-                        } else {
-                          // fallback to notification-based approve
-                          await handleApproveStaff(record as Notification);
-                        }
-                        await fetchDashboardData();
-                      } catch (err) {
-                        console.error('Approve action failed', err);
-                      } finally {
-                        setLoading(false);
-                      }
-                    }}
                     icon={<CheckOutlined />}
+                    onClick={() => handleApproveStaff(notification)}
                   >
                     Approve
                   </Button>
-                  <Button danger size="small" onClick={() => handleRejectStaff(record)} icon={<ExclamationCircleOutlined />}>Reject</Button>
-                </Space>
-              )
-            }
-          ]}
+                ),
+              ].filter(Boolean)}
+            >
+              <List.Item.Meta
+                avatar={<AppAvatar icon={<TeamOutlined />} style={{ backgroundColor: notification.read ? '#8c8c8c' : '#faad14' }} />}
+                title={<Text strong>{notification.message}</Text>}
+                description={
+                  <div>
+                    <Text type="secondary">{new Date(notification.createdAt).toLocaleString()}</Text>
+                    {notification.data && (
+                      <div style={{ marginTop: 8 }}>
+                        <Text strong>Full Name:</Text> {notification.data.fullName || notification.data?.userId?.fullName || 'N/A'}<br />
+                        <Text strong>Email:</Text> {notification.data.email || 'N/A'}<br />
+                        <Text strong>Username:</Text> {notification.data.username || notification.data?.userId?.username || 'N/A'}
+                      </div>
+                    )}
+                  </div>
+                }
+              />
+            </List.Item>
+          )}
+          size="small"
         />
       ) : (
-        // Fallback: show recent notifications list for other notification types
-        (notifications.length === 0) ? (
-          <Empty
-            image={<BellOutlined style={{ fontSize: 48, color: '#d9d9d9' }} />}
-            description={<span style={{ color: '#888' }}>No notifications</span>}
-          />
-        ) : (
-          <List
-            dataSource={notifications}
-            renderItem={(notification) => (
-              <List.Item
-                actions={[
-                  (notification.type || '').toString().toLowerCase().includes('staff') && !notification.read && (
-                    <Button
-                      type="primary"
-                      size="small"
-                      icon={<CheckOutlined />}
-                      onClick={() => handleApproveStaff(notification)}
-                    >
-                      Approve
-                    </Button>
-                  ),
-                  // removed Mark Read action per design
-                ].filter(Boolean)}
-              >
-                <List.Item.Meta
-                  avatar={<AppAvatar icon={(notification.type || '').toString().toLowerCase().includes('staff') ? <TeamOutlined /> : <BellOutlined />} style={{ backgroundColor: notification.read ? '#8c8c8c' : ((notification.type || '').toString().toLowerCase().includes('staff') ? '#faad14' : '#1890ff') }} />}
-                  title={<Text strong={(notification.type || '').toString().toLowerCase().includes('staff')}>{notification.message}</Text>}
-                  description={
-                    <div>
-                      <Text type="secondary">{new Date(notification.createdAt).toLocaleString()}</Text>
-                      {((notification.type || '').toString().toLowerCase().includes('staff') && notification.data) && (
-                        <div style={{ marginTop: 8 }}>
-                          <Text strong>Full Name:</Text> {notification.data.fullName || 'N/A'}<br />
-                          <Text strong>Email:</Text> {notification.data.email || 'N/A'}<br />
-                          <Text strong>Username:</Text> {notification.data.username || 'N/A'}
-                        </div>
-                      )}
-                    </div>
-                  }
-                />
-              </List.Item>
-            )}
-            size="small"
-          />
-        )
+        <Empty
+          image={<BellOutlined style={{ fontSize: 48, color: '#d9d9d9' }} />}
+          description={<span style={{ color: '#888' }}>No notifications</span>}
+        />
       )}
   <Button type="link" style={{ position: 'absolute', right: 16, bottom: 8, fontSize: 13, color: '#1890ff' }} onClick={() => navigate('/admin/notifications')}>View all</Button>
     </Card>

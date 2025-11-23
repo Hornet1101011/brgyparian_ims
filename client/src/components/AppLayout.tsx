@@ -14,11 +14,11 @@ import {
   BarChartOutlined,
   HistoryOutlined,
   FileDoneOutlined,
-  
-  FileProtectOutlined
-  ,MenuFoldOutlined, MenuUnfoldOutlined, MenuOutlined, UserOutlined
+  FileProtectOutlined,
+  MenuOutlined,
+  UserOutlined,
+  BellOutlined,
 } from '@ant-design/icons';
-import { getAbsoluteApiUrl } from '../services/api';
 import './AppLayoutSidebar.css';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -100,6 +100,11 @@ const navConfig: {
       icon: <FileProtectOutlined />,
       label: 'Verification Requests',
     },
+    {
+      key: '/admin/notifications',
+      icon: <BellOutlined />,
+      label: 'Notifications',
+    },
   ],
   staff: [
     {
@@ -157,68 +162,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   }
 
   // Utility bar quick actions removed: online/status and dark-mode switch removed
-  // You can expand these as needed for your system
-  const [residentImageSrc, setResidentImageSrc] = useState<string | null>(null);
-  
   // Start collapsed by default so the navigation is compact on initial load.
-  const [collapsed, setCollapsed] = useState(true);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const api = await import('../services/api');
-        try {
-          const data = await api.residentPersonalInfoAPI.getPersonalInfo();
-          if (data?.profileImage) {
-            const url = data.profileImage.startsWith('http') ? data.profileImage : `${window.location.origin}${data.profileImage}`;
-            setResidentImageSrc(url);
-            return;
-          }
-          if (data?.profileImageId) {
-            setResidentImageSrc(getAbsoluteApiUrl(`/resident/personal-info/avatar/${data.profileImageId}`));
-            return;
-          }
-        } catch (err) {
-          // ignore
-        }
-        try {
-          const resp = await api.default.get('/resident/profile');
-          const d = resp.data;
-          if (d?.profileImage) {
-            const url = d.profileImage.startsWith('http') ? d.profileImage : `${window.location.origin}${d.profileImage}`;
-            setResidentImageSrc(url);
-          } else if (d?.profileImageId) {
-            setResidentImageSrc(getAbsoluteApiUrl(`/resident/personal-info/avatar/${d.profileImageId}`));
-          }
-        } catch (err) {
-          // ignore
-        }
-      } catch (err) {
-        // ignore
-      }
-      // verification status intentionally omitted (feature temporarily disabled)
-    })();
-    const handler = (e: Event) => {
-      try {
-        const ce = e as CustomEvent;
-        const updated = ce?.detail;
-        if (!updated) return;
-        if (updated.profileImage) {
-          const url = updated.profileImage.startsWith('http') ? updated.profileImage : `${window.location.origin}${updated.profileImage}`;
-          setResidentImageSrc(url);
-        } else if (updated.profileImageId) {
-          setResidentImageSrc(getAbsoluteApiUrl(`/resident/personal-info/avatar/${updated.profileImageId}`));
-        }
-      } catch (err) {
-        // ignore
-      }
-    };
-    window.addEventListener('userProfileUpdated', handler as EventListener);
-    return () => {
-      window.removeEventListener('userProfileUpdated', handler as EventListener);
-      try { clearInterval((window as any).__verifPollId); } catch (e) {}
-    };
-  }, []);
+  const [collapsed] = useState(true);
 
     // avatar icons are used instead of image Avatars; keep residentImageSrc for
     // potential future uses but header will show icons (Menu and Person).

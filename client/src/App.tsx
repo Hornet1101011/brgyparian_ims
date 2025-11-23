@@ -34,7 +34,7 @@ import ResidentPortal from './components/ResidentPortal';
 import LandingPage from './components/LandingPage';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
-import MessageInbox from './components/admin/MessageInbox';
+import AdminNotifications from './components/admin/AdminNotifications';
 import DocumentHistory from './components/DocumentHistory';
 import Announcements from './components/admin/Announcements';
 import AnnouncementsList from './components/AnnouncementsList';
@@ -93,7 +93,8 @@ const App: FC<AppProps> = () => {
                 <Route path="/staff/inbox" element={<StaffRoute><StaffInbox /></StaffRoute>} />
                 {/* Admin Routes */}
                 <Route path="/admin/dashboard" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
-                <Route path="/admin/messages" element={<AdminRoute><MessageInbox /></AdminRoute>} />
+                <Route path="/admin/messages" element={<AdminRoute><AdminNotifications /></AdminRoute>} />
+                <Route path="/admin/notifications" element={<AdminRoute><AdminNotifications /></AdminRoute>} />
                 <Route path="/admin/verification-requests" element={<AdminRoute><VerificationRequests /></AdminRoute>} />
                 {/* Announcements listing for residents/staff */}
                 <Route path="/announcements" element={<PrivateRoute><AnnouncementsList /></PrivateRoute>} />
