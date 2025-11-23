@@ -152,12 +152,14 @@ export const approveRequest = async (req: Request, res: Response) => {
       await Message.create({
         to: user._id,
         from: (req as any).user?._id,
+        barangayID: (req as any).user?._id ? (req as any).user?.barangayID : undefined,
         subject: 'Staff access approved',
         text: 'Your request for staff access has been approved. You now have staff privileges.'
       });
     } catch (e) {
       console.warn('Failed to create approval message', e);
     }
+    
 
   res.json({ message: 'User promoted to staff and request updated (approved)', request: serviceReq });
   } catch (error) {

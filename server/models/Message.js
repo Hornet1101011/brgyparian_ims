@@ -5,6 +5,8 @@ const MessageSchema = new mongoose.Schema({
   recipientId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   subject: { type: String, required: true },
   body: { type: String, required: true },
+  // optional barangay identifier of the sender (useful for admin inbox filtering/audit)
+  barangayID: { type: String, required: false },
   status: { type: String, enum: ['unread', 'read'], default: 'unread' },
   createdAt: { type: Date, default: Date.now }
 });

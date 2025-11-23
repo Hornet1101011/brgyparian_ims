@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import './ResidentPortal.css';
 import { useTranslation } from 'react-i18next';
-import { residentPersonalInfoAPI, axiosInstance } from '../services/api';
+import { residentPersonalInfoAPI, axiosInstance, verificationAPI, getInbox } from '../services/api';
 import { AxiosResponse } from 'axios';
 import { Form, Input, Button, Select, Typography, Row, Col, Card, Space, message, Upload, Alert, Tooltip, Progress } from 'antd';
 import { UploadOutlined, InfoCircleOutlined } from '@ant-design/icons';
@@ -249,6 +249,37 @@ export default function ResidentPortal() {
 	axiosInstance.get('/resident/requests').then((res: AxiosResponse<any>) => {
 		setRequests(res.data);
 	});
+
+	// Load current user's verification requests (if any) so we can display pending uploads
+	(async () => {
+		try {
+			const reqs = await verificationAPI.getMyRequests();
+			if (Array.isArray(reqs) && reqs.length > 0) {
+				// prefer most recent pending request
+				const pending = reqs.find((r: any) => r.status === 'pending') || reqs[0];
+				if (pending) {
+					const filesMeta: any[] = pending.filesMeta || [];
+					// Map upto three files into proof, govId, selfie by index
+					const makeFileEntry = (fm: any, idx: number) => {
+						if (!fm || !fm.gridFileId) return null;
+						const url = verificationAPI.getFileUrl(fm.gridFileId);
+						return {
+							uid: `remote-${idx}-${fm.gridFileId}`,
+							name: fm.filename || `file-${idx+1}`,
+							status: 'done',
+							url,
+							thumbUrl: fm.filename && /\.(png|jpe?g|gif|webp)$/i.test(fm.filename) ? url : undefined,
+						};
+					};
+					setProofList(filesMeta[0] ? [makeFileEntry(filesMeta[0], 0)].filter(Boolean) as any[] : []);
+					setGovIdList(filesMeta[1] ? [makeFileEntry(filesMeta[1], 1)].filter(Boolean) as any[] : []);
+					setSelfieList(filesMeta[2] ? [makeFileEntry(filesMeta[2], 2)].filter(Boolean) as any[] : []);
+				}
+			}
+		} catch (e) {
+			// ignore — no pending verification found or request failed
+		}
+	})();
 }, []);
 
 // Cleanup any created object URLs for upload previews when component unmounts
@@ -277,6 +308,10 @@ useEffect(() => {
 			if (proofFile) formData.append('ids', proofFile, proofFile.name);
 			if (govIdFile) formData.append('ids', govIdFile, govIdFile.name);
 			if (selfieFile) formData.append('ids', selfieFile, selfieFile.name);
+			// include per-file types so server can persist structured metadata and avoid index-only mapping
+			if (proofFile) formData.append('fileTypes', 'proof');
+			if (govIdFile) formData.append('fileTypes', 'govid');
+			if (selfieFile) formData.append('fileTypes', 'selfie');
 			// include uploader barangayID so GridFS file metadata and request document can record it
 			const brgy = form?.barangayID || profile?.barangayID || '';
 			if (brgy) formData.append('barangayID', brgy);
@@ -292,9 +327,32 @@ useEffect(() => {
 				}
 			});
 			message.success('Verification documents uploaded');
-			// clear selected files
-			setProofFile(null); setGovIdFile(null); setSelfieFile(null);
-			setProofList([]); setGovIdList([]); setSelfieList([]);
+			// Refresh displayed files from the server (show pending request with uploaded files)
+			try {
+				const reqs = await verificationAPI.getMyRequests();
+				if (Array.isArray(reqs) && reqs.length > 0) {
+					const pending = reqs.find((r: any) => r.status === 'pending') || reqs[0];
+					const filesMeta: any[] = pending.filesMeta || [];
+					const makeFileEntry = (fm: any, idx: number) => {
+						if (!fm || !fm.gridFileId) return null;
+						const url = verificationAPI.getFileUrl(fm.gridFileId);
+						return {
+							uid: `remote-${idx}-${fm.gridFileId}`,
+							name: fm.filename || `file-${idx+1}`,
+							status: 'done',
+							url,
+							thumbUrl: fm.filename && /\.(png|jpe?g|gif|webp)$/i.test(fm.filename) ? url : undefined,
+						};
+					};
+					setProofList(filesMeta[0] ? [makeFileEntry(filesMeta[0], 0)].filter(Boolean) as any[] : []);
+					setGovIdList(filesMeta[1] ? [makeFileEntry(filesMeta[1], 1)].filter(Boolean) as any[] : []);
+					setSelfieList(filesMeta[2] ? [makeFileEntry(filesMeta[2], 2)].filter(Boolean) as any[] : []);
+					// clear local pending File objects since we are now showing server versions
+					setProofFile(null); setGovIdFile(null); setSelfieFile(null);
+				}
+			} catch (e) {
+				// ignore failures here
+			}
 			setVerificationProgress(100);
 		} catch (err) {
 			console.error('Verification upload failed', err);
@@ -435,16 +493,17 @@ useEffect(() => {
 								border: 'none',
 								padding: 0,
 							}}
-							styles={{ body: { padding: '24px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' } }}
-							variant="outlined"
+								bodyStyle={{ padding: '24px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+								bordered={false}
 						>
 							<div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
 								<Upload
 									showUploadList={false}
 									accept="image/*"
-									customRequest={async ({ file, onSuccess, onError }) => {
+									customRequest={async (opts: any) => {
+										const { file, onSuccess, onError } = opts || {};
 										try {
-											await handleBannerAvatarUpload(file as File);
+											await handleBannerAvatarUpload(file as File | null);
 											if (typeof onSuccess === 'function') onSuccess('ok');
 										} catch (err) {
 											if (typeof onError === 'function') onError(err as any);
@@ -457,8 +516,9 @@ useEffect(() => {
 										tabIndex={0}
 										aria-label="Upload profile picture"
 										title="Upload profile picture"
-										onKeyDown={(e) => {
-											if (e.key === 'Enter' || e.key === ' ') {
+										onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => {
+											const key = (e && (e as React.KeyboardEvent).key) || '';
+											if (key === 'Enter' || key === ' ') {
 												(e.target as HTMLElement).click();
 											}
 										}}
@@ -497,8 +557,8 @@ useEffect(() => {
 								border: 'none',
 								backdropFilter: 'blur(2px)',
 							}}
-							styles={{ body: { padding: 40 } }}
-							variant="outlined"
+								bodyStyle={{ padding: 40 }}
+								bordered={false}
 						>
 							<div style={{ maxWidth: 900, margin: '0 auto' }}>
 								<Typography.Title level={3} style={{
@@ -518,8 +578,9 @@ useEffect(() => {
 												<Upload
 													accept="image/*,application/pdf"
 													fileList={proofList}
-													beforeUpload={(file) => false}
-													onChange={({ fileList }) => {
+													beforeUpload={(file: File) => false}
+													onChange={(info: any) => {
+														const fileList = info?.fileList || [];
 														// revoke existing previews for this slot
 														proofList.forEach((pf: any) => {
 															if (pf && pf.thumbUrl) {
@@ -551,8 +612,9 @@ useEffect(() => {
 												<Upload
 													accept="image/*,application/pdf"
 													fileList={govIdList}
-													beforeUpload={(file) => false}
-													onChange={({ fileList }) => {
+													beforeUpload={(file: File) => false}
+													onChange={(info: any) => {
+														const fileList = info?.fileList || [];
 														// revoke existing previews for this slot
 														govIdList.forEach((gf: any) => {
 															if (gf && gf.thumbUrl) {
@@ -584,8 +646,9 @@ useEffect(() => {
 												<Upload
 													accept="image/*"
 													fileList={selfieList}
-													beforeUpload={(file) => false}
-													onChange={({ fileList }) => {
+													beforeUpload={(file: File) => false}
+													onChange={(info: any) => {
+														const fileList = info?.fileList || [];
 														// revoke existing previews for this slot
 														selfieList.forEach((sf: any) => {
 															if (sf && sf.thumbUrl) {
@@ -681,11 +744,11 @@ useEffect(() => {
 													   boxShadow: '0 8px 32px #bfc7d6cc',
 													   marginBottom: 32,
 													   border: 'none',
-													   backdropFilter: 'blur(2px)',
-												   }}
-												   styles={{ body: { padding: 40 } }}
-												   variant="outlined"
-												>
+												   	backdropFilter: 'blur(2px)',
+												   	}}
+												   	bodyStyle={{ padding: 40 }}
+												   	bordered={false}
+												   	>
 																										 <div style={{ maxWidth: 900, margin: '0 auto' }}>
 																											<Typography.Title level={3} style={{
 																												fontWeight: 900,
@@ -698,39 +761,39 @@ useEffect(() => {
 																												WebkitTextFillColor: 'transparent',
 																											}}>{t('userInformation')}</Typography.Title>
 																											 {form && (
-																												 <Form layout="vertical">
-															<Row gutter={24}>
-																<Col xs={24} sm={12}><Form.Item label={t('username')}><Input name="username" value={form.username} onChange={handleChangeUser} disabled={!editingUser} /></Form.Item></Col>
-																<Col xs={24} sm={12}><Form.Item label={t('email')}><Input name="email" value={form.email} onChange={handleChangeUser} disabled={!editingUser} /></Form.Item></Col>
-															</Row>
-															<Row gutter={24}>
-																<Col xs={24} sm={12}><Form.Item label={t('address')}><Input name="address" value={form.address} onChange={handleChangeUser} disabled={!editingUser} /></Form.Item></Col>
-																<Col xs={24} sm={12}><Form.Item label={t('contactNumber')}><Input name="contactNumber" value={form.contactNumber} onChange={handleChangeUser} disabled={!editingUser} /></Form.Item></Col>
-															</Row>
-															<Row gutter={24}>
-																<Col xs={24} sm={12}><Form.Item label={t('barangayID') || 'Barangay ID'}><Input name="barangayID" value={form.barangayID} disabled /></Form.Item></Col>
-																<Col xs={24} sm={12}><Form.Item label={t('role') || 'Role'}><Input name="role" value={form.role} disabled /></Form.Item></Col>
-															</Row>
-															<Space style={{ marginTop: 24 }}>
-																{editingUser ? (
-																	<>
-																		<Button type="primary" onClick={handleSaveUser} style={{ background: 'linear-gradient(90deg, #43e97b 0%, #38f9d7 100%)', border: 'none', fontWeight: 600 }}>Save</Button>
-																		<Button onClick={handleCancelUser}>Cancel</Button>
-																	</>
-																) : (
-																	<Button onClick={handleEditUser} style={{ fontWeight: 600 }}>Edit</Button>
-																														 )}
-																<Button
-																	type="dashed"
-																	onClick={handleRequestStaff}
-																	disabled={staffRequestSent || requesting}
-																	style={{ color: '#341f97', borderColor: '#341f97', fontWeight: 600 }}
-																>
-																	{staffRequestSent ? 'Request Sent' : 'Request Staff Access'}
-																</Button>
-															</Space>
-														</Form>
-													)}
+																																	 <Form layout="vertical">
+																																		 <Row gutter={24}>
+																																			 <Col xs={24} sm={12}><Form.Item label={t('username')}><Input name="username" value={form?.username || ''} onChange={handleChangeUser} disabled={!editingUser} /></Form.Item></Col>
+																																			 <Col xs={24} sm={12}><Form.Item label={t('email')}><Input name="email" value={form?.email || ''} onChange={handleChangeUser} disabled={!editingUser} /></Form.Item></Col>
+																																		 </Row>
+																																		 <Row gutter={24}>
+																																			 <Col xs={24} sm={12}><Form.Item label={t('address')}><Input name="address" value={form?.address || ''} onChange={handleChangeUser} disabled={!editingUser} /></Form.Item></Col>
+																																			 <Col xs={24} sm={12}><Form.Item label={t('contactNumber')}><Input name="contactNumber" value={form?.contactNumber || ''} onChange={handleChangeUser} disabled={!editingUser} /></Form.Item></Col>
+																																		 </Row>
+																																		 <Row gutter={24}>
+																																			 <Col xs={24} sm={12}><Form.Item label={t('barangayID') || 'Barangay ID'}><Input name="barangayID" value={form?.barangayID || ''} disabled /></Form.Item></Col>
+																																			 <Col xs={24} sm={12}><Form.Item label={t('role') || 'Role'}><Input name="role" value={form?.role || ''} disabled /></Form.Item></Col>
+																																		 </Row>
+																																		 <Space style={{ marginTop: 24 }}>
+																																			 {editingUser ? (
+																																				 <>
+																																					 <Button type="primary" onClick={handleSaveUser} style={{ background: 'linear-gradient(90deg, #43e97b 0%, #38f9d7 100%)', border: 'none', fontWeight: 600 }}>Save</Button>
+																																					 <Button onClick={handleCancelUser}>Cancel</Button>
+																																				 </>
+																																			 ) : (
+																																				 <Button onClick={handleEditUser} style={{ fontWeight: 600 }}>Edit</Button>
+																																										  )}
+																																			 <Button
+																																				 type="dashed"
+																																				 onClick={handleRequestStaff}
+																																				 disabled={staffRequestSent || requesting}
+																																				 style={{ color: '#341f97', borderColor: '#341f97', fontWeight: 600 }}
+																																			 >
+																																				 {staffRequestSent ? 'Request Sent' : 'Request Staff Access'}
+																																			 </Button>
+																																		 </Space>
+																																	 </Form>
+																																 )}
 																										 </div>
 												</Card>
 
@@ -745,8 +808,8 @@ useEffect(() => {
 														   border: 'none',
 														   backdropFilter: 'blur(2px)',
 													   }}
-													   styles={{ body: { padding: 40 } }}
-													   variant="outlined"
+													   bodyStyle={{ padding: 40 }}
+													   bordered={false}
 													   >
 														   <Form layout="vertical" style={{ maxWidth: 900, margin: '0 auto' }}>
 															   {/* Resident Info Main Title */}
@@ -772,10 +835,10 @@ useEffect(() => {
 																WebkitTextFillColor: 'transparent',
 															}}>Personal Information</Typography.Title>
 															<Row gutter={24}>
-																<Col xs={24} sm={12} md={6}><Form.Item label="First Name"><Input name="firstName" value={personalForm.firstName} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																<Col xs={24} sm={12} md={6}><Form.Item label="Middle Name"><Input name="middleName" value={personalForm.middleName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																<Col xs={24} sm={12} md={6}><Form.Item label="Last Name"><Input name="lastName" value={personalForm.lastName} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																<Col xs={24} sm={12} md={6}><Form.Item label="Age"><Input name="age" type="number" value={personalForm.age || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+																<Col xs={24} sm={12} md={6}><Form.Item label="First Name"><Input name="firstName" value={personalForm?.firstName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+																<Col xs={24} sm={12} md={6}><Form.Item label="Middle Name"><Input name="middleName" value={personalForm?.middleName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+																<Col xs={24} sm={12} md={6}><Form.Item label="Last Name"><Input name="lastName" value={personalForm?.lastName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+																<Col xs={24} sm={12} md={6}><Form.Item label="Age"><Input name="age" type="number" value={personalForm?.age || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
 															</Row>
 															<Row gutter={16}>
 																<Col xs={24} sm={12} md={6}><Form.Item label="Birth Date"><Input name="birthDate" type="date" value={personalForm.birthDate || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
@@ -788,7 +851,7 @@ useEffect(() => {
 																<Col xs={24} sm={12} md={6}><Form.Item label="Sex">
 																		<Select
 																			value={personalForm.sex || ''}
-																			onChange={value => setPersonalForm(prev => prev ? { ...prev, sex: value } : prev)}
+																			onChange={(value: string) => setPersonalForm(prev => prev ? { ...prev, sex: value } : prev)}
 																			disabled={!editingPersonal}
 																		>
 																			<Select.Option value="">Select</Select.Option>
@@ -809,9 +872,9 @@ useEffect(() => {
 															   <Row gutter={16}>
 																   <Col xs={24} sm={24} md={12} lg={8}>
 																	   <Form.Item label="Civil Status">
-																		   <Select
+																			<Select
 																			   value={personalForm.civilStatus || ''}
-																			   onChange={value => setPersonalForm(prev => prev ? { ...prev, civilStatus: value } : prev)}
+																			   onChange={(value: string) => setPersonalForm(prev => prev ? { ...prev, civilStatus: value } : prev)}
 																			   disabled={!editingPersonal}
 																		   >
 																			   <Select.Option value="">Select</Select.Option>
@@ -872,11 +935,11 @@ useEffect(() => {
 														   </Row>
 														   <Row gutter={16}>
 															   <Col xs={24} sm={12} md={6}><Form.Item label="Spouse Status">
-																	   <Select
-																		   value={personalForm.spouseStatus || ''}
-																		   onChange={value => setPersonalForm(prev => prev ? { ...prev, spouseStatus: value } : prev)}
-																		   disabled={!editingPersonal}
-																	   >
+																		   <Select
+																			   value={personalForm.spouseStatus || ''}
+																			   onChange={(value: string) => setPersonalForm(prev => prev ? { ...prev, spouseStatus: value } : prev)}
+																			   disabled={!editingPersonal}
+																		   >
 																		   <Select.Option value="">Select status</Select.Option>
 																		   <Select.Option value="Alive">Alive</Select.Option>
 																		   <Select.Option value="Deceased">Deceased</Select.Option>
@@ -907,7 +970,7 @@ useEffect(() => {
 																	<Form.Item label="Mother's Status">
 																		<Select
 																			value={personalForm.motherStatus || ''}
-																			onChange={value => setPersonalForm(prev => prev ? { ...prev, motherStatus: value } : prev)}
+																			onChange={(value: string) => setPersonalForm(prev => prev ? { ...prev, motherStatus: value } : prev)}
 																			disabled={!editingPersonal}
 																		>
 																			<Select.Option value="">Select status</Select.Option>
@@ -934,7 +997,7 @@ useEffect(() => {
 																	<Form.Item label="Father's Status">
 																		<Select
 																			value={personalForm.fatherStatus || ''}
-																			onChange={value => setPersonalForm(prev => prev ? { ...prev, fatherStatus: value } : prev)}
+																			onChange={(value: string) => setPersonalForm(prev => prev ? { ...prev, fatherStatus: value } : prev)}
 																			disabled={!editingPersonal}
 																		>
 																			<Select.Option value="">Select status</Select.Option>
@@ -964,7 +1027,7 @@ useEffect(() => {
 														   <Row gutter={16}>
 															   <Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Business Name"><Input name="businessName" value={personalForm.businessName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
 															   <Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Business Type">
-																   <Select value={personalForm.businessType || ''} onChange={value => setPersonalForm(prev => prev ? { ...prev, businessType: value } : prev)} disabled={!editingPersonal}>
+																   <Select value={personalForm.businessType || ''} onChange={(value: string) => setPersonalForm(prev => prev ? { ...prev, businessType: value } : prev)} disabled={!editingPersonal}>
 																	   <Select.Option value="">Select</Select.Option>
 																	   <Select.Option value="Sole Proprietorship">Sole Proprietorship</Select.Option>
 																	   <Select.Option value="Partnership">Partnership</Select.Option>

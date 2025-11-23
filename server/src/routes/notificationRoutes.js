@@ -71,6 +71,7 @@ router.post('/approve', auth, async (req, res) => {
       await Message.create({
         to: user._id,
         from: req.user && req.user._id ? req.user._id : undefined,
+        barangayID: req.user && req.user.barangayID ? req.user.barangayID : undefined,
         subject: 'Staff access approved',
         text: 'Your request for staff access has been approved. You now have staff privileges.'
       });
@@ -100,6 +101,7 @@ router.post('/reject', auth, async (req, res) => {
         await Message.create({
           to: requesterId,
           from: req.user && req.user._id ? req.user._id : undefined,
+          barangayID: req.user && req.user.barangayID ? req.user.barangayID : undefined,
           subject: 'Staff access rejected',
           text: reason && reason.trim() !== '' ? reason : 'Your request for staff access has been rejected.'
         });

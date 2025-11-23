@@ -8,7 +8,7 @@ router.post('/', requireAuth, async (req, res) => {
   try {
     const { recipientId, subject, body } = req.body;
     const senderId = req.user._id;
-    const message = await Message.create({ senderId, recipientId, subject, body });
+    const message = await Message.create({ senderId, recipientId, subject, body, barangayID: req.user && req.user.barangayID ? req.user.barangayID : undefined });
     res.status(201).json(message);
   } catch (err) {
     res.status(400).json({ error: err.message });

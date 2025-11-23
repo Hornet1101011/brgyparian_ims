@@ -45,9 +45,13 @@ router.post('/upload', auth, upload.array('ids', 3), async (req: any, res) => {
     const ObjectId = mongodb.ObjectId;
     if (!bucket) {
       console.warn('verificationRequests GridFS bucket not available');
+      return res.status(500).json({ message: 'Storage for verification requests is not available' });
     }
     const gridIds: any[] = [];
-    for (const f of (req.files || [])) {
+    // collect declared file types from form-data (e.g. repeated `fileTypes` fields)
+    const submittedTypes = (req.body && req.body.fileTypes) ? (Array.isArray(req.body.fileTypes) ? req.body.fileTypes : [req.body.fileTypes]) : [];
+    for (let idx = 0; idx < (req.files || []).length; idx++) {
+      const f = req.files[idx];
       try {
         const originalName = f.originalname || `file_${Date.now()}`;
         filenames.push(originalName);
@@ -55,8 +59,10 @@ router.post('/upload', auth, upload.array('ids', 3), async (req: any, res) => {
         if (!bucket) {
           throw new Error('GridFS bucket not available');
         }
+        // include declared fileType in GridFS metadata when provided
+        const declaredType = submittedTypes[idx] || null;
         const uploadStream = bucket.openUploadStream(originalName, {
-          metadata: { uploadedBy: user._id, barangayID: user.barangayID }
+          metadata: { uploadedBy: user._id, barangayID: user.barangayID, fileType: declaredType }
         });
         await new Promise((resolve, reject) => {
           readable.pipe(uploadStream)
@@ -70,12 +76,54 @@ router.post('/upload', auth, upload.array('ids', 3), async (req: any, res) => {
         console.warn('GridFS upload failed for file buffer', err);
       }
     }
-
-  const vr = new VerificationRequest({ userId: user._id, barangayID: user.barangayID, files: filenames, gridFileIds: gridIds, status: 'pending' });
+    // If the resident already has a pending verification request, replace its files instead
+    let vr: any = null;
     try {
-      await vr.save();
-    } catch (err: any) {
-      if (handleSaveError(err, res)) return;
+      const existing = await VerificationRequest.findOne({ userId: user._id, status: 'pending' });
+      if (existing) {
+        // remove old GridFS files
+        try {
+          if (Array.isArray(existing.gridFileIds) && existing.gridFileIds.length > 0) {
+            for (const fid of existing.gridFileIds) {
+              try {
+                const fileId = typeof fid === 'string' ? new ObjectId(fid) : fid;
+                // @ts-ignore
+                await bucket.delete(fileId);
+              } catch (e) {
+                console.warn('Failed to delete old GridFS file while replacing verification request', fid, e && (e as Error).message);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Error cleaning old GridFS files for existing verification request', e && (e as Error).message);
+        }
+        // build structured filesMeta for the request (prefer fileTypes from form-data)
+        const filesMeta = filenames.map((fn, idx) => ({ filename: fn, gridFileId: gridIds[idx], fileType: submittedTypes[idx] || null, barangayID: user.barangayID || existing.barangayID }));
+
+        existing.files = filenames;
+        existing.gridFileIds = gridIds;
+        existing.filesMeta = filesMeta;
+        existing.barangayID = user.barangayID || existing.barangayID;
+        existing.createdAt = new Date();
+        existing.status = 'pending';
+        try {
+          await existing.save();
+        } catch (err: any) {
+          if (handleSaveError(err, res)) return;
+          throw err;
+        }
+        vr = existing;
+      } else {
+        const filesMeta = filenames.map((fn, idx) => ({ filename: fn, gridFileId: gridIds[idx], fileType: submittedTypes[idx] || null, barangayID: user.barangayID }));
+        vr = new VerificationRequest({ userId: user._id, barangayID: user.barangayID, files: filenames, gridFileIds: gridIds, filesMeta, status: 'pending' });
+        try {
+          await vr.save();
+        } catch (err: any) {
+          if (handleSaveError(err, res)) return;
+          throw err;
+        }
+      }
+    } catch (err) {
       throw err;
     }
 
@@ -84,23 +132,25 @@ router.post('/upload', auth, upload.array('ids', 3), async (req: any, res) => {
       sendToUser(String(user._id), 'verification-request', vr);
     } catch (e) {}
 
-    // Notify all admins by creating Message entries
+    // Notify all admins by creating Message entries and Notifications
     const admins = await User.find({ role: 'admin' });
-  const residentName = (user.fullName || user.username || user.email || 'Resident');
-  const subject = 'New Verification Request';
-  const text = `${residentName} (${(user.barangayID || 'no-brgy')}) submitted verification documents.`;
+    const residentName = (user.fullName || user.username || user.email || 'Resident');
+    const subject = 'New Verification Request';
+    const text = `${residentName} (${(user.barangayID || 'no-brgy')}) submitted verification documents.`;
     for (const admin of admins) {
-      // Message model expects senderId and recipientId fields
-      // Use CommonJS require to get the correct model if necessary
-      const Msg = require('../../models/Message');
-      await Msg.create({ senderId: user._id, recipientId: admin._id, subject, body: text });
+      try {
+        // Message model uses `from`, `to`, `subject` and `text` fields; include sender's barangayID
+        await Message.create({ from: user._id, to: admin._id, subject, text, barangayID: user.barangayID });
+      } catch (merr) {
+        console.warn('Failed to create admin message for verification request', merr && (merr as Error).message);
+      }
       try {
         await Notification.create({
           user: admin._id,
           type: 'verification_request',
           title: subject,
           message: text,
-          data: { requestId: vr._id?.toString(), userId: user._id.toString() },
+          data: { requestId: vr._id?.toString(), userId: user._id.toString(), barangayID: user.barangayID },
           read: false,
         });
       } catch (nerr) {
@@ -108,7 +158,13 @@ router.post('/upload', auth, upload.array('ids', 3), async (req: any, res) => {
       }
     }
 
-    return res.json({ message: 'Files uploaded', verificationRequest: vr });
+    // normalize gridFileIds to strings for client convenience and include per-file metadata
+    const vrObj: any = vr.toObject ? vr.toObject() : vr;
+    if (Array.isArray(vrObj.gridFileIds)) vrObj.gridFileIds = vrObj.gridFileIds.map((g: any) => String(g));
+    // Build files metadata array pairing filenames with their grid ids and the sender's barangayID
+    const filesMeta = filenames.map((fn, idx) => ({ filename: fn, gridFileId: String(gridIds[idx] || ''), fileType: (Array.isArray(req.body?.fileTypes) ? req.body.fileTypes[idx] : (req.body?.fileTypes || null)), barangayID: user.barangayID }));
+    vrObj.filesMeta = filesMeta;
+    return res.json({ message: 'Files uploaded', verificationRequest: vrObj });
   } catch (err) {
     console.error('Verification upload error', err);
     return res.status(500).json({ message: 'Upload failed', error: String(err) });
@@ -177,7 +233,20 @@ router.get('/requests/my', auth, async (req, res) => {
     }
 
     const reqs = await VerificationRequest.find({ userId: user._id }).sort({ createdAt: -1 });
-    return res.json(reqs);
+    // normalize gridFileIds to strings and attach filesMeta for client convenience
+    const mapped = (reqs || []).map((vr: any) => {
+      const obj = vr.toObject ? vr.toObject() : vr;
+      if (Array.isArray(obj.gridFileIds)) obj.gridFileIds = obj.gridFileIds.map((g: any) => String(g));
+      // Prefer already-stored structured filesMeta; otherwise, construct from legacy arrays
+      if (Array.isArray(obj.filesMeta) && obj.filesMeta.length > 0) {
+        obj.filesMeta = obj.filesMeta.map((fm: any) => ({ filename: fm.filename, gridFileId: String(fm.gridFileId || ''), fileType: fm.fileType || null, barangayID: fm.barangayID || obj.barangayID }));
+      } else {
+        const filesMeta = (obj.files || []).map((fn: any, idx: number) => ({ filename: fn, gridFileId: String((obj.gridFileIds && obj.gridFileIds[idx]) || ''), fileType: null, barangayID: obj.barangayID }));
+        obj.filesMeta = filesMeta;
+      }
+      return obj;
+    });
+    return res.json(mapped);
   } catch (err) {
     console.error('Error fetching my verification requests', err);
     return res.status(500).json({ message: 'Error fetching requests', error: String(err) });

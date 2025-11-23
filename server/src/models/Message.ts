@@ -4,6 +4,7 @@ export interface IMessage extends Document {
   to: mongoose.Types.ObjectId; // Resident user
   from: mongoose.Types.ObjectId; // Staff user
   inquiryId?: mongoose.Types.ObjectId; // optional for system messages
+  barangayID?: string; // optional sender barangay id for admin/audit
   text: string; // message body
   subject?: string; // optional subject for generic messages
   createdAt: Date;
@@ -26,6 +27,7 @@ const messageSchema = new mongoose.Schema({
     ref: 'Inquiry',
     required: false,
   },
+  barangayID: { type: String, required: false },
   text: {
     type: String,
     required: true,
