@@ -1,12 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Typography, Button, Badge, Modal, Table, Tooltip, Checkbox } from 'antd';
+import { Row, Col, Card, Typography, Button, Badge, Modal, Table, Tooltip, Checkbox, Tag } from 'antd';
 import { FileTextOutlined, MailOutlined, NotificationOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import AvatarImage from './AvatarImage';
 import styles from './dashboard.module.css';
 import { getAbsoluteApiUrl } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import { documentsAPI, contactAPI } from '../services/api';
+import { documentsAPI, contactAPI, verificationAPI } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 
 interface DocumentRequest {
@@ -114,6 +114,29 @@ const Dashboard: React.FC = () => {
     const timer = setInterval(tick, 1000);
     return () => clearInterval(timer);
     // TODO: Fetch unread notifications count
+  }, [user]);
+
+  // Resident verification status: check backend for pending verification requests
+  const [hasPendingVerification, setHasPendingVerification] = useState<boolean>(false);
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        if (user?.role === 'resident') {
+          const reqs = await verificationAPI.getMyRequests();
+          if (!mounted) return;
+          if (Array.isArray(reqs) && reqs.length > 0) {
+            const pending = reqs.some((r: any) => (r.status || '').toString().toLowerCase() === 'pending');
+            setHasPendingVerification(pending);
+          } else {
+            setHasPendingVerification(false);
+          }
+        }
+      } catch (err) {
+        // ignore
+      }
+    })();
+    return () => { mounted = false; };
   }, [user]);
 
   useEffect(() => {
@@ -228,21 +251,24 @@ const Dashboard: React.FC = () => {
                           <path d="M20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="#595959"/>
                         </svg>
                       </button>
+                      {/* verification tag moved next to name (rendered in userInfo) */}
                     </div>
                     <div className={styles.userInfo}>
-                      <Typography.Title level={3} className={styles.userName} style={{ marginBottom: 0, fontWeight: 800 }}>{user?.fullName ?? user?.username ?? user?.email ?? ''}</Typography.Title>
-                      <Typography.Text type="secondary" className={styles.userMeta}>
-                        Barangay ID: {user?.barangayID ?? (() => {
-                          try {
-                            const stored = localStorage.getItem('userProfile');
-                            if (stored) {
-                              const p = JSON.parse(stored);
-                              return p?.barangayID || 'N/A';
-                            }
-                          } catch (e) {}
-                          return 'N/A';
-                        })()}
-                      </Typography.Text>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <Typography.Title level={3} className={styles.userName} style={{ marginBottom: 0, fontWeight: 800 }}>{user?.fullName ?? user?.username ?? user?.email ?? ''}</Typography.Title>
+                        <Typography.Text type="secondary" className={styles.userMeta}>
+                          Barangay ID: {user?.barangayID ?? (() => {
+                            try {
+                              const stored = localStorage.getItem('userProfile');
+                              if (stored) {
+                                const p = JSON.parse(stored);
+                                return p?.barangayID || 'N/A';
+                              }
+                            } catch (e) {}
+                            return 'N/A';
+                          })()}
+                        </Typography.Text>
+                      </div>
                       <div style={{ marginTop: 8 }}><Typography.Text type="secondary" className={styles.userMeta}>{new Date().toLocaleString()}</Typography.Text></div>
                     </div>
                   </div>

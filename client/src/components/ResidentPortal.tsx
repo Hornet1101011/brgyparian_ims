@@ -3,8 +3,8 @@ import './ResidentPortal.css';
 import { useTranslation } from 'react-i18next';
 import { residentPersonalInfoAPI, axiosInstance, verificationAPI } from '../services/api';
 import { AxiosResponse } from 'axios';
-import { Form, Input, Button, Select, Typography, Row, Col, Card, Space, message, Upload, Alert, Tooltip, Progress } from 'antd';
-import { UploadOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { Form, Input, Button, Select, Typography, Row, Col, Card, Space, message, Upload, Alert, Tooltip, Progress, Tag } from 'antd';
+import { UploadOutlined, InfoCircleOutlined, CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, SyncOutlined } from '@ant-design/icons';
 import ResidentCreateModal from './ResidentCreateModal';
 import { useAuth } from '../contexts/AuthContext';
 import AvatarImage from './AvatarImage';
@@ -161,6 +161,26 @@ export default function ResidentPortal() {
 			}
 		} catch (err) {
 			message.error('Failed to upload avatar');
+		}
+	};
+
+	// Refresh authoritative profile from server (keeps verification status accurate)
+	const refreshProfile = async () => {
+		try {
+			const resp = await axiosInstance.get('/resident/profile');
+			if (resp && resp.data) {
+				setProfile(resp.data);
+				setForm(resp.data);
+				if (resp.data?.profileImage) {
+					const url = resp.data.profileImage.startsWith('http') ? resp.data.profileImage : `${window.location.origin}${resp.data.profileImage}`;
+					setAvatarPreview(url);
+				}
+				message.success('Profile synchronized');
+			}
+		} catch (err) {
+			// silent fail - user can retry
+			console.warn('Failed to refresh profile', err);
+			message.error('Failed to refresh profile');
 		}
 	};
 	// ...existing code...
@@ -358,6 +378,12 @@ useEffect(() => {
 				}
 			});
 			message.success('Verification documents uploaded');
+			// After a successful upload refresh the authoritative profile so UI reflects server-side verified flag
+			try {
+				await refreshProfile();
+			} catch (e) {
+				// ignore refresh failure
+			}
 			// Refresh displayed files from the server (show pending request with uploaded files)
 			try {
 				const reqs = await verificationAPI.getMyRequests();
@@ -535,53 +561,74 @@ useEffect(() => {
 								bordered={false}
 						>
 							<div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-								<Upload
-									showUploadList={false}
-									accept="image/*"
-									customRequest={async (opts: any) => {
-										const { file, onSuccess, onError } = opts || {};
-										try {
-											await handleBannerAvatarUpload(file as File | null);
-											if (typeof onSuccess === 'function') onSuccess('ok');
-										} catch (err) {
-											if (typeof onError === 'function') onError(err as any);
-										}
-									}}
-								>
-									<div
-										className="resident-banner-avatar clickable"
-										role="button"
-										tabIndex={0}
-										aria-label="Upload profile picture"
-										title="Upload profile picture"
-										onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => {
-											const key = (e && (e as React.KeyboardEvent).key) || '';
-											if (key === 'Enter' || key === ' ') {
-												(e.target as HTMLElement).click();
+								{/* Left column: avatar, verification tag, timestamp */}
+								<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+									<Upload
+										showUploadList={false}
+										accept="image/*"
+										customRequest={async (opts: any) => {
+											const { file, onSuccess, onError } = opts || {};
+											try {
+												await handleBannerAvatarUpload(file as File | null);
+												if (typeof onSuccess === 'function') onSuccess('ok');
+											} catch (err) {
+												if (typeof onError === 'function') onError(err as any);
 											}
 										}}
 									>
-										{avatarPreview ? (
-											<img src={avatarPreview} alt="avatar" className="resident-banner-avatar__img" />
-										) : (
-											<AvatarImage user={(() => {
-												let displayUser = profile;
-												if (!displayUser) {
-													try {
-														const stored = localStorage.getItem('userProfile');
-														if (stored) displayUser = JSON.parse(stored);
-													} catch (err) {}
+										<div
+											className="resident-banner-avatar clickable"
+											role="button"
+											tabIndex={0}
+											aria-label="Upload profile picture"
+											title="Upload profile picture"
+											onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => {
+												const key = (e && (e as React.KeyboardEvent).key) || '';
+												if (key === 'Enter' || key === ' ') {
+													(e.target as HTMLElement).click();
 												}
-												return displayUser;
-											})()} size={96} className="resident-banner-avatar__img" />
-										)}
-									</div>
-								</Upload>
-									<div>
-										<Typography.Title level={3} style={{ margin: 0, fontWeight: 800 }}>{profile?.username || profile?.email || 'Resident'}</Typography.Title>
-										<Typography.Text type="secondary">Barangay ID: {profile?.barangayID || 'N/A'}</Typography.Text>
-										<div style={{ marginTop: 8 }}><Typography.Text type="secondary">{currentTime}</Typography.Text></div>
-									</div>
+											}}
+										>
+											{avatarPreview ? (
+												<img src={avatarPreview} alt="avatar" className="resident-banner-avatar__img" />
+											) : (
+												<AvatarImage user={(() => {
+													let displayUser = profile;
+													if (!displayUser) {
+														try {
+															const stored = localStorage.getItem('userProfile');
+															if (stored) displayUser = JSON.parse(stored);
+														} catch (err) {}
+													}
+													return displayUser;
+												})()} size={96} className="resident-banner-avatar__img" />
+											)}
+										</div>
+									</Upload>
+									{/* Verification status (uses authoritative profile) */}
+									{(() => {
+										const isVerified = !!(profile && (profile as any).verified === true);
+										const hasPending = ((proofList && proofList.length) || (govIdList && govIdList.length) || (selfieList && selfieList.length)) ? true : false;
+										return (
+											<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+												{isVerified ? (
+													<Tag icon={<CheckCircleOutlined />} color="success">Verified</Tag>
+												) : hasPending ? (
+													<Tag icon={<ClockCircleOutlined />} color="orange">Pending Verification</Tag>
+												) : (
+													<Tag icon={<CloseCircleOutlined />} color="default">Not Verified</Tag>
+												)}
+												<Button size="small" icon={<SyncOutlined />} onClick={refreshProfile} aria-label="Refresh verification status" />
+											</div>
+										);
+									})()}
+									<div style={{ marginTop: 4 }}><Typography.Text type="secondary">{currentTime}</Typography.Text></div>
+								</div>
+								{/* Right column: user info */}
+								<div>
+									<Typography.Title level={3} style={{ margin: 0, fontWeight: 800 }}>{profile?.username || profile?.email || 'Resident'}</Typography.Title>
+									<Typography.Text type="secondary">Barangay ID: {profile?.barangayID || 'N/A'}</Typography.Text>
+								</div>
 							</div>
 						</Card>
 

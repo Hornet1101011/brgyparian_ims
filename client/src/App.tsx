@@ -12,6 +12,7 @@ import Layout from './components/Layout';
 import PrivateRoute from './components/PrivateRoute';
 import StaffRoute from './components/StaffRoute';
 import AdminRoute from './components/AdminRoute';
+import VerifiedResidentRoute from './components/VerifiedResidentRoute';
 // MinimalChart unused — import removed to satisfy ESLint
 
 // Pages
@@ -79,10 +80,10 @@ const App: FC<AppProps> = () => {
               <Route element={<Layout />}>
                 {/* Added for sidebar navigation */}
                 <Route path="/home" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
-                <Route path="/request" element={<PrivateRoute><DocumentRequestForm /></PrivateRoute>} />
+                <Route path="/request" element={<VerifiedResidentRoute><DocumentRequestForm /></VerifiedResidentRoute>} />
                 <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
                 <Route path="/guest/dashboard" element={<PrivateRoute><GuestDashboard /></PrivateRoute>} />
-                <Route path="/request-document" element={<PrivateRoute><DocumentRequestForm /></PrivateRoute>} />
+                <Route path="/request-document" element={<VerifiedResidentRoute><DocumentRequestForm /></VerifiedResidentRoute>} />
                 <Route path="/contact" element={<PrivateRoute><InquiryForm /></PrivateRoute>} />
                 <Route path="/inquiries" element={<PrivateRoute><InquiryForm /></PrivateRoute>} />
                 <Route path="/inquiry-tracker" element={<StaffRoute><InquiryTracker /></StaffRoute>} />

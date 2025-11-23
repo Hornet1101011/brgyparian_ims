@@ -378,7 +378,8 @@ router.get('/stream', async (req, res) => {
 });
 
 // Admin: toggle verify user
-router.post('/admin/verify-user/:userId', auth, authorize('admin'), async (req, res) => {
+// Extracted handler for easier testing and to support transactions
+export const adminVerifyUserHandler = async (req: any, res: any) => {
   try {
     // If verifications are disabled, disallow manual toggles via verify-user endpoint
     try {
@@ -387,34 +388,61 @@ router.post('/admin/verify-user/:userId', auth, authorize('admin'), async (req, 
     } catch (se) {}
     const { userId } = req.params;
     const { verified } = req.body;
-    const user = await User.findById(userId) as any;
-    if (!user) return res.status(404).json({ message: 'User not found' });
-    // set verified flag (cast to any to avoid TS schema mismatch in project)
-    user.set('verified', !!verified);
-    await user.save();
-    // Optionally update related verification requests
-    if (verified) {
-      await VerificationRequest.updateMany({ userId: user._id, status: 'pending' }, { status: 'approved', reviewedAt: new Date(), reviewerId: (req as any).user._id });
+
+    // Use a session for the user state update and request state update
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        const user = await User.findById(userId).session(session) as any;
+        if (!user) {
+          // Abort transaction by throwing
+          throw new Error('User not found');
+        }
+
+        // set verified flag and audit fields
+        user.set('verified', !!verified);
+        if (verified) {
+          user.set('verifiedAt', new Date());
+          user.set('verifiedBy', (req as any).user?._id || null);
+        } else {
+          user.set('verifiedAt', null);
+          user.set('verifiedBy', null);
+        }
+        await user.save({ session });
+
+        // Optionally update related verification requests
+        if (verified) {
+          await VerificationRequest.updateMany({ userId: user._id, status: 'pending' }, { status: 'approved', reviewedAt: new Date(), reviewerId: (req as any).user._id }).session(session);
+        }
+      });
+    } finally {
+      session.endSession();
     }
-    const verifiedValue = user.get('verified');
-    // Notify the user that their verified status was changed by admin
+
+    // load fresh user for response and notify
+    const userFresh = await User.findById(userId) as any;
+    const verifiedValue = userFresh ? userFresh.get('verified') : !!verified;
+
     try {
       await Notification.create({
-        user: user._id,
+        user: userId,
         type: 'verification_manual_update',
         title: 'Account verified',
         message: `Your account verified status has been set to ${verifiedValue ? 'true' : 'false'} by an administrator.`,
-        data: { userId: user._id.toString(), verified: !!verifiedValue },
+        data: { userId: userId.toString(), verified: !!verifiedValue },
         read: false,
       });
     } catch (nerr) {
       console.warn('Failed to create notification for user verification toggle', nerr && (nerr as Error).message);
     }
-    return res.json({ message: 'User verification updated', user: { _id: user._id, verified: verifiedValue } });
-  } catch (err) {
+    return res.json({ message: 'User verification updated', user: { _id: userId, verified: verifiedValue } });
+  } catch (err: any) {
+    if (String(err.message || '').includes('User not found')) return res.status(404).json({ message: 'User not found' });
     res.status(500).json({ message: 'Error updating user verification', error: String(err) });
   }
-});
+};
+
+router.post('/admin/verify-user/:userId', auth, authorize('admin'), adminVerifyUserHandler);
 
 // Resident: cancel their own verification request (delete request and files)
 router.delete('/requests/:id', auth, async (req, res) => {
@@ -463,29 +491,51 @@ router.delete('/requests/:id', auth, async (req, res) => {
 });
 
 // Admin: approve a specific verification request by id
-router.post('/admin/requests/:id/approve', auth, authorize('admin'), async (req, res) => {
+// Extracted approve handler so we can transactionally update user+request and test it.
+export const adminApproveHandler = async (req: any, res: any) => {
   try {
     // If verifications disabled, prevent approve actions
     try {
       const settings = await SystemSettingModel.findOne().lean();
       if (settings && settings.enableVerifications === false) return res.status(403).json({ message: 'Verifications are disabled' });
     } catch (se) {}
+
     const { id } = req.params;
-    const vr = await VerificationRequest.findById(id);
-    if (!vr) return res.status(404).json({ message: 'Verification request not found' });
-    // set user verified
-    const user = await User.findById(vr.userId) as any;
-    if (user) {
-      user.set('verified', true);
-      try {
-        await user.save();
-      } catch (err: any) {
-        if (handleSaveError(err, res)) return res.status(500).json({ message: 'Error updating user verification' });
-        throw err;
+
+    const session = await mongoose.startSession();
+    let vr: any = null;
+    try {
+      await session.withTransaction(async () => {
+        vr = await VerificationRequest.findById(id).session(session);
+        if (!vr) throw new Error('Verification request not found');
+
+        // set user verified and audit fields inside transaction
+        const user = await User.findById(vr.userId).session(session) as any;
+        if (user) {
+          user.set('verified', true);
+          user.set('verifiedAt', new Date());
+          user.set('verifiedBy', (req as any).user?._id || null);
+          await user.save({ session });
+        }
+
+        // remove the verification request document as part of the transaction
+        await VerificationRequest.deleteOne({ _id: vr._id }).session(session);
+      });
+    } catch (tranErr: any) {
+      // If it was not found, translate to 404, otherwise rethrow
+      if (String(tranErr.message || '').includes('Verification request not found')) {
+        return res.status(404).json({ message: 'Verification request not found' });
       }
+      console.error('Transaction error approving verification', tranErr);
+      return res.status(500).json({ message: 'Error approving verification', error: String(tranErr) });
+    } finally {
+      session.endSession();
     }
 
-    // delete associated GridFS files (we keep behaviour similar to reject)
+    if (!vr) return res.status(404).json({ message: 'Verification request not found' });
+
+    // delete associated GridFS files (outside transaction since GridFS operations
+    // may not participate in the mongoose session depending on deployment)
     try {
       const bucket = ensureBucket('verificationRequests');
       const mongodb = await import('mongodb');
@@ -503,13 +553,6 @@ router.post('/admin/requests/:id/approve', auth, authorize('admin'), async (req,
       }
     } catch (e) {
       console.warn('Error cleaning GridFS files for verification request during approve', e && (e as Error).message);
-    }
-
-    // remove the verification request after successful approval
-    try {
-      await VerificationRequest.deleteOne({ _id: vr._id });
-    } catch (e) {
-      console.warn('Failed to delete verification request after approve', vr._id, e && (e as Error).message);
     }
 
     // notify owner about profile update and that their request is removed
@@ -537,7 +580,7 @@ router.post('/admin/requests/:id/approve', auth, authorize('admin'), async (req,
     console.error('Error approving verification request', err);
     return res.status(500).json({ message: 'Error', error: String(err) });
   }
-});
+};
 
 // Admin: reject a specific verification request by id (delete files and request, leave user unverified)
 router.post('/admin/requests/:id/reject', auth, authorize('admin'), async (req, res) => {
@@ -578,6 +621,8 @@ router.post('/admin/requests/:id/reject', auth, authorize('admin'), async (req, 
     const user = await User.findById(vr.userId) as any;
     if (user) {
       user.set('verified', false);
+      user.set('verifiedAt', null);
+      user.set('verifiedBy', null);
       try {
         await user.save();
       } catch (err: any) {
@@ -641,8 +686,10 @@ router.post('/admin/requests/:id/unapprove', auth, authorize('admin'), async (re
     const user = await User.findById(userId) as any;
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    // mark user as unverified
+    // mark user as unverified and clear audit fields
     user.set('verified', false);
+    user.set('verifiedAt', null);
+    user.set('verifiedBy', null);
     try {
       await user.save();
     } catch (err: any) {

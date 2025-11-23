@@ -120,3 +120,35 @@
     font-size: 12px;
   }
 }
+
+/* Responsive visibility helpers for verification tag placement */
+.hideOnMobile {
+  display: inline-block;
+}
+.showOnMobile {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .hideOnMobile {
+    display: none !important;
+  }
+  .showOnMobile {
+    display: block !important;
+    margin-top: 8px;
+    text-align: center;
+  }
+}
+
+/* Verification tag under avatar styling */
+.verificationUnderAvatar {
+  margin-top: 8px;
+  text-align: center;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+.verificationUnderAvatar .ant-tag {
+  font-size: 12px;
+  padding: 0 8px;
+}
