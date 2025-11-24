@@ -14,10 +14,13 @@ export const getMyInquiries = async (req: any, res: Response, next: NextFunction
 };
 import { Request, Response, NextFunction } from 'express';
 import path from 'path';
+import mongoose from 'mongoose';
 import { Inquiry } from '../models/Inquiry';
 import { io } from '../index';
 import { User } from '../models/User';
 import { Message } from '../models/Message';
+import { Notification } from '../models/Notification';
+import { AppointmentSlot } from '../models/AppointmentSlot';
 import { handleSaveError } from '../utils/handleSaveError';
 
 export const createInquiry = async (req: any, res: Response, next: NextFunction) => {
@@ -267,14 +270,130 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
       console.warn('Failed to validate appointmentDates on update:', e);
     }
 
-    const inquiry = await Inquiry.findByIdAndUpdate(
-      req.params.id,
-      updateBody,
-      { new: true }
-    );
-    if (!inquiry) {
-      return res.status(404).json({ message: 'Inquiry not found' });
+    // Fetch existing inquiry to detect status transitions and for safety checks
+    const beforeInquiry = await Inquiry.findById(req.params.id).lean();
+    if (!beforeInquiry) return res.status(404).json({ message: 'Inquiry not found' });
+
+
+    // If scheduledDates are being added, perform minute-precise atomic reservation
+    let inquiry: any = null;
+    const scheduledProvided = updateBody.scheduledDates && Array.isArray(updateBody.scheduledDates) && updateBody.scheduledDates.length > 0;
+    if (scheduledProvided) {
+      // Normalize and validate each scheduled slot
+      const normalizeToMinutes = (t: string) => {
+        const parts = String(t || '').split(':');
+        if (parts.length < 2) return NaN;
+        const hh = parseInt(parts[0], 10);
+        const mm = parseInt(parts[1], 10);
+        if (Number.isNaN(hh) || Number.isNaN(mm)) return NaN;
+        return hh * 60 + mm;
+      };
+
+      const OFFICE_START = 8 * 60; // 480
+      const OFFICE_END = 17 * 60; // 1020
+      const LUNCH_START = 12 * 60; // 720
+      const LUNCH_END = 13 * 60; // 780
+      const SLOT_STEP = 5; // 5-minute buckets for atomic insertion
+
+      // Build all slot docs to insert and run validation checks
+      const slotDocs: Array<any> = [];
+      for (const slot of updateBody.scheduledDates) {
+        if (!slot || !slot.date || !slot.startTime || !slot.endTime) {
+          return res.status(400).json({ message: 'Each scheduledDate must include date, startTime and endTime' });
+        }
+        const sMin = normalizeToMinutes(slot.startTime);
+        const eMin = normalizeToMinutes(slot.endTime);
+        if (Number.isNaN(sMin) || Number.isNaN(eMin) || sMin >= eMin) {
+          return res.status(400).json({ message: `Invalid time range for ${slot.date}` });
+        }
+        if (sMin < OFFICE_START || eMin > OFFICE_END) {
+          return res.status(400).json({ message: `Time range for ${slot.date} must be within office hours 08:00-17:00` });
+        }
+        // disallow lunch overlap
+        if (sMin < LUNCH_END && eMin > LUNCH_START) {
+          return res.status(400).json({ message: `Time range for ${slot.date} must not overlap lunch break 12:00-13:00` });
+        }
+
+        // generate slot integers (minute values at SLOT_STEP granularity)
+        for (let m = sMin; m < eMin; m += SLOT_STEP) {
+          slotDocs.push({ date: slot.date, slot: m, inquiryId: req.params.id, scheduledBy: (req as any).user?._id });
+        }
+      }
+
+      // Attempt an atomic reservation using MongoDB transactions and the AppointmentSlot unique index
+      let session: any = null;
+      try {
+        session = await mongoose.startSession();
+        session.startTransaction();
+        // Remove prior slots for this inquiry (reschedule case)
+        await AppointmentSlot.deleteMany({ inquiryId: req.params.id }).session(session);
+        // Insert new slots; unique index on {date, slot} ensures no overlap
+        if (slotDocs.length > 0) {
+          await AppointmentSlot.insertMany(slotDocs, { ordered: true, session });
+        }
+        // Update the inquiry with scheduledDates and scheduledBy inside the same transaction
+        updateBody.scheduledBy = (req as any).user?._id || updateBody.scheduledBy;
+        inquiry = await Inquiry.findByIdAndUpdate(req.params.id, updateBody, { new: true, session });
+        if (!inquiry) {
+          // Shouldn't happen; abort
+          await session.abortTransaction();
+          session.endSession();
+          return res.status(404).json({ message: 'Inquiry not found' });
+        }
+        await session.commitTransaction();
+        session.endSession();
+      } catch (txErr: any) {
+        try { if (session) { await session.abortTransaction(); session.endSession(); } } catch (e) { }
+        // Duplicate key error means some slot was already taken
+        if (txErr && txErr.code === 11000) {
+          return res.status(409).json({ message: 'Scheduling conflict: one or more time slots already taken' });
+        }
+        // If transactions are not supported or other error, fall back to conservative check
+        console.warn('Transaction-based scheduling failed, falling back to non-atomic check:', txErr && txErr.message);
+        // cleanup any partial inserts if present (best-effort)
+        try {
+          await AppointmentSlot.deleteMany({ inquiryId: req.params.id });
+        } catch (cleanupErr) { /* ignore */ }
+        return res.status(500).json({ message: 'Failed to schedule appointment atomically', error: txErr && (txErr.message || txErr) });
+      }
+    } else {
+      // No scheduledDates provided — perform a normal update
+      inquiry = await Inquiry.findByIdAndUpdate(req.params.id, updateBody, { new: true });
+      if (!inquiry) {
+        return res.status(404).json({ message: 'Inquiry not found' });
+      }
     }
+
+    // If this is a transition to 'scheduled' and scheduledDates were provided, notify the resident
+    try {
+      const beforeStatus = beforeInquiry.status;
+      const afterStatus = inquiry.status;
+      const scheduledProvided = updateBody.scheduledDates && Array.isArray(updateBody.scheduledDates) && updateBody.scheduledDates.length > 0;
+      if (beforeStatus !== 'scheduled' && afterStatus === 'scheduled' && scheduledProvided) {
+        // find resident user
+        const resident = await User.findOne({ username: inquiry.username, barangayID: inquiry.barangayID, role: 'resident' });
+        const notifMessage = `Your appointment has been scheduled for ${inquiry.scheduledDates?.map((s:any) => `${s.date} ${s.startTime}-${s.endTime}`).join('; ')}`;
+        if (resident) {
+          await Notification.create({
+            userId: resident._id,
+            type: 'inquiries',
+            title: 'Appointment Scheduled',
+            message: notifMessage,
+            data: { inquiryId: inquiry._id, scheduledDates: inquiry.scheduledDates }
+          });
+          // emit socket event for real-time updates
+          try {
+            io.to(String(resident._id)).emit('inquiryScheduled', { inquiryId: inquiry._id, scheduledDates: inquiry.scheduledDates });
+          } catch (e) {
+            // non-fatal
+            console.warn('Failed to emit socket event for scheduled inquiry', e && e.message);
+          }
+        }
+      }
+    } catch (notifyErr) {
+      console.warn('Failed during post-schedule notification step', notifyErr && notifyErr.message);
+    }
+
     res.json(inquiry);
   } catch (error) {
     res.status(500).json({ message: 'Error updating inquiry', error });

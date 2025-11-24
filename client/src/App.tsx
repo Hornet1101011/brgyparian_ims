@@ -89,6 +89,7 @@ const App: FC<AppProps> = () => {
                 <Route path="/inquiry-tracker" element={<StaffRoute><InquiryTracker /></StaffRoute>} />
                 {/* Staff Routes */}
                 <Route path="/staff-dashboard" element={<StaffRoute><StaffDashboard /></StaffRoute>} />
+                <Route path="/staff/appointments" element={<StaffRoute>{React.createElement(require('./pages/StaffAppointments').default)}</StaffRoute>} />
                 <Route path="/document-processing" element={<StaffRoute>{React.createElement(require('./components/DocumentProcessing').default)}</StaffRoute>} />
                 <Route path="/templates-manager" element={<StaffRoute><TemplatesManager /></StaffRoute>} />
                 <Route path="/staff/inbox" element={<StaffRoute><StaffInbox /></StaffRoute>} />

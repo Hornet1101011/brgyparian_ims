@@ -34,6 +34,9 @@ export interface IInquiry extends Document {
   }>;
   // Optional preferred appointment dates supplied by residents (stored as YYYY-MM-DD strings)
   appointmentDates?: string[];
+  // scheduledDates contains the actual scheduled slots set by staff
+  scheduledDates?: Array<{ date: string; startTime: string; endTime: string }>;
+  scheduledBy?: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -54,7 +57,7 @@ const inquirySchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['open', 'in-progress', 'resolved'],
+    enum: ['open', 'in-progress', 'scheduled', 'resolved'],
     default: 'open',
   },
   createdBy: {
@@ -121,6 +124,9 @@ const inquirySchema = new mongoose.Schema({
   }],
   // Preferred appointment dates (optional) - store as YYYY-MM-DD strings
   appointmentDates: [{ type: String }],
+  // Actual scheduled appointment slots added by staff
+  scheduledDates: [{ date: String, startTime: String, endTime: String }],
+  scheduledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 }, {
   timestamps: true,
 });

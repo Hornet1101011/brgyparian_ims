@@ -18,6 +18,7 @@ import {
   MenuOutlined,
   UserOutlined,
   BellOutlined,
+  CalendarOutlined,
 } from '@ant-design/icons';
 import './AppLayoutSidebar.css';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -116,6 +117,11 @@ const navConfig: {
       key: '/staff/inbox',
       icon: <InboxOutlined />,
       label: 'Staff Inbox',
+    },
+    {
+      key: '/staff/appointments',
+      icon: <CalendarOutlined />,
+      label: 'Appointments',
     },
     {
       key: '/templates-manager',

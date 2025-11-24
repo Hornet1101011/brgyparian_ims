@@ -34,6 +34,13 @@
   display: inline-block;
   vertical-align: middle;
 }
+
+/* Brief highlight when calendar is auto-scrolled into view */
+.af-scroll-highlight {
+  box-shadow: 0 0 0 6px rgba(64,169,255,0.12);
+  border-radius: 8px;
+  transition: box-shadow 280ms ease-in-out;
+}
 .af-calendar-available {
   background: #52c41a;
 }
@@ -41,6 +48,83 @@
   background: #1890ff;
   box-shadow: 0 0 0 3px rgba(24,144,255,0.06);
 }
+
+/* New calendar number styles */
+.af-calendar-container .ant-picker-calendar {
+  box-shadow: none;
+}
+.af-date-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 54px;
+}
+.af-date-number {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 20px;
+  font-weight: 600;
+}
+.af-date-available .af-date-number {
+  background: rgba(82,196,26,0.12);
+  color: #2f8b12;
+}
+.af-date-selected .af-date-number {
+  background: rgba(24,144,255,0.16);
+  color: #096dd9;
+}
+.af-date-unavailable .af-date-number {
+  background: transparent;
+  color: rgba(0,0,0,0.25);
+}
+.af-disabled { opacity: 0.45; pointer-events: none; }
+
+/* Today indicator (not selectable) */
+.af-today .af-date-number {
+  border: 1px solid rgba(250, 173, 20, 0.18);
+  background: #fff8e6; /* warm subtle yellow to denote today */
+  box-shadow: 0 1px 0 rgba(250,173,20,0.06) inset;
+  transition: transform 120ms ease;
+}
+.af-today .af-date-number {
+  color: #ad6a00; /* darker warm tone */
+}
+.af-today:hover .af-date-number { transform: translateY(-2px); }
+.af-today-label {
+  font-size: 11px;
+  color: #925400;
+  margin-top: 6px;
+  text-align: center;
+  font-weight: 600;
+  background: rgba(250,173,20,0.06);
+  padding: 2px 6px;
+  border-radius: 10px;
+  display: inline-block;
+}
+
+/* Increase space between weeks */
+.ant-picker-calendar-date-content {
+  padding-top: 6px !important;
+  padding-bottom: 6px !important;
+}
+
+/* Action panel legend */
+.af-legend { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.af-legend-available { background: #52c41a; }
+.af-legend-selected { background: #1890ff; }
+.af-legend-unavailable { background: #f0f0f0; }
+
+/* Selected chips */
+.af-selected-panel { display:flex; gap:8px; flex-wrap:wrap; }
+.af-chip { display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:999px; background:#fafafa; border:1px solid #f0f0f0; }
+
+/* highlight when scrolled into view */
+.af-scroll-highlight { box-shadow: 0 0 0 6px rgba(64,169,255,0.12); border-radius: 8px; transition: box-shadow 280ms ease-in-out; }
+
+.af-month-year-select { font-family: Inter, Roboto, system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial; }
 .af-calendar-unavailable {
   background: #f0f0f0;
   opacity: 0.5;
@@ -99,5 +183,43 @@
     display: flex;
     justify-content: flex-end;
     padding-top: 6px;
+  }
+}
+
+/* Mobile behavior: stack panel below calendar instead of sticky */
+@media (max-width: 768px) {
+  .af-main-calendar-area {
+    flex-direction: column;
+  }
+
+  .af-action-panel {
+    position: static;
+    width: 100%;
+    z-index: 1;
+    background: transparent;
+    border-left: none;
+    border-top: 1px solid #f0f0f0;
+    box-shadow: none;
+    padding: 12px 0 0 0;
+    display: block;
+    margin-top: 12px;
+  }
+
+  /* remove extra bottom padding on calendar (no sticky bar) */
+  .af-calendar-container {
+    padding-bottom: 0;
+  }
+
+  /* make action buttons full width when panel is stacked */
+  .af-action-panel .ant-btn {
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* make chips horizontally scrollable if overflow */
+  .af-selected-panel {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 8px;
   }
 }
