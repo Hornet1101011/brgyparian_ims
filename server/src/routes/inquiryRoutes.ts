@@ -44,6 +44,11 @@ router.get('/:id', auth, (req: any, res: Response, next: NextFunction) => getInq
 // Update an inquiry (admin and staff only)
 router.patch('/:id', auth, authorize('admin', 'staff'), (req: any, res: Response, next: NextFunction) => updateInquiry(req, res, next));
 
+// Some hosting environments or proxies do not allow the HTTP PATCH method.
+// Provide a POST-based fallback that performs the same update logic so
+// clients that cannot send PATCH can still update inquiries.
+router.post('/:id', auth, authorize('admin', 'staff'), (req: any, res: Response, next: NextFunction) => updateInquiry(req, res, next));
+
 // Add a response to an inquiry (allow resident and staff replies)
 // Allow file attachments with responses as well
 router.post('/:id/responses', auth, upload.array('attachments'), (req: any, res: Response, next: NextFunction) => addResponse(req, res, next));

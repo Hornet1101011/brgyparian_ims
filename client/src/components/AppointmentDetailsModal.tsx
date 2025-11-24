@@ -84,10 +84,36 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
       await contactAPI.resolveInquiry(record._id); // mark resolved? will use patch below
       // Instead of resolveInquiry, call update inquiry to set scheduledDates and status
       await contactAPI.getInquiryById(record._id); // ensure exists
-      await (async () => {
-        const resp = await (await fetch(`/api/inquiries/${record._id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scheduledDates, status: 'scheduled' }) })).json();
-        return resp;
-      })();
+      // Try PATCH first (preferred). Some hosts block PATCH and return an HTML
+      // error page (501/Not Implemented). If we receive a non-JSON response
+      // or status 501, retry the request as POST (server-side fallback route).
+      const doUpdate = async () => {
+        const url = `/api/inquiries/${record._id}`;
+        const body = JSON.stringify({ scheduledDates, status: 'scheduled' });
+
+        // Attempt PATCH
+        let resp = await fetch(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body });
+        let text = await resp.text();
+
+        // If server returned 501 or response is not JSON (likely HTML error), retry with POST
+        const looksLikeHtml = typeof text === 'string' && text.trim().startsWith('<');
+        if (resp.status === 501 || looksLikeHtml) {
+          resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+          text = await resp.text();
+        }
+
+        // Try to parse JSON and surface errors
+        try {
+          const json = JSON.parse(text);
+          if (!resp.ok) throw new Error(json && json.message ? json.message : 'Request failed');
+          return json;
+        } catch (err) {
+          // If parsing fails, throw a helpful error
+          throw new Error('Server returned an unexpected non-JSON response');
+        }
+      };
+
+      await doUpdate();
       message.success('Appointment scheduled');
       onClose();
     } catch (e) {
