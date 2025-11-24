@@ -348,13 +348,34 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
         if (txErr && txErr.code === 11000) {
           return res.status(409).json({ message: 'Scheduling conflict: one or more time slots already taken' });
         }
-        // If transactions are not supported or other error, fall back to conservative check
-        console.warn('Transaction-based scheduling failed, falling back to non-atomic check:', txErr && txErr.message);
-        // cleanup any partial inserts if present (best-effort)
+        // If transactions are not supported or other error, attempt best-effort non-transactional reservation
+        console.warn('Transaction-based scheduling failed, attempting non-transactional fallback:', txErr && txErr.message);
         try {
+          // remove any previous slots for this inquiry (best-effort)
           await AppointmentSlot.deleteMany({ inquiryId: req.params.id });
-        } catch (cleanupErr) { /* ignore */ }
-        return res.status(500).json({ message: 'Failed to schedule appointment atomically', error: txErr && (txErr.message || txErr) });
+          // try to insert without a session; duplicate key will throw if any slot taken
+          if (slotDocs.length > 0) {
+            await AppointmentSlot.insertMany(slotDocs, { ordered: true });
+          }
+          // update inquiry normally
+          inquiry = await Inquiry.findByIdAndUpdate(req.params.id, updateBody, { new: true });
+          if (!inquiry) {
+            // rollback: remove inserted slots
+            try { await AppointmentSlot.deleteMany({ inquiryId: req.params.id }); } catch (e) { }
+            return res.status(404).json({ message: 'Inquiry not found' });
+          }
+        } catch (fbErr: any) {
+          // If duplicate key => conflict
+          if (fbErr && fbErr.code === 11000) {
+            // cleanup any partial inserts
+            try { await AppointmentSlot.deleteMany({ inquiryId: req.params.id }); } catch (e) { }
+            return res.status(409).json({ message: 'Scheduling conflict: one or more time slots already taken' });
+          }
+          console.error('Non-transactional fallback scheduling failed:', fbErr && (fbErr.message || fbErr));
+          // cleanup any partial inserts
+          try { await AppointmentSlot.deleteMany({ inquiryId: req.params.id }); } catch (e) { }
+          return res.status(500).json({ message: 'Failed to schedule appointment', error: fbErr && (fbErr.message || fbErr) });
+        }
       }
     } else {
       // No scheduledDates provided — perform a normal update
