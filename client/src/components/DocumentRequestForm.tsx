@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import './DocumentRequestForm.css';
-import { documentsAPI } from '../services/api';
+import { documentsAPI, axiosInstance } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { FileWordOutlined, MoreOutlined, EyeOutlined, DownloadOutlined } from '@ant-design/icons';
 import { 
@@ -59,7 +59,37 @@ const DocumentRequestForm: React.FC = () => {
   const { user: authUser } = useAuth();
   // currentUser will be resolved inside handlers when needed
 
-  const userIsResidentUnverified = Boolean(authUser && (authUser as any).role === 'resident' && !(authUser as any).verified);
+  // Authoritative profile from server (preferred source of truth for verification)
+  const [profile, setProfile] = useState<any>(() => {
+    try {
+      const stored = localStorage.getItem('userProfile');
+      return stored ? JSON.parse(stored) : null;
+    } catch (e) {
+      return null;
+    }
+  });
+
+  // Fetch authoritative profile on mount and keep it up to date
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const resp = await axiosInstance.get('/resident/profile');
+        if (mounted && resp && resp.data) {
+          setProfile(resp.data);
+          try { localStorage.setItem('userProfile', JSON.stringify(resp.data)); } catch (e) {}
+        }
+      } catch (err) {
+        // ignore fetch errors; we'll fallback to token-decoded user
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  // Prefer `profile.verified` when available; fall back to `authUser.verified`.
+  const userIsResidentUnverified = Boolean(
+    authUser && (authUser as any).role === 'resident' && !((profile && (profile.verified === true)) || ((authUser as any).verified === true))
+  );
 
   // Verification popups disabled while the feature is paused
 

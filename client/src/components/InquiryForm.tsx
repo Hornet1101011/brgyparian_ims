@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import dayjs, { Dayjs } from 'dayjs';
 import type { FormInstance } from 'antd';
 import {
   Form,
@@ -16,6 +17,8 @@ import {
   Tooltip,
   Modal,
   Descriptions,
+  Calendar,
+  Tag,
 } from 'antd';
 import { UploadOutlined, InfoCircleOutlined, SendOutlined, ReloadOutlined, MailOutlined } from '@ant-design/icons';
 import './InquiryForm.css';
@@ -59,6 +62,85 @@ const InquiryForm: React.FC = () => {
   const [previewModalVisible, setPreviewModalVisible] = React.useState(false);
   const [previewValues, setPreviewValues] = React.useState<any>(null);
   const LOCALSTORAGE_KEY = 'inquiryFormDraft_v1';
+
+  // Helper: Appointment scheduler state lives here when inquiry type is appointment
+  const [appointmentMode, setAppointmentMode] = React.useState(false);
+  const [appointmentDates, setAppointmentDates] = React.useState<string[]>([]);
+
+  // Utility: format a date-like value to YYYY-MM-DD key (supports moment/dayjs or Date)
+  const dateKey = (d: any) => {
+    try {
+      if (!d) return '';
+      if (typeof d.format === 'function') return d.format('YYYY-MM-DD');
+      if (d instanceof Date) return d.toISOString().slice(0, 10);
+      return new Date(d).toISOString().slice(0, 10);
+    } catch (e) { return '' }
+  };
+
+  // Use a reusable utility to get the next 30 available weekdays (dayjs objects)
+  const { getAvailableAppointmentDates } = (() => require('../utils/appointments'))();
+  const availableDayjs = React.useMemo(() => getAvailableAppointmentDates(30), []);
+  const allowedWeekdays = React.useMemo(() => new Set(availableDayjs.map((d: Dayjs) => d.format('YYYY-MM-DD'))), [availableDayjs]);
+
+  // Default select the earliest available date (the first element of availableDayjs)
+  React.useEffect(() => {
+    if (availableDayjs && availableDayjs.length > 0) {
+      const first = availableDayjs[0].format('YYYY-MM-DD');
+      setAppointmentDates(prev => prev.length ? prev : [first]);
+    }
+  }, [availableDayjs]);
+
+  // Watch inquiry type and toggle appointment mode
+  React.useEffect(() => {
+    const t = form.getFieldValue('type');
+    if (t === 'SCHEDULE_APPOINTMENT') setAppointmentMode(true);
+    else setAppointmentMode(false);
+  }, [form]);
+
+  const dateSelect = (d: Dayjs | any) => {
+    if (!d) return;
+    const k = dateKey(d);
+    if (!k) return;
+
+    // (a) disallow past dates
+    try {
+      if (dayjs(k).isBefore(dayjs().startOf('day'))) {
+        antdMessage.info('Cannot select past dates.');
+        return;
+      }
+    } catch (e) {
+      // fallthrough
+    }
+
+    // (c) disallow weekends explicitly
+    const weekdayNum = (typeof d.day === 'function') ? d.day() : new Date(k).getDay();
+    if (weekdayNum === 0 || weekdayNum === 6) {
+      antdMessage.info('Weekends (Saturday/Sunday) are not allowed.');
+      return;
+    }
+
+    // (b) ensure date is within the available 30-day list
+    if (!allowedWeekdays.has(k)) {
+      antdMessage.info('Only future weekdays within the next 30 available days can be selected.');
+      return;
+    }
+
+    // toggle selection with max 3 constraint
+    setAppointmentDates(prev => {
+      const exists = prev.includes(k);
+      if (exists) return prev.filter(x => x !== k);
+      if (prev.length >= 3) {
+        antdMessage.warning('You can select up to 3 appointment dates.');
+        return prev;
+      }
+      return [...prev, k].sort();
+    });
+  };
+
+  const applyAppointmentDatesToForm = () => {
+    form.setFieldsValue({ appointmentDates });
+    antdMessage.success('Appointment dates added to the inquiry');
+  };
 
   // Load draft from localStorage on mount
   React.useEffect(() => {
@@ -145,6 +227,17 @@ const InquiryForm: React.FC = () => {
     setLoading(true);
     setShowSuccess(false);
     try {
+      // Ensure appointment dates are included for scheduling inquiries
+      const selectedDates: string[] = (values && Array.isArray(values.appointmentDates) && values.appointmentDates.length)
+        ? values.appointmentDates
+        : appointmentDates;
+      if (values && values.type === 'SCHEDULE_APPOINTMENT') {
+        if (!selectedDates || selectedDates.length === 0) {
+          antdMessage.error('Please select at least one appointment date before submitting.');
+          setLoading(false);
+          return;
+        }
+      }
       // Extract uploaded files if any and send as multipart/form-data
       let files: any[] = [];
       if (values.attachment) {
@@ -160,6 +253,13 @@ const InquiryForm: React.FC = () => {
       formData.append('barangayID', user?.barangayID || '');
       if (values.assignedTo && Array.isArray(values.assignedTo)) {
         for (const id of values.assignedTo) formData.append('assignedTo[]', id);
+      }
+      // Append selected appointment dates (if any)
+      if (selectedDates && Array.isArray(selectedDates) && selectedDates.length) {
+        for (const d of selectedDates) {
+          // d is expected to be an ISO-like YYYY-MM-DD string
+          formData.append('appointmentDates[]', d);
+        }
       }
       // Append each file's originFileObj (Upload component stores the file under originFileObj)
       for (const f of files) {
@@ -468,6 +568,82 @@ const InquiryForm: React.FC = () => {
             </Col>
           </Row>
 
+          {/* Appointment scheduling mode (shows when user selects SCHEDULE_APPOINTMENT) */}
+          {appointmentMode && (
+            <div style={{ marginTop: 12, marginBottom: 12 }}>
+              <Card title="Appointment Scheduling" style={{ borderRadius: 12, marginBottom: 12 }}>
+                    <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                  <div style={{ width: 320 }}>
+                    <Calendar
+                      fullscreen={false}
+                      onSelect={(d: any) => dateSelect(d)}
+                      dateCellRender={(d: any) => {
+                        const k = dateKey(d);
+                        const isAllowed = allowedWeekdays.has(k);
+                        const isSelected = appointmentDates.includes(k);
+                        const limitReached = appointmentDates.length >= 3;
+
+                        const wrapperStyle: React.CSSProperties = {
+                          padding: 8,
+                          height: '100%',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'flex-end',
+                          alignItems: 'flex-end',
+                          pointerEvents: (limitReached && !isSelected) ? 'none' : 'auto',
+                          opacity: !isAllowed ? 0.45 : 1,
+                        };
+
+                        let indicatorClass = 'af-calendar-unavailable';
+                        if (isSelected) indicatorClass = 'af-calendar-selected';
+                        else if (isAllowed) indicatorClass = 'af-calendar-available';
+
+                        return (
+                          <div style={wrapperStyle} className={isAllowed ? 'af-calendar-cell available' : 'af-calendar-cell unavailable'} title={(!isAllowed ? 'Unavailable' : (isSelected ? 'Selected' : (limitReached ? 'Selection limit reached' : 'Available')))}>
+                            <span className={`af-calendar-indicator ${indicatorClass}`} />
+                          </div>
+                        );
+                      }}
+                    />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 240 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                      <strong>Selected Dates ({appointmentDates.length}/3)</strong>
+                        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12, color: '#8c8c8c' }}>
+                            <span className="af-calendar-indicator af-calendar-available" /> Available
+                          </div>
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12, color: '#8c8c8c' }}>
+                            <span className="af-calendar-indicator af-calendar-selected" /> Selected
+                          </div>
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12, color: '#8c8c8c' }}>
+                            <span className="af-calendar-indicator af-calendar-unavailable" /> Unavailable
+                          </div>
+                        </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                      {appointmentDates.length === 0 && <div style={{ color: '#8c8c8c' }}>No dates selected</div>}
+                      <div className="af-selected-panel">
+                        {appointmentDates.map(d => (
+                          <div key={d} className="af-chip">
+                            <span style={{ marginRight: 8 }}>{dayjs(d).format('MMM DD, YYYY')}</span>
+                            <Button type="link" size="small" onClick={() => setAppointmentDates(prev => prev.filter(x => x !== d))}>✕</Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <Button onClick={() => setAppointmentDates([])}>Clear</Button>
+                      <Button type="primary" onClick={applyAppointmentDatesToForm} disabled={appointmentDates.length === 0}>Add Dates to Inquiry</Button>
+                    </div>
+                    <div style={{ marginTop: 12, color: '#8c8c8c', fontSize: 13 }}>
+                      Choose up to 3 preferred weekdays. Past dates and weekends are disabled.
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          )}
           <Form.Item>
             <Row justify="end" gutter={[8, 8]}>
               <Col xs={24} sm="auto" style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -534,6 +710,14 @@ const InquiryForm: React.FC = () => {
               <Descriptions.Item label="Subject">{previewValues.subject}</Descriptions.Item>
               <Descriptions.Item label="Message">{previewValues.message}</Descriptions.Item>
               <Descriptions.Item label="Attachments">{(fileListState || []).map((f: any) => f.name || (f.originFileObj && f.originFileObj.name)).join(', ')}</Descriptions.Item>
+              {/* Show selected appointment dates when scheduling */}
+              {((previewValues.type === 'SCHEDULE_APPOINTMENT') || (previewValues.appointmentDates && previewValues.appointmentDates.length)) && (
+                <Descriptions.Item label="Appointment Dates">
+                  {((previewValues.appointmentDates && previewValues.appointmentDates.length) ? previewValues.appointmentDates : appointmentDates).map((d: string, i: number) => (
+                    <div key={d} style={{ marginBottom: 6 }}>{dayjs(d).format('MMM DD, YYYY')}</div>
+                  ))}
+                </Descriptions.Item>
+              )}
             </Descriptions>
           )}
         </Modal>

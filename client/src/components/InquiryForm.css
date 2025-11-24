@@ -23,6 +23,46 @@
   font-size: 16px;
 }
 
+/* Calendar improvements for appointment scheduler */
+.af-calendar-cell {
+  padding: 10px 6px !important;
+}
+.af-calendar-indicator {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  display: inline-block;
+  vertical-align: middle;
+}
+.af-calendar-available {
+  background: #52c41a;
+}
+.af-calendar-selected {
+  background: #1890ff;
+  box-shadow: 0 0 0 3px rgba(24,144,255,0.06);
+}
+.af-calendar-unavailable {
+  background: #f0f0f0;
+  opacity: 0.5;
+}
+.af-calendar-cell.available:hover {
+  box-shadow: 0 4px 10px rgba(24,144,255,0.08);
+  transform: translateY(-2px);
+}
+.af-selected-panel {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.af-chip {
+  background: #fff;
+  border: 1px solid #e8e8e8;
+  padding: 6px 10px;
+  border-radius: 16px;
+  font-size: 13px;
+}
+
+
 /* File list responsive behavior */
 .inquiry-file-item {
   display: flex;

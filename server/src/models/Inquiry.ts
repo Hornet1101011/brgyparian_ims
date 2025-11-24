@@ -32,6 +32,8 @@ export interface IInquiry extends Document {
     size?: number;
     uploadedAt?: Date;
   }>;
+  // Optional preferred appointment dates supplied by residents (stored as YYYY-MM-DD strings)
+  appointmentDates?: string[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -117,6 +119,8 @@ const inquirySchema = new mongoose.Schema({
     size: { type: Number },
     uploadedAt: { type: Date, default: Date.now }
   }],
+  // Preferred appointment dates (optional) - store as YYYY-MM-DD strings
+  appointmentDates: [{ type: String }],
 }, {
   timestamps: true,
 });

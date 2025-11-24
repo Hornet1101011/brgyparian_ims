@@ -119,6 +119,38 @@ export const createInquiry = async (req: any, res: Response, next: NextFunction)
       username: resolvedUsername || user?.username || 'Unknown',
       barangayID: resolvedBarangayID || user?.barangayID || 'Unknown',
     });
+    // Parse optional appointmentDates sent as form fields (supports `appointmentDates[]` or `appointmentDates`)
+    try {
+      const rawDates = req.body && (req.body.appointmentDates || req.body['appointmentDates[]']);
+      if (rawDates) {
+        const arr = Array.isArray(rawDates) ? rawDates : [rawDates];
+        const now = new Date(); now.setHours(0,0,0,0);
+        const validStrings: string[] = [];
+        for (const s of arr) {
+          if (!s) continue;
+          try {
+            const d = new Date(s);
+            if (isNaN(d.getTime())) continue;
+            const dStart = new Date(d);
+            dStart.setHours(0,0,0,0);
+            // Enforce future-or-today and weekday-only
+            if (dStart < now) continue;
+            const wk = dStart.getDay();
+            if (wk === 0 || wk === 6) continue;
+            const key = dStart.toISOString().slice(0,10);
+            validStrings.push(key);
+          } catch (ignore) {
+            // skip invalid
+          }
+        }
+        // Deduplicate, respect client-side limit (store up to 3)
+        const unique = Array.from(new Set(validStrings));
+        if (unique.length) inquiry.appointmentDates = unique.slice(0, 3);
+      }
+    } catch (e) {
+      // non-fatal: ignore parsing errors and continue
+      console.warn('Failed to parse appointmentDates for inquiry:', e);
+    }
     // If files were uploaded via multer (router uses upload.array('attachments')) save metadata
     if (req.files && Array.isArray(req.files) && req.files.length > 0) {
       const host = req.get('host');
@@ -201,9 +233,43 @@ export const getInquiryById = async (req: any, res: Response, next: NextFunction
 
 export const updateInquiry = async (req: any, res: Response, next: NextFunction) => {
   try {
+    // Prepare update body and validate appointmentDates if supplied
+    const updateBody: any = { ...req.body };
+    try {
+      const rawDates = updateBody.appointmentDates || updateBody['appointmentDates[]'];
+      if (rawDates !== undefined) {
+        const arr = Array.isArray(rawDates) ? rawDates : [rawDates];
+        const now = new Date(); now.setHours(0,0,0,0);
+        const validStrings: string[] = [];
+        for (const s of arr) {
+          if (!s) continue;
+          try {
+            const d = new Date(s);
+            if (isNaN(d.getTime())) continue;
+            const dStart = new Date(d);
+            dStart.setHours(0,0,0,0);
+            // enforce future-or-today and weekday-only
+            if (dStart < now) continue;
+            const wk = dStart.getDay();
+            if (wk === 0 || wk === 6) continue;
+            validStrings.push(dStart.toISOString().slice(0,10));
+          } catch (ignore) { }
+        }
+        const unique = Array.from(new Set(validStrings));
+        // If client provided appointmentDates but none are valid, reject the update
+        if (arr.length > 0 && unique.length === 0) {
+          return res.status(400).json({ message: 'Invalid appointmentDates: must be valid future weekdays in YYYY-MM-DD format.' });
+        }
+        if (unique.length) updateBody.appointmentDates = unique.slice(0, 3);
+        else updateBody.appointmentDates = [];
+      }
+    } catch (e) {
+      console.warn('Failed to validate appointmentDates on update:', e);
+    }
+
     const inquiry = await Inquiry.findByIdAndUpdate(
       req.params.id,
-      { ...req.body },
+      updateBody,
       { new: true }
     );
     if (!inquiry) {
