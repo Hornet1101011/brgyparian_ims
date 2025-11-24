@@ -387,8 +387,8 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
 
     // If this is a transition to 'scheduled' and scheduledDates were provided, notify the resident
     try {
-      const beforeStatus = beforeInquiry.status;
-      const afterStatus = inquiry.status;
+      const beforeStatus = String((beforeInquiry as any).status);
+      const afterStatus = String((inquiry as any).status);
       const scheduledProvided = updateBody.scheduledDates && Array.isArray(updateBody.scheduledDates) && updateBody.scheduledDates.length > 0;
       if (beforeStatus !== 'scheduled' && afterStatus === 'scheduled' && scheduledProvided) {
         // find resident user
@@ -407,12 +407,12 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
             io.to(String(resident._id)).emit('inquiryScheduled', { inquiryId: inquiry._id, scheduledDates: inquiry.scheduledDates });
           } catch (e) {
             // non-fatal
-            console.warn('Failed to emit socket event for scheduled inquiry', e && e.message);
+            console.warn('Failed to emit socket event for scheduled inquiry', (e as any)?.message || e);
           }
         }
       }
     } catch (notifyErr) {
-      console.warn('Failed during post-schedule notification step', notifyErr && notifyErr.message);
+      console.warn('Failed during post-schedule notification step', (notifyErr as any)?.message || notifyErr);
     }
 
     res.json(inquiry);
