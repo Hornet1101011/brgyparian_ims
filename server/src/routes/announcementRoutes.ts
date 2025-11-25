@@ -33,15 +33,19 @@ router.get('/:id/image', async (req, res) => {
   try {
     const ann = await Announcement.findById(req.params.id).lean();
     if (!ann) return res.status(404).json({ message: 'Announcement not found' });
-    if (ann.imageData && ann.imageContentType) {
-      res.set('Content-Type', ann.imageContentType);
+    // TypeScript may infer a union that includes array types from various model typings.
+    // Normalize to `any` for property access to avoid spurious compile errors while still
+    // performing runtime checks for the expected fields.
+    const annAny: any = ann as any;
+    if (annAny && annAny.imageData && annAny.imageContentType) {
+      res.set('Content-Type', annAny.imageContentType);
       // ann.imageData may be a Buffer or a BSON Binary; normalize to Buffer
-      const data = (ann.imageData as any);
+      const data = annAny.imageData as any;
       const buf = Buffer.isBuffer(data) ? data : (data && data.buffer ? Buffer.from(data.buffer) : Buffer.from(data));
       return res.send(buf);
     }
-    if (ann.imagePath) {
-      const filePath = path.join(process.cwd(), ann.imagePath);
+    if (annAny && annAny.imagePath) {
+      const filePath = path.join(process.cwd(), annAny.imagePath);
       if (fs.existsSync(filePath)) {
         return res.sendFile(filePath);
       }

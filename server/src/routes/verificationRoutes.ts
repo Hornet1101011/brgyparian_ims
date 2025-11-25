@@ -24,8 +24,9 @@ router.post('/upload', auth, upload.array('ids', 3), async (req: any, res) => {
   try {
     // if verifications are globally disabled, reject uploads
     try {
-      const settings = await SystemSettingModel.findOne().lean();
-      if (settings && settings.enableVerifications === false) {
+        const settings = await SystemSettingModel.findOne().lean();
+        const settingsAny: any = settings as any;
+        if (settingsAny && settingsAny.enableVerifications === false) {
         return res.status(403).json({ message: 'Verifications are currently disabled' });
       }
     } catch (se) {
@@ -176,8 +177,9 @@ router.get('/admin/requests', auth, authorize('admin'), async (req, res) => {
   try {
     // if verifications are disabled, hide requests (return empty list)
     try {
-      const settings = await SystemSettingModel.findOne().lean();
-      if (settings && settings.enableVerifications === false) return res.json([]);
+        const settings = await SystemSettingModel.findOne().lean();
+        const settingsAny: any = settings as any;
+        if (settingsAny && settingsAny.enableVerifications === false) return res.json([]);
     } catch (se) {}
     // populated user fields include verification status; cast to any in controllers to avoid strict IUser typing issues
     const reqs = await VerificationRequest.find().sort({ createdAt: -1 }).populate('userId', 'fullName username barangayID verified');
@@ -195,7 +197,8 @@ router.get('/requests/my', auth, async (req, res) => {
     // If verifications are disabled, hide any pending requests and don't prompt residents
     try {
       const settings = await SystemSettingModel.findOne().lean();
-      if (settings && settings.enableVerifications === false) {
+      const settingsAny: any = settings as any;
+      if (settingsAny && settingsAny.enableVerifications === false) {
         return res.json([]);
       }
     } catch (se) {}
@@ -258,8 +261,9 @@ router.get('/requests/:id', auth, async (req, res) => {
   try {
     // If verifications disabled, respond as not found so UI hides it
     try {
-      const settings = await SystemSettingModel.findOne().lean();
-      if (settings && settings.enableVerifications === false) return res.status(404).json({ message: 'Not found' });
+        const settings = await SystemSettingModel.findOne().lean();
+        const settingsAny: any = settings as any;
+        if (settingsAny && settingsAny.enableVerifications === false) return res.status(404).json({ message: 'Not found' });
     } catch (se) {}
     const { id } = req.params;
     const vr = await VerificationRequest.findById(id).populate('userId', 'fullName username barangayID verified');
@@ -280,8 +284,9 @@ router.get('/file/:id', auth, authorize('admin'), async (req, res) => {
   try {
     // If verifications disabled, don't allow file download
     try {
-      const settings = await SystemSettingModel.findOne().lean();
-      if (settings && settings.enableVerifications === false) return res.status(404).send('Not found');
+        const settings = await SystemSettingModel.findOne().lean();
+        const settingsAny: any = settings as any;
+        if (settingsAny && settingsAny.enableVerifications === false) return res.status(404).send('Not found');
     } catch (se) {}
     const { id } = req.params;
     const db = (mongoose.connection.db as any);
@@ -383,8 +388,9 @@ export const adminVerifyUserHandler = async (req: any, res: any) => {
   try {
     // If verifications are disabled, disallow manual toggles via verify-user endpoint
     try {
-      const settings = await SystemSettingModel.findOne().lean();
-      if (settings && settings.enableVerifications === false) return res.status(403).json({ message: 'Verifications are disabled' });
+        const settings = await SystemSettingModel.findOne().lean();
+        const settingsAny: any = settings as any;
+        if (settingsAny && settingsAny.enableVerifications === false) return res.status(403).json({ message: 'Verifications are disabled' });
     } catch (se) {}
     const { userId } = req.params;
     const { verified } = req.body;
@@ -497,7 +503,8 @@ export const adminApproveHandler = async (req: any, res: any) => {
     // If verifications disabled, prevent approve actions
     try {
       const settings = await SystemSettingModel.findOne().lean();
-      if (settings && settings.enableVerifications === false) return res.status(403).json({ message: 'Verifications are disabled' });
+      const settingsAny: any = settings as any;
+      if (settingsAny && settingsAny.enableVerifications === false) return res.status(403).json({ message: 'Verifications are disabled' });
     } catch (se) {}
 
     const { id } = req.params;
@@ -588,7 +595,8 @@ router.post('/admin/requests/:id/reject', auth, authorize('admin'), async (req, 
     // If verifications disabled, prevent reject actions
     try {
       const settings = await SystemSettingModel.findOne().lean();
-      if (settings && settings.enableVerifications === false) return res.status(403).json({ message: 'Verifications are disabled' });
+      const settingsAny: any = settings as any;
+      if (settingsAny && settingsAny.enableVerifications === false) return res.status(403).json({ message: 'Verifications are disabled' });
     } catch (se) {}
     const { id } = req.params;
     const vr = await VerificationRequest.findById(id);
@@ -667,7 +675,8 @@ router.post('/admin/requests/:id/unapprove', auth, authorize('admin'), async (re
     // If verifications are disabled, disallow manual toggles
     try {
       const settings = await SystemSettingModel.findOne().lean();
-      if (settings && settings.enableVerifications === false) return res.status(403).json({ message: 'Verifications are disabled' });
+      const settingsAny: any = settings as any;
+      if (settingsAny && settingsAny.enableVerifications === false) return res.status(403).json({ message: 'Verifications are disabled' });
     } catch (se) {}
 
     const { id } = req.params;
