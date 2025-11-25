@@ -68,6 +68,30 @@
   border-radius: 20px;
   font-weight: 600;
 }
+
+/* Make calendar container fluid and allow horizontal scroll if needed */
+.af-calendar-container {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.af-calendar-container .ant-picker-calendar {
+  width: 100%;
+  min-width: 280px; /* allow shrink but keep usable */
+}
+
+/* Reduce sizes on medium screens to fit container */
+@media (max-width: 900px) {
+  .af-date-cell { height: 46px; }
+  .af-date-number { width: 30px; height: 30px; font-size: 14px; }
+}
+
+/* Further compact on narrow/small screens */
+@media (max-width: 640px) {
+  .af-date-cell { height: 40px; }
+  .af-date-number { width: 28px; height: 28px; font-size: 13px; }
+  .af-today-label { font-size: 10px; padding: 2px 5px; }
+  .af-calendar-container .ant-picker-calendar { min-width: 240px; }
+}
 .af-date-available .af-date-number {
   background: rgba(82,196,26,0.12);
   color: #2f8b12;

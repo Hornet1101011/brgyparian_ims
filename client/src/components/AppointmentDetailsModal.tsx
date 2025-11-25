@@ -3,7 +3,7 @@ import { Modal, Descriptions, Divider, Checkbox, Button, Space, message } from '
 import dayjs from 'dayjs';
 import { Select } from 'antd';
 import TimeRangeSelector from './TimeRangeSelector';
-import { contactAPI } from '../services/api';
+import { contactAPI, axiosInstance } from '../services/api';
 
 type Props = {
   visible: boolean;
@@ -135,21 +135,49 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
       let resp: Response | null = null;
       if (isLocal) {
         try {
-          resp = await doFetchWithTimeout(localUrl, 2500);
+          // Try local absolute URL quickly (may be offline)
+          await axiosInstance.post(localUrl, JSON.parse(body), { timeout: 2500 });
+          // Construct a synthetic successful response shape to keep downstream logic same
+          resp = { ok: true } as any;
         } catch (err) {
-          console.warn('Local backend unreachable or timed out, retrying remote:', err);
-          // try remote
-          resp = await doFetchWithTimeout(remoteUrl, 8000);
+          console.warn('Local backend unreachable or timed out, retrying remote with auth:', (err as any)?.message || err);
+          try {
+            const r = await axiosInstance.post(remoteUrl, JSON.parse(body), { timeout: 8000 });
+            resp = { ok: true, data: r.data } as any;
+          } catch (err2: any) {
+            // If remote responded with 401/403, rethrow so existing error handling runs
+            const status = err2?.response?.status;
+            const msg = err2?.response?.data?.message || err2?.message || String(err2);
+            const fakeResp: any = { ok: false, status: status || 500, text: async () => msg };
+            resp = fakeResp;
+          }
         }
       } else {
-        resp = await doFetchWithTimeout(remoteUrl, 8000);
+        try {
+          const r = await axiosInstance.post(remoteUrl, JSON.parse(body), { timeout: 8000 });
+          resp = { ok: true, data: r.data } as any;
+        } catch (err2: any) {
+          const status = err2?.response?.status;
+          const msg = err2?.response?.data?.message || err2?.message || String(err2);
+          const fakeResp: any = { ok: false, status: status || 500, text: async () => msg };
+          resp = fakeResp;
+        }
       }
-      if (!resp.ok) {
+      if (!resp || !(resp as any).ok) {
         // Read the body as text first (avoids body stream already-read errors),
         // then attempt to parse JSON out of it.
         let serverText: string | null = null;
         try {
-          const txt = await resp.text();
+          // resp may be an object returned from axios stub or a Fetch-like Response.
+          const anyResp: any = resp;
+          let txt = '';
+          if (anyResp && typeof anyResp.text === 'function') {
+            txt = await anyResp.text();
+          } else if (anyResp && anyResp.data) {
+            try { txt = JSON.stringify(anyResp.data); } catch (_) { txt = String(anyResp.data); }
+          } else {
+            txt = String(anyResp || '');
+          }
           try {
             const j = JSON.parse(txt);
             serverText = j && j.message ? j.message : JSON.stringify(j);
@@ -159,9 +187,10 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
         } catch (readErr) {
           serverText = String(readErr);
         }
-        console.error('Scheduling failed:', resp.status, serverText);
-        message.error(serverText || `Server error ${resp.status}`);
-        throw new Error(serverText || `Request failed with status ${resp.status}`);
+        const statusCode = (resp && (resp as any).status) ? (resp as any).status : 'unknown';
+        console.error('Scheduling failed:', statusCode, serverText);
+        message.error(serverText || `Server error ${statusCode}`);
+        throw new Error(serverText || `Request failed with status ${statusCode}`);
       }
       // Do not auto-resolve here. Use the manual Resolve button instead.
       message.success('Appointment scheduled');

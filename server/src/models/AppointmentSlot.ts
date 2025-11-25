@@ -21,6 +21,12 @@ const appointmentSlotSchema = new mongoose.Schema({
 // Unique index per date+slot to prevent overlapping reservations for the same slot
 appointmentSlotSchema.index({ date: 1, slot: 1 }, { unique: true });
 
+// Also enforce uniqueness for the full appointment range (date + start + end)
+// This prevents saving duplicate appointments that have identical start/end times
+// for the same date. Note: creating this index will fail if duplicate documents
+// already exist; run the provided migration script to dedupe first.
+appointmentSlotSchema.index({ date: 1, appointmentStartTime: 1, appointmentEndTime: 1 }, { unique: true, sparse: true });
+
 // Guard against recompilation in dev (nodemon / ts-node)
 export const AppointmentSlot: mongoose.Model<any> = (mongoose.models && (mongoose.models as any).AppointmentSlot)
   ? (mongoose.models as any).AppointmentSlot as mongoose.Model<any>

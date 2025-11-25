@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Typography, Button, Badge, Modal, Table, Tooltip, Checkbox, Tag } from 'antd';
+import { Row, Col, Card, Typography, Button, Badge, Modal, Table, Tooltip, Checkbox, Tag, List, Space, message } from 'antd';
 import { FileTextOutlined, MailOutlined, NotificationOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import AvatarImage from './AvatarImage';
 import styles from './dashboard.module.css';
@@ -45,6 +45,11 @@ const Dashboard: React.FC = () => {
     }
   });
   const [helpHover, setHelpHover] = useState(false);
+  // Resident appointments
+  const [appointments, setAppointments] = useState<any[]>([]);
+  const [appointmentsLoading, setAppointmentsLoading] = useState(false);
+  const [apptModalVisible, setApptModalVisible] = useState(false);
+  const [selectedAppt, setSelectedAppt] = useState<any | null>(null);
 
   const formatDate = (val?: any) => {
     if (!val) return '';
@@ -114,6 +119,38 @@ const Dashboard: React.FC = () => {
     const timer = setInterval(tick, 1000);
     return () => clearInterval(timer);
     // TODO: Fetch unread notifications count
+  }, [user]);
+
+  // Fetch resident's inquiries/appointments when role is resident
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      if (!user || user.role !== 'resident') return;
+      setAppointmentsLoading(true);
+      try {
+        const res = await contactAPI.getMyInquiries();
+        if (!mounted) return;
+        // Keep only inquiries that have scheduledDates or status 'scheduled'
+        const list = (Array.isArray(res) ? res : (res && res.data) ? res.data : []).filter((r: any) => (r.scheduledDates && r.scheduledDates.length) || (r.status === 'scheduled'));
+        // normalize and sort by next appointment date
+        const normalized = list.map((r: any) => {
+          const next = (r.scheduledDates && r.scheduledDates.length) ? r.scheduledDates[0] : null;
+          return { ...r, nextAppointment: next };
+        }).sort((a: any, b: any) => {
+          const da = a.nextAppointment ? new Date(a.nextAppointment.date) : new Date(a.createdAt);
+          const db = b.nextAppointment ? new Date(b.nextAppointment.date) : new Date(b.createdAt);
+          return da.getTime() - db.getTime();
+        });
+        setAppointments(normalized);
+      } catch (err) {
+        console.error('Failed to load resident appointments', err);
+        setAppointments([]);
+      } finally {
+        setAppointmentsLoading(false);
+      }
+    };
+    load();
+    return () => { mounted = false; };
   }, [user]);
 
   // Resident verification status: check backend for pending verification requests
@@ -425,6 +462,56 @@ const Dashboard: React.FC = () => {
           </Col>
         </Row>
         
+        {/* Resident Appointments (only for residents) */}
+        {user?.role === 'resident' && (
+          <div style={{ marginBottom: 28 }}>
+            <Card title="Your Appointments" bordered={false} style={{ borderRadius: 12 }}>
+              <List
+                loading={appointmentsLoading}
+                dataSource={appointments}
+                locale={{ emptyText: 'No scheduled appointments' }}
+                renderItem={(item: any) => {
+                  const next = item.nextAppointment;
+                  const dateLabel = next ? new Date(next.date).toLocaleDateString() : 'N/A';
+                  const timeLabel = next ? `${next.startTime} - ${next.endTime}` : '—';
+                  const status = item.status || (next ? 'scheduled' : 'pending');
+                  return (
+                    <List.Item
+                      actions={[
+                        <Button key="view" type="link" onClick={() => { setSelectedAppt(item); setApptModalVisible(true); }}>View</Button>,
+                        <Button key="cancel" type="link" danger onClick={async () => {
+                          Modal.confirm({
+                            title: 'Cancel appointment',
+                            content: 'Are you sure you want to cancel this appointment? This will mark the inquiry as resolved.',
+                            onOk: async () => {
+                              try {
+                                await contactAPI.resolveInquiry(item._id);
+                                message.success('Appointment cancelled');
+                                // refresh list
+                                const res = await contactAPI.getMyInquiries();
+                                const list = (Array.isArray(res) ? res : (res && res.data) ? res.data : []).filter((r: any) => (r.scheduledDates && r.scheduledDates.length) || (r.status === 'scheduled'));
+                                setAppointments(list);
+                              } catch (err) {
+                                console.error('Failed to cancel appointment', err);
+                                message.error('Failed to cancel appointment');
+                              }
+                            }
+                          });
+                        }}>Cancel</Button>
+                      ]}
+                    >
+                      <List.Item.Meta
+                        avatar={<div style={{ width: 52, height: 52, borderRadius: 8, background: '#f5f7fb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FileTextOutlined style={{ color: '#1890ff', fontSize: 20 }} /></div>}
+                        title={<div style={{ display: 'flex', gap: 12, alignItems: 'center' }}><strong>{item.subject || 'Appointment'}</strong> <Tag color={status === 'scheduled' ? 'blue' : (status === 'resolved' ? 'default' : 'orange')}>{status}</Tag></div>}
+                        description={<div><div style={{ fontWeight: 600 }}>{dateLabel} · {timeLabel}</div><div style={{ color: '#666', marginTop: 6 }}>{item.message || ''}</div></div>}
+                      />
+                    </List.Item>
+                  );
+                }}
+              />
+            </Card>
+          </div>
+        )}
         {/* Pending Requests Modal */}
         <Modal
           title="Pending Requests"
@@ -562,6 +649,30 @@ const Dashboard: React.FC = () => {
             />
           </Tooltip>
         </div>
+        {/* Appointment detail modal */}
+        <Modal
+          title="Appointment Details"
+          open={apptModalVisible}
+          onCancel={() => setApptModalVisible(false)}
+          footer={null}
+          width={720}
+        >
+          {selectedAppt ? (
+            <div>
+              <Typography.Title level={4}>{selectedAppt.subject || 'Appointment'}</Typography.Title>
+              <Typography.Paragraph>{selectedAppt.message}</Typography.Paragraph>
+              <div style={{ marginTop: 12 }}>
+                <strong>Scheduled Dates:</strong>
+                <ul>
+                  {(selectedAppt.scheduledDates || []).map((s: any, i: number) => (
+                    <li key={i}>{new Date(s.date).toLocaleDateString()} — {s.startTime} to {s.endTime}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          ) : <div>No appointment selected</div>}
+        </Modal>
+
         {/* ...other dashboard sections... */}
       </div>
     </>

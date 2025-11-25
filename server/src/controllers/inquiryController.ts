@@ -121,6 +121,9 @@ export const createInquiry = async (req: any, res: Response, next: NextFunction)
       // Use resolvedUsername/barangayID if available; otherwise fall back to staff user (legacy behavior)
       username: resolvedUsername || user?.username || 'Unknown',
       barangayID: resolvedBarangayID || user?.barangayID || 'Unknown',
+      // If a resident created the inquiry, mark it as 'pending' so staff know it needs review.
+      // Other creators (staff/admin/system) will default to 'open'.
+      status: (user && user.role && String(user.role).toLowerCase() === 'resident') ? 'pending' : 'open'
     });
     // Parse optional appointmentDates sent as form fields (supports `appointmentDates[]` or `appointmentDates`)
     try {
@@ -337,6 +340,31 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
 
       // Attempt an atomic reservation using MongoDB transactions and the AppointmentSlot unique index
       let session: any = null;
+      // Before attempting inserts, ensure there are no existing appointments matching
+      // the same date + appointmentStartTime + appointmentEndTime for a different inquiry.
+      try {
+        const seenRanges = new Set<string>();
+        const duplicateCheckPromises: Array<Promise<any>> = [];
+        for (const slot of updateBody.scheduledDates) {
+          const key = `${slot.date}|${slot.startTime}|${slot.endTime}`;
+          if (seenRanges.has(key)) continue;
+          seenRanges.add(key);
+          // check if an appointment with same date and range exists but for a different inquiry
+          duplicateCheckPromises.push(AppointmentSlot.findOne({
+            date: slot.date,
+            appointmentStartTime: slot.startTime,
+            appointmentEndTime: slot.endTime
+          }).lean());
+        }
+        const dupResults = await Promise.all(duplicateCheckPromises);
+        for (const r of dupResults) {
+          if (r && String((r as any).inquiryId) !== String(req.params.id)) {
+            return res.status(409).json({ message: 'Duplicate appointment exists for the selected date and time range' });
+          }
+        }
+      } catch (dupErr) {
+        console.warn('Duplicate-range pre-check failed, continuing to attempt scheduling:', (dupErr as any)?.message || dupErr);
+      }
       try {
         session = await mongoose.startSession();
         session.startTransaction();

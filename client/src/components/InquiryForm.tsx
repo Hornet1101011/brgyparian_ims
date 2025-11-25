@@ -72,6 +72,15 @@ const InquiryForm: React.FC = () => {
   const [calendarValue, setCalendarValue] = React.useState<Dayjs>(dayjs());
   // live clock to allow month dropdown to refresh when months pass while the page is open
   const [now, setNow] = React.useState<Dayjs>(dayjs());
+  // Responsive state: detect mobile/small screens to adapt calendar layout
+  const [isMobile, setIsMobile] = React.useState<boolean>(false);
+
+  React.useEffect(() => {
+    const check = () => setIsMobile(typeof window !== 'undefined' ? window.innerWidth <= 640 : false);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
 
   // Utility: format a date-like value to YYYY-MM-DD key (supports moment/dayjs or Date)
   const dateKey = (d: any) => {
@@ -655,7 +664,7 @@ const InquiryForm: React.FC = () => {
             <div style={{ marginTop: 12, marginBottom: 12 }}>
               <Card style={{ borderRadius: 12, marginBottom: 12, boxShadow: '0 8px 20px rgba(31, 41, 55, 0.06)' }}>
                 {/* Top bar: Title + consolidated month/year dropdown */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', padding: '8px 12px', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 8 : 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <Typography.Title level={5} style={{ margin: 0 }}>Appointment Scheduling</Typography.Title>
                     <div style={{ color: '#6c757d', fontSize: 13 }}>{/* helper in header if needed */}</div>
@@ -668,7 +677,7 @@ const InquiryForm: React.FC = () => {
                         if (!isNaN(y) && !isNaN(m)) setCalendarValue(dayjs().year(y).month(m - 1).date(1));
                       }}
                       className="af-month-year-select"
-                      style={{ minWidth: 160 }}
+                      style={{ minWidth: 160, marginTop: isMobile ? 6 : 0 }}
                     >
                       {Array.from({ length: 12 }).map((_, i) => {
                         const opt = now.startOf('month').add(i, 'month');
@@ -688,8 +697,8 @@ const InquiryForm: React.FC = () => {
                 </div>
 
                 {/* Main area: calendar + action sidebar */}
-                <div className="af-main-calendar-area" style={{ display: 'flex', gap: 20, alignItems: 'stretch' }}>
-                  <div style={{ flex: 1, minWidth: 420 }}>
+                <div className="af-main-calendar-area" style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 20, alignItems: 'stretch' }}>
+                  <div style={{ flex: 1, minWidth: isMobile ? 'auto' : 360 }}>
                     <div ref={calendarRef} className="af-calendar-container">
                       <Calendar
                         fullscreen={false}
@@ -726,7 +735,7 @@ const InquiryForm: React.FC = () => {
                   </div>
 
                   {/* Right action panel */}
-                  <div className="af-action-panel" style={{ width: 320, borderLeft: '1px solid #f0f0f0', paddingLeft: 16, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                  <div className="af-action-panel" style={{ width: isMobile ? '100%' : 320, borderLeft: isMobile ? 'none' : '1px solid #f0f0f0', paddingLeft: isMobile ? 0 : 16, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', marginTop: isMobile ? 12 : 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                       <strong>Selected Dates ({appointmentDates.length}/3)</strong>
                       <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
