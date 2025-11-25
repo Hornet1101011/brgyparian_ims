@@ -314,10 +314,25 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
           return res.status(400).json({ message: `Time range for ${slot.date} must not overlap lunch break 12:00-13:00` });
         }
 
-        // generate slot integers (minute values at SLOT_STEP granularity)
-        for (let m = sMin; m < eMin; m += SLOT_STEP) {
-          slotDocs.push({ date: slot.date, slot: m, inquiryId: req.params.id, scheduledBy: (req as any).user?._id });
-        }
+          // generate slot integers (minute values at SLOT_STEP granularity)
+          for (let m = sMin; m < eMin; m += SLOT_STEP) {
+            slotDocs.push({
+              date: slot.date,
+              slot: m,
+              inquiryId: req.params.id,
+              scheduledBy: (req as any).user?._id,
+              // Resident info: try to get from the existing inquiry; fallback to request body
+              residentName: (beforeInquiry && (beforeInquiry as any).createdBy && (beforeInquiry as any).createdBy.fullName) || (beforeInquiry && (beforeInquiry as any).username) || undefined,
+              residentUsername: (beforeInquiry && (beforeInquiry as any).username) || undefined,
+              residentBarangayID: (beforeInquiry && (beforeInquiry as any).barangayID) || undefined,
+              // Staff info (who confirmed)
+              scheduledByUsername: (req as any).user?.username || undefined,
+              scheduledByBarangayID: (req as any).user?.barangayID || undefined,
+              // appointment-level time range
+              appointmentStartTime: slot.startTime,
+              appointmentEndTime: slot.endTime
+            });
+          }
       }
 
       // Attempt an atomic reservation using MongoDB transactions and the AppointmentSlot unique index
@@ -417,7 +432,11 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
 
     res.json(inquiry);
   } catch (error) {
-    res.status(500).json({ message: 'Error updating inquiry', error });
+    // Log the full error on the server for debugging, but return a safe
+    // string message to the client to avoid serializing complex error objects.
+    console.error('Error in updateInquiry:', error && (error as any).stack ? (error as any).stack : error);
+    const errMsg = error && (error as any).message ? (error as any).message : String(error);
+    res.status(500).json({ message: 'Error updating inquiry', error: errMsg });
   }
 };
 

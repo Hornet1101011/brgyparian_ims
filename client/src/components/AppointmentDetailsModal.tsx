@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, Descriptions, Divider, Checkbox, Button, Space, message } from 'antd';
 import dayjs from 'dayjs';
+import { Select } from 'antd';
 import TimeRangeSelector from './TimeRangeSelector';
 import { contactAPI } from '../services/api';
 
@@ -15,6 +16,7 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
   const [timeRanges, setTimeRanges] = useState<Record<string, { start?: string; end?: string }>>({});
   const [saving, setSaving] = useState(false);
   const [resolving, setResolving] = useState(false);
+  const [maxToSchedule, setMaxToSchedule] = useState<number>(0);
   const [existingScheduledByDate, setExistingScheduledByDate] = useState<Record<string, Array<{start:string,end:string}>>>({});
 
   useEffect(() => {
@@ -22,6 +24,13 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
     // reset
     setSelectedDates([]);
     setTimeRanges({});
+    // default the maxToSchedule to the number of requested dates (cap at 3)
+    try {
+      const count = (record && record.appointmentDates && Array.isArray(record.appointmentDates)) ? record.appointmentDates.length : 0;
+      setMaxToSchedule(count > 0 ? Math.min(3, count) : 0);
+    } catch (e) {
+      // ignore
+    }
     // fetch existing scheduled appointments to avoid double-booking
     (async () => {
       try {
@@ -47,8 +56,13 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
   const requestedDates = useMemo(() => (record && record.appointmentDates) ? record.appointmentDates : [], [record]);
 
   const toggleDate = (date: string, checked: boolean) => {
-    if (checked) setSelectedDates(prev => [...prev, date]);
-    else {
+    if (checked) {
+      if (maxToSchedule > 0 && selectedDates.length >= maxToSchedule) {
+        message.warning(`You may only select up to ${maxToSchedule} date(s) to schedule`);
+        return;
+      }
+      setSelectedDates(prev => [...prev, date]);
+    } else {
       setSelectedDates(prev => prev.filter(d => d !== date));
       setTimeRanges(prev => { const next = { ...prev }; delete next[date]; return next; });
     }
@@ -88,13 +102,19 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
       const body = JSON.stringify({ scheduledDates, status: 'scheduled' });
       const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
       if (!resp.ok) {
-        // Try to extract JSON message, otherwise text (HTML or plain)
-        let serverText = null;
+        // Read the body as text first (avoids body stream already-read errors),
+        // then attempt to parse JSON out of it.
+        let serverText: string | null = null;
         try {
-          const j = await resp.json();
-          serverText = j && j.message ? j.message : JSON.stringify(j);
-        } catch (e) {
-          try { serverText = await resp.text(); } catch (e2) { serverText = String(e2); }
+          const txt = await resp.text();
+          try {
+            const j = JSON.parse(txt);
+            serverText = j && j.message ? j.message : JSON.stringify(j);
+          } catch (parseErr) {
+            serverText = txt;
+          }
+        } catch (readErr) {
+          serverText = String(readErr);
         }
         console.error('Scheduling failed:', resp.status, serverText);
         message.error(serverText || `Server error ${resp.status}`);

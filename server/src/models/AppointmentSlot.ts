@@ -5,6 +5,16 @@ const appointmentSlotSchema = new mongoose.Schema({
   slot: { type: Number, required: true }, // minute index (e.g., 480 for 08:00, 485 for 08:05)
   inquiryId: { type: mongoose.Schema.Types.ObjectId, ref: 'Inquiry', required: true },
   scheduledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  // Resident info for easier lookup and admin reporting
+  residentName: { type: String },
+  residentUsername: { type: String },
+  residentBarangayID: { type: String },
+  // Staff user info who confirmed the appointment (username + barangayID)
+  scheduledByUsername: { type: String },
+  scheduledByBarangayID: { type: String },
+  // Appointment-level details (the time range that this slot is part of)
+  appointmentStartTime: { type: String }, // e.g. '08:30'
+  appointmentEndTime: { type: String },   // e.g. '08:45'
   createdAt: { type: Date, default: Date.now }
 });
 
