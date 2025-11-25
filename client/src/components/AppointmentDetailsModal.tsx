@@ -14,6 +14,7 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [timeRanges, setTimeRanges] = useState<Record<string, { start?: string; end?: string }>>({});
   const [saving, setSaving] = useState(false);
+  const [resolving, setResolving] = useState(false);
   const [existingScheduledByDate, setExistingScheduledByDate] = useState<Record<string, Array<{start:string,end:string}>>>({});
 
   useEffect(() => {
@@ -49,7 +50,7 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
     if (checked) setSelectedDates(prev => [...prev, date]);
     else {
       setSelectedDates(prev => prev.filter(d => d !== date));
-      setTimeRanges(prev => { const next = {...prev}; delete next[date]; return next; });
+      setTimeRanges(prev => { const next = { ...prev }; delete next[date]; return next; });
     }
   };
 
@@ -58,7 +59,6 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
   };
 
   const validateNoOverlap = () => {
-    // ensure each selected date has a start and end and doesn't overlap existingScheduledByDate
     for (const d of selectedDates) {
       const range = timeRanges[d];
       if (!range || !range.start || !range.end) return { ok: false, msg: `Please supply time range for ${d}` };
@@ -81,39 +81,26 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
     const scheduledDates = selectedDates.map(d => ({ date: d, startTime: timeRanges[d].start, endTime: timeRanges[d].end }));
     setSaving(true);
     try {
-      await contactAPI.resolveInquiry(record._id); // mark resolved? will use patch below
-      // Instead of resolveInquiry, call update inquiry to set scheduledDates and status
+      // Instead of auto-resolving, only update inquiry with scheduledDates/status
       await contactAPI.getInquiryById(record._id); // ensure exists
-      // Try PATCH first (preferred). Some hosts block PATCH and return an HTML
-      // error page (501/Not Implemented). If we receive a non-JSON response
-      // or status 501, retry the request as POST (server-side fallback route).
-      const doUpdate = async () => {
-        const url = `/api/inquiries/${record._id}`;
-        const body = JSON.stringify({ scheduledDates, status: 'scheduled' });
-
-        // Attempt PATCH
-        let resp = await fetch(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body });
-        let text = await resp.text();
-
-        // If server returned 501 or response is not JSON (likely HTML error), retry with POST
-        const looksLikeHtml = typeof text === 'string' && text.trim().startsWith('<');
-        if (resp.status === 501 || looksLikeHtml) {
-          resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
-          text = await resp.text();
-        }
-
-        // Try to parse JSON and surface errors
+      // Use POST-only for inquiry updates to work around hosts that block PATCH.
+      const url = `/api/inquiries/${record._id}`;
+      const body = JSON.stringify({ scheduledDates, status: 'scheduled' });
+      const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+      if (!resp.ok) {
+        // Try to extract JSON message, otherwise text (HTML or plain)
+        let serverText = null;
         try {
-          const json = JSON.parse(text);
-          if (!resp.ok) throw new Error(json && json.message ? json.message : 'Request failed');
-          return json;
-        } catch (err) {
-          // If parsing fails, throw a helpful error
-          throw new Error('Server returned an unexpected non-JSON response');
+          const j = await resp.json();
+          serverText = j && j.message ? j.message : JSON.stringify(j);
+        } catch (e) {
+          try { serverText = await resp.text(); } catch (e2) { serverText = String(e2); }
         }
-      };
-
-      await doUpdate();
+        console.error('Scheduling failed:', resp.status, serverText);
+        message.error(serverText || `Server error ${resp.status}`);
+        throw new Error(serverText || `Request failed with status ${resp.status}`);
+      }
+      // Do not auto-resolve here. Use the manual Resolve button instead.
       message.success('Appointment scheduled');
       onClose();
     } catch (e) {
@@ -121,6 +108,22 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
       message.error('Failed to schedule appointment');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleResolve = async () => {
+    if (!record || !record._id) return;
+    setResolving(true);
+    try {
+      const resp = await contactAPI.resolveInquiry(record._id);
+      message.success('Inquiry resolved');
+      // Optionally close modal or refresh parent; we'll close the modal to reflect change
+      onClose();
+    } catch (err) {
+      console.error('Failed to resolve inquiry', err);
+      message.error('Failed to resolve inquiry');
+    } finally {
+      setResolving(false);
     }
   };
 
@@ -150,6 +153,7 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
       <Divider />
       <Space style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <Button onClick={onClose}>Close</Button>
+        <Button onClick={handleResolve} loading={resolving} disabled={resolving}>Resolve</Button>
         <Button type="primary" onClick={confirm} loading={saving} disabled={selectedDates.length === 0}>Confirm Appointment</Button>
       </Space>
     </Modal>
