@@ -363,9 +363,35 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
         session.endSession();
       } catch (txErr: any) {
         try { if (session) { await session.abortTransaction(); session.endSession(); } } catch (e) { }
-        // Duplicate key error means some slot was already taken
+        // Duplicate key error means some slot was already taken — enrich with conflict details
         if (txErr && txErr.code === 11000) {
-          return res.status(409).json({ message: 'Scheduling conflict: one or more time slots already taken' });
+          try {
+            // Build a set of conflicting slots by checking AppointmentSlot documents that match any slotDocs
+            const keys = slotDocs.map((sd: any) => ({ date: sd.date, slot: sd.slot }));
+            const matches = await AppointmentSlot.find({ $or: keys }).lean();
+            const conflictsByInquiry = new Map<string, { date: string, startTime?: string, endTime?: string }>();
+            for (const m of matches || []) {
+              if (!m) continue;
+              if (!m.inquiryId || String(m.inquiryId) === String(req.params.id)) continue;
+              const id = String(m.inquiryId);
+              if (!conflictsByInquiry.has(id)) {
+                conflictsByInquiry.set(id, { date: m.date, startTime: m.appointmentStartTime || undefined, endTime: m.appointmentEndTime || undefined });
+              }
+            }
+            const conflictsDetailed: any[] = [];
+            for (const [inqId, info] of conflictsByInquiry.entries()) {
+              try {
+                const inq = await Inquiry.findById(inqId).populate('createdBy', 'fullName username').lean();
+                conflictsDetailed.push({ inquiryId: inqId, username: inq?.username || null, residentName: (inq && (inq as any).createdBy && (inq as any).createdBy.fullName) || null, date: info.date, startTime: info.startTime, endTime: info.endTime });
+              } catch (ee) {
+                conflictsDetailed.push({ inquiryId: inqId, date: info.date, startTime: info.startTime, endTime: info.endTime });
+              }
+            }
+            return res.status(409).json({ message: 'Scheduling conflict: one or more time slots already taken', conflicts: conflictsDetailed });
+          } catch (enrichErr) {
+            console.warn('Failed to enrich duplicate-key error with conflicts:', enrichErr);
+            return res.status(409).json({ message: 'Scheduling conflict: one or more time slots already taken' });
+          }
         }
         // If transactions are not supported or other error, attempt best-effort non-transactional reservation
         console.warn('Transaction-based scheduling failed, attempting non-transactional fallback:', txErr && txErr.message);
@@ -384,11 +410,38 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
             return res.status(404).json({ message: 'Inquiry not found' });
           }
         } catch (fbErr: any) {
-          // If duplicate key => conflict
+          // If duplicate key => conflict. Enrich with conflicting inquiry details when possible.
           if (fbErr && fbErr.code === 11000) {
-            // cleanup any partial inserts
-            try { await AppointmentSlot.deleteMany({ inquiryId: req.params.id }); } catch (e) { }
-            return res.status(409).json({ message: 'Scheduling conflict: one or more time slots already taken' });
+            try {
+              // Build list of keys to query
+              const keys = slotDocs.map((sd: any) => ({ date: sd.date, slot: sd.slot }));
+              const matches = await AppointmentSlot.find({ $or: keys }).lean();
+              const conflictsByInquiry = new Map<string, { date: string, startTime?: string, endTime?: string }>();
+              for (const m of matches || []) {
+                if (!m) continue;
+                if (!m.inquiryId || String(m.inquiryId) === String(req.params.id)) continue;
+                const id = String(m.inquiryId);
+                if (!conflictsByInquiry.has(id)) {
+                  conflictsByInquiry.set(id, { date: m.date, startTime: m.appointmentStartTime || undefined, endTime: m.appointmentEndTime || undefined });
+                }
+              }
+              const conflictsDetailed: any[] = [];
+              for (const [inqId, info] of conflictsByInquiry.entries()) {
+                try {
+                  const inq = await Inquiry.findById(inqId).populate('createdBy', 'fullName username').lean();
+                  conflictsDetailed.push({ inquiryId: inqId, username: inq?.username || null, residentName: (inq && (inq as any).createdBy && (inq as any).createdBy.fullName) || null, date: info.date, startTime: info.startTime, endTime: info.endTime });
+                } catch (ee) {
+                  conflictsDetailed.push({ inquiryId: inqId, date: info.date, startTime: info.startTime, endTime: info.endTime });
+                }
+              }
+              // cleanup any partial inserts
+              try { await AppointmentSlot.deleteMany({ inquiryId: req.params.id }); } catch (e) { }
+              return res.status(409).json({ message: 'Scheduling conflict: one or more time slots already taken', conflicts: conflictsDetailed });
+            } catch (enrichErr) {
+              console.warn('Failed to enrich duplicate-key error in fallback:', enrichErr);
+              try { await AppointmentSlot.deleteMany({ inquiryId: req.params.id }); } catch (e) { }
+              return res.status(409).json({ message: 'Scheduling conflict: one or more time slots already taken' });
+            }
           }
           console.error('Non-transactional fallback scheduling failed:', fbErr && (fbErr.message || fbErr));
           // cleanup any partial inserts
