@@ -25,6 +25,8 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
       const all = await contactAPI.getAllInquiries();
       const map: Record<string, Array<{start:string,end:string,inquiryId?:string,residentUsername?:string,residentName?:string}>> = {};
       (all || []).forEach((inq: any) => {
+        // ignore entries for the same inquiry we're editing — they are not conflicts
+        if (record && inq && String(inq._id) === String(record._id)) return;
         if (inq.scheduledDates && Array.isArray(inq.scheduledDates)) {
           inq.scheduledDates.forEach((sd: any) => {
             const date = sd.date;
@@ -42,6 +44,75 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
   };
 
   // Preflight availability check: refresh bookings and validate current selections
+  const requestedDates = useMemo(() => (record && record.appointmentDates) ? record.appointmentDates : [], [record]);
+
+  const toggleDate = (date: string, checked: boolean) => {
+    if (checked) {
+      if (maxToSchedule > 0 && selectedDates.length >= maxToSchedule) {
+        message.warning(`You may only select up to ${maxToSchedule} date(s) to schedule`);
+        return;
+      }
+      setSelectedDates(prev => [...prev, date]);
+    } else {
+      setSelectedDates(prev => prev.filter(d => d !== date));
+      setTimeRanges(prev => { const next: any = { ...prev }; delete next[date]; return next; });
+    }
+  };
+
+  const handleMaxChange = (val: number) => {
+    const newMax = Number(val) || 0;
+    setMaxToSchedule(newMax);
+    if (newMax > 0 && selectedDates.length > newMax) {
+      const keep = selectedDates.slice(0, newMax);
+      setSelectedDates(keep);
+      setTimeRanges(prev => {
+        const next: any = {};
+        for (const d of keep) if (prev[d]) next[d] = prev[d];
+        return next;
+      });
+    }
+  };
+
+  const updateTimeRange = (date: string, start?: string, end?: string) => {
+    setTimeRanges(prev => ({ ...prev, [date]: { start, end } }));
+  };
+
+  const validateNoOverlap = () => {
+    const normalizeToMinutes = (t?: string) => {
+      if (!t) return NaN;
+      const parts = String(t).split(':');
+      if (parts.length < 2) return NaN;
+      const hh = parseInt(parts[0], 10);
+      const mm = parseInt(parts[1], 10);
+      if (Number.isNaN(hh) || Number.isNaN(mm)) return NaN;
+      return hh * 60 + mm;
+    };
+
+    const OFFICE_START = 8 * 60; // 480
+    const OFFICE_END = 17 * 60; // 1020
+    const LUNCH_START = 12 * 60; // 720
+    const LUNCH_END = 13 * 60; // 780
+
+    for (const d of selectedDates) {
+      const range = timeRanges[d];
+      if (!range || !range.start || !range.end) return { ok: false, msg: `Please supply time range for ${d}` };
+      const sMin = normalizeToMinutes(range.start);
+      const eMin = normalizeToMinutes(range.end);
+      if (Number.isNaN(sMin) || Number.isNaN(eMin) || sMin >= eMin) return { ok: false, msg: `Invalid time range for ${d}` };
+      if (sMin < OFFICE_START || eMin > OFFICE_END) return { ok: false, msg: `Time range for ${d} must be within office hours 08:00-17:00` };
+      if (sMin < LUNCH_END && eMin > LUNCH_START) return { ok: false, msg: `Time range for ${d} must not overlap lunch break 12:00-13:00` };
+
+      const existing = existingScheduledByDate[d] || [];
+      for (const ex of existing) {
+        const exS = normalizeToMinutes((ex as any).start);
+        const exE = normalizeToMinutes((ex as any).end);
+        if (!Number.isNaN(exS) && !Number.isNaN(exE) && sMin < exE && eMin > exS) {
+          return { ok: false, msg: `Selected time ${range.start}-${range.end} overlaps existing appointment ${ (ex as any).start }-${ (ex as any).end } on ${d}` };
+        }
+      }
+    }
+    return { ok: true };
+  };
   const runPreflightCheck = async () => {
     await fetchExistingScheduled();
     const v = validateNoOverlap();
@@ -77,150 +148,66 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
     fetchExistingScheduled();
   }, [visible]);
 
-  
-
-  const requestedDates = useMemo(() => (record && record.appointmentDates) ? record.appointmentDates : [], [record]);
-
-  const toggleDate = (date: string, checked: boolean) => {
-    if (checked) {
-      if (maxToSchedule > 0 && selectedDates.length >= maxToSchedule) {
-        message.warning(`You may only select up to ${maxToSchedule} date(s) to schedule`);
-        return;
-      }
-      setSelectedDates(prev => [...prev, date]);
-    } else {
-      setSelectedDates(prev => prev.filter(d => d !== date));
-      setTimeRanges(prev => { const next = { ...prev }; delete next[date]; return next; });
-    }
-  };
-
-  const handleMaxChange = (val: number) => {
-    const newMax = Number(val) || 0;
-    setMaxToSchedule(newMax);
-    if (newMax > 0 && selectedDates.length > newMax) {
-      const keep = selectedDates.slice(0, newMax);
-      setSelectedDates(keep);
-      setTimeRanges(prev => {
-        const next: any = {};
-        for (const d of keep) if (prev[d]) next[d] = prev[d];
-        return next;
-      });
-    }
-  };
-
-  const updateTimeRange = (date: string, start?: string, end?: string) => {
-    setTimeRanges(prev => ({ ...prev, [date]: { start, end } }));
-  };
-
-  const validateNoOverlap = () => {
-    for (const d of selectedDates) {
-      const range = timeRanges[d];
-      if (!range || !range.start || !range.end) return { ok: false, msg: `Please supply time range for ${d}` };
-      const s = range.start; const e = range.end;
-      const existing = existingScheduledByDate[d] || [];
-      for (const ex of existing) {
-        // overlap if s < ex.end && e > ex.start
-        if (s < ex.end && e > ex.start) {
-          return { ok: false, msg: `Selected time ${s}-${e} overlaps existing appointment ${ex.start}-${ex.end} on ${d}` };
-        }
-      }
-    }
-    return { ok: true };
-  };
-
   const confirm = async () => {
     const check = validateNoOverlap();
     if (!check.ok) { message.error(check.msg); return; }
-    // Build scheduledDates payload
     const scheduledDates = selectedDates.map(d => ({ date: d, startTime: timeRanges[d].start, endTime: timeRanges[d].end }));
     setSaving(true);
     try {
-      // Instead of auto-resolving, only update inquiry with scheduledDates/status
-      await contactAPI.getInquiryById(record._id); // ensure exists
-      // Use POST-only for inquiry updates to work around hosts that block PATCH.
-      // In local development, call backend directly to avoid CRA proxy ECONNREFUSED issues.
-      const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-      // Try local backend first (short timeout) then fallback to Render deployment if unreachable.
-      const localUrl = `http://localhost:5000/api/inquiries/${record._id}`;
-      const remoteUrl = `https://alphaversion.onrender.com/api/inquiries/${record._id}`;
-      const body = JSON.stringify({ scheduledDates, status: 'scheduled' });
-
-      const doFetchWithTimeout = async (url: string, timeoutMs = 3000) => {
-        const controller = new AbortController();
-        const id = setTimeout(() => controller.abort(), timeoutMs);
-        try {
-          const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: controller.signal as any });
-          clearTimeout(id);
-          return r;
-        } catch (err) {
-          clearTimeout(id);
-          throw err;
-        }
-      };
-
-      let resp: Response | null = null;
-      if (isLocal) {
-        try {
-          // Try local absolute URL quickly (may be offline)
-          await axiosInstance.post(localUrl, JSON.parse(body), { timeout: 2500 });
-          // Construct a synthetic successful response shape to keep downstream logic same
-          resp = { ok: true } as any;
-        } catch (err) {
-          console.warn('Local backend unreachable or timed out, retrying remote with auth:', (err as any)?.message || err);
+      await contactAPI.getInquiryById(record._id);
+      const payload = { scheduledDates, status: 'scheduled' };
+      try {
+        await axiosInstance.post(`/inquiries/${record._id}`, payload, { timeout: 10000 });
+        message.success('Appointment scheduled');
+        onClose();
+      } catch (err: any) {
+        const status = err?.response?.status;
+        const data = err?.response?.data;
+        const serverText = (data && (data.message || JSON.stringify(data))) || err?.message || String(err);
+        console.error('Scheduling failed:', status, serverText);
+        if (status === 409) {
+          // Ensure we have the latest bookings to present accurate conflict details
           try {
-            const r = await axiosInstance.post(remoteUrl, JSON.parse(body), { timeout: 8000 });
-            resp = { ok: true, data: r.data } as any;
-          } catch (err2: any) {
-            // If remote responded with 401/403, rethrow so existing error handling runs
-            const status = err2?.response?.status;
-            const msg = err2?.response?.data?.message || err2?.message || String(err2);
-            const fakeResp: any = { ok: false, status: status || 500, text: async () => msg };
-            resp = fakeResp;
+            await fetchExistingScheduled();
+          } catch (refreshErr) {
+            console.warn('Failed to refresh bookings after 409', refreshErr);
           }
-        }
-      } else {
-        try {
-          const r = await axiosInstance.post(remoteUrl, JSON.parse(body), { timeout: 8000 });
-          resp = { ok: true, data: r.data } as any;
-        } catch (err2: any) {
-          const status = err2?.response?.status;
-          const msg = err2?.response?.data?.message || err2?.message || String(err2);
-          const fakeResp: any = { ok: false, status: status || 500, text: async () => msg };
-          resp = fakeResp;
-        }
-      }
-      if (!resp || !(resp as any).ok) {
-        // Read the body as text first (avoids body stream already-read errors),
-        // then attempt to parse JSON out of it.
-        let serverText: string | null = null;
-        let parsedJson: any = null;
-        try {
-          // resp may be an object returned from axios stub or a Fetch-like Response.
-          const anyResp: any = resp;
-          let txt = '';
-          if (anyResp && typeof anyResp.text === 'function') {
-            txt = await anyResp.text();
-          } else if (anyResp && anyResp.data) {
-            try { txt = JSON.stringify(anyResp.data); } catch (_) { txt = String(anyResp.data); }
-          } else {
-            txt = String(anyResp || '');
+
+          // Prefer server-provided conflict details when available
+          let conflictItems = data && Array.isArray(data.conflicts) ? data.conflicts : null;
+
+          // If server didn't provide specifics, compute local conflicts from refreshed `existingScheduledByDate`
+          if (!conflictItems) {
+            const localConflicts: any[] = [];
+            try {
+              const normalizeToMinutes = (t?: string) => {
+                if (!t) return NaN;
+                const parts = String(t).split(':');
+                if (parts.length < 2) return NaN;
+                const hh = parseInt(parts[0], 10);
+                const mm = parseInt(parts[1], 10);
+                if (Number.isNaN(hh) || Number.isNaN(mm)) return NaN;
+                return hh * 60 + mm;
+              };
+              for (const sd of scheduledDates) {
+                const date = sd.date;
+                const sMin = normalizeToMinutes(sd.startTime);
+                const eMin = normalizeToMinutes(sd.endTime);
+                const existing = (existingScheduledByDate && existingScheduledByDate[date]) || [];
+                for (const ex of existing) {
+                  const exS = normalizeToMinutes((ex as any).start);
+                  const exE = normalizeToMinutes((ex as any).end);
+                  if (!Number.isNaN(exS) && !Number.isNaN(exE) && sMin < exE && eMin > exS) {
+                    localConflicts.push({ date, startTime: ex.start, endTime: ex.end, inquiryId: ex.inquiryId, residentUsername: ex.residentUsername, residentName: ex.residentName });
+                  }
+                }
+              }
+            } catch (computeErr) {
+              console.warn('Failed to compute local conflicts', computeErr);
+            }
+            conflictItems = localConflicts.length > 0 ? localConflicts : null;
           }
-          try {
-            const j = JSON.parse(txt);
-            parsedJson = j;
-            serverText = j && j.message ? j.message : JSON.stringify(j);
-          } catch (parseErr) {
-            serverText = txt;
-          }
-        } catch (readErr) {
-          serverText = String(readErr);
-        }
-        const statusCode = (resp && (resp as any).status) ? (resp as any).status : 'unknown';
-        console.error('Scheduling failed:', statusCode, serverText);
-        // If this is a 409 conflict specifically, show a helpful dialog with a refresh option
-        if (statusCode === 409) {
-          // Build conflict content: if server returned conflicts array, enumerate them
-          const conflictItems = (parsedJson && Array.isArray(parsedJson.conflicts)) ? parsedJson.conflicts : null;
+
           Modal.confirm({
             title: 'Scheduling conflict',
             content: (
@@ -246,23 +233,35 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
               message.info('Refreshed existing bookings');
             }
           });
-          // Surface the error to caller flow as well (so confirm() shows failure)
           message.error(serverText || 'Scheduling conflict: one or more time slots already taken');
-          throw new Error(serverText || `Request failed with status ${statusCode}`);
+          throw new Error(serverText || `Request failed with status ${status}`);
         }
-
-        message.error(serverText || `Server error ${statusCode}`);
-        throw new Error(serverText || `Request failed with status ${statusCode}`);
+        if (status === 401 || status === 403) {
+          Modal.confirm({
+            title: 'Authentication required',
+            content: (
+              <div>
+                <p>{serverText || 'You are not authenticated to perform this action on the remote server.'}</p>
+                <p>Please sign in to continue.</p>
+              </div>
+            ),
+            okText: 'Go to Login',
+            cancelText: 'Cancel',
+            onOk: () => { try { window.location.href = '/login'; } catch (e) {} }
+          });
+          message.error(serverText || `Authentication required (${status})`);
+          throw new Error(serverText || `Request failed with status ${status}`);
+        }
+        message.error(serverText || `Server error ${status || 'unknown'}`);
+        throw err;
       }
-      // Do not auto-resolve here. Use the manual Resolve button instead.
-      message.success('Appointment scheduled');
-      onClose();
     } catch (e) {
       console.error(e);
       message.error('Failed to schedule appointment');
     } finally {
       setSaving(false);
     }
+
   };
 
   const handleResolve = async () => {
