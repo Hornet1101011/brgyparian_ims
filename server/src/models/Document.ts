@@ -41,5 +41,8 @@ const documentSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 
-export const DocumentModel = mongoose.model<IDocument>('Document', documentSchema);
+// Guard against model recompilation when running in nodemon/ts-node
+export const DocumentModel: mongoose.Model<IDocument> = (mongoose.models && (mongoose.models as any).Document)
+  ? (mongoose.models as any).Document as mongoose.Model<IDocument>
+  : mongoose.model<IDocument>('Document', documentSchema);
 export const Document = DocumentModel;

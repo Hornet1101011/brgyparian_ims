@@ -68,6 +68,20 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
     }
   };
 
+  const handleMaxChange = (val: number) => {
+    const newMax = Number(val) || 0;
+    setMaxToSchedule(newMax);
+    if (newMax > 0 && selectedDates.length > newMax) {
+      const keep = selectedDates.slice(0, newMax);
+      setSelectedDates(keep);
+      setTimeRanges(prev => {
+        const next: any = {};
+        for (const d of keep) if (prev[d]) next[d] = prev[d];
+        return next;
+      });
+    }
+  };
+
   const updateTimeRange = (date: string, start?: string, end?: string) => {
     setTimeRanges(prev => ({ ...prev, [date]: { start, end } }));
   };
@@ -152,6 +166,17 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
       <Descriptions column={1} bordered>
         <Descriptions.Item label="Resident">{record.createdBy?.fullName || record.username}</Descriptions.Item>
         <Descriptions.Item label="Message">{record.message}</Descriptions.Item>
+        <Descriptions.Item label="Number to Schedule">
+          <Select
+            value={maxToSchedule || undefined}
+            onChange={(v) => handleMaxChange(Number(v))}
+            style={{ width: 140 }}
+          >
+            {(requestedDates || []).map((_: any, idx: number) => (
+              <Select.Option key={idx + 1} value={idx + 1}>{idx + 1}</Select.Option>
+            ))}
+          </Select>
+        </Descriptions.Item>
         <Descriptions.Item label="Requested Dates">
           {requestedDates.length === 0 && <div>No dates requested</div>}
           {requestedDates.map((d: string) => (
