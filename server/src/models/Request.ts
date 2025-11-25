@@ -68,4 +68,7 @@ const requestSchema = new mongoose.Schema({
   timestamps: true,
 });
 
-export const Request = mongoose.model<IRequest>('Request', requestSchema);
+// Guard against recompilation in dev
+export const Request: mongoose.Model<IRequest> = (mongoose.models && (mongoose.models as any).Request)
+  ? (mongoose.models as any).Request as mongoose.Model<IRequest>
+  : mongoose.model<IRequest>('Request', requestSchema);

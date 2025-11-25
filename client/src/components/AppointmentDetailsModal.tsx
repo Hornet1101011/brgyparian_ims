@@ -112,7 +112,10 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
       // Instead of auto-resolving, only update inquiry with scheduledDates/status
       await contactAPI.getInquiryById(record._id); // ensure exists
       // Use POST-only for inquiry updates to work around hosts that block PATCH.
-      const url = `/api/inquiries/${record._id}`;
+      // In local development, call backend directly to avoid CRA proxy ECONNREFUSED issues.
+      const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+      const backendRoot = isLocal ? 'http://localhost:5000' : '';
+      const url = `${backendRoot}/api/inquiries/${record._id}`;
       const body = JSON.stringify({ scheduledDates, status: 'scheduled' });
       const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
       if (!resp.ok) {

@@ -239,4 +239,6 @@ userSchema.set('toJSON', {
   }
 });
 
+// Guard against recompilation in dev (nodemon / ts-node)
+// Use a looser type here to avoid compile-time mismatch with existing mongoose.models entries during hot reloads
 export const User = mongoose.model<IUser, IUserModel>('User', userSchema);

@@ -10,6 +10,9 @@ const officialSchema = new mongoose.Schema({
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });
 
-export const Official = mongoose.model('Official', officialSchema);
+// Guard against recompilation in dev
+export const Official: mongoose.Model<any> = (mongoose.models && (mongoose.models as any).Official)
+  ? (mongoose.models as any).Official as mongoose.Model<any>
+  : mongoose.model('Official', officialSchema);
 
 export default Official;

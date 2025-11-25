@@ -21,4 +21,7 @@ const appointmentSlotSchema = new mongoose.Schema({
 // Unique index per date+slot to prevent overlapping reservations for the same slot
 appointmentSlotSchema.index({ date: 1, slot: 1 }, { unique: true });
 
-export const AppointmentSlot = mongoose.model('AppointmentSlot', appointmentSlotSchema);
+// Guard against recompilation in dev (nodemon / ts-node)
+export const AppointmentSlot: mongoose.Model<any> = (mongoose.models && (mongoose.models as any).AppointmentSlot)
+  ? (mongoose.models as any).AppointmentSlot as mongoose.Model<any>
+  : mongoose.model('AppointmentSlot', appointmentSlotSchema);

@@ -25,4 +25,7 @@ const notificationSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 });
 
-export const Notification = mongoose.model<INotification>('Notification', notificationSchema);
+// Guard against recompilation in dev
+export const Notification: mongoose.Model<INotification> = (mongoose.models && (mongoose.models as any).Notification)
+  ? (mongoose.models as any).Notification as mongoose.Model<INotification>
+  : mongoose.model<INotification>('Notification', notificationSchema);

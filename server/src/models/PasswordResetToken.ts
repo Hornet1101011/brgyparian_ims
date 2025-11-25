@@ -12,4 +12,7 @@ const passwordResetTokenSchema = new mongoose.Schema({
 // Create TTL index so MongoDB automatically deletes expired tokens
 passwordResetTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
-export const PasswordResetToken = mongoose.model('PasswordResetToken', passwordResetTokenSchema);
+// Guard against recompilation in dev
+export const PasswordResetToken: mongoose.Model<any> = (mongoose.models && (mongoose.models as any).PasswordResetToken)
+  ? (mongoose.models as any).PasswordResetToken as mongoose.Model<any>
+  : mongoose.model('PasswordResetToken', passwordResetTokenSchema);

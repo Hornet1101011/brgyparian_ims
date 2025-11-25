@@ -20,4 +20,7 @@ const ActivityLogSchema = new Schema<IActivityLog>({
   ipAddress: { type: String, required: true },
 });
 
-export const ActivityLog = mongoose.model<IActivityLog>('ActivityLog', ActivityLogSchema);
+// Guard against recompilation in dev
+export const ActivityLog: mongoose.Model<IActivityLog> = (mongoose.models && (mongoose.models as any).ActivityLog)
+  ? (mongoose.models as any).ActivityLog as mongoose.Model<IActivityLog>
+  : mongoose.model<IActivityLog>('ActivityLog', ActivityLogSchema);

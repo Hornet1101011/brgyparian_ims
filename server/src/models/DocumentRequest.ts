@@ -184,4 +184,7 @@ documentRequestSchema.methods.generateDocumentContent = async function(): Promis
 documentRequestSchema.index({ requesterId: 1, status: 1 });
 documentRequestSchema.index({ dateRequested: -1 });
 
-export const DocumentRequest = mongoose.model<IDocumentRequest>('DocumentRequest', documentRequestSchema);
+// Guard against recompilation in dev
+export const DocumentRequest: mongoose.Model<IDocumentRequest> = (mongoose.models && (mongoose.models as any).DocumentRequest)
+  ? (mongoose.models as any).DocumentRequest as mongoose.Model<IDocumentRequest>
+  : mongoose.model<IDocumentRequest>('DocumentRequest', documentRequestSchema);

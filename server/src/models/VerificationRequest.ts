@@ -34,4 +34,7 @@ const verificationRequestSchema = new mongoose.Schema({
   reviewerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: false },
 });
 
-export const VerificationRequest = mongoose.model<IVerificationRequest>('VerificationRequest', verificationRequestSchema);
+// Guard against recompilation in dev
+export const VerificationRequest: mongoose.Model<IVerificationRequest> = (mongoose.models && (mongoose.models as any).VerificationRequest)
+  ? (mongoose.models as any).VerificationRequest as mongoose.Model<IVerificationRequest>
+  : mongoose.model<IVerificationRequest>('VerificationRequest', verificationRequestSchema);

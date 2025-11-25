@@ -46,4 +46,7 @@ const messageSchema = new mongoose.Schema({
   },
 });
 
-export const Message = mongoose.model<IMessage>('Message', messageSchema);
+// Guard against recompilation in dev
+export const Message: mongoose.Model<IMessage> = (mongoose.models && (mongoose.models as any).Message)
+  ? (mongoose.models as any).Message as mongoose.Model<IMessage>
+  : mongoose.model<IMessage>('Message', messageSchema);

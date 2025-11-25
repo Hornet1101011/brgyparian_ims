@@ -131,4 +131,7 @@ const inquirySchema = new mongoose.Schema({
   timestamps: true,
 });
 
-export const Inquiry = mongoose.model<IInquiry>('Inquiry', inquirySchema);
+// Guard against recompilation in dev
+export const Inquiry: mongoose.Model<IInquiry> = (mongoose.models && (mongoose.models as any).Inquiry)
+  ? (mongoose.models as any).Inquiry as mongoose.Model<IInquiry>
+  : mongoose.model<IInquiry>('Inquiry', inquirySchema);
