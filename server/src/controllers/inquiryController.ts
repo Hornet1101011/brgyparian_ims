@@ -23,6 +23,45 @@ import { Notification } from '../models/Notification';
 import { AppointmentSlot } from '../models/AppointmentSlot';
 import { handleSaveError } from '../utils/handleSaveError';
 
+// Helper: convert HH:MM to minutes since midnight
+const normalizeToMinutes = (t?: string) => {
+  if (!t) return NaN;
+  const parts = String(t).split(':');
+  if (parts.length < 2) return NaN;
+  const hh = parseInt(parts[0], 10);
+  const mm = parseInt(parts[1], 10);
+  if (Number.isNaN(hh) || Number.isNaN(mm)) return NaN;
+  return hh * 60 + mm;
+};
+
+// Helper: find overlapping appointment slots for a given date/time range
+async function findConflictsForRange(date: string, startTime: string, endTime: string, excludeInquiryId?: string) {
+  const sMin = normalizeToMinutes(startTime);
+  const eMin = normalizeToMinutes(endTime);
+  if (Number.isNaN(sMin) || Number.isNaN(eMin) || sMin >= eMin) return [];
+  // Query AppointmentSlot for any minute buckets that overlap [sMin, eMin)
+  const overlapping = await AppointmentSlot.find({ date, slot: { $gte: sMin, $lt: eMin } }).lean();
+  const byInquiry = new Map<string, { date: string; startTime?: string; endTime?: string }>();
+  for (const o of overlapping || []) {
+    if (!o) continue;
+    const otherId = String(o.inquiryId || '');
+    if (!otherId || (excludeInquiryId && otherId === String(excludeInquiryId))) continue;
+    if (!byInquiry.has(otherId)) {
+      byInquiry.set(otherId, { date: o.date, startTime: o.appointmentStartTime || undefined, endTime: o.appointmentEndTime || undefined });
+    }
+  }
+  if (byInquiry.size === 0) return [];
+  const conflicts: any[] = [];
+  const ids = Array.from(byInquiry.keys());
+  const inqs = await Inquiry.find({ _id: { $in: ids } }).populate('createdBy', 'fullName username').lean();
+  for (const id of ids) {
+    const info = byInquiry.get(id)!;
+    const inq = (inqs || []).find((x: any) => String(x._id) === String(id));
+    conflicts.push({ inquiryId: id, username: inq?.username || null, residentName: (inq && (inq as any).createdBy && (inq as any).createdBy.fullName) || null, date: info.date, startTime: info.startTime, endTime: info.endTime });
+  }
+  return conflicts;
+}
+
 export const createInquiry = async (req: any, res: Response, next: NextFunction) => {
   try {
     // Accept assignedTo (array of user IDs) and/or assignedRole
@@ -341,6 +380,21 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
       // Attempt an atomic reservation using MongoDB transactions and the AppointmentSlot unique index
       let session: any = null;
       // NOTE: preflight overlap checking removed — rely on DB unique index and insert-time errors
+      // Quick availability check against AppointmentSlot collection to avoid obvious conflicts
+      try {
+        const aggregatedConflicts: any[] = [];
+        for (const sd of updateBody.scheduledDates) {
+          const conflicts = await findConflictsForRange(sd.date, sd.startTime, sd.endTime, req.params.id);
+          if (conflicts && conflicts.length) aggregatedConflicts.push(...conflicts);
+        }
+        if (aggregatedConflicts.length > 0) {
+          return res.status(409).json({ message: 'Scheduling conflict: one or more time slots already taken', conflicts: aggregatedConflicts });
+        }
+      } catch (availErr) {
+        // If availability check fails for any reason, continue and let DB insertion be authoritative
+        console.warn('Availability pre-check failed, proceeding to insert:', (availErr as any)?.message || availErr);
+      }
+
       try {
         session = await mongoose.startSession();
         session.startTransaction();
