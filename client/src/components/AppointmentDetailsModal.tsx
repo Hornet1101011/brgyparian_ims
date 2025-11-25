@@ -114,10 +114,36 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
       // Use POST-only for inquiry updates to work around hosts that block PATCH.
       // In local development, call backend directly to avoid CRA proxy ECONNREFUSED issues.
       const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-      const backendRoot = isLocal ? 'http://localhost:5000' : '';
-      const url = `${backendRoot}/api/inquiries/${record._id}`;
+      // Try local backend first (short timeout) then fallback to Render deployment if unreachable.
+      const localUrl = `http://localhost:5000/api/inquiries/${record._id}`;
+      const remoteUrl = `https://alphaversion.onrender.com/api/inquiries/${record._id}`;
       const body = JSON.stringify({ scheduledDates, status: 'scheduled' });
-      const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+
+      const doFetchWithTimeout = async (url: string, timeoutMs = 3000) => {
+        const controller = new AbortController();
+        const id = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: controller.signal as any });
+          clearTimeout(id);
+          return r;
+        } catch (err) {
+          clearTimeout(id);
+          throw err;
+        }
+      };
+
+      let resp: Response | null = null;
+      if (isLocal) {
+        try {
+          resp = await doFetchWithTimeout(localUrl, 2500);
+        } catch (err) {
+          console.warn('Local backend unreachable or timed out, retrying remote:', err);
+          // try remote
+          resp = await doFetchWithTimeout(remoteUrl, 8000);
+        }
+      } else {
+        resp = await doFetchWithTimeout(remoteUrl, 8000);
+      }
       if (!resp.ok) {
         // Read the body as text first (avoids body stream already-read errors),
         // then attempt to parse JSON out of it.
