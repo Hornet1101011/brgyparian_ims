@@ -17,7 +17,49 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
   const [saving, setSaving] = useState(false);
   const [resolving, setResolving] = useState(false);
   const [maxToSchedule, setMaxToSchedule] = useState<number>(0);
-  const [existingScheduledByDate, setExistingScheduledByDate] = useState<Record<string, Array<{start:string,end:string}>>>({});
+  const [existingScheduledByDate, setExistingScheduledByDate] = useState<Record<string, Array<{start:string,end:string,inquiryId?:string,residentUsername?:string,residentName?:string}>>>({});
+  const [availabilityOk, setAvailabilityOk] = useState<boolean>(true);
+  const [availabilityMsg, setAvailabilityMsg] = useState<string>('');
+  const fetchExistingScheduled = async () => {
+    try {
+      const all = await contactAPI.getAllInquiries();
+      const map: Record<string, Array<{start:string,end:string,inquiryId?:string,residentUsername?:string,residentName?:string}>> = {};
+      (all || []).forEach((inq: any) => {
+        if (inq.scheduledDates && Array.isArray(inq.scheduledDates)) {
+          inq.scheduledDates.forEach((sd: any) => {
+            const date = sd.date;
+            if (!date) return;
+            map[date] = map[date] || [];
+            map[date].push({ start: sd.startTime, end: sd.endTime, inquiryId: inq._id, residentUsername: inq.username, residentName: inq.createdBy?.fullName });
+          });
+        }
+      });
+      setExistingScheduledByDate(map);
+    } catch (e) {
+      console.warn('Failed to fetch scheduled appointments', e);
+      message.warning('Could not refresh existing bookings.');
+    }
+  };
+
+  // Preflight availability check: refresh bookings and validate current selections
+  const runPreflightCheck = async () => {
+    await fetchExistingScheduled();
+    const v = validateNoOverlap();
+    if (!v.ok) {
+      setAvailabilityOk(false);
+      setAvailabilityMsg(v.msg || 'Selected time conflicts with existing bookings');
+    } else {
+      setAvailabilityOk(true);
+      setAvailabilityMsg('');
+    }
+  };
+
+  // Run preflight when selectedDates or timeRanges change
+  useEffect(() => {
+    if (selectedDates.length === 0) { setAvailabilityOk(true); setAvailabilityMsg(''); return; }
+    // fire and forget
+    runPreflightCheck().catch(err => console.warn('Preflight check failed', err));
+  }, [selectedDates, timeRanges]);
 
   useEffect(() => {
     if (!visible) return;
@@ -32,26 +74,10 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
       // ignore
     }
     // fetch existing scheduled appointments to avoid double-booking
-    (async () => {
-      try {
-        const all = await contactAPI.getAllInquiries();
-        const map: Record<string, Array<{start:string,end:string}>> = {};
-        (all || []).forEach((inq: any) => {
-          if (inq.scheduledDates && Array.isArray(inq.scheduledDates)) {
-            inq.scheduledDates.forEach((sd: any) => {
-              const date = sd.date;
-              if (!date) return;
-              map[date] = map[date] || [];
-              map[date].push({ start: sd.startTime, end: sd.endTime });
-            });
-          }
-        });
-        setExistingScheduledByDate(map);
-      } catch (e) {
-        console.warn('Failed to fetch scheduled appointments', e);
-      }
-    })();
+    fetchExistingScheduled();
   }, [visible]);
+
+  
 
   const requestedDates = useMemo(() => (record && record.appointmentDates) ? record.appointmentDates : [], [record]);
 
@@ -167,6 +193,7 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
         // Read the body as text first (avoids body stream already-read errors),
         // then attempt to parse JSON out of it.
         let serverText: string | null = null;
+        let parsedJson: any = null;
         try {
           // resp may be an object returned from axios stub or a Fetch-like Response.
           const anyResp: any = resp;
@@ -180,6 +207,7 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
           }
           try {
             const j = JSON.parse(txt);
+            parsedJson = j;
             serverText = j && j.message ? j.message : JSON.stringify(j);
           } catch (parseErr) {
             serverText = txt;
@@ -189,6 +217,40 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
         }
         const statusCode = (resp && (resp as any).status) ? (resp as any).status : 'unknown';
         console.error('Scheduling failed:', statusCode, serverText);
+        // If this is a 409 conflict specifically, show a helpful dialog with a refresh option
+        if (statusCode === 409) {
+          // Build conflict content: if server returned conflicts array, enumerate them
+          const conflictItems = (parsedJson && Array.isArray(parsedJson.conflicts)) ? parsedJson.conflicts : null;
+          Modal.confirm({
+            title: 'Scheduling conflict',
+            content: (
+              <div>
+                <p>{serverText || 'One or more time slots are already taken.'}</p>
+                {conflictItems && conflictItems.length > 0 && (
+                  <div style={{ marginTop: 8 }}>
+                    <p style={{ marginBottom: 6 }}><strong>Conflicting bookings:</strong></p>
+                    <ul>
+                      {conflictItems.map((c: any, idx: number) => (
+                        <li key={idx}>{c.date} {c.startTime}-{c.endTime} — {c.residentUsername || c.residentName || c.inquiryId}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <p>You can refresh current bookings to see the latest scheduled appointments, or choose a different time.</p>
+              </div>
+            ),
+            okText: 'Refresh Bookings',
+            cancelText: 'Close',
+            onOk: async () => {
+              await fetchExistingScheduled();
+              message.info('Refreshed existing bookings');
+            }
+          });
+          // Surface the error to caller flow as well (so confirm() shows failure)
+          message.error(serverText || 'Scheduling conflict: one or more time slots already taken');
+          throw new Error(serverText || `Request failed with status ${statusCode}`);
+        }
+
         message.error(serverText || `Server error ${statusCode}`);
         throw new Error(serverText || `Request failed with status ${statusCode}`);
       }
@@ -254,10 +316,13 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
         </Descriptions.Item>
       </Descriptions>
       <Divider />
+      {!availabilityOk && (
+        <div style={{ marginBottom: 8, color: '#d4380d' }}>{availabilityMsg}</div>
+      )}
       <Space style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <Button onClick={onClose}>Close</Button>
         <Button onClick={handleResolve} loading={resolving} disabled={resolving}>Resolve</Button>
-        <Button type="primary" onClick={confirm} loading={saving} disabled={selectedDates.length === 0}>Confirm Appointment</Button>
+        <Button type="primary" onClick={confirm} loading={saving} disabled={selectedDates.length === 0 || !availabilityOk}>Confirm Appointment</Button>
       </Space>
     </Modal>
   );

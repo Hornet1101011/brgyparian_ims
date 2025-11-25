@@ -7,7 +7,7 @@ const { Text } = Typography;
 
 type Props = {
   date: string; // YYYY-MM-DD
-  existingRanges?: Array<{ start: string; end: string }>; // times as HH:mm
+  existingRanges?: Array<{ start: string; end: string; inquiryId?: string; residentUsername?: string; residentName?: string }>; // times as HH:mm
   onChange: (start?: string, end?: string) => void;
 };
 
@@ -28,8 +28,8 @@ const TimeRangeSelector: React.FC<Props> = ({ date, existingRanges = [], onChang
       const s = toMinutes(r.start);
       const e = toMinutes(r.end);
       if (Number.isNaN(s) || Number.isNaN(e)) return null;
-      return { start: s, end: e };
-    }).filter(Boolean) as Array<{ start: number; end: number }>;
+      return { start: s, end: e, meta: { inquiryId: r.inquiryId, residentUsername: r.residentUsername, residentName: r.residentName } };
+    }).filter(Boolean) as Array<{ start: number; end: number; meta?: any }>;
   }, [existingRanges]);
 
   const OFFICE_START = 8 * 60; // 480
@@ -85,7 +85,7 @@ const TimeRangeSelector: React.FC<Props> = ({ date, existingRanges = [], onChang
     return blocks.map(b => {
       const left = Math.max(0, ((b.start - OFFICE_START) / total) * 100);
       const width = Math.max(0, ((Math.min(b.end, OFFICE_END) - Math.max(b.start, OFFICE_START)) / total) * 100);
-      return { left, width, start: b.start, end: b.end };
+      return { left, width, start: b.start, end: b.end, meta: (b as any).meta };
     });
   }, [blocks]);
 
@@ -122,7 +122,8 @@ const TimeRangeSelector: React.FC<Props> = ({ date, existingRanges = [], onChang
       <div style={{ marginTop: 8 }}>
         <div style={{ height: 10, background: '#f0f0f0', position: 'relative', borderRadius: 4 }}>
           {timelineSegments.map((s, i) => (
-            <div key={i} title={`${Math.floor(s.start/60).toString().padStart(2,'0')}:${(s.start%60).toString().padStart(2,'0')} - ${Math.floor(s.end/60).toString().padStart(2,'0')}:${(s.end%60).toString().padStart(2,'0')}`}
+            <div key={i}
+              title={`${Math.floor(s.start/60).toString().padStart(2,'0')}:${(s.start%60).toString().padStart(2,'0')} - ${Math.floor(s.end/60).toString().padStart(2,'0')}:${(s.end%60).toString().padStart(2,'0')}` + (s.meta && s.meta.residentUsername ? ` (Booked by ${s.meta.residentUsername})` : '')}
               style={{ position: 'absolute', left: `${s.left}%`, width: `${s.width}%`, top: 0, bottom: 0, background: 'rgba(220,53,69,0.85)', borderRadius: 4 }} />
           ))}
         </div>

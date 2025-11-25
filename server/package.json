@@ -8,6 +8,8 @@
     "start": "node dist/index.js",
     "start:prod": "cross-env NODE_ENV=production node dist/index.js",
     "dev": "nodemon src/index.ts",
+    "migrate:dedupe-appointments": "node ./scripts/dedupe_appointment_slots.js",
+    "migrate:dedupe-appointments:dry": "node ./scripts/dedupe_appointment_slots.js --dry-run",
     "build": "tsc",
     "postinstall": "npm run build",
     "test": "jest --runInBand --detectOpenHandles --forceExit"

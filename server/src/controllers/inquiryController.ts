@@ -343,24 +343,47 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
       // Before attempting inserts, ensure there are no existing appointments matching
       // the same date + appointmentStartTime + appointmentEndTime for a different inquiry.
       try {
+        // Collect conflicts for any identical appointment ranges
         const seenRanges = new Set<string>();
-        const duplicateCheckPromises: Array<Promise<any>> = [];
+        const conflictResults: Array<any> = [];
         for (const slot of updateBody.scheduledDates) {
           const key = `${slot.date}|${slot.startTime}|${slot.endTime}`;
           if (seenRanges.has(key)) continue;
           seenRanges.add(key);
-          // check if an appointment with same date and range exists but for a different inquiry
-          duplicateCheckPromises.push(AppointmentSlot.findOne({
+          // find any appointment slots that belong to a different inquiry
+          const slots = await AppointmentSlot.find({
             date: slot.date,
             appointmentStartTime: slot.startTime,
             appointmentEndTime: slot.endTime
-          }).lean());
-        }
-        const dupResults = await Promise.all(duplicateCheckPromises);
-        for (const r of dupResults) {
-          if (r && String((r as any).inquiryId) !== String(req.params.id)) {
-            return res.status(409).json({ message: 'Duplicate appointment exists for the selected date and time range' });
+          }).lean();
+          for (const s of slots || []) {
+            if (s && String(s.inquiryId) !== String(req.params.id)) {
+              // collect conflict info; we'll try to enrich with inquiry/resident info below
+              conflictResults.push({ appointmentSlot: s, date: slot.date, startTime: slot.startTime, endTime: slot.endTime });
+            }
           }
+        }
+        if (conflictResults.length > 0) {
+          // Try to fetch inquiry/resident details for better client messages
+          const conflictsDetailed: Array<any> = [];
+          for (const c of conflictResults) {
+            try {
+              // Populate createdBy so we can read the resident's display name
+              const inq = await Inquiry.findById(String(c.appointmentSlot.inquiryId)).populate('createdBy', 'fullName username').lean();
+              conflictsDetailed.push({
+                inquiryId: String(c.appointmentSlot.inquiryId),
+                username: inq?.username || null,
+                residentName: (inq && (inq as any).createdBy && (inq as any).createdBy.fullName) || null,
+                date: c.date,
+                startTime: c.startTime,
+                endTime: c.endTime
+              });
+            } catch (ee) {
+              // fallback minimal info
+              conflictsDetailed.push({ inquiryId: String(c.appointmentSlot.inquiryId), date: c.date, startTime: c.startTime, endTime: c.endTime });
+            }
+          }
+          return res.status(409).json({ message: 'Duplicate appointment exists for the selected date and time range', conflicts: conflictsDetailed });
         }
       } catch (dupErr) {
         console.warn('Duplicate-range pre-check failed, continuing to attempt scheduling:', (dupErr as any)?.message || dupErr);

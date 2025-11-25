@@ -11,6 +11,9 @@ require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 const MONGODB_URI = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/barangay_system';
 
 async function run() {
+  const args = process.argv.slice(2 || 0);
+  const dryRun = args.includes('--dry-run') || args.includes('-n');
+  const verbose = args.includes('--verbose') || args.includes('-v');
   console.log('Connecting to', MONGODB_URI);
   await mongoose.connect(MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true });
   const db = mongoose.connection.db;
@@ -56,9 +59,13 @@ async function run() {
     const remove = docs.slice(1).map(d => d._id);
 
     if (remove.length > 0) {
-      const delRes = await coll.deleteMany({ _id: { $in: remove } });
-      console.log(`Deduped ${date} ${start}-${end}: removed ${delRes.deletedCount} docs, kept ${String(keep._id)}`);
-      dupCount += delRes.deletedCount || 0;
+      if (dryRun) {
+        console.log(`[dry-run] Would remove ${remove.length} duplicate docs for ${date} ${start}-${end}; keep ${String(keep._id)}`);
+      } else {
+        const delRes = await coll.deleteMany({ _id: { $in: remove } });
+        console.log(`Deduped ${date} ${start}-${end}: removed ${delRes.deletedCount} docs, kept ${String(keep._id)}`);
+        dupCount += delRes.deletedCount || 0;
+      }
     }
   }
 
@@ -66,9 +73,13 @@ async function run() {
 
   // Create the unique index on (date, appointmentStartTime, appointmentEndTime)
   try {
-    console.log('Creating unique index on {date, appointmentStartTime, appointmentEndTime}...');
-    await coll.createIndex({ date: 1, appointmentStartTime: 1, appointmentEndTime: 1 }, { unique: true, sparse: true });
-    console.log('Unique index created successfully.');
+    if (dryRun) {
+      console.log('[dry-run] Skipping index creation because --dry-run was specified.');
+    } else {
+      console.log('Creating unique index on {date, appointmentStartTime, appointmentEndTime}...');
+      await coll.createIndex({ date: 1, appointmentStartTime: 1, appointmentEndTime: 1 }, { unique: true, sparse: true });
+      console.log('Unique index created successfully.');
+    }
   } catch (e) {
     console.error('Failed to create unique index:', e && e.message ? e.message : e);
     console.error('If index creation failed due to duplicates, re-run this script after manual inspection.');
