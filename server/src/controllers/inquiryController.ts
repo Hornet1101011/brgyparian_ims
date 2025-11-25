@@ -340,53 +340,45 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
 
       // Attempt an atomic reservation using MongoDB transactions and the AppointmentSlot unique index
       let session: any = null;
-      // Before attempting inserts, ensure there are no existing appointments matching
-      // the same date + appointmentStartTime + appointmentEndTime for a different inquiry.
+      // Before attempting inserts, ensure there are no overlapping appointments for the same date/time
       try {
-        // Collect conflicts for any identical appointment ranges
-        const seenRanges = new Set<string>();
-        const conflictResults: Array<any> = [];
+        // Collect conflicts for any overlapping minute slots (uses numeric `slot` field)
+        const seenInquiryRanges = new Map<string, { inquiryId: string, date: string, startTime: string, endTime: string }>();
         for (const slot of updateBody.scheduledDates) {
-          const key = `${slot.date}|${slot.startTime}|${slot.endTime}`;
-          if (seenRanges.has(key)) continue;
-          seenRanges.add(key);
-          // find any appointment slots that belong to a different inquiry
-          const slots = await AppointmentSlot.find({
+          // compute minute bounds for the requested range
+          const sMin = normalizeToMinutes(slot.startTime);
+          const eMin = normalizeToMinutes(slot.endTime);
+          if (Number.isNaN(sMin) || Number.isNaN(eMin)) continue;
+          // find any AppointmentSlot documents that overlap this minute range and belong to other inquiries
+          const overlapping = await AppointmentSlot.find({
             date: slot.date,
-            appointmentStartTime: slot.startTime,
-            appointmentEndTime: slot.endTime
+            slot: { $gte: sMin, $lt: eMin }
           }).lean();
-          for (const s of slots || []) {
-            if (s && String(s.inquiryId) !== String(req.params.id)) {
-              // collect conflict info; we'll try to enrich with inquiry/resident info below
-              conflictResults.push({ appointmentSlot: s, date: slot.date, startTime: slot.startTime, endTime: slot.endTime });
+          for (const o of overlapping || []) {
+            if (!o) continue;
+            const otherId = String(o.inquiryId || '');
+            if (!otherId || otherId === String(req.params.id)) continue;
+            // Use appointmentStartTime/EndTime from the stored slot doc if available
+            const key = `${otherId}|${o.appointmentStartTime || ''}|${o.appointmentEndTime || ''}|${slot.date}`;
+            if (!seenInquiryRanges.has(key)) {
+              seenInquiryRanges.set(key, { inquiryId: otherId, date: slot.date, startTime: o.appointmentStartTime || o.start || '', endTime: o.appointmentEndTime || o.end || '' });
             }
           }
         }
-        if (conflictResults.length > 0) {
-          // Try to fetch inquiry/resident details for better client messages
+        if (seenInquiryRanges.size > 0) {
           const conflictsDetailed: Array<any> = [];
-          for (const c of conflictResults) {
+          for (const v of seenInquiryRanges.values()) {
             try {
-              // Populate createdBy so we can read the resident's display name
-              const inq = await Inquiry.findById(String(c.appointmentSlot.inquiryId)).populate('createdBy', 'fullName username').lean();
-              conflictsDetailed.push({
-                inquiryId: String(c.appointmentSlot.inquiryId),
-                username: inq?.username || null,
-                residentName: (inq && (inq as any).createdBy && (inq as any).createdBy.fullName) || null,
-                date: c.date,
-                startTime: c.startTime,
-                endTime: c.endTime
-              });
+              const inq = await Inquiry.findById(String(v.inquiryId)).populate('createdBy', 'fullName username').lean();
+              conflictsDetailed.push({ inquiryId: String(v.inquiryId), username: inq?.username || null, residentName: (inq && (inq as any).createdBy && (inq as any).createdBy.fullName) || null, date: v.date, startTime: v.startTime, endTime: v.endTime });
             } catch (ee) {
-              // fallback minimal info
-              conflictsDetailed.push({ inquiryId: String(c.appointmentSlot.inquiryId), date: c.date, startTime: c.startTime, endTime: c.endTime });
+              conflictsDetailed.push({ inquiryId: String(v.inquiryId), date: v.date, startTime: v.startTime, endTime: v.endTime });
             }
           }
-          return res.status(409).json({ message: 'Duplicate appointment exists for the selected date and time range', conflicts: conflictsDetailed });
+          return res.status(409).json({ message: 'Scheduling conflict: one or more time slots already taken', conflicts: conflictsDetailed });
         }
       } catch (dupErr) {
-        console.warn('Duplicate-range pre-check failed, continuing to attempt scheduling:', (dupErr as any)?.message || dupErr);
+        console.warn('Overlap pre-check failed, continuing to attempt scheduling:', (dupErr as any)?.message || dupErr);
       }
       try {
         session = await mongoose.startSession();
