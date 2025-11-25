@@ -48,6 +48,11 @@ router.patch('/:id', auth, authorize('admin', 'staff'), (req: any, res: Response
 // Provide a POST-based fallback that performs the same update logic so
 // clients that cannot send PATCH can still update inquiries.
 router.post('/:id', auth, authorize('admin', 'staff'), (req: any, res: Response, next: NextFunction) => updateInquiry(req, res, next));
+// Check availability for a set of scheduledDates (staff only) without committing
+router.post('/:id/check-availability', auth, authorize('admin', 'staff'), (req: any, res: Response, next: NextFunction) => {
+  // eslint-disable-next-line @typescript-eslint/no-floating-promises
+  (async () => await (await import('../controllers/inquiryController')).checkAvailability(req, res, next))();
+});
 
 // Add a response to an inquiry (allow resident and staff replies)
 // Allow file attachments with responses as well

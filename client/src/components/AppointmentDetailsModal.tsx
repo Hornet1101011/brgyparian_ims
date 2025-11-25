@@ -3,7 +3,7 @@ import { Modal, Descriptions, Divider, Checkbox, Button, Space, message } from '
 import dayjs from 'dayjs';
 import { Select } from 'antd';
 import TimeRangeSelector from './TimeRangeSelector';
-import { contactAPI, axiosInstance } from '../services/api';
+import { contactAPI } from '../services/api';
 
 type Props = {
   visible: boolean;
@@ -151,13 +151,93 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
   const confirm = async () => {
     const check = validateNoOverlap();
     if (!check.ok) { message.error(check.msg); return; }
-    const scheduledDates = selectedDates.map(d => ({ date: d, startTime: timeRanges[d].start, endTime: timeRanges[d].end }));
+    const scheduledDates = selectedDates.map(d => ({ date: d, startTime: timeRanges[d].start!, endTime: timeRanges[d].end! }));
     setSaving(true);
     try {
-      await contactAPI.getInquiryById(record._id);
-      const payload = { scheduledDates, status: 'scheduled' };
+      // First try availability endpoint (may return null if 404)
+      let availability: any = null;
       try {
-        await axiosInstance.post(`/inquiries/${record._id}`, payload, { timeout: 10000 });
+        availability = await contactAPI.checkAvailability(record._id, scheduledDates);
+      } catch (availErr: any) {
+        // If availability endpoint exists but errors (non-404), surface a warning and fall back to direct scheduling
+        if (availErr && availErr.response && availErr.response.status !== 404) {
+          console.warn('Availability check failed, will fallback to scheduling:', availErr);
+        }
+        availability = null;
+      }
+
+      // If availability returned explicit conflicts, show them and abort scheduling
+      if (availability) {
+        const conflicts = Array.isArray(availability.conflicts) ? availability.conflicts : (Array.isArray(availability.conflictItems) ? availability.conflictItems : null);
+        const availableFlag = typeof availability.available === 'boolean' ? availability.available : (conflicts ? conflicts.length === 0 : true);
+        if (!availableFlag) {
+          // If server provided conflicts show them, else try to refresh and compute local conflicts
+          let conflictItems = conflicts;
+          if (!conflictItems) {
+            try { await fetchExistingScheduled(); } catch (e) { /* ignore */ }
+            const localConflicts: any[] = [];
+            try {
+              const normalizeToMinutes = (t?: string) => {
+                if (!t) return NaN;
+                const parts = String(t).split(':');
+                if (parts.length < 2) return NaN;
+                const hh = parseInt(parts[0], 10);
+                const mm = parseInt(parts[1], 10);
+                if (Number.isNaN(hh) || Number.isNaN(mm)) return NaN;
+                return hh * 60 + mm;
+              };
+              for (const sd of scheduledDates) {
+                const date = sd.date;
+                const sMin = normalizeToMinutes(sd.startTime);
+                const eMin = normalizeToMinutes(sd.endTime);
+                const existing = (existingScheduledByDate && existingScheduledByDate[date]) || [];
+                for (const ex of existing) {
+                  const exS = normalizeToMinutes((ex as any).start);
+                  const exE = normalizeToMinutes((ex as any).end);
+                  if (!Number.isNaN(exS) && !Number.isNaN(exE) && sMin < exE && eMin > exS) {
+                    localConflicts.push({ date, startTime: ex.start, endTime: ex.end, inquiryId: ex.inquiryId, residentUsername: ex.residentUsername, residentName: ex.residentName });
+                  }
+                }
+              }
+            } catch (computeErr) {
+              console.warn('Failed to compute local conflicts', computeErr);
+            }
+            conflictItems = localConflicts.length > 0 ? localConflicts : null;
+          }
+
+          Modal.confirm({
+            title: 'Scheduling conflict',
+            content: (
+              <div>
+                <p>{(availability && availability.message) || 'One or more time slots are already taken.'}</p>
+                {conflictItems && conflictItems.length > 0 && (
+                  <div style={{ marginTop: 8 }}>
+                    <p style={{ marginBottom: 6 }}><strong>Conflicting bookings:</strong></p>
+                    <ul>
+                      {conflictItems.map((c: any, idx: number) => (
+                        <li key={idx}>{c.date} {c.startTime}-{c.endTime} — {c.residentUsername || c.residentName || c.inquiryId}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <p>You can refresh current bookings to see the latest scheduled appointments, or choose a different time.</p>
+              </div>
+            ),
+            okText: 'Refresh Bookings',
+            cancelText: 'Close',
+            onOk: async () => {
+              await fetchExistingScheduled();
+              message.info('Refreshed existing bookings');
+            }
+          });
+          message.error((availability && availability.message) || 'Scheduling conflict: one or more time slots already taken');
+          return;
+        }
+      }
+
+      // Proceed to schedule (server is authoritative). If availability endpoint was not present, this is the primary attempt.
+      try {
+        await contactAPI.scheduleInquiry(record._id, scheduledDates);
         message.success('Appointment scheduled');
         onClose();
       } catch (err: any) {
@@ -166,17 +246,9 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
         const serverText = (data && (data.message || JSON.stringify(data))) || err?.message || String(err);
         console.error('Scheduling failed:', status, serverText);
         if (status === 409) {
-          // Ensure we have the latest bookings to present accurate conflict details
-          try {
-            await fetchExistingScheduled();
-          } catch (refreshErr) {
-            console.warn('Failed to refresh bookings after 409', refreshErr);
-          }
+          try { await fetchExistingScheduled(); } catch (refreshErr) { console.warn('Failed to refresh bookings after 409', refreshErr); }
 
-          // Prefer server-provided conflict details when available
           let conflictItems = data && Array.isArray(data.conflicts) ? data.conflicts : null;
-
-          // If server didn't provide specifics, compute local conflicts from refreshed `existingScheduledByDate`
           if (!conflictItems) {
             const localConflicts: any[] = [];
             try {
@@ -234,7 +306,7 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
             }
           });
           message.error(serverText || 'Scheduling conflict: one or more time slots already taken');
-          throw new Error(serverText || `Request failed with status ${status}`);
+          return;
         }
         if (status === 401 || status === 403) {
           Modal.confirm({
@@ -250,11 +322,12 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
             onOk: () => { try { window.location.href = '/login'; } catch (e) {} }
           });
           message.error(serverText || `Authentication required (${status})`);
-          throw new Error(serverText || `Request failed with status ${status}`);
+          return;
         }
         message.error(serverText || `Server error ${status || 'unknown'}`);
-        throw err;
+        return;
       }
+
     } catch (e) {
       console.error(e);
       message.error('Failed to schedule appointment');
@@ -321,6 +394,7 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
       <Space style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <Button onClick={onClose}>Close</Button>
         <Button onClick={handleResolve} loading={resolving} disabled={resolving}>Resolve</Button>
+        <Button onClick={runPreflightCheck} disabled={selectedDates.length === 0}>Refresh Availability</Button>
         <Button type="primary" onClick={confirm} loading={saving} disabled={selectedDates.length === 0 || !availabilityOk}>Confirm Appointment</Button>
       </Space>
     </Modal>

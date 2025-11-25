@@ -312,6 +312,26 @@ const contact = {
   // Mark an inquiry as resolved (admin/staff)
   resolveInquiry: (id: string) =>
     axiosInstance.patch(`/inquiries/${id}`, { status: 'resolved' }).then(response => response.data),
+  // Check availability for proposed scheduled dates (server may implement this endpoint).
+  // Returns availability details or `null` if the endpoint is not available (404).
+  checkAvailability: async (id: string, scheduledDates: Array<{ date: string; startTime: string; endTime: string }>) => {
+    try {
+      const resp = await axiosInstance.post(`/inquiries/${id}/availability`, { scheduledDates });
+      return resp.data;
+    } catch (err: any) {
+      // If server doesn't provide an availability endpoint, return null so callers
+      // can fallback to optimistic scheduling or rely on server-side 409 handling.
+      if (err && err.response && err.response.status === 404) return null;
+      throw err;
+    }
+  },
+  // Schedule appointments for an inquiry. This centralizes the POST payload
+  // used by various UI components and returns server response data.
+  scheduleInquiry: async (id: string, scheduledDates: Array<{ date: string; startTime: string; endTime: string }>) => {
+    const payload = { scheduledDates, status: 'scheduled' };
+    const resp = await axiosInstance.post(`/inquiries/${id}`, payload);
+    return resp.data;
+  },
   // Public announcements
   getAnnouncements: () =>
     axiosInstance.get('/announcements').then(response => response.data),

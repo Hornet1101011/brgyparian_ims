@@ -551,6 +551,24 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
   }
 };
 
+export const checkAvailability = async (req: any, res: Response, next: NextFunction) => {
+  try {
+    const scheduled = req.body && req.body.scheduledDates && Array.isArray(req.body.scheduledDates) ? req.body.scheduledDates : null;
+    if (!scheduled || scheduled.length === 0) return res.status(400).json({ message: 'scheduledDates required' });
+    const conflicts: any[] = [];
+    for (const sd of scheduled) {
+      if (!sd || !sd.date || !sd.startTime || !sd.endTime) continue;
+      const c = await findConflictsForRange(sd.date, sd.startTime, sd.endTime, req.params.id);
+      if (c && c.length) conflicts.push(...c);
+    }
+    if (conflicts.length > 0) return res.status(409).json({ message: 'Scheduling conflict', conflicts });
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error('Error in checkAvailability:', error);
+    res.status(500).json({ message: 'Error checking availability' });
+  }
+};
+
 export const addResponse = async (req: any, res: Response, next: NextFunction) => {
 // ...existing code...
 module.exports = {
