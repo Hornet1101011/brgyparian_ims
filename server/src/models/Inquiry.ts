@@ -4,7 +4,7 @@ export interface IInquiry extends Document {
   subject: string;
   message: string;
   type?: string;
-  status: 'open' | 'in-progress' | 'resolved';
+  status: 'open' | 'pending' | 'in-progress' | 'scheduled' | 'resolved';
   createdBy: mongoose.Types.ObjectId;
   username: string;
   barangayID: string;
@@ -57,7 +57,7 @@ const inquirySchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['open', 'in-progress', 'scheduled', 'resolved'],
+    enum: ['open', 'pending', 'in-progress', 'scheduled', 'resolved'],
     default: 'open',
   },
   createdBy: {
