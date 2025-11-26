@@ -12,7 +12,7 @@ export async function logAppointmentChange(options: {
   residentId: any,
   residentName?: string,
   inquiryId?: any,
-  action: 'CREATED_APPOINTMENT' | 'EDITED_APPOINTMENT',
+  action: 'CREATED_APPOINTMENT' | 'EDITED_APPOINTMENT' | 'CANCELED_APPOINTMENT',
   fromTimeRange?: string,
   toTimeRange?: string,
 }) {

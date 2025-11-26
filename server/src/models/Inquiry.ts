@@ -4,7 +4,7 @@ export interface IInquiry extends Document {
   subject: string;
   message: string;
   type?: string;
-  status: 'open' | 'pending' | 'in-progress' | 'scheduled' | 'resolved';
+  status: 'open' | 'pending' | 'in-progress' | 'scheduled' | 'resolved' | 'canceled';
   createdBy: mongoose.Types.ObjectId;
   username: string;
   barangayID: string;
@@ -37,6 +37,9 @@ export interface IInquiry extends Document {
   // scheduledDates contains the actual scheduled slots set by staff
   scheduledDates?: Array<{ date: string; startTime: string; endTime: string }>;
   scheduledBy?: mongoose.Types.ObjectId;
+  cancellationReason?: string;
+  canceledBy?: mongoose.Types.ObjectId;
+  canceledAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -57,7 +60,7 @@ const inquirySchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['open', 'pending', 'in-progress', 'scheduled', 'resolved'],
+    enum: ['open', 'pending', 'in-progress', 'scheduled', 'resolved', 'canceled'],
     default: 'open',
   },
   createdBy: {
@@ -127,6 +130,9 @@ const inquirySchema = new mongoose.Schema({
   // Actual scheduled appointment slots added by staff
   scheduledDates: [{ date: String, startTime: String, endTime: String }],
   scheduledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  cancellationReason: { type: String },
+  canceledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  canceledAt: { type: Date },
 }, {
   timestamps: true,
 });

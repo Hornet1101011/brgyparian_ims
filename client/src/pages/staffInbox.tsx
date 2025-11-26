@@ -39,7 +39,8 @@ const StaffInbox: React.FC = () => {
         try {
           // try to load all inquiries first
           const all = await contactAPI.getAllInquiries();
-          setInquiries(all || []);
+          const filteredAll = (all || []).filter((i: any) => !(i && i.type === 'SCHEDULE_APPOINTMENT'));
+          setInquiries(filteredAll);
           const found = (all || []).find((i: any) => i._id === openId);
           if (found) {
             setSelectedInquiry(found);
@@ -58,7 +59,9 @@ const StaffInbox: React.FC = () => {
             const single = await contactAPI.getInquiryById(openId);
             if (single) {
               setSelectedInquiry(single);
-              setInquiries(prev => [single, ...prev]);
+              if (!(single && single.type === 'SCHEDULE_APPOINTMENT')) {
+                setInquiries(prev => [single, ...prev]);
+              }
             }
           } catch (err) {
             // ignore
@@ -78,7 +81,8 @@ const StaffInbox: React.FC = () => {
     setLoading(true);
     try {
       const res = await contactAPI.getAllInquiries();
-      setInquiries(res || []);
+      const filtered = (res || []).filter((i: any) => !(i && i.type === 'SCHEDULE_APPOINTMENT'));
+      setInquiries(filtered);
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('Failed to load inquiries', e);
@@ -188,8 +192,10 @@ const StaffInbox: React.FC = () => {
 
         const created = await contactAPI.submitInquiry(payload);
         antdMessage.success(`Message sent to ${selectedInquiry.residentName || payload.username}`);
-        // add to list and open created thread
-        setInquiries(prev => [created].concat(prev));
+        // add to list and open created thread (skip schedule-type inquiries)
+        if (!(created && created.type === 'SCHEDULE_APPOINTMENT')) {
+          setInquiries(prev => [created].concat(prev));
+        }
         setSelectedInquiry(created);
         setReplyText('');
       } else {

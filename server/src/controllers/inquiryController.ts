@@ -12,6 +12,8 @@ export const getMyInquiries = async (req: any, res: Response, next: NextFunction
     res.status(500).json({ message: 'Error fetching resident inquiries', error });
   }
 };
+
+
 import { Request, Response, NextFunction } from 'express';
 import path from 'path';
 import mongoose from 'mongoose';
@@ -572,16 +574,73 @@ export const checkAvailability = async (req: any, res: Response, next: NextFunct
   }
 };
 
-export const addResponse = async (req: any, res: Response, next: NextFunction) => {
-// ...existing code...
-module.exports = {
-  createInquiry,
-  getAllInquiries,
-  getInquiryById,
-  updateInquiry,
-  addResponse,
-  getMyInquiries,
+export const cancelInquiry = async (req: any, res: Response, next: NextFunction) => {
+  try {
+    const id = req.params.id;
+    const reason = (req.body && req.body.reason) ? String(req.body.reason).trim() : '';
+    if (!reason || reason.length < 10) return res.status(400).json({ message: 'Cancellation reason is required (minimum 10 characters).' });
+
+    const inquiry = await Inquiry.findById(id);
+    if (!inquiry) return res.status(404).json({ message: 'Inquiry not found' });
+
+    const curStatus = String(inquiry.status || '').toLowerCase();
+    if (curStatus === 'canceled') return res.status(400).json({ message: 'Appointment is already canceled.' });
+    if (curStatus === 'resolved') return res.status(400).json({ message: 'Cannot cancel a resolved inquiry.' });
+
+    inquiry.status = 'canceled';
+    inquiry.cancellationReason = reason;
+    inquiry.canceledBy = (req as any).user?._id || null;
+    inquiry.canceledAt = new Date();
+
+    await inquiry.save();
+
+    await AppointmentSlot.deleteMany({ inquiryId: inquiry._id }).catch((e) => {
+      console.warn('Failed to release appointment slots after cancellation', e);
+    });
+
+    try {
+      const staffId = (req as any).user?._id || null;
+      const staffName = (req as any).user?.fullName || (req as any).user?.username || undefined;
+      let residentId = (inquiry as any).residentId || undefined;
+      let residentName = (inquiry as any).residentName || (inquiry as any).username || undefined;
+      if (!residentId) {
+        const resident = await User.findOne({ username: inquiry.username, barangayID: inquiry.barangayID, role: 'resident' }).lean().catch(() => null);
+        if (resident) { residentId = resident._id; residentName = resident.fullName || resident.username; }
+      }
+      if (auditService && typeof (auditService as any).logAppointmentChange === 'function') {
+        await (auditService as any).logAppointmentChange({
+          staffId,
+          staffName,
+          residentId,
+          residentName,
+          inquiryId: inquiry._id,
+          action: 'CANCELED_APPOINTMENT',
+        } as any);
+      }
+    } catch (auditErr) {
+      console.warn('Failed to write cancellation audit log', auditErr);
+    }
+
+    try {
+      const resident = await User.findOne({ username: inquiry.username, barangayID: inquiry.barangayID, role: 'resident' }).catch(() => null);
+      if (resident) {
+        await sendAppointmentNotification(resident._id, 'canceled', { inquiryId: inquiry._id, reason }).catch((e) => {
+          console.warn('sendAppointmentNotification failed for cancellation', e);
+        });
+      }
+    } catch (notifyErr) {
+      console.warn('Failed to notify resident of cancellation', notifyErr);
+    }
+
+    return res.json({ success: true, inquiry });
+  } catch (err) {
+    console.error('Error in cancelInquiry:', err);
+    return res.status(500).json({ message: 'Failed to cancel appointment' });
+  }
 };
+
+export const addResponse = async (req: any, res: Response, next: NextFunction) => {
+  // ...existing code...
   try {
     const inquiry = await Inquiry.findById(req.params.id);
     if (!inquiry) {

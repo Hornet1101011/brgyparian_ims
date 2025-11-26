@@ -452,7 +452,7 @@ const StaffDashboard: React.FC = () => {
     <Spin spinning={loading} tip="Loading...">
       <div>
         {/* KPI Cards Row */}
-        <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+        <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
           <Col xs={24} sm={12} md={6}>
             <Card 
               hoverable 
@@ -578,9 +578,16 @@ const StaffDashboard: React.FC = () => {
             </Card>
           </Col>
         </Row>
+        {/* Staff Calendar centered below KPI cards */}
+        <Row justify="center" style={{ marginBottom: 12 }}>
+          <Col xs={24} lg={20}>
+            <StaffCalendar />
+          </Col>
+        </Row>
+
         {/* Main Content Cards */}
-        <Row gutter={[16, 16]}>
-          <Col xs={24} lg={8}>
+        <Row gutter={[12, 12]}>
+          <Col xs={24} lg={7}>
             <Card 
               title={<Space><FileSearchOutlined /> Document Categories</Space>} 
               hoverable
@@ -593,8 +600,8 @@ const StaffDashboard: React.FC = () => {
               }}
               styles={{ body: { 
                 padding: '0',
-                height: '400px',
-                maxHeight: '400px',
+                height: '360px',
+                maxHeight: '360px',
                 overflow: 'hidden'
               } }}
             >
@@ -754,13 +761,72 @@ const StaffDashboard: React.FC = () => {
               </Collapse>
             </Card>
           </Col>
-          <Col xs={24} lg={8}>
-            <DailyAppointmentsCard />
+          <Col xs={24} lg={10}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <div style={{ minHeight: 140 }}>
+                  <DailyAppointmentsCard />
+                </div>
+              </div>
+              <div>
+                {/* Announcements moved into center column */}
+                <Card
+                  title={<Space><FileTextOutlined /> Announcements</Space>}
+                  style={{ marginTop: 0, background: '#fafbfc', borderRadius: 12, boxShadow: '0 2px 8px #d9d9d933', border: '1px solid #f0f0f0', position: 'relative' }}
+                  styles={{ body: { padding: 12, minHeight: 140 } }}
+                  size="small"
+                  hoverable={false}
+                >
+                  {miniAnns.length === 0 ? (
+                    <Empty
+                      image={<FileTextOutlined style={{ fontSize: 42, color: '#d9d9d9' }} />}
+                      description={<span style={{ color: '#888' }}>No announcements</span>}
+                    />
+                  ) : (
+                    <div style={{ maxHeight: 320, overflowY: 'auto', paddingRight: 6 }}>
+                      <List
+                        loading={miniLoading}
+                        dataSource={miniAnns}
+                        renderItem={(item) => (
+                          <List.Item style={{ cursor: 'pointer', padding: '10px 8px', alignItems: 'center' }} onClick={() => { setMiniSelected(item); setDrawerVisible(true); }}>
+                            <List.Item.Meta
+                              title={<div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontWeight: 600, fontSize: 13, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: '1.2em' }}>{item.text || 'Untitled'}</div>
+                                  <div style={{ fontSize: 12, color: '#888', marginTop: 6 }}>{new Date(item.createdAt).toLocaleString()}</div>
+                                </div>
+                              </div>}
+                              description={null}
+                            />
+                            {item.imagePath && (
+                              <div style={{ marginLeft: 12, width: 92, display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
+                                <img loading="lazy" className="rounded-img" src={getAbsoluteApiUrl(`/announcements/${item._id}/image`)} alt="ann" style={{ width: 92, height: 60, objectFit: 'cover', borderRadius: 6, background: '#f0f0f0' }} />
+                              </div>
+                            )}
+                          </List.Item>
+                        )}
+                        size="small"
+                      />
+                    </div>
+                  )}
+                  <Button type="link" style={{ position: 'absolute', right: 16, bottom: 0, fontSize: 13, color: '#1890ff' }} onClick={() => navigate('/admin/announcements')}>Manage</Button>
+                </Card>
+                <Drawer open={drawerVisible} onClose={() => { setDrawerVisible(false); setMiniSelected(null); }} title="Announcement" width={720} placement="right">
+                  {miniSelected && (
+                    <div>
+                      <Typography.Text style={{ display: 'block', marginBottom: 12, whiteSpace: 'pre-wrap' }}>{miniSelected.text}</Typography.Text>
+                      {miniSelected.imagePath && (
+                        <img loading="lazy" className="rounded-img rounded-img-lg" src={getAbsoluteApiUrl(`/announcements/${miniSelected._id}/image`)} alt="announcement" style={{ width: '100%', height: 'auto', borderRadius: 8, background: '#f6f6f6' }} />
+                      )}
+                      <div style={{ marginTop: 8, color: '#888' }}>{new Date(miniSelected.createdAt).toLocaleString()}</div>
+                    </div>
+                  )}
+                </Drawer>
+              </div>
+            </div>
           </Col>
-          <Col xs={24} lg={8}>
-            <StaffCalendar />
-          </Col>
-          <Col xs={24} lg={8}>
+          
+            <Col xs={24} lg={7}>
               <Card 
               title={
                 <Space>
@@ -791,8 +857,8 @@ const StaffDashboard: React.FC = () => {
                 position: 'relative'
               }}
               styles={{ body: { 
-                height: '400px',
-                maxHeight: '400px',
+                height: '360px',
+                maxHeight: '360px',
                 padding: 0,
                 overflow: 'hidden'
               } }}
@@ -1005,63 +1071,7 @@ const StaffDashboard: React.FC = () => {
             </div>
             </Card>
           </Col>
-          <Col xs={24} lg={8}>
-            <Card
-              title={<Space><FileTextOutlined /> Announcements</Space>}
-              style={{ marginTop: 0, background: '#fafbfc', borderRadius: 12, boxShadow: '0 2px 8px #d9d9d933', border: '1px solid #f0f0f0', position: 'relative' }}
-              styles={{ body: { padding: 12 } }}
-              size="small"
-              hoverable={false}
-            >
-              {miniAnns.length === 0 ? (
-                <Empty
-                  image={<FileTextOutlined style={{ fontSize: 42, color: '#d9d9d9' }} />}
-                  description={<span style={{ color: '#888' }}>No announcements</span>}
-                />
-              ) : (
-                <div style={{ maxHeight: 320, overflowY: 'auto', paddingRight: 6 }}>
-                  <List
-                    loading={miniLoading}
-                    dataSource={miniAnns}
-                    renderItem={(item) => (
-                      <List.Item style={{ cursor: 'pointer', padding: '10px 8px', alignItems: 'center' }} onClick={() => { setMiniSelected(item); setDrawerVisible(true); }}>
-                        <List.Item.Meta
-                          title={<div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontWeight: 600, fontSize: 13, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: '1.2em' }}>{item.text || 'Untitled'}</div>
-                              <div style={{ fontSize: 12, color: '#888', marginTop: 6 }}>{new Date(item.createdAt).toLocaleString()}</div>
-                            </div>
-                          </div>}
-                          description={null}
-                        />
-                        {item.imagePath && (
-                          <div style={{ marginLeft: 12, width: 92, display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
-                            <img loading="lazy" className="rounded-img" src={getAbsoluteApiUrl(`/announcements/${item._id}/image`)} alt="ann" style={{ width: 92, height: 60, objectFit: 'cover', borderRadius: 6, background: '#f0f0f0' }} />
-                          </div>
-                        )}
-                      </List.Item>
-                    )}
-                    size="small"
-                  />
-                </div>
-              )}
-              <Button type="link" style={{ position: 'absolute', right: 16, bottom: 0, fontSize: 13, color: '#1890ff' }} onClick={() => navigate('/admin/announcements')}>Manage</Button>
-
-              <Drawer open={drawerVisible} onClose={() => { setDrawerVisible(false); setMiniSelected(null); }} title="Announcement" width={720} placement="right">
-                {miniSelected && (
-                  <div>
-                    <Typography.Text style={{ display: 'block', marginBottom: 12, whiteSpace: 'pre-wrap' }}>{miniSelected.text}</Typography.Text>
-                    {miniSelected.imagePath && (
-                      <img loading="lazy" className="rounded-img rounded-img-lg" src={getAbsoluteApiUrl(`/announcements/${miniSelected._id}/image`)} alt="announcement" style={{ width: '100%', height: 'auto', borderRadius: 8, background: '#f6f6f6' }} />
-                    )}
-                    <div style={{ marginTop: 8, color: '#888' }}>{new Date(miniSelected.createdAt).toLocaleString()}</div>
-                  </div>
-                )}
-              </Drawer>
-            </Card>
-
-            {/* Completed Requests card removed per user request */}
-          </Col>
+          
         </Row>
         {/* Documents Modal - shows processed documents from documents collection */}
         <Modal

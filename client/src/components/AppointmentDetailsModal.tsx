@@ -21,7 +21,6 @@ type SchedulingState = {
   selectedDates: string[];
   timeRanges: Record<string, { start?: string; end?: string }>;
   saving: boolean;
-  resolving: boolean;
   maxToSchedule: number;
   existingScheduledByDate: Record<string, ScheduledItem[]>;
   availabilityOk: boolean;
@@ -34,7 +33,6 @@ type SchedulingAction =
   | { type: 'REMOVE_SELECTED_DATE'; payload: string }
   | { type: 'SET_TIME_RANGE'; payload: { date: string; start?: string; end?: string } }
   | { type: 'SET_SAVING'; payload: boolean }
-  | { type: 'SET_RESOLVING'; payload: boolean }
   | { type: 'SET_MAX_TO_SCHEDULE'; payload: number }
   | { type: 'SET_EXISTING_SCHEDULED_BY_DATE'; payload: Record<string, ScheduledItem[]> }
   | { type: 'SET_AVAILABILITY'; payload: { ok: boolean; msg?: string } }
@@ -44,7 +42,6 @@ const initialState: SchedulingState = {
   selectedDates: [],
   timeRanges: {},
   saving: false,
-  resolving: false,
   maxToSchedule: 0,
   existingScheduledByDate: {},
   availabilityOk: true,
@@ -68,8 +65,7 @@ function reducer(state: SchedulingState, action: SchedulingAction): SchedulingSt
       return { ...state, timeRanges: { ...state.timeRanges, [action.payload.date]: { start: action.payload.start, end: action.payload.end } } };
     case 'SET_SAVING':
       return { ...state, saving: action.payload };
-    case 'SET_RESOLVING':
-      return { ...state, resolving: action.payload };
+    
     case 'SET_MAX_TO_SCHEDULE':
       return { ...state, maxToSchedule: action.payload };
     case 'SET_EXISTING_SCHEDULED_BY_DATE':
@@ -85,6 +81,9 @@ function reducer(state: SchedulingState, action: SchedulingAction): SchedulingSt
 
 const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose, prefill }) => {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const [cancelVisible, setCancelVisible] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelLoading, setCancelLoading] = useState(false);
   const appointmentsQuery = useAppointmentsQuery();
   const submitSchedule = useSubmitScheduleMutation();
   
@@ -205,6 +204,31 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose, pr
     // ensure appointments query is fresh when modal opens
     try { appointmentsQuery.refetch(); } catch (e) { /* ignore */ }
   }, [visible]);
+
+  const handleCancelConfirm = async () => {
+    if (!record || !record._id) return;
+    const reason = String(cancelReason || '').trim();
+    if (!reason || reason.length < 10) {
+      message.error('Please provide a cancellation reason (minimum 10 characters).');
+      return;
+    }
+    setCancelLoading(true);
+    try {
+      const resp = await (await import('../api/appointments')).cancelAppointment(String(record._id), reason);
+      try { await appointmentsQuery.refetch(); } catch (_) {}
+      // update local status
+      setLocalStatus('canceled');
+      message.success('Appointment canceled');
+      setCancelVisible(false);
+      setCancelReason('');
+      // close modal or keep open to show cancellation reason — we'll refresh details
+    } catch (err: any) {
+      console.error('Failed to cancel appointment', err);
+      message.error((err && err.message) ? err.message : 'Failed to cancel appointment');
+    } finally {
+      setCancelLoading(false);
+    }
+  };
 
   const [localStatus, setLocalStatus] = useState<string | undefined>(undefined);
 
@@ -408,21 +432,7 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose, pr
 
   };
 
-  const handleResolve = async () => {
-    if (!record || !record._id) return;
-    dispatch({ type: 'SET_RESOLVING', payload: true });
-    try {
-      const resp = await appointmentsAPI.resolveAppointment(String(record._id));
-      message.success('Inquiry resolved');
-      // Optionally close modal or refresh parent; we'll close the modal to reflect change
-      onClose();
-    } catch (err) {
-      console.error('Failed to resolve inquiry', err);
-      message.error('Failed to resolve inquiry');
-    } finally {
-      dispatch({ type: 'SET_RESOLVING', payload: false });
-    }
-  };
+  // Note: resolve action removed for staff appointments per UX request
 
   return (
     <Modal open={visible} onCancel={onClose} footer={null} width={720} className="schedulingModal" title={<Typography.Title level={4}>Appointment Details</Typography.Title>}>
@@ -457,10 +467,23 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose, pr
       )}
       <Space style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <Button onClick={onClose}>Close</Button>
-        <Button onClick={handleResolve} loading={state.resolving} disabled={state.resolving}>Resolve</Button>
-        <Button onClick={runPreflightCheck} disabled={state.selectedDates.length === 0}>Refresh Availability</Button>
-        <Button type="primary" onClick={confirm} loading={state.saving} disabled={state.selectedDates.length === 0 || !state.availabilityOk}>{(localStatus || record?.status) === 'scheduled' ? 'Save Changes' : 'Confirm Appointment'}</Button>
+        {/* Cancel Appointment button - show only for scheduled or not canceled */}
+        {((localStatus || record?.status) !== 'canceled') && (
+          <Button danger style={{ marginRight: 8 }} onClick={() => setCancelVisible(true)}>Cancel Appointment</Button>
+        )}
+        <Button type="primary" onClick={confirm} loading={state.saving} disabled={state.selectedDates.length === 0 || !state.availabilityOk || (localStatus || record?.status) === 'canceled'}>{(localStatus || record?.status) === 'scheduled' ? 'Save Changes' : 'Confirm Appointment'}</Button>
       </Space>
+
+      <Modal title="Cancel Appointment" open={cancelVisible} onCancel={() => { setCancelVisible(false); setCancelReason(''); }} footer={null}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <label style={{ fontWeight: 600 }}>Reason for Cancellation</label>
+          <textarea value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} style={{ width: '100%', minHeight: 120, padding: 8 }} />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+            <Button onClick={() => { setCancelVisible(false); setCancelReason(''); }}>Close</Button>
+            <Button danger type="primary" loading={cancelLoading} onClick={handleCancelConfirm}>Confirm</Button>
+          </div>
+        </div>
+      </Modal>
     </Modal>
   );
 };

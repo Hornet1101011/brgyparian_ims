@@ -106,6 +106,15 @@ export async function resolveAppointment(inquiryId: string): Promise<any> {
   }
 }
 
+export async function cancelAppointment(inquiryId: string, reason: string): Promise<any> {
+  try {
+    const resp = await axiosInstance.patch(`/inquiries/${inquiryId}/cancel`, { reason });
+    return resp.data;
+  } catch (err: any) {
+    return handleError(err);
+  }
+}
+
 export default {
   getAppointmentInquiries,
   getAppointmentDetails,
@@ -113,6 +122,7 @@ export default {
   getScheduledAppointmentsByDate,
   scheduleAppointment,
   resolveAppointment,
+  cancelAppointment,
   getDailySummary,
   getSlotsByDate,
   getSlotsForRange,

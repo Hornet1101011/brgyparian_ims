@@ -4,12 +4,14 @@ import { useAppointmentsQuery } from '../hooks/useAppointments';
 import '../components/staff/appointments/scheduling.css';
 import dayjs from 'dayjs';
 import AppointmentDetailsModal from '../components/AppointmentDetailsModal';
+import InquiryDetailsModal from '../components/InquiryDetailsModal';
 
 const { Text } = Typography;
 
 const StaffAppointments: React.FC = () => {
   const [selectedRecord, setSelectedRecord] = useState<any | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [inquiryModalVisible, setInquiryModalVisible] = useState(false);
 
   const { data: inquiries = [], isLoading, isError } = useAppointmentsQuery();
   if (isError) {
@@ -28,7 +30,7 @@ const StaffAppointments: React.FC = () => {
     }},
     { title: 'Actions', key: 'actions', render: (_: any, record: any) => (
       <Space>
-        <Button onClick={() => { setSelectedRecord(record); setModalVisible(true); }}>View</Button>
+        <Button onClick={() => { setSelectedRecord(record); setInquiryModalVisible(true); }}>View</Button>
         <Button type="primary" onClick={() => { setSelectedRecord(record); setModalVisible(true); }}>{record && record.status === 'scheduled' ? 'Edit Appointment' : 'Schedule'}</Button>
       </Space>
     )}
@@ -38,13 +40,21 @@ const StaffAppointments: React.FC = () => {
     <Card className="cardRounded" title={<Typography.Title level={4}>Staff — Appointments</Typography.Title>}>
       <Table rowKey={(r:any) => r._id} dataSource={inquiries} columns={columns} loading={isLoading} scroll={{ x: 'max-content' }} />
 
-      {selectedRecord && (
-        <AppointmentDetailsModal
-          visible={modalVisible}
-          record={selectedRecord}
-          onClose={() => { setModalVisible(false); setSelectedRecord(null); }}
-        />
-      )}
+        {selectedRecord && (
+          <AppointmentDetailsModal
+            visible={modalVisible}
+            record={selectedRecord}
+            onClose={() => { setModalVisible(false); setSelectedRecord(null); }}
+          />
+        )}
+        {selectedRecord && (
+          <InquiryDetailsModal
+            visible={inquiryModalVisible}
+            inquiryId={selectedRecord?._id || null}
+            onClose={() => { setInquiryModalVisible(false); setSelectedRecord(null); }}
+            onChanged={() => { /* trigger refresh via page-level refetch if needed */ window.dispatchEvent(new Event('appointments-updated')); }}
+          />
+        )}
     </Card>
   );
 };

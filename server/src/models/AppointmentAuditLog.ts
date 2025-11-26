@@ -6,7 +6,7 @@ const appointmentAuditSchema = new mongoose.Schema({
   residentId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   residentName: { type: String },
   inquiryId: { type: mongoose.Schema.Types.ObjectId, ref: 'Inquiry' },
-  action: { type: String, enum: ['CREATED_APPOINTMENT', 'EDITED_APPOINTMENT'], required: true },
+  action: { type: String, enum: ['CREATED_APPOINTMENT', 'EDITED_APPOINTMENT', 'CANCELED_APPOINTMENT'], required: true },
   fromTimeRange: { type: String },
   toTimeRange: { type: String },
 }, {

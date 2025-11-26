@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Checkbox, Select, Tooltip, Tag } from 'antd';
+import { Checkbox, Select, Tooltip } from 'antd';
+import { DISABLED_BG, AVAILABLE_GREEN, BOOKED_RED, LIMITED_GOLD } from '../../../theme/colors';
 import appointmentsAPI from '../../../api/appointments';
 import dayjs from 'dayjs';
 import TimeRangeSelector from '../../TimeRangeSelector';
@@ -71,15 +72,33 @@ const DateSelectionSection: React.FC<Props> = ({ requestedDates, maxToSchedule, 
             {dayjs(d).format('MMM DD, YYYY')}
           </Checkbox>
           <span style={{ marginLeft: 8 }}>
-            {statusByDate[d] === 'Available' && <Tag color="green">Available</Tag>}
-            {statusByDate[d] === 'Partially Booked' && <Tag color="orange">Partially Booked</Tag>}
-            {statusByDate[d] === 'Fully Booked' && <Tag color="default">Fully Booked</Tag>}
+            {statusByDate[d] === 'Available' && (
+              <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontSize: 12 }}>
+                <div style={{ width: 12, height: 12, background: AVAILABLE_GREEN, borderRadius: 3, border: '1px solid rgba(0,0,0,0.06)' }} />
+                <div>Available</div>
+              </span>
+            )}
+            {statusByDate[d] === 'Partially Booked' && (
+              <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontSize: 12 }}>
+                <div style={{ width: 12, height: 12, background: LIMITED_GOLD, borderRadius: 3, border: '1px solid rgba(0,0,0,0.06)' }} />
+                <div>Partially Booked</div>
+              </span>
+            )}
+            {statusByDate[d] === 'Fully Booked' && (
+              <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontSize: 12 }}>
+                <div style={{ width: 12, height: 12, background: BOOKED_RED, borderRadius: 3, border: '1px solid rgba(0,0,0,0.06)' }} />
+                <div>Fully Booked</div>
+              </span>
+            )}
           </span>
           {selectedDates.includes(d) && (
             <div className="dateSelectionInner">
               <TimeRangeSelector
                 date={d}
-                existingRanges={[...(existingScheduledByDate[d] || []), ...(slotsByDate[d] || [])]}
+                existingRanges={[
+                  ...(existingScheduledByDate[d] || []),
+                  ...((slotsByDate[d] || []).map(s => ({ start: s.startTime, end: s.endTime, residentName: s.residentName })))
+                ]}
                 onChange={(s, e) => {
                   // local validation: prevent choosing ranges overlapping server slots
                   const serverSlots = slotsByDate[d] || [];

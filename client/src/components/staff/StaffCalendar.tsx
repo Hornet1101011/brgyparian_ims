@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Card, Row, Col, Button, Tooltip, Modal, List, Tag, Grid } from 'antd';
+import { Card, Row, Col, Button, Tooltip, Modal, List, Grid } from 'antd';
 import { LeftOutlined, RightOutlined } from '@ant-design/icons';
 import { getSlotsForRange, getAppointmentWithSlots, getAppointmentInquiries } from '../../api/appointments';
 import AppointmentDetailsModal from '../AppointmentDetailsModal';
 import { contact } from '../../services/api';
 import { Input, Space } from 'antd';
+import { DISABLED_BG, AVAILABLE_GREEN, BOOKED_RED, LIMITED_GOLD, TODAY_BLUE } from '../../theme/colors';
 
 // Simple helpers
 const toMinutes = (t: string) => {
@@ -42,21 +43,67 @@ function buildDayBlocks() {
 
 const DAY_BLOCKS = buildDayBlocks();
 
-function isoDate(dt: Date) { return dt.toISOString().slice(0,10); }
+// (disabled background is imported from shared theme)
+
+function isoDate(dt: Date) {
+  // Return local YYYY-MM-DD (avoid toISOString UTC rollover)
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, '0');
+  const d = String(dt.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+// Parse a YYYY-MM-DD string to a local Date at midnight
+function parseLocalDate(dateStr: string) {
+  const parts = String(dateStr).split('-').map(p => parseInt(p, 10));
+  if (parts.length < 3 || parts.some(isNaN)) return new Date(dateStr);
+  const [y, m, d] = parts;
+  return new Date(y, m - 1, d, 0, 0, 0, 0);
+}
 
 interface SlotItem { _id: string; date: string; startTime: string; endTime: string; residentName?: string; staffName?: string }
 
 const Legend: React.FC = () => (
-  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-    <Tag color="green">🟩 Available</Tag>
-    <Tag color="gold">🟨 Limited Slots</Tag>
-    <Tag color="red">🟥 Fully Booked</Tag>
+  <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+      <div style={{ width: 12, height: 12, background: AVAILABLE_GREEN, borderRadius: 3, border: '1px solid rgba(0,0,0,0.06)' }} />
+      <div style={{ fontSize: 13 }}>Available</div>
+    </div>
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+      <div style={{ width: 12, height: 12, background: LIMITED_GOLD, borderRadius: 3, border: '1px solid rgba(0,0,0,0.06)' }} />
+      <div style={{ fontSize: 13 }}>Limited Slots</div>
+    </div>
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+      <div style={{ width: 12, height: 12, background: BOOKED_RED, borderRadius: 3, border: '1px solid rgba(0,0,0,0.06)' }} />
+      <div style={{ fontSize: 13 }}>Fully Booked</div>
+    </div>
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+      <Tooltip title="Gray Disabled"><div style={{ width: 12, height: 12, background: DISABLED_BG, borderRadius: 3, border: '1px solid #d9d9d9' }} /></Tooltip>
+      <div style={{ fontSize: 13 }}>Disabled</div>
+    </div>
+  </div>
+);
+
+// Small square + label badge used for legend and per-column status
+const SmallBadge: React.FC<{ color: string; label: React.ReactNode; muted?: boolean }> = ({ color, label, muted }) => (
+  <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12, color: muted ? '#666' : '#222' }}>
+    <div style={{ width: 12, height: 12, background: color, borderRadius: 3, border: '1px solid rgba(0,0,0,0.06)' }} />
+    <div>{label}</div>
   </div>
 );
 
 const StaffCalendar: React.FC = () => {
   const screens = Grid.useBreakpoint();
   const isMobile = !screens.md;
+
+  // Today's date at local midnight for past-date comparisons
+  const today = useMemo(() => { const d = new Date(); d.setHours(0,0,0,0); return d; }, []);
+  const todayIso = useMemo(() => {
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dd}`;
+  }, [today]);
 
   const [anchorDate, setAnchorDate] = useState<Date>(() => { const d = new Date(); d.setHours(0,0,0,0); return d; });
   const [slots, setSlots] = useState<SlotItem[]>([]);
@@ -72,6 +119,7 @@ const StaffCalendar: React.FC = () => {
   const [quickCreateUsername, setQuickCreateUsername] = useState('');
   const [quickCreateSubject, setQuickCreateSubject] = useState('Quick appointment');
   const [quickCreateLoading, setQuickCreateLoading] = useState(false);
+  const [slotDetail, setSlotDetail] = useState<any | null>(null);
 
   // Compute week range (Mon..Sun) containing anchorDate
   const weekStart = useMemo(() => {
@@ -119,6 +167,12 @@ const StaffCalendar: React.FC = () => {
   }, [slots]);
 
   const dayStatus = (dateStr: string) => {
+    // Treat past dates and weekends as disabled (use local-date parsing)
+    const dt = parseLocalDate(dateStr);
+    const wk = dt.getDay();
+    // compare local midnights
+    const isPast = dt.setHours(0,0,0,0) < today.getTime();
+    if (isPast || wk === 0 || wk === 6) return 'disabled';
     const list = slotsByDate.get(dateStr) || [];
     const totalBlocks = DAY_BLOCKS.length;
     let bookedBlocks = 0;
@@ -134,7 +188,16 @@ const StaffCalendar: React.FC = () => {
   const dayColor = (status: string) => {
     if (status === 'available') return 'green';
     if (status === 'partial') return 'gold';
+    if (status === 'disabled') return 'default';
     return 'red';
+  };
+
+  // Map status -> theme token color
+  const dayTokenColor = (status: string) => {
+    if (status === 'available') return AVAILABLE_GREEN;
+    if (status === 'partial') return LIMITED_GOLD;
+    if (status === 'disabled') return DISABLED_BG;
+    return BOOKED_RED;
   };
 
   const openDetail = (dateStr: string) => setDetailDate(dateStr);
@@ -216,6 +279,12 @@ const StaffCalendar: React.FC = () => {
     return wk === 0 || wk === 6;
   };
 
+  const isPastDate = (d: Date) => {
+    const dd = new Date(d);
+    dd.setHours(0,0,0,0);
+    return dd < today;
+  };
+
   return (
     <Card title="Staff Calendar" extra={<Legend />} style={{ width: '100%' }}>
       <Row justify="space-between" align="middle" style={{ marginBottom: 12 }}>
@@ -232,28 +301,43 @@ const StaffCalendar: React.FC = () => {
         // Mobile list view
                       <List loading={loading} dataSource={weekDates} renderItem={(d) => {
           const ds = isoDate(d);
+          const isToday = ds === todayIso;
           const status = dayStatus(ds);
           return (
             <List.Item>
-              <List.Item.Meta title={<div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                <div>{ds} {isOfficeClosed(d) ? '(Closed)' : ''}</div>
-                <div>
-                  <Tag color={dayColor(status)}>{status === 'available' ? 'Available' : status === 'partial' ? 'Limited' : 'Full'}</Tag>
-                  <Button size="small" onClick={() => openDetail(ds)} style={{ marginLeft: 8 }}>View</Button>
-                  {/* Mobile quick-schedule action */}
-                  <Button size="small" onClick={async () => {
-                    // find first free block
-                    const list = slotsByDate.get(ds) || [];
-                    const free = DAY_BLOCKS.find(b => !list.some(s => rangesOverlap(b.sMin, b.eMin, toMinutes(s.startTime), toMinutes(s.endTime))));
-                    if (!free) {
-                      // open detail if no free block
-                      openDetail(ds);
-                    } else {
-                      openQuickSchedule(ds, free.start, free.end);
-                    }
-                  }} style={{ marginLeft: 8 }}>Quick Schedule</Button>
+              <List.Item.Meta title={
+                <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div>{ds}</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      {isToday && <SmallBadge color={TODAY_BLUE} label="Today" />}
+                      {status !== 'disabled' && <SmallBadge color={dayTokenColor(status)} label={status === 'available' ? 'Available' : status === 'partial' ? 'Limited' : 'Full'} />}
+                    </div>
+                    {status === 'disabled' && <div style={{ marginTop: 6 }}><SmallBadge color={DISABLED_BG} label="Disabled" muted /></div>}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
+                    <div>
+                      <Button size="small" onClick={() => { if (!isPastDate(d) && !isOfficeClosed(d)) openDetail(ds); }} style={{ marginLeft: 8 }} disabled={isPastDate(d) || isOfficeClosed(d)}>View</Button>
+                      {/* Mobile quick-schedule action */}
+                      <Button size="small" onClick={async () => {
+                        if (isPastDate(d) || isOfficeClosed(d)) return;
+                        // find first free block
+                        const list = slotsByDate.get(ds) || [];
+                        const free = DAY_BLOCKS.find(b => !list.some(s => rangesOverlap(b.sMin, b.eMin, toMinutes(s.startTime), toMinutes(s.endTime))));
+                        if (!free) {
+                          // open detail if no free block
+                          openDetail(ds);
+                        } else {
+                          openQuickSchedule(ds, free.start, free.end);
+                        }
+                      }} style={{ marginLeft: 8 }} disabled={isPastDate(d) || isOfficeClosed(d)}>Quick Schedule</Button>
+                    </div>
+                    <div style={{ fontSize: 12, color: '#666' }}>{isOfficeClosed(d) ? 'Closed' : (isPastDate(d) ? 'Past' : '')}</div>
+                  </div>
                 </div>
-              </div>} description={(() => {
+              } description={(() => {
                 const list = slotsByDate.get(ds) || [];
                 if (!list.length) return 'No appointments';
                 return `${list.length} appointment(s)`;
@@ -263,24 +347,58 @@ const StaffCalendar: React.FC = () => {
         }} />
       ) : (
         // Desktop grid view: day columns with a colored header and tiny block preview
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8 }}>
+        <div>
+          {!isMobile && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 12, marginBottom: 8 }}>
+              {weekDates.map((d, idx) => {
+                const short = d.toLocaleDateString(undefined, { weekday: 'short' });
+                const closed = isOfficeClosed(d);
+                const past = isPastDate(d);
+                const label = closed ? `${short} (Closed)` : (past ? `${short} (Past)` : short);
+                return (
+                  <Tooltip key={idx} title={closed ? 'Office closed on weekends' : undefined}>
+                    <div aria-disabled={closed || past} style={{ padding: 8, background: '#fafafa', borderRadius: 8, textAlign: 'center', border: closed ? '1px solid rgba(0,0,0,0.02)' : '1px solid rgba(0,0,0,0.04)', color: (closed || past) ? '#9e9e9e' : '#111' }}>{label}</div>
+                  </Tooltip>
+                );
+              })}
+            </div>
+          )}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 12 }}>
           {weekDates.map((d) => {
             const ds = isoDate(d);
+            const isToday = ds === todayIso;
             const status = dayStatus(ds);
             const list = slotsByDate.get(ds) || [];
             return (
-              <div key={ds} style={{ border: '1px solid #eee', borderRadius: 4, overflow: 'hidden' }}>
-                <div style={{ padding: 8, background: dayColor(status), color: '#111', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>{ds}</div>
-                  <div>
-                    <Tag color={dayColor(status)}>{status === 'available' ? 'Available' : status === 'partial' ? 'Limited' : 'Full'}</Tag>
+              <div key={ds} style={{ border: isToday ? '2px solid #91d5ff' : '1px solid rgba(0,0,0,0.06)', borderRadius: 8, overflow: 'hidden', background: '#fff', boxShadow: isToday ? '0 8px 20px rgba(24,144,255,0.08)' : '0 6px 14px rgba(20,40,80,0.04)' }}>
+                <div style={{ padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', background: '#fafafa' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ fontSize: 13, color: isPastDate(d) ? '#aaa' : '#111' }}>{ds}</div>
+                    {/* Tag row moved below the date (left side) - don't show Disabled here */}
+                    <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        {isToday && <SmallBadge color={TODAY_BLUE} label="Today" />}
+                        {status !== 'disabled' && <SmallBadge color={dayTokenColor(status)} label={status === 'available' ? 'Available' : status === 'partial' ? 'Limited' : 'Full'} />}
+                      </div>
+                      {status === 'disabled' && <SmallBadge color={DISABLED_BG} label="Disabled" muted />}
+                    </div>
+                  </div>
+                  {/* Right side: Disabled / Closed / Past indicators */}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
+                    <div>
+                      <Button size="small" onClick={() => { if (!isPastDate(d) && !isOfficeClosed(d)) openDetail(ds); }} disabled={isPastDate(d) || isOfficeClosed(d)}>View</Button>
+                    </div>
+                    {(isOfficeClosed(d) || isPastDate(d)) && <div style={{ fontSize: 11, color: '#666' }}>{isOfficeClosed(d) ? 'Closed' : 'Past'}</div>}
                   </div>
                 </div>
-                <div style={{ padding: 8 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+                <div style={{ padding: 12, opacity: isPastDate(d) ? 0.6 : 1 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
                     {DAY_BLOCKS.slice(0, 16).map((b, idx) => {
                       // small preview cell: check any overlap
                       const overlapping = list.some(s => rangesOverlap(b.sMin, b.eMin, toMinutes(s.startTime), toMinutes(s.endTime)));
+                      const cellIsPast = isPastDate(d);
+                      const cellDisabled = isOfficeClosed(d) || cellIsPast;
+                      const cellBg = cellDisabled ? DISABLED_BG : (overlapping ? BOOKED_RED : AVAILABLE_GREEN);
                       return (
                         <Tooltip key={idx} placement="top" title={(
                           <div>
@@ -293,16 +411,21 @@ const StaffCalendar: React.FC = () => {
                             )}
                           </div>
                         )}>
-                          <div aria-label={overlapping ? `Booked ${b.start} to ${b.end}` : `Free ${b.start} to ${b.end}`} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); /* click */ } }} onClick={() => {
-                            if (isOfficeClosed(d)) return;
+                          {(() => {
+                            const cellDisabled = isOfficeClosed(d) || cellIsPast;
+                            return (
+                              <div aria-label={overlapping ? `Booked ${b.start} to ${b.end}` : `Free ${b.start} to ${b.end}`} role="button" tabIndex={cellDisabled ? -1 : 0} aria-disabled={cellDisabled} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); /* click */ } }} onClick={() => {
+                                if (cellDisabled) return;
                             if (overlapping) {
                               const first = list.find(s => rangesOverlap(b.sMin, b.eMin, toMinutes(s.startTime), toMinutes(s.endTime)));
                               if (first && (first as any).inquiryId) openEditorForInquiry((first as any).inquiryId);
                             } else {
                               openQuickSchedule(ds, b.start, b.end);
                             }
-                          }} style={{ height: 28, borderRadius: 4, background: overlapping ? '#ff4d4f' : '#73d13d', opacity: overlapping ? 1 : 0.95, cursor: isOfficeClosed(d) ? 'not-allowed' : 'pointer' }} />
-                        </Tooltip>
+                              }} style={{ height: 32, borderRadius: 6, background: cellBg, opacity: cellDisabled ? 0.6 : 1, cursor: cellDisabled ? 'not-allowed' : 'pointer' }} />
+                            );
+                          })()}
+                            </Tooltip>
                       );
                     })}
                   </div>
@@ -313,16 +436,47 @@ const StaffCalendar: React.FC = () => {
               </div>
             );
           })}
+          </div>
         </div>
       )}
 
       <Modal title={detailDate ? `Schedule for ${detailDate}` : ''} visible={!!detailDate} onCancel={closeDetail} footer={null} width={720}>
         {detailDate && (
           <List dataSource={slotsByDate.get(detailDate) || []} renderItem={(s: any) => (
-              <List.Item onClick={() => s.inquiryId && openEditorForInquiry(s.inquiryId)} style={{ cursor: s.inquiryId ? 'pointer' : 'default' }}>
-                <List.Item.Meta title={`${s.startTime} - ${s.endTime}`} description={<div>{s.residentName || 'Resident'} — {s.staffName || 'Staff'}</div>} />
+              <List.Item actions={[
+                s.inquiryId ? <Button key="open" onClick={() => openEditorForInquiry(s.inquiryId)}>Open</Button>
+                : <Button key="details" onClick={() => setSlotDetail(s)}>Details</Button>
+              ]}>
+                <List.Item.Meta
+                  title={`${s.startTime} - ${s.endTime}`}
+                  description={(
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div><strong>{s.residentName || s.residentUsername || 'Resident'}</strong> — {s.staffName || 'Staff'}</div>
+                      {s.subject && <div><em>{s.subject}</em></div>}
+                      {s.status && <div>Status: {s.status}</div>}
+                      {s.notes && <div style={{ color: '#444' }}>{s.notes}</div>}
+                    </div>
+                  )}
+                />
               </List.Item>
           )} locale={{ emptyText: 'No appointments' }} />
+        )}
+      </Modal>
+
+      <Modal title={slotDetail ? `Appointment Details` : ''} visible={!!slotDetail} onCancel={() => setSlotDetail(null)} footer={null} width={640}>
+        {slotDetail && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div><strong>Time</strong>: {slotDetail.startTime} — {slotDetail.endTime}</div>
+            <div><strong>Resident</strong>: {slotDetail.residentName || slotDetail.residentUsername || 'Unknown'}</div>
+            {slotDetail.residentPhone && <div><strong>Phone</strong>: {slotDetail.residentPhone}</div>}
+            {slotDetail.residentEmail && <div><strong>Email</strong>: {slotDetail.residentEmail}</div>}
+            <div><strong>Staff</strong>: {slotDetail.staffName || 'Staff'}</div>
+            {slotDetail.subject && <div><strong>Subject</strong>: {slotDetail.subject}</div>}
+            {slotDetail.status && <div><strong>Status</strong>: {slotDetail.status}</div>}
+            {slotDetail.notes && <div><strong>Notes</strong>: <div style={{ whiteSpace: 'pre-wrap' }}>{slotDetail.notes}</div></div>}
+            <div style={{ fontSize: 12, color: '#666' }}>Slot ID: {slotDetail._id}{slotDetail.inquiryId ? ` — Inquiry: ${slotDetail.inquiryId}` : ''}</div>
+            {slotDetail.inquiryId && <div><Button type="primary" onClick={() => { setSlotDetail(null); openEditorForInquiry(slotDetail.inquiryId); }}>Open Inquiry</Button></div>}
+          </div>
         )}
       </Modal>
 

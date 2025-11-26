@@ -13,6 +13,7 @@ import {
   getSlotsByDate,
   getMyInquiries,
   getAppointmentAuditLogs,
+  cancelInquiry,
   checkAvailability,
 } from '../controllers/inquiryController';
 import { Request, Response, NextFunction } from 'express';
@@ -64,6 +65,9 @@ router.post('/:id', auth, authorize('admin', 'staff'), (req: any, res: Response,
 router.put('/:id/schedule', auth, authorize('admin', 'staff'), (req: any, res: Response, next: NextFunction) => updateInquiry(req, res, next));
 // Check availability for a set of scheduledDates (staff only) without committing
 router.post('/:id/check-availability', auth, authorize('admin', 'staff'), (req: any, res: Response, next: NextFunction) => checkAvailability(req, res, next));
+
+// Cancel an appointment (staff only) with reason
+router.patch('/:id/cancel', auth, authorize('admin', 'staff'), (req: any, res: Response, next: NextFunction) => cancelInquiry(req, res, next));
 
 // Add a response to an inquiry (allow resident and staff replies)
 // Allow file attachments with responses as well
