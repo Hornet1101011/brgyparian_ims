@@ -337,7 +337,24 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
       const LUNCH_END = 13 * 60; // 780
       const SLOT_STEP = 5; // 5-minute buckets for atomic insertion
 
+      // Normalize and deduplicate scheduled ranges, then build slot docs to insert
       // Build all slot docs to insert and run validation checks
+      // First, deduplicate identical scheduled ranges (date + start + end)
+      try {
+        const seenRanges = new Set<string>();
+        const uniqueRanges: any[] = [];
+        for (const sd of updateBody.scheduledDates) {
+          const key = `${sd.date}|${sd.startTime}|${sd.endTime}`;
+          if (!seenRanges.has(key)) {
+            seenRanges.add(key);
+            uniqueRanges.push(sd);
+          }
+        }
+        updateBody.scheduledDates = uniqueRanges;
+      } catch (e) {
+        // non-fatal: if dedupe fails just continue with original array
+      }
+
       const slotDocs: Array<any> = [];
       for (const slot of updateBody.scheduledDates) {
         if (!slot || !slot.date || !slot.startTime || !slot.endTime) {
@@ -375,6 +392,23 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
               appointmentEndTime: slot.endTime
             });
           }
+      }
+
+      // Remove any accidental duplicate minute-slot documents (same date+slot)
+      try {
+        const seen = new Set<string>();
+        const deduped: any[] = [];
+        for (const sd of slotDocs) {
+          const k = `${sd.date}|${sd.slot}`;
+          if (seen.has(k)) continue;
+          seen.add(k);
+          deduped.push(sd);
+        }
+        // replace slotDocs contents with deduped entries
+        slotDocs.length = 0;
+        slotDocs.push(...deduped);
+      } catch (e) {
+        // ignore dedupe errors
       }
 
       // Attempt an atomic reservation using MongoDB transactions and the AppointmentSlot unique index
