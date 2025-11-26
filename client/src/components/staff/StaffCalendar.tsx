@@ -3,6 +3,8 @@ import { Card, Row, Col, Button, Tooltip, Modal, List, Tag, Grid } from 'antd';
 import { LeftOutlined, RightOutlined } from '@ant-design/icons';
 import { getSlotsForRange, getAppointmentWithSlots, getAppointmentInquiries } from '../../api/appointments';
 import AppointmentDetailsModal from '../AppointmentDetailsModal';
+import { contact } from '../../services/api';
+import { Input, Space } from 'antd';
 
 // Simple helpers
 const toMinutes = (t: string) => {
@@ -66,6 +68,10 @@ const StaffCalendar: React.FC = () => {
   const [quickModalVisible, setQuickModalVisible] = useState(false);
   const [quickLoading, setQuickLoading] = useState(false);
   const [quickInquiries, setQuickInquiries] = useState<any[]>([]);
+  const [quickCreateVisible, setQuickCreateVisible] = useState(false);
+  const [quickCreateUsername, setQuickCreateUsername] = useState('');
+  const [quickCreateSubject, setQuickCreateSubject] = useState('Quick appointment');
+  const [quickCreateLoading, setQuickCreateLoading] = useState(false);
 
   // Compute week range (Mon..Sun) containing anchorDate
   const weekStart = useMemo(() => {
@@ -164,6 +170,36 @@ const StaffCalendar: React.FC = () => {
     }
   };
 
+  const openQuickCreate = (dateStr: string, startTime: string, endTime: string) => {
+    setEditorPrefill({ date: dateStr, startTime, endTime });
+    setQuickCreateUsername('');
+    setQuickCreateSubject(`Quick appointment ${dateStr} ${startTime}`);
+    setQuickCreateVisible(true);
+  };
+
+  const submitQuickCreate = async () => {
+    if (!quickCreateUsername) return;
+    setQuickCreateLoading(true);
+    try {
+      const payload = { subject: quickCreateSubject, message: 'Created from calendar quick-schedule', type: 'SCHEDULE_APPOINTMENT', username: quickCreateUsername };
+      const created = await contact.submitInquiry(payload);
+      if (created && created._id) {
+        // open editor for created inquiry
+        const resp = await getAppointmentWithSlots(created._id);
+        if (resp && resp.inquiry) {
+          setEditorRecord(resp.inquiry);
+          setEditorVisible(true);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to create inquiry', err);
+    } finally {
+      setQuickCreateLoading(false);
+      setQuickCreateVisible(false);
+      setQuickModalVisible(false);
+    }
+  };
+
   const closeQuickModal = () => { setQuickModalVisible(false); setQuickInquiries([]); setEditorPrefill(null); };
 
   const scheduleInquiryFromQuick = (inq: any) => {
@@ -204,6 +240,18 @@ const StaffCalendar: React.FC = () => {
                 <div>
                   <Tag color={dayColor(status)}>{status === 'available' ? 'Available' : status === 'partial' ? 'Limited' : 'Full'}</Tag>
                   <Button size="small" onClick={() => openDetail(ds)} style={{ marginLeft: 8 }}>View</Button>
+                  {/* Mobile quick-schedule action */}
+                  <Button size="small" onClick={async () => {
+                    // find first free block
+                    const list = slotsByDate.get(ds) || [];
+                    const free = DAY_BLOCKS.find(b => !list.some(s => rangesOverlap(b.sMin, b.eMin, toMinutes(s.startTime), toMinutes(s.endTime))));
+                    if (!free) {
+                      // open detail if no free block
+                      openDetail(ds);
+                    } else {
+                      openQuickSchedule(ds, free.start, free.end);
+                    }
+                  }} style={{ marginLeft: 8 }}>Quick Schedule</Button>
                 </div>
               </div>} description={(() => {
                 const list = slotsByDate.get(ds) || [];
@@ -234,18 +282,26 @@ const StaffCalendar: React.FC = () => {
                       // small preview cell: check any overlap
                       const overlapping = list.some(s => rangesOverlap(b.sMin, b.eMin, toMinutes(s.startTime), toMinutes(s.endTime)));
                       return (
-                        <Tooltip key={idx} title={overlapping ? list.filter(s => rangesOverlap(b.sMin, b.eMin, toMinutes(s.startTime), toMinutes(s.endTime))).map(s => `${s.residentName || 'Resident'} ${s.startTime}-${s.endTime} (${s.staffName || 'staff'})`).join('\n') : `${b.start}-${b.end} free`}>
-                          <div onClick={() => {
+                        <Tooltip key={idx} placement="top" title={(
+                          <div>
+                            {overlapping ? (
+                              list.filter(s => rangesOverlap(b.sMin, b.eMin, toMinutes(s.startTime), toMinutes(s.endTime))).map((s: any, i: number) => (
+                                <div key={i}><strong>{s.residentName || s.residentUsername || 'Resident'}</strong> {s.startTime}-{s.endTime} — {s.staffName || 'staff'}</div>
+                              ))
+                            ) : (
+                              <div>{b.start}-{b.end} — Free</div>
+                            )}
+                          </div>
+                        )}>
+                          <div aria-label={overlapping ? `Booked ${b.start} to ${b.end}` : `Free ${b.start} to ${b.end}`} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); /* click */ } }} onClick={() => {
                             if (isOfficeClosed(d)) return;
                             if (overlapping) {
-                              // open editor for first overlapping slot's inquiry
                               const first = list.find(s => rangesOverlap(b.sMin, b.eMin, toMinutes(s.startTime), toMinutes(s.endTime)));
                               if (first && (first as any).inquiryId) openEditorForInquiry((first as any).inquiryId);
                             } else {
-                              // open quick-schedule modal prefilled for this free block
                               openQuickSchedule(ds, b.start, b.end);
                             }
-                          }} style={{ height: 28, borderRadius: 4, background: overlapping ? '#f5222d' : '#52c41a', opacity: overlapping ? 1 : 0.95, cursor: isOfficeClosed(d) ? 'not-allowed' : 'pointer' }} />
+                          }} style={{ height: 28, borderRadius: 4, background: overlapping ? '#ff4d4f' : '#73d13d', opacity: overlapping ? 1 : 0.95, cursor: isOfficeClosed(d) ? 'not-allowed' : 'pointer' }} />
                         </Tooltip>
                       );
                     })}
@@ -277,6 +333,17 @@ const StaffCalendar: React.FC = () => {
             <List.Item.Meta title={inq.subject || inq.username || `Inquiry ${inq._id}`} description={<div>{inq.createdBy?.fullName || inq.username || 'Unknown resident'}</div>} />
           </List.Item>
         )} locale={{ emptyText: 'No appointment inquiries available' }} />
+        <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <Button onClick={() => setQuickCreateVisible(true)}>Create New Inquiry</Button>
+        </div>
+      </Modal>
+
+      <Modal title="Create New Inquiry" visible={quickCreateVisible} onCancel={() => setQuickCreateVisible(false)} okText="Create" confirmLoading={quickCreateLoading} onOk={submitQuickCreate}>
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <Input placeholder="Resident username (required)" value={quickCreateUsername} onChange={e => setQuickCreateUsername(e.target.value)} />
+          <Input placeholder="Subject" value={quickCreateSubject} onChange={e => setQuickCreateSubject(e.target.value)} />
+          <div style={{ fontSize: 12, color: '#666' }}>The created inquiry will open in the appointment editor with date/time prefilled.</div>
+        </Space>
       </Modal>
 
         <AppointmentDetailsModal visible={editorVisible} record={editorRecord} onClose={closeEditor} prefill={editorPrefill} />

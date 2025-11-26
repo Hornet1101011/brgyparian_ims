@@ -114,4 +114,6 @@ export default {
   scheduleAppointment,
   resolveAppointment,
   getDailySummary,
+  getSlotsByDate,
+  getSlotsForRange,
 };

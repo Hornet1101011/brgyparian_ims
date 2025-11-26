@@ -291,7 +291,7 @@ export const documentsAPI = {
     axiosInstance.post('/document-requests/preview-filled', data).then(response => response.data),
 };
 
-const contact = {
+export const contact = {
   submitInquiry: (data: any) => {
     // Support FormData (multipart) or JSON payloads
     if (typeof FormData !== 'undefined' && data instanceof FormData) {
