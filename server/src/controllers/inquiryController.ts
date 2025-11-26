@@ -387,8 +387,14 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
           const conflicts = await findConflictsForRange(sd.date, sd.startTime, sd.endTime, req.params.id);
           if (conflicts && conflicts.length) aggregatedConflicts.push(...conflicts);
         }
-        if (aggregatedConflicts.length > 0) {
+        // Determine if the requester is staff/admin so we can optionally allow overrides
+        const roleStr = (req.user && req.user.role) ? String(req.user.role).toLowerCase() : '';
+        const isStaffLike = roleStr.includes('staff') || roleStr.includes('admin');
+        if (aggregatedConflicts.length > 0 && !isStaffLike) {
           return res.status(409).json({ message: 'Scheduling conflict: one or more time slots already taken', conflicts: aggregatedConflicts });
+        }
+        if (aggregatedConflicts.length > 0 && isStaffLike) {
+          console.info('Staff override: proceeding despite preflight conflicts', aggregatedConflicts);
         }
       } catch (availErr) {
         // If availability check fails for any reason, continue and let DB insertion be authoritative
@@ -441,6 +447,27 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
                 conflictsDetailed.push({ inquiryId: inqId, date: info.date, startTime: info.startTime, endTime: info.endTime });
               }
             }
+            // If requester is staff/admin, attempt to override existing reservations by removing conflicts and retrying
+            const roleStr2 = (req.user && req.user.role) ? String(req.user.role).toLowerCase() : '';
+            const isStaffLike2 = roleStr2.includes('staff') || roleStr2.includes('admin');
+            if (isStaffLike2) {
+              try {
+                // remove conflicting slots that belong to other inquiries
+                const conflictInquiryIds = Array.from(conflictsByInquiry.keys());
+                if (conflictInquiryIds.length) {
+                  await AppointmentSlot.deleteMany({ inquiryId: { $in: conflictInquiryIds } });
+                }
+                // try inserting again (best-effort, non-transactional)
+                if (slotDocs.length > 0) {
+                  await AppointmentSlot.insertMany(slotDocs, { ordered: true });
+                }
+                inquiry = await Inquiry.findByIdAndUpdate(req.params.id, updateBody, { new: true });
+                if (inquiry) return res.json(inquiry);
+              } catch (overrideErr) {
+                console.warn('Staff override attempt failed:', (overrideErr as any)?.message || overrideErr);
+                // fall through to return conflict below
+              }
+            }
             return res.status(409).json({ message: 'Scheduling conflict: one or more time slots already taken', conflicts: conflictsDetailed });
           } catch (enrichErr) {
             console.warn('Failed to enrich duplicate-key error with conflicts:', enrichErr);
@@ -486,6 +513,25 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
                   conflictsDetailed.push({ inquiryId: inqId, username: inq?.username || null, residentName: (inq && (inq as any).createdBy && (inq as any).createdBy.fullName) || null, date: info.date, startTime: info.startTime, endTime: info.endTime });
                 } catch (ee) {
                   conflictsDetailed.push({ inquiryId: inqId, date: info.date, startTime: info.startTime, endTime: info.endTime });
+                }
+              }
+              // If requester is staff/admin, attempt to override existing reservations by removing conflicts and retrying
+              const roleStr3 = (req.user && req.user.role) ? String(req.user.role).toLowerCase() : '';
+              const isStaffLike3 = roleStr3.includes('staff') || roleStr3.includes('admin');
+              if (isStaffLike3) {
+                try {
+                  const conflictInquiryIds = Array.from(conflictsByInquiry.keys());
+                  if (conflictInquiryIds.length) {
+                    await AppointmentSlot.deleteMany({ inquiryId: { $in: conflictInquiryIds } });
+                  }
+                  // retry insert
+                  if (slotDocs.length > 0) {
+                    await AppointmentSlot.insertMany(slotDocs, { ordered: true });
+                  }
+                  inquiry = await Inquiry.findByIdAndUpdate(req.params.id, updateBody, { new: true });
+                  if (inquiry) return res.json(inquiry);
+                } catch (overrideErr) {
+                  console.warn('Staff override attempt (fallback) failed:', (overrideErr as any)?.message || overrideErr);
                 }
               }
               // cleanup any partial inserts

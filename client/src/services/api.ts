@@ -8,6 +8,7 @@ import {
 import { Notification } from '../types/notification';
 import { localDB } from './localDatabase';
 import { syncService } from './syncService';
+import type { ScheduledAppointment, ConflictItem } from '../types/appointments';
 // Fetch template text for a document type
 export const getTemplateText = (type: string) =>
   axiosInstance.get(`/templates/${type}`).then(res => res.data.text);
@@ -314,9 +315,10 @@ const contact = {
     axiosInstance.patch(`/inquiries/${id}`, { status: 'resolved' }).then(response => response.data),
   // Check availability for proposed scheduled dates (server may implement this endpoint).
   // Returns availability details or `null` if the endpoint is not available (404).
-  checkAvailability: async (id: string, scheduledDates: Array<{ date: string; startTime: string; endTime: string }>) => {
+  checkAvailability: async (id: string, scheduledDates: ScheduledAppointment[]) => {
     try {
-      const resp = await axiosInstance.post(`/inquiries/${id}/availability`, { scheduledDates });
+      // Server exposes POST /inquiries/:id/check-availability
+      const resp = await axiosInstance.post(`/inquiries/${id}/check-availability`, { scheduledDates });
       return resp.data;
     } catch (err: any) {
       // If server doesn't provide an availability endpoint, return null so callers
@@ -327,10 +329,10 @@ const contact = {
   },
   // Schedule appointments for an inquiry. This centralizes the POST payload
   // used by various UI components and returns server response data.
-  scheduleInquiry: async (id: string, scheduledDates: Array<{ date: string; startTime: string; endTime: string }>) => {
+  scheduleInquiry: async (id: string, scheduledDates: ScheduledAppointment[]) => {
     const payload = { scheduledDates, status: 'scheduled' };
     const resp = await axiosInstance.post(`/inquiries/${id}`, payload);
-    return resp.data;
+    return resp.data as { success?: boolean; conflicts?: ConflictItem[] } | any;
   },
   // Public announcements
   getAnnouncements: () =>

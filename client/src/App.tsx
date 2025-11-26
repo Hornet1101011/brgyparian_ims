@@ -1,6 +1,7 @@
 import Inbox from './pages/inbox';
 import type { FC } from 'react';
 import React from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import TemplatesManager from './components/TemplatesManager';
 import StaffInbox from './pages/staffInbox';
 import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
@@ -59,10 +60,12 @@ const RootRedirect: React.FC = () => {
 interface AppProps {}
 
 const App: FC<AppProps> = () => {
+  const queryClient = new QueryClient();
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <ConfigProvider>
+        <QueryClientProvider client={queryClient}>
         <Router>
           <AuthProvider>
             <Routes>
@@ -115,6 +118,7 @@ const App: FC<AppProps> = () => {
             </Routes>
           </AuthProvider>
         </Router>
+        </QueryClientProvider>
       </ConfigProvider>
     </ThemeProvider>
   );

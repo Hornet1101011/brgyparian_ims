@@ -1,33 +1,21 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Table, Button, Card, Tag, Space, Modal, Typography, message } from 'antd';
-import { contactAPI } from '../services/api';
+import React, { useMemo, useState } from 'react';
+import { Table, Button, Card, Tag, Space, Typography, message } from 'antd';
+import { useAppointmentsQuery } from '../hooks/useAppointments';
+import '../components/staff/appointments/scheduling.css';
 import dayjs from 'dayjs';
 import AppointmentDetailsModal from '../components/AppointmentDetailsModal';
 
 const { Text } = Typography;
 
 const StaffAppointments: React.FC = () => {
-  const [loading, setLoading] = useState(false);
-  const [inquiries, setInquiries] = useState<any[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<any | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
 
-  const fetch = async () => {
-    setLoading(true);
-    try {
-      const data = await contactAPI.getAllInquiries();
-      // Filter to only schedule appointment type
-      const appointments = Array.isArray(data) ? data.filter((i: any) => (i.type === 'SCHEDULE_APPOINTMENT')) : [];
-      setInquiries(appointments);
-    } catch (e) {
-      console.error(e);
-      message.error('Failed to fetch appointments');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { fetch(); }, []);
+  const { data: inquiries = [], isLoading, isError } = useAppointmentsQuery();
+  if (isError) {
+    // keep existing message behavior
+    message.error('Failed to fetch appointments');
+  }
 
   const columns = useMemo(() => [
     { title: 'Resident Name', dataIndex: ['createdBy', 'fullName'], key: 'resident', render: (_: any, record: any) => record.createdBy?.fullName || record.username },
@@ -36,7 +24,7 @@ const StaffAppointments: React.FC = () => {
     { title: 'Requested Dates', dataIndex: 'appointmentDates', key: 'appointmentDates', render: (dates: string[]) => (dates || []).map(d => <div key={d}>{dayjs(d).format('MMM DD, YYYY')}</div>) },
     { title: 'Status', dataIndex: 'status', key: 'status', render: (s: string) => {
       const color = s === 'scheduled' ? 'green' : s === 'resolved' ? 'gray' : 'orange';
-      return <Tag color={color} style={{ textTransform: 'capitalize' }}>{s || 'open'}</Tag>;
+      return <Tag color={color} className="capitalize">{s || 'open'}</Tag>;
     }},
     { title: 'Actions', key: 'actions', render: (_: any, record: any) => (
       <Space>
@@ -47,14 +35,14 @@ const StaffAppointments: React.FC = () => {
   ], []);
 
   return (
-    <Card title="Staff — Appointments" style={{ borderRadius: 12 }}>
-      <Table rowKey={(r:any) => r._id} dataSource={inquiries} columns={columns} loading={loading} />
+    <Card className="cardRounded" title={<Typography.Title level={4}>Staff — Appointments</Typography.Title>}>
+      <Table rowKey={(r:any) => r._id} dataSource={inquiries} columns={columns} loading={isLoading} scroll={{ x: 'max-content' }} />
 
       {selectedRecord && (
         <AppointmentDetailsModal
           visible={modalVisible}
           record={selectedRecord}
-          onClose={() => { setModalVisible(false); setSelectedRecord(null); fetch(); }}
+          onClose={() => { setModalVisible(false); setSelectedRecord(null); }}
         />
       )}
     </Card>

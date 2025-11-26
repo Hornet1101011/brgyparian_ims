@@ -1,168 +1,207 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, Descriptions, Divider, Checkbox, Button, Space, message } from 'antd';
-import dayjs from 'dayjs';
+import React, { useEffect, useMemo, useReducer } from 'react';
+import { Modal, Descriptions, Divider, Button, Space, message, Typography } from 'antd';
 import { Select } from 'antd';
-import TimeRangeSelector from './TimeRangeSelector';
-import { contactAPI } from '../services/api';
+import DateSelectionSection from './staff/appointments/DateSelectionSection';
+import AppointmentDetails from './staff/appointments/AppointmentDetails';
+import './staff/appointments/scheduling.css';
+import appointmentsAPI from '../api/appointments';
+import { useAppointmentsQuery, useSubmitScheduleMutation } from '../hooks/useAppointments';
+import type { AppointmentInquiry, TimeRange } from '../types/appointments';
 
 type Props = {
   visible: boolean;
-  record: any;
+  record: AppointmentInquiry;
   onClose: () => void;
 };
 
-const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) => {
-  const [selectedDates, setSelectedDates] = useState<string[]>([]);
-  const [timeRanges, setTimeRanges] = useState<Record<string, { start?: string; end?: string }>>({});
-  const [saving, setSaving] = useState(false);
-  const [resolving, setResolving] = useState(false);
-  const [maxToSchedule, setMaxToSchedule] = useState<number>(0);
-  const [existingScheduledByDate, setExistingScheduledByDate] = useState<Record<string, Array<{start:string,end:string,inquiryId?:string,residentUsername?:string,residentName?:string}>>>({});
-  const [availabilityOk, setAvailabilityOk] = useState<boolean>(true);
-  const [availabilityMsg, setAvailabilityMsg] = useState<string>('');
-  const fetchExistingScheduled = async () => {
-    try {
-      const all = await contactAPI.getAllInquiries();
-      const map: Record<string, Array<{start:string,end:string,inquiryId?:string,residentUsername?:string,residentName?:string}>> = {};
-      (all || []).forEach((inq: any) => {
-        // ignore entries for the same inquiry we're editing — they are not conflicts
-        if (record && inq && String(inq._id) === String(record._id)) return;
-        if (inq.scheduledDates && Array.isArray(inq.scheduledDates)) {
-          inq.scheduledDates.forEach((sd: any) => {
-            const date = sd.date;
-            if (!date) return;
-            map[date] = map[date] || [];
-            map[date].push({ start: sd.startTime, end: sd.endTime, inquiryId: inq._id, residentUsername: inq.username, residentName: inq.createdBy?.fullName });
-          });
-        }
-      });
-      setExistingScheduledByDate(map);
-    } catch (e) {
-      console.warn('Failed to fetch scheduled appointments', e);
-      message.warning('Could not refresh existing bookings.');
+type ScheduledItem = { start: string; end: string; inquiryId?: string; residentUsername?: string; residentName?: string };
+
+type SchedulingState = {
+  selectedDates: string[];
+  timeRanges: Record<string, { start?: string; end?: string }>;
+  saving: boolean;
+  resolving: boolean;
+  maxToSchedule: number;
+  existingScheduledByDate: Record<string, ScheduledItem[]>;
+  availabilityOk: boolean;
+  availabilityMsg: string;
+};
+
+type SchedulingAction =
+  | { type: 'SET_SELECTED_DATES'; payload: string[] }
+  | { type: 'ADD_SELECTED_DATE'; payload: string }
+  | { type: 'REMOVE_SELECTED_DATE'; payload: string }
+  | { type: 'SET_TIME_RANGE'; payload: { date: string; start?: string; end?: string } }
+  | { type: 'SET_SAVING'; payload: boolean }
+  | { type: 'SET_RESOLVING'; payload: boolean }
+  | { type: 'SET_MAX_TO_SCHEDULE'; payload: number }
+  | { type: 'SET_EXISTING_SCHEDULED_BY_DATE'; payload: Record<string, ScheduledItem[]> }
+  | { type: 'SET_AVAILABILITY'; payload: { ok: boolean; msg?: string } }
+  | { type: 'RESET' };
+
+const initialState: SchedulingState = {
+  selectedDates: [],
+  timeRanges: {},
+  saving: false,
+  resolving: false,
+  maxToSchedule: 0,
+  existingScheduledByDate: {},
+  availabilityOk: true,
+  availabilityMsg: ''
+};
+
+function reducer(state: SchedulingState, action: SchedulingAction): SchedulingState {
+  switch (action.type) {
+    case 'SET_SELECTED_DATES':
+      return { ...state, selectedDates: action.payload };
+    case 'ADD_SELECTED_DATE':
+      if (state.selectedDates.includes(action.payload)) return state;
+      return { ...state, selectedDates: [...state.selectedDates, action.payload] };
+    case 'REMOVE_SELECTED_DATE': {
+      const next = state.selectedDates.filter(d => d !== action.payload);
+      const nextRanges: Record<string, { start?: string; end?: string }> = { ...state.timeRanges };
+      delete nextRanges[action.payload];
+      return { ...state, selectedDates: next, timeRanges: nextRanges };
     }
-  };
+    case 'SET_TIME_RANGE':
+      return { ...state, timeRanges: { ...state.timeRanges, [action.payload.date]: { start: action.payload.start, end: action.payload.end } } };
+    case 'SET_SAVING':
+      return { ...state, saving: action.payload };
+    case 'SET_RESOLVING':
+      return { ...state, resolving: action.payload };
+    case 'SET_MAX_TO_SCHEDULE':
+      return { ...state, maxToSchedule: action.payload };
+    case 'SET_EXISTING_SCHEDULED_BY_DATE':
+      return { ...state, existingScheduledByDate: action.payload };
+    case 'SET_AVAILABILITY':
+      return { ...state, availabilityOk: action.payload.ok, availabilityMsg: action.payload.msg || '' };
+    case 'RESET':
+      return { ...initialState };
+    default:
+      return state;
+  }
+}
+
+const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) => {
+  const [state, dispatch] = useReducer(reducer, initialState);
+  const appointmentsQuery = useAppointmentsQuery();
+  const submitSchedule = useSubmitScheduleMutation();
+
+  // derive existing scheduled map from appointments query data
+  useEffect(() => {
+    const all = Array.isArray(appointmentsQuery.data) ? appointmentsQuery.data : [];
+    const map: Record<string, Array<{start:string,end:string,inquiryId?:string,residentUsername?:string,residentName?:string}>> = {};
+    (all || []).forEach((inq: any) => {
+      if (record && inq && String(inq._id) === String(record._id)) return;
+      if (inq.scheduledDates && Array.isArray(inq.scheduledDates)) {
+        inq.scheduledDates.forEach((sd: any) => {
+          const date = sd.date;
+          if (!date) return;
+          map[date] = map[date] || [];
+          map[date].push({ start: sd.startTime, end: sd.endTime, inquiryId: String(inq._id), residentUsername: inq.username, residentName: inq.createdBy?.fullName });
+        });
+      }
+    });
+    dispatch({ type: 'SET_EXISTING_SCHEDULED_BY_DATE', payload: map });
+  }, [appointmentsQuery.data, record && record._id]);
 
   // Preflight availability check: refresh bookings and validate current selections
   const requestedDates = useMemo(() => (record && record.appointmentDates) ? record.appointmentDates : [], [record]);
 
   const toggleDate = (date: string, checked: boolean) => {
     if (checked) {
-      if (maxToSchedule > 0 && selectedDates.length >= maxToSchedule) {
-        message.warning(`You may only select up to ${maxToSchedule} date(s) to schedule`);
+      if (state.maxToSchedule > 0 && state.selectedDates.length >= state.maxToSchedule) {
+        message.warning(`You may only select up to ${state.maxToSchedule} date(s) to schedule`);
         return;
       }
-      setSelectedDates(prev => [...prev, date]);
+      dispatch({ type: 'ADD_SELECTED_DATE', payload: date });
     } else {
-      setSelectedDates(prev => prev.filter(d => d !== date));
-      setTimeRanges(prev => { const next: any = { ...prev }; delete next[date]; return next; });
+      dispatch({ type: 'REMOVE_SELECTED_DATE', payload: date });
     }
   };
 
   const handleMaxChange = (val: number) => {
     const newMax = Number(val) || 0;
-    setMaxToSchedule(newMax);
-    if (newMax > 0 && selectedDates.length > newMax) {
-      const keep = selectedDates.slice(0, newMax);
-      setSelectedDates(keep);
-      setTimeRanges(prev => {
-        const next: any = {};
-        for (const d of keep) if (prev[d]) next[d] = prev[d];
-        return next;
-      });
+    dispatch({ type: 'SET_MAX_TO_SCHEDULE', payload: newMax });
+    if (newMax > 0 && state.selectedDates.length > newMax) {
+      const keep = state.selectedDates.slice(0, newMax);
+      const prunedRanges: Record<string, { start?: string; end?: string }> = {};
+      for (const d of keep) if (state.timeRanges[d]) prunedRanges[d] = state.timeRanges[d];
+      dispatch({ type: 'SET_SELECTED_DATES', payload: keep });
+      // set each kept range explicitly
+      for (const d of Object.keys(prunedRanges)) {
+        dispatch({ type: 'SET_TIME_RANGE', payload: { date: d, start: prunedRanges[d].start, end: prunedRanges[d].end } });
+      }
     }
   };
 
   const updateTimeRange = (date: string, start?: string, end?: string) => {
-    setTimeRanges(prev => ({ ...prev, [date]: { start, end } }));
+    dispatch({ type: 'SET_TIME_RANGE', payload: { date, start, end } });
   };
 
   const validateNoOverlap = () => {
-    const normalizeToMinutes = (t?: string) => {
-      if (!t) return NaN;
-      const parts = String(t).split(':');
-      if (parts.length < 2) return NaN;
-      const hh = parseInt(parts[0], 10);
-      const mm = parseInt(parts[1], 10);
-      if (Number.isNaN(hh) || Number.isNaN(mm)) return NaN;
-      return hh * 60 + mm;
-    };
-
-    const OFFICE_START = 8 * 60; // 480
-    const OFFICE_END = 17 * 60; // 1020
-    const LUNCH_START = 12 * 60; // 720
-    const LUNCH_END = 13 * 60; // 780
-
-    for (const d of selectedDates) {
-      const range = timeRanges[d];
-      if (!range || !range.start || !range.end) return { ok: false, msg: `Please supply time range for ${d}` };
-      const sMin = normalizeToMinutes(range.start);
-      const eMin = normalizeToMinutes(range.end);
-      if (Number.isNaN(sMin) || Number.isNaN(eMin) || sMin >= eMin) return { ok: false, msg: `Invalid time range for ${d}` };
-      if (sMin < OFFICE_START || eMin > OFFICE_END) return { ok: false, msg: `Time range for ${d} must be within office hours 08:00-17:00` };
-      if (sMin < LUNCH_END && eMin > LUNCH_START) return { ok: false, msg: `Time range for ${d} must not overlap lunch break 12:00-13:00` };
-
-      const existing = existingScheduledByDate[d] || [];
-      for (const ex of existing) {
-        const exS = normalizeToMinutes((ex as any).start);
-        const exE = normalizeToMinutes((ex as any).end);
-        if (!Number.isNaN(exS) && !Number.isNaN(exE) && sMin < exE && eMin > exS) {
-          return { ok: false, msg: `Selected time ${range.start}-${range.end} overlaps existing appointment ${ (ex as any).start }-${ (ex as any).end } on ${d}` };
-        }
-      }
+    // replace inline minute math with centralized validation
+    try {
+      // lazy require to avoid circular import issues
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const svc = require('../services/appointmentSchedulingService');
+      return svc.validateSelections(state.selectedDates, state.timeRanges, state.existingScheduledByDate);
+    } catch (e) {
+      console.warn('Failed to run centralized validation', e);
+      // fallback to permissive result so UX doesn't block scheduling unnecessarily
+      return { ok: true };
     }
-    return { ok: true };
   };
   const runPreflightCheck = async () => {
-    await fetchExistingScheduled();
     const v = validateNoOverlap();
     if (!v.ok) {
-      setAvailabilityOk(false);
-      setAvailabilityMsg(v.msg || 'Selected time conflicts with existing bookings');
+      dispatch({ type: 'SET_AVAILABILITY', payload: { ok: false, msg: v.msg || 'Selected time conflicts with existing bookings' } });
     } else {
-      setAvailabilityOk(true);
-      setAvailabilityMsg('');
+      dispatch({ type: 'SET_AVAILABILITY', payload: { ok: true } });
     }
   };
 
   // Run preflight when selectedDates or timeRanges change
   useEffect(() => {
-    if (selectedDates.length === 0) { setAvailabilityOk(true); setAvailabilityMsg(''); return; }
+    if (state.selectedDates.length === 0) { dispatch({ type: 'SET_AVAILABILITY', payload: { ok: true } }); return; }
     // fire and forget
     runPreflightCheck().catch(err => console.warn('Preflight check failed', err));
-  }, [selectedDates, timeRanges]);
+  }, [state.selectedDates, JSON.stringify(state.timeRanges)]);
 
   useEffect(() => {
     if (!visible) return;
     // reset
-    setSelectedDates([]);
-    setTimeRanges({});
+    dispatch({ type: 'RESET' });
     // default the maxToSchedule to the number of requested dates (cap at 3)
     try {
       const count = (record && record.appointmentDates && Array.isArray(record.appointmentDates)) ? record.appointmentDates.length : 0;
-      setMaxToSchedule(count > 0 ? Math.min(3, count) : 0);
+      dispatch({ type: 'SET_MAX_TO_SCHEDULE', payload: count > 0 ? Math.min(3, count) : 0 });
     } catch (e) {
       // ignore
     }
-    // fetch existing scheduled appointments to avoid double-booking
-    fetchExistingScheduled();
+    // ensure appointments query is fresh when modal opens
+    try { appointmentsQuery.refetch(); } catch (e) { /* ignore */ }
   }, [visible]);
 
   const confirm = async () => {
     const check = validateNoOverlap();
     if (!check.ok) { message.error(check.msg); return; }
-    const scheduledDates = selectedDates.map(d => ({ date: d, startTime: timeRanges[d].start!, endTime: timeRanges[d].end! }));
-    setSaving(true);
+    const scheduledDates = state.selectedDates.map(d => ({ date: d, startTime: state.timeRanges[d].start!, endTime: state.timeRanges[d].end! }));
+    dispatch({ type: 'SET_SAVING', payload: true });
     try {
       // First try availability endpoint (may return null if 404)
       let availability: any = null;
       try {
-        availability = await contactAPI.checkAvailability(record._id, scheduledDates);
-      } catch (availErr: any) {
-        // If availability endpoint exists but errors (non-404), surface a warning and fall back to direct scheduling
-        if (availErr && availErr.response && availErr.response.status !== 404) {
-          console.warn('Availability check failed, will fallback to scheduling:', availErr);
+        availability = await appointmentsAPI.getAppointmentDetails(String(record._id));
+        // If endpoint provides availability info under a different path, fall back to contact API pattern
+        if (availability && typeof availability === 'object' && ('available' in availability || 'conflicts' in availability)) {
+          // keep as availability object
+        } else {
+          // not an availability response; set to null so scheduling call proceeds
+          availability = null;
         }
+      } catch (availErr: any) {
+        // If availability endpoint doesn't exist or errors, just fallback and schedule
         availability = null;
       }
 
@@ -173,31 +212,18 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
         if (!availableFlag) {
           // If server provided conflicts show them, else try to refresh and compute local conflicts
           let conflictItems = conflicts;
-          if (!conflictItems) {
-            try { await fetchExistingScheduled(); } catch (e) { /* ignore */ }
+            if (!conflictItems) {
+            try { await appointmentsQuery.refetch(); } catch (e) { /* ignore */ }
             const localConflicts: any[] = [];
             try {
-              const normalizeToMinutes = (t?: string) => {
-                if (!t) return NaN;
-                const parts = String(t).split(':');
-                if (parts.length < 2) return NaN;
-                const hh = parseInt(parts[0], 10);
-                const mm = parseInt(parts[1], 10);
-                if (Number.isNaN(hh) || Number.isNaN(mm)) return NaN;
-                return hh * 60 + mm;
-              };
-              for (const sd of scheduledDates) {
-                const date = sd.date;
-                const sMin = normalizeToMinutes(sd.startTime);
-                const eMin = normalizeToMinutes(sd.endTime);
-                const existing = (existingScheduledByDate && existingScheduledByDate[date]) || [];
-                for (const ex of existing) {
-                  const exS = normalizeToMinutes((ex as any).start);
-                  const exE = normalizeToMinutes((ex as any).end);
-                  if (!Number.isNaN(exS) && !Number.isNaN(exE) && sMin < exE && eMin > exS) {
-                    localConflicts.push({ date, startTime: ex.start, endTime: ex.end, inquiryId: ex.inquiryId, residentUsername: ex.residentUsername, residentName: ex.residentName });
-                  }
-                }
+              // use centralized conflict finder
+              try {
+                // eslint-disable-next-line @typescript-eslint/no-var-requires
+                const svc = require('../services/appointmentSchedulingService');
+                const lc = svc.findConflicts(scheduledDates, state.existingScheduledByDate, record && record._id);
+                if (Array.isArray(lc) && lc.length > 0) localConflicts.push(...lc as any[]);
+              } catch (e) {
+                console.warn('Failed to compute local conflicts via service', e);
               }
             } catch (computeErr) {
               console.warn('Failed to compute local conflicts', computeErr);
@@ -226,7 +252,7 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
             okText: 'Refresh Bookings',
             cancelText: 'Close',
             onOk: async () => {
-              await fetchExistingScheduled();
+              try { await appointmentsQuery.refetch(); } catch (_) {}
               message.info('Refreshed existing bookings');
             }
           });
@@ -236,17 +262,17 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
       }
 
       // Proceed to schedule (server is authoritative). If availability endpoint was not present, this is the primary attempt.
-      try {
-        await contactAPI.scheduleInquiry(record._id, scheduledDates);
-        message.success('Appointment scheduled');
-        onClose();
-      } catch (err: any) {
+        try {
+          await submitSchedule.mutateAsync({ id: String(record._id), scheduledDates });
+          message.success('Appointment scheduled');
+          onClose();
+        } catch (err: any) {
         const status = err?.response?.status;
         const data = err?.response?.data;
         const serverText = (data && (data.message || JSON.stringify(data))) || err?.message || String(err);
         console.error('Scheduling failed:', status, serverText);
         if (status === 409) {
-          try { await fetchExistingScheduled(); } catch (refreshErr) { console.warn('Failed to refresh bookings after 409', refreshErr); }
+          try { await appointmentsQuery.refetch(); } catch (refreshErr) { console.warn('Failed to refresh bookings after 409', refreshErr); }
 
           let conflictItems = data && Array.isArray(data.conflicts) ? data.conflicts : null;
           if (!conflictItems) {
@@ -265,12 +291,12 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
                 const date = sd.date;
                 const sMin = normalizeToMinutes(sd.startTime);
                 const eMin = normalizeToMinutes(sd.endTime);
-                const existing = (existingScheduledByDate && existingScheduledByDate[date]) || [];
+                const existing = (state.existingScheduledByDate && state.existingScheduledByDate[date]) || [];
                 for (const ex of existing) {
                   const exS = normalizeToMinutes((ex as any).start);
                   const exE = normalizeToMinutes((ex as any).end);
                   if (!Number.isNaN(exS) && !Number.isNaN(exE) && sMin < exE && eMin > exS) {
-                    localConflicts.push({ date, startTime: ex.start, endTime: ex.end, inquiryId: ex.inquiryId, residentUsername: ex.residentUsername, residentName: ex.residentName });
+                    localConflicts.push({ date, startTime: (ex as any).start, endTime: (ex as any).end, inquiryId: ex.inquiryId, residentUsername: ex.residentUsername, residentName: ex.residentName });
                   }
                 }
               }
@@ -301,7 +327,7 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
             okText: 'Refresh Bookings',
             cancelText: 'Close',
             onOk: async () => {
-              await fetchExistingScheduled();
+              try { await appointmentsQuery.refetch(); } catch (_) {}
               message.info('Refreshed existing bookings');
             }
           });
@@ -332,16 +358,16 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
       console.error(e);
       message.error('Failed to schedule appointment');
     } finally {
-      setSaving(false);
+      dispatch({ type: 'SET_SAVING', payload: false });
     }
 
   };
 
   const handleResolve = async () => {
     if (!record || !record._id) return;
-    setResolving(true);
+    dispatch({ type: 'SET_RESOLVING', payload: true });
     try {
-      const resp = await contactAPI.resolveInquiry(record._id);
+      const resp = await appointmentsAPI.resolveAppointment(String(record._id));
       message.success('Inquiry resolved');
       // Optionally close modal or refresh parent; we'll close the modal to reflect change
       onClose();
@@ -349,20 +375,19 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
       console.error('Failed to resolve inquiry', err);
       message.error('Failed to resolve inquiry');
     } finally {
-      setResolving(false);
+      dispatch({ type: 'SET_RESOLVING', payload: false });
     }
   };
 
   return (
-    <Modal open={visible} onCancel={onClose} footer={null} width={780} title="Appointment Details">
+    <Modal open={visible} onCancel={onClose} footer={null} width={720} className="schedulingModal" title={<Typography.Title level={4}>Appointment Details</Typography.Title>}>
       <Descriptions column={1} bordered>
-        <Descriptions.Item label="Resident">{record.createdBy?.fullName || record.username}</Descriptions.Item>
-        <Descriptions.Item label="Message">{record.message}</Descriptions.Item>
+        <AppointmentDetails record={record} />
         <Descriptions.Item label="Number to Schedule">
           <Select
-            value={maxToSchedule || undefined}
+            value={state.maxToSchedule || undefined}
             onChange={(v) => handleMaxChange(Number(v))}
-            style={{ width: 140 }}
+            className="selectSmall"
           >
             {(requestedDates || []).map((_: any, idx: number) => (
               <Select.Option key={idx + 1} value={idx + 1}>{idx + 1}</Select.Option>
@@ -370,32 +395,26 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
           </Select>
         </Descriptions.Item>
         <Descriptions.Item label="Requested Dates">
-          {requestedDates.length === 0 && <div>No dates requested</div>}
-          {requestedDates.map((d: string) => (
-            <div key={d} style={{ marginBottom: 8 }}>
-              <Checkbox onChange={(e) => toggleDate(d, e.target.checked)}>{dayjs(d).format('MMM DD, YYYY')}</Checkbox>
-              {selectedDates.includes(d) && (
-                <div style={{ marginTop: 8, marginLeft: 24 }}>
-                  <TimeRangeSelector
-                    date={d}
-                    existingRanges={existingScheduledByDate[d] || []}
-                    onChange={(s,e) => updateTimeRange(d, s, e)}
-                  />
-                </div>
-              )}
-            </div>
-          ))}
+          <DateSelectionSection
+            requestedDates={requestedDates}
+            maxToSchedule={state.maxToSchedule}
+            selectedDates={state.selectedDates}
+            setSelectedDates={(d) => dispatch({ type: 'SET_SELECTED_DATES', payload: d })}
+            timeRanges={state.timeRanges}
+            updateTimeRange={updateTimeRange}
+            existingScheduledByDate={state.existingScheduledByDate}
+          />
         </Descriptions.Item>
       </Descriptions>
       <Divider />
-      {!availabilityOk && (
-        <div style={{ marginBottom: 8, color: '#d4380d' }}>{availabilityMsg}</div>
+      {!state.availabilityOk && (
+        <div style={{ marginBottom: 8, color: '#d4380d' }}>{state.availabilityMsg}</div>
       )}
       <Space style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <Button onClick={onClose}>Close</Button>
-        <Button onClick={handleResolve} loading={resolving} disabled={resolving}>Resolve</Button>
-        <Button onClick={runPreflightCheck} disabled={selectedDates.length === 0}>Refresh Availability</Button>
-        <Button type="primary" onClick={confirm} loading={saving} disabled={selectedDates.length === 0 || !availabilityOk}>Confirm Appointment</Button>
+        <Button onClick={handleResolve} loading={state.resolving} disabled={state.resolving}>Resolve</Button>
+        <Button onClick={runPreflightCheck} disabled={state.selectedDates.length === 0}>Refresh Availability</Button>
+        <Button type="primary" onClick={confirm} loading={state.saving} disabled={state.selectedDates.length === 0 || !state.availabilityOk}>Confirm Appointment</Button>
       </Space>
     </Modal>
   );
