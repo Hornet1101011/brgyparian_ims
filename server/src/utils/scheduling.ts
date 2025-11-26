@@ -8,7 +8,8 @@ export const toMinutes = (hhmm: string) => {
 };
 
 export const rangesOverlap = (aStartMin: number, aEndMin: number, bStartMin: number, bEndMin: number) => {
-  return aStartMin < bEndMin && aEndMin > bStartMin;
+  // Overlap iff startA < endB && startB < endA
+  return aStartMin < bEndMin && bStartMin < aEndMin;
 };
 
 export const slotOverlapsAny = (candidate: { start: string; end: string }, existing: Array<{ start: string; end: string }>) => {

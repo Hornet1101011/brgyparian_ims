@@ -22,6 +22,7 @@ import { Message } from '../models/Message';
 import { Notification } from '../models/Notification';
 import { AppointmentSlot } from '../models/AppointmentSlot';
 import { handleSaveError } from '../utils/handleSaveError';
+import { rangesOverlap } from '../utils/scheduling';
 
 // Helper: convert HH:MM to minutes since midnight
 const normalizeToMinutes = (t?: string) => {
@@ -321,267 +322,113 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
     let inquiry: any = null;
     const scheduledProvided = updateBody.scheduledDates && Array.isArray(updateBody.scheduledDates) && updateBody.scheduledDates.length > 0;
     if (scheduledProvided) {
-      // Normalize and validate each scheduled slot
-      const normalizeToMinutes = (t: string) => {
-        const parts = String(t || '').split(':');
-        if (parts.length < 2) return NaN;
-        const hh = parseInt(parts[0], 10);
-        const mm = parseInt(parts[1], 10);
-        if (Number.isNaN(hh) || Number.isNaN(mm)) return NaN;
-        return hh * 60 + mm;
+      // Helper: validate payload and return normalized list or throw an error response
+      const validateSchedulePayload = (arr: any[]) => {
+        const OFFICE_START = 8 * 60; // 480
+        const OFFICE_END = 17 * 60; // 1020
+        const LUNCH_START = 12 * 60; // 720
+        const LUNCH_END = 13 * 60; // 780
+        const SLOT_STEP = 5;
+        const normalize = (t: string) => {
+          const parts = String(t || '').split(':');
+          if (parts.length < 2) return NaN;
+          const hh = parseInt(parts[0], 10);
+          const mm = parseInt(parts[1], 10);
+          if (Number.isNaN(hh) || Number.isNaN(mm)) return NaN;
+          return hh * 60 + mm;
+        };
+        if (!Array.isArray(arr)) throw { status: 400, message: 'scheduledDates must be an array' };
+        // dedupe exact ranges and ensure unique dates
+        const seenRange = new Set<string>();
+        const seenDate = new Set<string>();
+        const out: any[] = [];
+        for (const sd of arr) {
+          if (!sd || !sd.date || !sd.startTime || !sd.endTime) throw { status: 400, message: 'Each scheduledDate must include date, startTime and endTime' };
+          const key = `${sd.date}|${sd.startTime}|${sd.endTime}`;
+          if (seenRange.has(key)) continue; // drop exact duplicate
+          if (seenDate.has(sd.date)) {
+            throw { status: 400, message: `Duplicate date in scheduledDates: ${sd.date}` };
+          }
+          const sMin = normalize(sd.startTime);
+          const eMin = normalize(sd.endTime);
+          if (Number.isNaN(sMin) || Number.isNaN(eMin) || sMin >= eMin) throw { status: 400, message: `Invalid time range for ${sd.date}` };
+          if (sMin < OFFICE_START || eMin > OFFICE_END) throw { status: 400, message: `Time range for ${sd.date} must be within office hours 08:00-17:00` };
+          if (sMin < LUNCH_END && eMin > LUNCH_START) throw { status: 400, message: `Time range for ${sd.date} must not overlap lunch break 12:00-13:00` };
+          seenRange.add(key);
+          seenDate.add(sd.date);
+          out.push({ date: sd.date, startTime: sd.startTime, endTime: sd.endTime, sMin, eMin });
+        }
+        return { normalized: out, SLOT_STEP };
       };
 
-      const OFFICE_START = 8 * 60; // 480
-      const OFFICE_END = 17 * 60; // 1020
-      const LUNCH_START = 12 * 60; // 720
-      const LUNCH_END = 13 * 60; // 780
-      const SLOT_STEP = 5; // 5-minute buckets for atomic insertion
-
-      // Normalize and deduplicate scheduled ranges, then build slot docs to insert
-      // Build all slot docs to insert and run validation checks
-      // First, deduplicate identical scheduled ranges (date + start + end)
-      try {
-        const seenRanges = new Set<string>();
-        const uniqueRanges: any[] = [];
-        for (const sd of updateBody.scheduledDates) {
-          const key = `${sd.date}|${sd.startTime}|${sd.endTime}`;
-          if (!seenRanges.has(key)) {
-            seenRanges.add(key);
-            uniqueRanges.push(sd);
+      // Helper: find conflicts for a single date using inquiry.scheduledDates (ignore other dates)
+      const findConflictsForDate = async (date: string, sMin: number, eMin: number, excludeInquiryId?: string) => {
+        // fetch inquiries that have scheduledDates on this date, excluding current inquiry
+        const matches = await Inquiry.find({ 'scheduledDates.date': date, _id: { $ne: excludeInquiryId } }).populate('createdBy', 'fullName username').lean();
+        const conflicts: any[] = [];
+        for (const inq of matches || []) {
+          if (!inq || !Array.isArray(inq.scheduledDates)) continue;
+          for (const sd of inq.scheduledDates) {
+            if (!sd || sd.date !== date) continue;
+            const oStart = normalizeToMinutes(sd.startTime);
+            const oEnd = normalizeToMinutes(sd.endTime);
+            if (Number.isNaN(oStart) || Number.isNaN(oEnd)) continue;
+            if (rangesOverlap(sMin, eMin, oStart, oEnd)) {
+              conflicts.push({ inquiryId: String(inq._id), username: inq?.username || null, residentName: (inq && (inq as any).createdBy && (inq as any).createdBy.fullName) || null, date, startTime: sd.startTime, endTime: sd.endTime });
+            }
           }
         }
-        updateBody.scheduledDates = uniqueRanges;
-      } catch (e) {
-        // non-fatal: if dedupe fails just continue with original array
-      }
+        return conflicts;
+      };
 
-      const slotDocs: Array<any> = [];
-      for (const slot of updateBody.scheduledDates) {
-        if (!slot || !slot.date || !slot.startTime || !slot.endTime) {
-          return res.status(400).json({ message: 'Each scheduledDate must include date, startTime and endTime' });
-        }
-        const sMin = normalizeToMinutes(slot.startTime);
-        const eMin = normalizeToMinutes(slot.endTime);
-        if (Number.isNaN(sMin) || Number.isNaN(eMin) || sMin >= eMin) {
-          return res.status(400).json({ message: `Invalid time range for ${slot.date}` });
-        }
-        if (sMin < OFFICE_START || eMin > OFFICE_END) {
-          return res.status(400).json({ message: `Time range for ${slot.date} must be within office hours 08:00-17:00` });
-        }
-        // disallow lunch overlap
-        if (sMin < LUNCH_END && eMin > LUNCH_START) {
-          return res.status(400).json({ message: `Time range for ${slot.date} must not overlap lunch break 12:00-13:00` });
-        }
+      // Helper: save schedule in one operation (replace inquiry.scheduledDates and save once)
+      const saveSchedule = async (inquiryDoc: any, normalized: any[]) => {
+        inquiryDoc.scheduledDates = normalized.map((r: any) => ({ date: r.date, startTime: r.startTime, endTime: r.endTime }));
+        inquiryDoc.scheduledBy = (req as any).user?._id || inquiryDoc.scheduledBy;
+        await inquiryDoc.save();
+        return inquiryDoc;
+      };
 
-          // generate slot integers (minute values at SLOT_STEP granularity)
-          for (let m = sMin; m < eMin; m += SLOT_STEP) {
-            slotDocs.push({
-              date: slot.date,
-              slot: m,
-              inquiryId: req.params.id,
-              scheduledBy: (req as any).user?._id,
-              // Resident info: try to get from the existing inquiry; fallback to request body
-              residentName: (beforeInquiry && (beforeInquiry as any).createdBy && (beforeInquiry as any).createdBy.fullName) || (beforeInquiry && (beforeInquiry as any).username) || undefined,
-              residentUsername: (beforeInquiry && (beforeInquiry as any).username) || undefined,
-              residentBarangayID: (beforeInquiry && (beforeInquiry as any).barangayID) || undefined,
-              // Staff info (who confirmed)
-              scheduledByUsername: (req as any).user?.username || undefined,
-              scheduledByBarangayID: (req as any).user?.barangayID || undefined,
-              // appointment-level time range
-              appointmentStartTime: slot.startTime,
-              appointmentEndTime: slot.endTime
-            });
-          }
-      }
-
-      // Remove any accidental duplicate minute-slot documents (same date+slot)
+      // Begin validation flow
+      let normalized: any[] = [];
       try {
-        const seen = new Set<string>();
-        const deduped: any[] = [];
-        for (const sd of slotDocs) {
-          const k = `${sd.date}|${sd.slot}`;
-          if (seen.has(k)) continue;
-          seen.add(k);
-          deduped.push(sd);
-        }
-        // replace slotDocs contents with deduped entries
-        slotDocs.length = 0;
-        slotDocs.push(...deduped);
-      } catch (e) {
-        // ignore dedupe errors
-      }
+        const v = validateSchedulePayload(updateBody.scheduledDates);
+        normalized = v.normalized;
+        const SLOT_STEP = v.SLOT_STEP;
 
-      // Attempt an atomic reservation using MongoDB transactions and the AppointmentSlot unique index
-      let session: any = null;
-      // NOTE: preflight overlap checking removed — rely on DB unique index and insert-time errors
-      // Quick availability check against AppointmentSlot collection to avoid obvious conflicts
-      try {
-        const aggregatedConflicts: any[] = [];
-        for (const sd of updateBody.scheduledDates) {
-          const conflicts = await findConflictsForRange(sd.date, sd.startTime, sd.endTime, req.params.id);
-          if (conflicts && conflicts.length) aggregatedConflicts.push(...conflicts);
+        // Check conflicts per-date
+        const conflictsAccum: any[] = [];
+        for (const r of normalized) {
+          const cs = await findConflictsForDate(r.date, r.sMin, r.eMin, req.params.id);
+          if (cs && cs.length) conflictsAccum.push(...cs);
         }
-        // Determine if the requester is staff/admin so we can optionally allow overrides
-        const roleStr = (req.user && req.user.role) ? String(req.user.role).toLowerCase() : '';
-        const isStaffLike = roleStr.includes('staff') || roleStr.includes('admin');
-        if (aggregatedConflicts.length > 0 && !isStaffLike) {
-          return res.status(409).json({ message: 'Scheduling conflict: one or more time slots already taken', conflicts: aggregatedConflicts });
+        if (conflictsAccum.length > 0) {
+          console.warn('Scheduling conflict detected:', conflictsAccum);
+          return res.status(409).json({ message: 'Scheduling conflict: one or more time slots already taken', conflicts: conflictsAccum });
         }
-        if (aggregatedConflicts.length > 0 && isStaffLike) {
-          console.info('Staff override: proceeding despite preflight conflicts', aggregatedConflicts);
-        }
-      } catch (availErr) {
-        // If availability check fails for any reason, continue and let DB insertion be authoritative
-        console.warn('Availability pre-check failed, proceeding to insert:', (availErr as any)?.message || availErr);
-      }
 
-      try {
-        session = await mongoose.startSession();
-        session.startTransaction();
-        // Remove prior slots for this inquiry (reschedule case)
-        await AppointmentSlot.deleteMany({ inquiryId: req.params.id }).session(session);
-        // Insert new slots; unique index on {date, slot} ensures no overlap
-        if (slotDocs.length > 0) {
-          await AppointmentSlot.insertMany(slotDocs, { ordered: true, session });
-        }
-        // Update the inquiry with scheduledDates and scheduledBy inside the same transaction
-        updateBody.scheduledBy = (req as any).user?._id || updateBody.scheduledBy;
-        inquiry = await Inquiry.findByIdAndUpdate(req.params.id, updateBody, { new: true, session });
-        if (!inquiry) {
-          // Shouldn't happen; abort
-          await session.abortTransaction();
-          session.endSession();
-          return res.status(404).json({ message: 'Inquiry not found' });
-        }
-        await session.commitTransaction();
-        session.endSession();
-      } catch (txErr: any) {
-        try { if (session) { await session.abortTransaction(); session.endSession(); } } catch (e) { }
-        // Duplicate key error means some slot was already taken — enrich with conflict details
-        if (txErr && txErr.code === 11000) {
-          try {
-            // Build a set of conflicting slots by checking AppointmentSlot documents that match any slotDocs
-            const keys = slotDocs.map((sd: any) => ({ date: sd.date, slot: sd.slot }));
-            const matches = await AppointmentSlot.find({ $or: keys }).lean();
-            const conflictsByInquiry = new Map<string, { date: string, startTime?: string, endTime?: string }>();
-            for (const m of matches || []) {
-              if (!m) continue;
-              if (!m.inquiryId || String(m.inquiryId) === String(req.params.id)) continue;
-              const id = String(m.inquiryId);
-              if (!conflictsByInquiry.has(id)) {
-                conflictsByInquiry.set(id, { date: m.date, startTime: m.appointmentStartTime || undefined, endTime: m.appointmentEndTime || undefined });
-              }
-            }
-            const conflictsDetailed: any[] = [];
-            for (const [inqId, info] of conflictsByInquiry.entries()) {
-              try {
-                const inq = await Inquiry.findById(inqId).populate('createdBy', 'fullName username').lean();
-                conflictsDetailed.push({ inquiryId: inqId, username: inq?.username || null, residentName: (inq && (inq as any).createdBy && (inq as any).createdBy.fullName) || null, date: info.date, startTime: info.startTime, endTime: info.endTime });
-              } catch (ee) {
-                conflictsDetailed.push({ inquiryId: inqId, date: info.date, startTime: info.startTime, endTime: info.endTime });
-              }
-            }
-            // If requester is staff/admin, attempt to override existing reservations by removing conflicts and retrying
-            const roleStr2 = (req.user && req.user.role) ? String(req.user.role).toLowerCase() : '';
-            const isStaffLike2 = roleStr2.includes('staff') || roleStr2.includes('admin');
-            if (isStaffLike2) {
-              try {
-                // remove conflicting slots that belong to other inquiries
-                const conflictInquiryIds = Array.from(conflictsByInquiry.keys());
-                if (conflictInquiryIds.length) {
-                  await AppointmentSlot.deleteMany({ inquiryId: { $in: conflictInquiryIds } });
-                }
-                // try inserting again (best-effort, non-transactional)
-                if (slotDocs.length > 0) {
-                  await AppointmentSlot.insertMany(slotDocs, { ordered: true });
-                }
-                inquiry = await Inquiry.findByIdAndUpdate(req.params.id, updateBody, { new: true });
-                if (inquiry) return res.json(inquiry);
-              } catch (overrideErr) {
-                console.warn('Staff override attempt failed:', (overrideErr as any)?.message || overrideErr);
-                // fall through to return conflict below
-              }
-            }
-            return res.status(409).json({ message: 'Scheduling conflict: one or more time slots already taken', conflicts: conflictsDetailed });
-          } catch (enrichErr) {
-            console.warn('Failed to enrich duplicate-key error with conflicts:', enrichErr);
+        // No conflicts — perform single save operation (build minute slots and save)
+        // Load inquiry document (not lean) so we can call save()
+        const inquiryDoc = await Inquiry.findById(req.params.id);
+        if (!inquiryDoc) return res.status(404).json({ message: 'Inquiry not found' });
+        console.info('Final scheduledDates to save:', normalized.map((r: any) => ({ date: r.date, startTime: r.startTime, endTime: r.endTime })));
+        try {
+          const saved = await saveSchedule(inquiryDoc, normalized);
+          return res.json({ success: true, scheduledDates: saved.scheduledDates });
+        } catch (saveErr: any) {
+          // If duplicate key or other conflict arises during insert, return 409 with details
+          if (saveErr && saveErr.code === 11000) {
+            console.warn('Conflict during saveSchedule:', saveErr.message || saveErr);
             return res.status(409).json({ message: 'Scheduling conflict: one or more time slots already taken' });
           }
+          console.error('Failed to save schedule:', saveErr && (saveErr.message || saveErr));
+          return res.status(500).json({ message: 'Failed to schedule appointment', error: saveErr && (saveErr.message || saveErr) });
         }
-        // If transactions are not supported or other error, attempt best-effort non-transactional reservation
-        console.warn('Transaction-based scheduling failed, attempting non-transactional fallback:', txErr && txErr.message);
-        try {
-          // remove any previous slots for this inquiry (best-effort)
-          await AppointmentSlot.deleteMany({ inquiryId: req.params.id });
-          // try to insert without a session; duplicate key will throw if any slot taken
-          if (slotDocs.length > 0) {
-            await AppointmentSlot.insertMany(slotDocs, { ordered: true });
-          }
-          // update inquiry normally
-          inquiry = await Inquiry.findByIdAndUpdate(req.params.id, updateBody, { new: true });
-          if (!inquiry) {
-            // rollback: remove inserted slots
-            try { await AppointmentSlot.deleteMany({ inquiryId: req.params.id }); } catch (e) { }
-            return res.status(404).json({ message: 'Inquiry not found' });
-          }
-        } catch (fbErr: any) {
-          // If duplicate key => conflict. Enrich with conflicting inquiry details when possible.
-          if (fbErr && fbErr.code === 11000) {
-            try {
-              // Build list of keys to query
-              const keys = slotDocs.map((sd: any) => ({ date: sd.date, slot: sd.slot }));
-              const matches = await AppointmentSlot.find({ $or: keys }).lean();
-              const conflictsByInquiry = new Map<string, { date: string, startTime?: string, endTime?: string }>();
-              for (const m of matches || []) {
-                if (!m) continue;
-                if (!m.inquiryId || String(m.inquiryId) === String(req.params.id)) continue;
-                const id = String(m.inquiryId);
-                if (!conflictsByInquiry.has(id)) {
-                  conflictsByInquiry.set(id, { date: m.date, startTime: m.appointmentStartTime || undefined, endTime: m.appointmentEndTime || undefined });
-                }
-              }
-              const conflictsDetailed: any[] = [];
-              for (const [inqId, info] of conflictsByInquiry.entries()) {
-                try {
-                  const inq = await Inquiry.findById(inqId).populate('createdBy', 'fullName username').lean();
-                  conflictsDetailed.push({ inquiryId: inqId, username: inq?.username || null, residentName: (inq && (inq as any).createdBy && (inq as any).createdBy.fullName) || null, date: info.date, startTime: info.startTime, endTime: info.endTime });
-                } catch (ee) {
-                  conflictsDetailed.push({ inquiryId: inqId, date: info.date, startTime: info.startTime, endTime: info.endTime });
-                }
-              }
-              // If requester is staff/admin, attempt to override existing reservations by removing conflicts and retrying
-              const roleStr3 = (req.user && req.user.role) ? String(req.user.role).toLowerCase() : '';
-              const isStaffLike3 = roleStr3.includes('staff') || roleStr3.includes('admin');
-              if (isStaffLike3) {
-                try {
-                  const conflictInquiryIds = Array.from(conflictsByInquiry.keys());
-                  if (conflictInquiryIds.length) {
-                    await AppointmentSlot.deleteMany({ inquiryId: { $in: conflictInquiryIds } });
-                  }
-                  // retry insert
-                  if (slotDocs.length > 0) {
-                    await AppointmentSlot.insertMany(slotDocs, { ordered: true });
-                  }
-                  inquiry = await Inquiry.findByIdAndUpdate(req.params.id, updateBody, { new: true });
-                  if (inquiry) return res.json(inquiry);
-                } catch (overrideErr) {
-                  console.warn('Staff override attempt (fallback) failed:', (overrideErr as any)?.message || overrideErr);
-                }
-              }
-              // cleanup any partial inserts
-              try { await AppointmentSlot.deleteMany({ inquiryId: req.params.id }); } catch (e) { }
-              return res.status(409).json({ message: 'Scheduling conflict: one or more time slots already taken', conflicts: conflictsDetailed });
-            } catch (enrichErr) {
-              console.warn('Failed to enrich duplicate-key error in fallback:', enrichErr);
-              try { await AppointmentSlot.deleteMany({ inquiryId: req.params.id }); } catch (e) { }
-              return res.status(409).json({ message: 'Scheduling conflict: one or more time slots already taken' });
-            }
-          }
-          console.error('Non-transactional fallback scheduling failed:', fbErr && (fbErr.message || fbErr));
-          // cleanup any partial inserts
-          try { await AppointmentSlot.deleteMany({ inquiryId: req.params.id }); } catch (e) { }
-          return res.status(500).json({ message: 'Failed to schedule appointment', error: fbErr && (fbErr.message || fbErr) });
-        }
+      } catch (vErr: any) {
+        // validation threw a structured error
+        if (vErr && vErr.status && vErr.message) return res.status(vErr.status).json({ message: vErr.message });
+        console.error('Error validating schedule payload:', vErr && vErr.message ? vErr.message : vErr);
+        return res.status(400).json({ message: 'Invalid scheduledDates payload' });
       }
     } else {
       // No scheduledDates provided — perform a normal update
