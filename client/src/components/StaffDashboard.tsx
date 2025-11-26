@@ -23,6 +23,8 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { documentsAPI, contactAPI, getAbsoluteApiUrl, axiosInstance } from '../services/api';
+import DailyAppointmentsCard from './staff/DailyAppointmentsCard';
+import StaffCalendar from './staff/StaffCalendar';
 
 
 interface DocumentRequest {
@@ -751,6 +753,12 @@ const StaffDashboard: React.FC = () => {
                 })}
               </Collapse>
             </Card>
+          </Col>
+          <Col xs={24} lg={8}>
+            <DailyAppointmentsCard />
+          </Col>
+          <Col xs={24} lg={8}>
+            <StaffCalendar />
           </Col>
           <Col xs={24} lg={8}>
               <Card 

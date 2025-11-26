@@ -450,6 +450,14 @@ app.use('/api/requests', requestRoutes);
 app.use('/api/inquiries', inquiryRoutes);
 app.use('/api/inquiries', myInquiryRoutes);
 app.use('/api/admin', adminRoutes);
+// Appointments summary route
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const appointmentsRoutes = require('./routes/appointments').default;
+  if (appointmentsRoutes) app.use('/api/appointments', appointmentsRoutes);
+} catch (e) {
+  console.error('Failed to mount /api/appointments routes', e);
+}
 // Mount public officials route so unauthenticated pages (login) can fetch officials
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires

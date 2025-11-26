@@ -50,6 +50,24 @@ export async function getSlotsByDate(date: string): Promise<{ slots: { date: str
   }
 }
 
+export async function getDailySummary(): Promise<{ totalScheduledToday: number; totalAvailableSlotsToday: number; nextAppointments: { residentName: string; startTime: string; endTime: string }[] }> {
+  try {
+    const resp = await axiosInstance.get('/appointments/summary/today');
+    return resp.data;
+  } catch (err: any) {
+    return handleError(err);
+  }
+}
+
+export async function getSlotsForRange(startDate: string, endDate: string): Promise<{ _id: string; inquiryId?: string; residentId?: string; residentName?: string; staffId?: string; staffName?: string; date: string; startTime: string; endTime: string }[]> {
+  try {
+    const resp = await axiosInstance.get('/appointments/slots', { params: { startDate, endDate } });
+    return Array.isArray(resp.data?.slots) ? resp.data.slots : [];
+  } catch (err: any) {
+    return handleError(err);
+  }
+}
+
 export async function getScheduledAppointmentsByDate(date: string): Promise<ScheduledAppointment[]> {
   try {
     const all = await getAppointmentInquiries();
@@ -95,4 +113,5 @@ export default {
   getScheduledAppointmentsByDate,
   scheduleAppointment,
   resolveAppointment,
+  getDailySummary,
 };

@@ -12,6 +12,7 @@ type Props = {
   visible: boolean;
   record: AppointmentInquiry;
   onClose: () => void;
+  prefill?: { date?: string; startTime?: string; endTime?: string } | null;
 };
 
 type ScheduledItem = { start: string; end: string; inquiryId?: string; residentUsername?: string; residentName?: string };
@@ -82,7 +83,7 @@ function reducer(state: SchedulingState, action: SchedulingAction): SchedulingSt
   }
 }
 
-const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) => {
+const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose, prefill }) => {
   const [state, dispatch] = useReducer(reducer, initialState);
   const appointmentsQuery = useAppointmentsQuery();
   const submitSchedule = useSubmitScheduleMutation();
@@ -188,6 +189,14 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
         dispatch({ type: 'SET_SELECTED_DATES', payload: dates });
         for (const sd of record.scheduledDates) {
           if (sd && sd.date) dispatch({ type: 'SET_TIME_RANGE', payload: { date: sd.date, start: sd.startTime, end: sd.endTime } });
+        }
+      }
+      // Apply prefill if provided (create mode from calendar)
+      if (prefill) {
+        const pf = prefill as { date?: string; startTime?: string; endTime?: string };
+        if (pf.date) {
+          dispatch({ type: 'SET_SELECTED_DATES', payload: [pf.date] });
+          dispatch({ type: 'SET_TIME_RANGE', payload: { date: pf.date, start: pf.startTime, end: pf.endTime } });
         }
       }
     } catch (e) {
