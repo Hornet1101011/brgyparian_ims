@@ -22,6 +22,7 @@ import { Message } from '../models/Message';
 import { Notification } from '../models/Notification';
 import { sendAppointmentNotification } from '../services/notificationService';
 import { AppointmentSlot } from '../models/AppointmentSlot';
+import { AppointmentAuditLog } from '../models/AppointmentAuditLog';
 import { handleSaveError } from '../utils/handleSaveError';
 import { rangesOverlap } from '../utils/scheduling';
 import schedulingService from '../services/schedulingService';
@@ -328,8 +329,8 @@ export const getAppointmentAuditLogs = async (req: any, res: Response) => {
       // text search on staffName or residentName
       filter.$text = { $search: q };
     }
-    const total = await (await import('../models/AppointmentAuditLog')).AppointmentAuditLog.countDocuments(filter);
-    const docs = await (await import('../models/AppointmentAuditLog')).AppointmentAuditLog.find(filter)
+    const total = await AppointmentAuditLog.countDocuments(filter);
+    const docs = await (AppointmentAuditLog as any).find(filter)
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
@@ -426,10 +427,10 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
         const inquiryDoc = await Inquiry.findById(req.params.id);
         if (!inquiryDoc) return res.status(404).json({ message: 'Inquiry not found' });
         console.info('Final scheduledDates to save:', normalized.map((r: any) => ({ date: r.date, startTime: r.startTime, endTime: r.endTime })));
-        try {
-          // Set status and save once
-          inquiryDoc.status = 'scheduled';
-          const saved = await saveSchedule(inquiryDoc, normalized);
+            try {
+              // Set status and save once
+              inquiryDoc.status = 'scheduled';
+              const saved = await saveSchedule(inquiryDoc, normalized);
 
           // Replace AppointmentSlot copies for this inquiry
           try {
@@ -484,8 +485,8 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
               console.warn('Failed to write appointment audit logs', auditErr);
             }
           } catch (slotErr) {
-            console.error('Failed to update AppointmentSlot copies:', slotErr && (slotErr.message || slotErr));
-            return res.status(500).json({ message: 'Failed to update appointment slots', error: slotErr && (slotErr.message || slotErr) });
+            console.error('Failed to update AppointmentSlot copies:', slotErr && ((slotErr as any).message || slotErr));
+            return res.status(500).json({ message: 'Failed to update appointment slots', error: slotErr && ((slotErr as any).message || slotErr) });
           }
 
           return res.json({ success: true, message: 'Appointment scheduled', inquiryId: String(saved._id), scheduledDates: saved.scheduledDates });

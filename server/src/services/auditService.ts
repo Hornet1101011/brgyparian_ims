@@ -27,7 +27,9 @@ export async function logAppointmentChange(options: {
       fromTimeRange: options.fromTimeRange,
       toTimeRange: options.toTimeRange
     };
-    const created = await AppointmentAuditLog.create(doc);
+    // Use instance save to avoid overload/type ambiguities with `.create()` signatures
+    const entry = new AppointmentAuditLog(doc);
+    const created = await entry.save();
     return created;
   } catch (err) {
     console.error('Failed to write appointment audit log', err);

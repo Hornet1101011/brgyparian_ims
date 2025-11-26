@@ -7,9 +7,13 @@ import {
   createInquiry,
   getAllInquiries,
   getInquiryById,
+  getInquiryAppointment,
   updateInquiry,
   addResponse,
+  getSlotsByDate,
   getMyInquiries,
+  getAppointmentAuditLogs,
+  checkAvailability,
 } from '../controllers/inquiryController';
 import { Request, Response, NextFunction } from 'express';
 
@@ -44,11 +48,10 @@ router.get('/:id', auth, (req: any, res: Response, next: NextFunction) => getInq
 // Get appointment details (inquiry + slots) for prefill/editing
 router.get('/:id/appointment', auth, authorize('admin', 'staff'), (req: any, res: Response, next: NextFunction) => getInquiryAppointment(req, res, next));
 // GET /api/inquiries/slots?date=YYYY-MM-DD
-router.get('/slots', auth, authorize('admin', 'staff'), (req: any, res: Response, next: NextFunction) => getSlotsByDate(req, res, next));
+router.get('/slots', auth, authorize('admin', 'staff'), (req: any, res: Response, next: NextFunction) => getSlotsByDate(req, res));
 // Appointment audit logs (admin, secretary only)
 router.get('/audit-logs', auth, authorize('admin', 'secretary'), (req: any, res: Response, next: NextFunction) => {
-  // eslint-disable-next-line @typescript-eslint/no-floating-promises
-  (async () => await (await import('../controllers/inquiryController')).getAppointmentAuditLogs(req, res, next))();
+  return getAppointmentAuditLogs(req, res);
 });
 // Update an inquiry (admin and staff only)
 router.patch('/:id', auth, authorize('admin', 'staff'), (req: any, res: Response, next: NextFunction) => updateInquiry(req, res, next));
@@ -60,10 +63,7 @@ router.post('/:id', auth, authorize('admin', 'staff'), (req: any, res: Response,
 // PUT /:id/schedule - explicit scheduling/editing endpoint for appointments
 router.put('/:id/schedule', auth, authorize('admin', 'staff'), (req: any, res: Response, next: NextFunction) => updateInquiry(req, res, next));
 // Check availability for a set of scheduledDates (staff only) without committing
-router.post('/:id/check-availability', auth, authorize('admin', 'staff'), (req: any, res: Response, next: NextFunction) => {
-  // eslint-disable-next-line @typescript-eslint/no-floating-promises
-  (async () => await (await import('../controllers/inquiryController')).checkAvailability(req, res, next))();
-});
+router.post('/:id/check-availability', auth, authorize('admin', 'staff'), (req: any, res: Response, next: NextFunction) => checkAvailability(req, res, next));
 
 // Add a response to an inquiry (allow resident and staff replies)
 // Allow file attachments with responses as well
