@@ -48,3 +48,63 @@ export async function deleteNotification(id: string) {
 export async function deleteManyNotifications(ids: string[]) {
   return Notification.deleteMany({ _id: { $in: ids } });
 }
+
+// Send appointment-related notification to a resident and emit socket event.
+// Quiet-fail: any errors are caught and logged but not thrown so callers remain unaffected.
+export async function sendAppointmentNotification(residentId: any, type: 'created' | 'edited' | 'canceled', details: any) {
+  try {
+    if (!residentId) return;
+    const titleMap: Record<string, string> = {
+      created: 'Appointment Scheduled',
+      edited: 'Appointment Updated',
+      canceled: 'Appointment Canceled'
+    };
+    const msgMap: Record<string, (d: any) => string> = {
+      created: (d: any) => {
+        if (Array.isArray(d?.scheduledDates) && d.scheduledDates.length) {
+          return `Your appointment has been scheduled for ${d.scheduledDates.map((s: any) => `${s.date}, ${s.startTime} – ${s.endTime}`).join('; ')}`;
+        }
+        if (d?.date && d?.startTime && d?.endTime) return `Your appointment has been scheduled for ${d.date}, ${d.startTime} – ${d.endTime}`;
+        return 'Your appointment has been scheduled.';
+      },
+      edited: (d: any) => {
+        if (Array.isArray(d?.scheduledDates) && d.scheduledDates.length) {
+          return `Your appointment has been updated to ${d.scheduledDates.map((s: any) => `${s.date}, ${s.startTime} – ${s.endTime}`).join('; ')}`;
+        }
+        if (d?.date && d?.startTime && d?.endTime) return `Your appointment has been updated to ${d.date}, ${d.startTime} – ${d.endTime}`;
+        return 'Your appointment has been updated.';
+      },
+      canceled: (d: any) => `Your appointment has been canceled.`
+    };
+
+    const title = titleMap[type] || 'Appointment Notification';
+    const message = (msgMap[type] || (() => 'Appointment update'))(details || {});
+
+    // Create Notification document for resident (non-blocking)
+    try {
+      await Notification.create({
+        userId: residentId,
+        type: 'appointments',
+        title,
+        message,
+        data: details || {}
+      });
+    } catch (e) {
+      console.warn('Failed to create appointment Notification document', (e as any)?.message || e);
+    }
+
+    // Emit socket event for real-time updates if io is available
+    try {
+      // Importing io here to avoid circular import at module load time in some cases
+      const { io } = require('../index');
+      if (io && typeof io.to === 'function') {
+        io.to(String(residentId)).emit('appointment:updated', { type, details });
+      }
+    } catch (e) {
+      console.warn('Failed to emit appointment socket event', (e as any)?.message || e);
+    }
+  } catch (err) {
+    // ensure this function never throws to callers
+    console.warn('sendAppointmentNotification encountered error', (err as any)?.message || err);
+  }
+}

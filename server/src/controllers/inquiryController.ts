@@ -20,9 +20,12 @@ import { io } from '../index';
 import { User } from '../models/User';
 import { Message } from '../models/Message';
 import { Notification } from '../models/Notification';
+import { sendAppointmentNotification } from '../services/notificationService';
 import { AppointmentSlot } from '../models/AppointmentSlot';
 import { handleSaveError } from '../utils/handleSaveError';
 import { rangesOverlap } from '../utils/scheduling';
+import schedulingService from '../services/schedulingService';
+import auditService from '../services/auditService';
 
 // Helper: convert HH:MM to minutes since midnight
 const normalizeToMinutes = (t?: string) => {
@@ -277,6 +280,67 @@ export const getInquiryById = async (req: any, res: Response, next: NextFunction
   }
 };
 
+export const getInquiryAppointment = async (req: any, res: Response, next: NextFunction) => {
+  try {
+    const id = req.params.id;
+    const inquiry = await Inquiry.findById(id).lean();
+    if (!inquiry) return res.status(404).json({ message: 'Inquiry not found' });
+
+    // fetch appointment slot copies
+    const slots = await AppointmentSlot.find({ inquiryId: id }).lean();
+    const formatted = (slots || []).map((s: any) => ({
+      date: s.date ? (new Date(s.date)).toISOString().slice(0,10) : null,
+      startTime: s.startTime,
+      endTime: s.endTime
+    })).filter((s: any) => s.date !== null);
+
+    return res.json({ inquiry, slots: formatted });
+  } catch (err) {
+    console.error('Failed to get inquiry appointment details:', err);
+    return res.status(500).json({ message: 'Failed to fetch appointment details' });
+  }
+};
+
+export const getSlotsByDate = async (req: any, res: Response) => {
+  try {
+    const date = req.query.date as string;
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ message: 'date query param required as YYYY-MM-DD' });
+    const dt = new Date(`${date}T00:00:00Z`);
+    if (isNaN(dt.getTime())) return res.status(400).json({ message: 'invalid date' });
+    const slots = await AppointmentSlot.find({ date: dt }).lean();
+    const out = (slots || []).map((s: any) => ({ date: (new Date(s.date)).toISOString().slice(0,10), startTime: s.startTime, endTime: s.endTime, residentName: s.residentName || s.residentUsername || null }));
+    return res.json({ slots: out });
+  } catch (err) {
+    console.error('Failed to fetch slots by date', err);
+    return res.status(500).json({ message: 'Failed to fetch slots' });
+  }
+};
+
+export const getAppointmentAuditLogs = async (req: any, res: Response) => {
+  try {
+    const page = Math.max(1, parseInt(String(req.query.page || '1'), 10));
+    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || '25'), 10)));
+    const q = (req.query.q || '').toString().trim();
+    const filter: any = {};
+    // Only appointment audit actions
+    filter.action = { $in: ['CREATED_APPOINTMENT', 'EDITED_APPOINTMENT'] };
+    if (q) {
+      // text search on staffName or residentName
+      filter.$text = { $search: q };
+    }
+    const total = await (await import('../models/AppointmentAuditLog')).AppointmentAuditLog.countDocuments(filter);
+    const docs = await (await import('../models/AppointmentAuditLog')).AppointmentAuditLog.find(filter)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean();
+    return res.json({ total, page, limit, logs: docs });
+  } catch (err) {
+    console.error('Failed to fetch appointment audit logs', err);
+    return res.status(500).json({ message: 'Failed to fetch audit logs' });
+  }
+};
+
 export const updateInquiry = async (req: any, res: Response, next: NextFunction) => {
   try {
     // Prepare update body and validate appointmentDates if supplied
@@ -322,65 +386,6 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
     let inquiry: any = null;
     const scheduledProvided = updateBody.scheduledDates && Array.isArray(updateBody.scheduledDates) && updateBody.scheduledDates.length > 0;
     if (scheduledProvided) {
-      // Helper: validate payload and return normalized list or throw an error response
-      const validateSchedulePayload = (arr: any[]) => {
-        const OFFICE_START = 8 * 60; // 480
-        const OFFICE_END = 17 * 60; // 1020
-        const LUNCH_START = 12 * 60; // 720
-        const LUNCH_END = 13 * 60; // 780
-        const SLOT_STEP = 5;
-        const normalize = (t: string) => {
-          const parts = String(t || '').split(':');
-          if (parts.length < 2) return NaN;
-          const hh = parseInt(parts[0], 10);
-          const mm = parseInt(parts[1], 10);
-          if (Number.isNaN(hh) || Number.isNaN(mm)) return NaN;
-          return hh * 60 + mm;
-        };
-        if (!Array.isArray(arr)) throw { status: 400, message: 'scheduledDates must be an array' };
-        // dedupe exact ranges and ensure unique dates
-        const seenRange = new Set<string>();
-        const seenDate = new Set<string>();
-        const out: any[] = [];
-        for (const sd of arr) {
-          if (!sd || !sd.date || !sd.startTime || !sd.endTime) throw { status: 400, message: 'Each scheduledDate must include date, startTime and endTime' };
-          const key = `${sd.date}|${sd.startTime}|${sd.endTime}`;
-          if (seenRange.has(key)) continue; // drop exact duplicate
-          if (seenDate.has(sd.date)) {
-            throw { status: 400, message: `Duplicate date in scheduledDates: ${sd.date}` };
-          }
-          const sMin = normalize(sd.startTime);
-          const eMin = normalize(sd.endTime);
-          if (Number.isNaN(sMin) || Number.isNaN(eMin) || sMin >= eMin) throw { status: 400, message: `Invalid time range for ${sd.date}` };
-          if (sMin < OFFICE_START || eMin > OFFICE_END) throw { status: 400, message: `Time range for ${sd.date} must be within office hours 08:00-17:00` };
-          if (sMin < LUNCH_END && eMin > LUNCH_START) throw { status: 400, message: `Time range for ${sd.date} must not overlap lunch break 12:00-13:00` };
-          seenRange.add(key);
-          seenDate.add(sd.date);
-          out.push({ date: sd.date, startTime: sd.startTime, endTime: sd.endTime, sMin, eMin });
-        }
-        return { normalized: out, SLOT_STEP };
-      };
-
-      // Helper: find conflicts for a single date using inquiry.scheduledDates (ignore other dates)
-      const findConflictsForDate = async (date: string, sMin: number, eMin: number, excludeInquiryId?: string) => {
-        // fetch inquiries that have scheduledDates on this date, excluding current inquiry
-        const matches = await Inquiry.find({ 'scheduledDates.date': date, _id: { $ne: excludeInquiryId } }).populate('createdBy', 'fullName username').lean();
-        const conflicts: any[] = [];
-        for (const inq of matches || []) {
-          if (!inq || !Array.isArray(inq.scheduledDates)) continue;
-          for (const sd of inq.scheduledDates) {
-            if (!sd || sd.date !== date) continue;
-            const oStart = normalizeToMinutes(sd.startTime);
-            const oEnd = normalizeToMinutes(sd.endTime);
-            if (Number.isNaN(oStart) || Number.isNaN(oEnd)) continue;
-            if (rangesOverlap(sMin, eMin, oStart, oEnd)) {
-              conflicts.push({ inquiryId: String(inq._id), username: inq?.username || null, residentName: (inq && (inq as any).createdBy && (inq as any).createdBy.fullName) || null, date, startTime: sd.startTime, endTime: sd.endTime });
-            }
-          }
-        }
-        return conflicts;
-      };
-
       // Helper: save schedule in one operation (replace inquiry.scheduledDates and save once)
       const saveSchedule = async (inquiryDoc: any, normalized: any[]) => {
         inquiryDoc.scheduledDates = normalized.map((r: any) => ({ date: r.date, startTime: r.startTime, endTime: r.endTime }));
@@ -389,22 +394,31 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
         return inquiryDoc;
       };
 
-      // Begin validation flow
+      // Begin validation flow: normalize and validate payload, check internal overlaps and against persisted slots
       let normalized: any[] = [];
       try {
-        const v = validateSchedulePayload(updateBody.scheduledDates);
-        normalized = v.normalized;
-        const SLOT_STEP = v.SLOT_STEP;
-
-        // Check conflicts per-date
-        const conflictsAccum: any[] = [];
-        for (const r of normalized) {
-          const cs = await findConflictsForDate(r.date, r.sMin, r.eMin, req.params.id);
-          if (cs && cs.length) conflictsAccum.push(...cs);
+        const arr = updateBody.scheduledDates;
+        if (!Array.isArray(arr)) return res.status(400).json({ message: 'scheduledDates must be an array' });
+        const seenRange = new Set<string>();
+        for (const sd of arr) {
+          if (!sd || !sd.date || !sd.startTime || !sd.endTime) return res.status(400).json({ message: 'Each scheduledDate must include date, startTime and endTime' });
+          const key = `${sd.date}|${sd.startTime}|${sd.endTime}`;
+          if (seenRange.has(key)) continue; // drop exact duplicate
+          seenRange.add(key);
+          const sMin = normalizeToMinutes(sd.startTime);
+          const eMin = normalizeToMinutes(sd.endTime);
+          if (Number.isNaN(sMin) || Number.isNaN(eMin) || sMin >= eMin) return res.status(400).json({ message: 'Start time must be earlier than end time' });
+          normalized.push({ date: sd.date, startTime: sd.startTime, endTime: sd.endTime, sMin, eMin });
         }
-        if (conflictsAccum.length > 0) {
-          console.warn('Scheduling conflict detected:', conflictsAccum);
-          return res.status(409).json({ message: 'Scheduling conflict: one or more time slots already taken', conflicts: conflictsAccum });
+
+        // Validate no internal overlaps within the payload
+        const internal = schedulingService.validateScheduledDatesPayload(normalized.map((r: any) => ({ date: r.date, startTime: r.startTime, endTime: r.endTime })));
+        if (!internal.ok) return res.status(400).json({ message: internal.message });
+
+        // Validate each range against office hours and existing AppointmentSlot entries
+        for (const r of normalized) {
+          const vt = await schedulingService.validateTimeRange(r.startTime, r.endTime, r.date, req.params.id);
+          if (!vt.ok) return res.status(400).json({ message: vt.message });
         }
 
         // No conflicts — perform single save operation (build minute slots and save)
@@ -413,8 +427,68 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
         if (!inquiryDoc) return res.status(404).json({ message: 'Inquiry not found' });
         console.info('Final scheduledDates to save:', normalized.map((r: any) => ({ date: r.date, startTime: r.startTime, endTime: r.endTime })));
         try {
+          // Set status and save once
+          inquiryDoc.status = 'scheduled';
           const saved = await saveSchedule(inquiryDoc, normalized);
-          return res.json({ success: true, scheduledDates: saved.scheduledDates });
+
+          // Replace AppointmentSlot copies for this inquiry
+          try {
+            await AppointmentSlot.deleteMany({ inquiryId: saved._id });
+            const slotDocs = normalized.map((d: any) => ({
+              inquiryId: saved._id,
+              residentId: (saved as any).residentId || (saved as any).createdBy || null,
+              staffId: (req as any).user?._id || null,
+              date: new Date(`${d.date}T00:00:00Z`),
+              startTime: d.startTime,
+              endTime: d.endTime,
+            }));
+            if (slotDocs.length) {
+              await AppointmentSlot.insertMany(slotDocs);
+            }
+            // Audit log each scheduled range (created or edited)
+            try {
+              const staffId = (req as any).user?._id || null;
+              const staffName = (req as any).user?.fullName || (req as any).user?.username || undefined;
+              // find resident id/name if possible
+              let residentId = (saved as any).residentId || undefined;
+              let residentName = (saved as any).residentName || (saved as any).username || undefined;
+              if (!residentId) {
+                try {
+                  const resident = await User.findOne({ username: saved.username, barangayID: saved.barangayID, role: 'resident' }).lean();
+                  if (resident) { residentId = resident._id; residentName = resident.fullName || resident.username; }
+                } catch (e) { /* ignore */ }
+              }
+              const actionType = (String(beforeInquiry?.status) !== 'scheduled') ? 'CREATED_APPOINTMENT' : 'EDITED_APPOINTMENT';
+              for (const d of normalized) {
+                // log each range separately
+                await auditService.logAppointmentChange({
+                  staffId,
+                  staffName,
+                  residentId,
+                  residentName,
+                  inquiryId: saved._id,
+                  action: actionType as any,
+                  fromTimeRange: d.startTime,
+                  toTimeRange: d.endTime,
+                });
+              }
+              // Send resident notification (non-blocking) summarizing scheduled ranges
+              try {
+                const notifType = actionType === 'CREATED_APPOINTMENT' ? 'created' : 'edited';
+                await sendAppointmentNotification(residentId, notifType as any, { inquiryId: saved._id, scheduledDates: saved.scheduledDates });
+              } catch (e) {
+                // swallow notification errors - already handled inside helper but be defensive
+                console.warn('sendAppointmentNotification failed', (e as any)?.message || e);
+              }
+            } catch (auditErr) {
+              console.warn('Failed to write appointment audit logs', auditErr);
+            }
+          } catch (slotErr) {
+            console.error('Failed to update AppointmentSlot copies:', slotErr && (slotErr.message || slotErr));
+            return res.status(500).json({ message: 'Failed to update appointment slots', error: slotErr && (slotErr.message || slotErr) });
+          }
+
+          return res.json({ success: true, message: 'Appointment scheduled', inquiryId: String(saved._id), scheduledDates: saved.scheduledDates });
         } catch (saveErr: any) {
           // If duplicate key or other conflict arises during insert, return 409 with details
           if (saveErr && saveErr.code === 11000) {
@@ -446,21 +520,22 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
       if (beforeStatus !== 'scheduled' && afterStatus === 'scheduled' && scheduledProvided) {
         // find resident user
         const resident = await User.findOne({ username: inquiry.username, barangayID: inquiry.barangayID, role: 'resident' });
-        const notifMessage = `Your appointment has been scheduled for ${inquiry.scheduledDates?.map((s:any) => `${s.date} ${s.startTime}-${s.endTime}`).join('; ')}`;
         if (resident) {
-          await Notification.create({
-            userId: resident._id,
-            type: 'inquiries',
-            title: 'Appointment Scheduled',
-            message: notifMessage,
-            data: { inquiryId: inquiry._id, scheduledDates: inquiry.scheduledDates }
-          });
-          // emit socket event for real-time updates
           try {
-            io.to(String(resident._id)).emit('inquiryScheduled', { inquiryId: inquiry._id, scheduledDates: inquiry.scheduledDates });
+            await sendAppointmentNotification(resident._id, 'created', { inquiryId: inquiry._id, scheduledDates: inquiry.scheduledDates });
           } catch (e) {
-            // non-fatal
-            console.warn('Failed to emit socket event for scheduled inquiry', (e as any)?.message || e);
+            console.warn('sendAppointmentNotification failed in post-update path', (e as any)?.message || e);
+          }
+        }
+      }
+      // If appointment moved out of scheduled (canceled or otherwise), notify resident as canceled
+      if (beforeStatus === 'scheduled' && afterStatus !== 'scheduled') {
+        const resident = await User.findOne({ username: inquiry.username, barangayID: inquiry.barangayID, role: 'resident' });
+        if (resident) {
+          try {
+            await sendAppointmentNotification(resident._id, 'canceled', { inquiryId: inquiry._id });
+          } catch (e) {
+            console.warn('sendAppointmentNotification failed for cancellation', (e as any)?.message || e);
           }
         }
       }

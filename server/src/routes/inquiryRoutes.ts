@@ -41,6 +41,15 @@ router.get('/', auth, (req: any, res: Response, next: NextFunction) => getAllInq
 
 // Get a specific inquiry
 router.get('/:id', auth, (req: any, res: Response, next: NextFunction) => getInquiryById(req, res, next));
+// Get appointment details (inquiry + slots) for prefill/editing
+router.get('/:id/appointment', auth, authorize('admin', 'staff'), (req: any, res: Response, next: NextFunction) => getInquiryAppointment(req, res, next));
+// GET /api/inquiries/slots?date=YYYY-MM-DD
+router.get('/slots', auth, authorize('admin', 'staff'), (req: any, res: Response, next: NextFunction) => getSlotsByDate(req, res, next));
+// Appointment audit logs (admin, secretary only)
+router.get('/audit-logs', auth, authorize('admin', 'secretary'), (req: any, res: Response, next: NextFunction) => {
+  // eslint-disable-next-line @typescript-eslint/no-floating-promises
+  (async () => await (await import('../controllers/inquiryController')).getAppointmentAuditLogs(req, res, next))();
+});
 // Update an inquiry (admin and staff only)
 router.patch('/:id', auth, authorize('admin', 'staff'), (req: any, res: Response, next: NextFunction) => updateInquiry(req, res, next));
 
@@ -48,6 +57,8 @@ router.patch('/:id', auth, authorize('admin', 'staff'), (req: any, res: Response
 // Provide a POST-based fallback that performs the same update logic so
 // clients that cannot send PATCH can still update inquiries.
 router.post('/:id', auth, authorize('admin', 'staff'), (req: any, res: Response, next: NextFunction) => updateInquiry(req, res, next));
+// PUT /:id/schedule - explicit scheduling/editing endpoint for appointments
+router.put('/:id/schedule', auth, authorize('admin', 'staff'), (req: any, res: Response, next: NextFunction) => updateInquiry(req, res, next));
 // Check availability for a set of scheduledDates (staff only) without committing
 router.post('/:id/check-availability', auth, authorize('admin', 'staff'), (req: any, res: Response, next: NextFunction) => {
   // eslint-disable-next-line @typescript-eslint/no-floating-promises

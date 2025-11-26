@@ -29,7 +29,7 @@ const StaffAppointments: React.FC = () => {
     { title: 'Actions', key: 'actions', render: (_: any, record: any) => (
       <Space>
         <Button onClick={() => { setSelectedRecord(record); setModalVisible(true); }}>View</Button>
-        <Button type="primary" onClick={() => { setSelectedRecord(record); setModalVisible(true); }}>Schedule</Button>
+        <Button type="primary" onClick={() => { setSelectedRecord(record); setModalVisible(true); }}>{record && record.status === 'scheduled' ? 'Edit Appointment' : 'Schedule'}</Button>
       </Space>
     )}
   ], []);

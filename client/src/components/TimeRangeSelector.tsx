@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { TimePicker, Row, Col, Typography } from 'antd';
+import { TimePicker, Row, Col, Typography, Tooltip } from 'antd';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 
@@ -122,15 +122,16 @@ const TimeRangeSelector: React.FC<Props> = ({ date, existingRanges = [], onChang
       <div style={{ marginTop: 8 }}>
         <div style={{ height: 10, background: '#f0f0f0', position: 'relative', borderRadius: 4 }}>
           {timelineSegments.map((s, i) => (
-            <div key={i}
-              title={`${Math.floor(s.start/60).toString().padStart(2,'0')}:${(s.start%60).toString().padStart(2,'0')} - ${Math.floor(s.end/60).toString().padStart(2,'0')}:${(s.end%60).toString().padStart(2,'0')}` + (s.meta && s.meta.residentUsername ? ` (Booked by ${s.meta.residentUsername})` : '')}
-              style={{ position: 'absolute', left: `${s.left}%`, width: `${s.width}%`, top: 0, bottom: 0, background: 'rgba(220,53,69,0.85)', borderRadius: 4 }} />
+            <Tooltip key={i} title={<div style={{ fontSize: 12 }}>{s.meta?.residentName ? `${s.meta.residentName}` : 'Booked'}<div style={{ fontSize: 11, color: '#999' }}>{`${Math.floor(s.start/60).toString().padStart(2,'0')}:${(s.start%60).toString().padStart(2,'0')} - ${Math.floor(s.end/60).toString().padStart(2,'0')}:${(s.end%60).toString().padStart(2,'0')}`}</div></div>} mouseEnterDelay={0.1} mouseLeaveDelay={0.1} trigger={['hover','click']}>
+              <div
+                style={{ position: 'absolute', left: `${s.left}%`, width: `${s.width}%`, top: 0, bottom: 0, background: 'rgba(110,110,110,0.8)', borderRadius: 4 }} />
+            </Tooltip>
           ))}
         </div>
         <div style={{ marginTop: 6, fontSize: 12, color: '#666' }}>
           <span style={{ marginRight: 12 }}>Office hours: 08:00–17:00</span>
           <span style={{ marginRight: 12 }}>Lunch: 12:00–13:00</span>
-          <span>Blocked intervals shown in red</span>
+          <span>Blocked intervals shown in gray</span>
         </div>
       </div>
     </div>

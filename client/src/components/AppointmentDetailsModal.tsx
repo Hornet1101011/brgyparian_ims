@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useReducer } from 'react';
+import React, { useEffect, useMemo, useReducer, useState } from 'react';
 import { Modal, Descriptions, Divider, Button, Space, message, Typography } from 'antd';
 import { Select } from 'antd';
 import DateSelectionSection from './staff/appointments/DateSelectionSection';
@@ -86,6 +86,7 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
   const [state, dispatch] = useReducer(reducer, initialState);
   const appointmentsQuery = useAppointmentsQuery();
   const submitSchedule = useSubmitScheduleMutation();
+  
 
   // derive existing scheduled map from appointments query data
   useEffect(() => {
@@ -179,9 +180,24 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
     } catch (e) {
       // ignore
     }
+    // Prefill local status and, if scheduled, prefill selected dates and ranges
+    try {
+      setLocalStatus(record?.status || undefined);
+      if (record && record.status === 'scheduled' && Array.isArray(record.scheduledDates) && record.scheduledDates.length > 0) {
+        const dates = record.scheduledDates.map((sd: any) => sd.date);
+        dispatch({ type: 'SET_SELECTED_DATES', payload: dates });
+        for (const sd of record.scheduledDates) {
+          if (sd && sd.date) dispatch({ type: 'SET_TIME_RANGE', payload: { date: sd.date, start: sd.startTime, end: sd.endTime } });
+        }
+      }
+    } catch (e) {
+      // ignore prefill errors
+    }
     // ensure appointments query is fresh when modal opens
     try { appointmentsQuery.refetch(); } catch (e) { /* ignore */ }
   }, [visible]);
+
+  const [localStatus, setLocalStatus] = useState<string | undefined>(undefined);
 
   const confirm = async () => {
     const check = validateNoOverlap();
@@ -265,6 +281,26 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
         try {
           await submitSchedule.mutateAsync({ id: String(record._id), scheduledDates });
           message.success('Appointment scheduled');
+          // update UI state: mark as scheduled and change button label
+          setLocalStatus('scheduled');
+          // refresh appointment slots from server for accurate prefill
+          try {
+            const resp = await appointmentsAPI.getAppointmentWithSlots(String(record._id));
+            if (resp && resp.slots && Array.isArray(resp.slots)) {
+              const slots = resp.slots;
+              const dates = slots.map((s: any) => s.date).filter(Boolean);
+              dispatch({ type: 'SET_SELECTED_DATES', payload: dates });
+              // reset timeRanges based on server slots
+              for (const s of slots) {
+                dispatch({ type: 'SET_TIME_RANGE', payload: { date: s.date, start: s.startTime, end: s.endTime } });
+              }
+            }
+          } catch (fetchErr) {
+            console.warn('Failed to refetch appointment slots after scheduling', fetchErr);
+            // best-effort: continue
+          }
+          // refresh main appointments query so parent list updates
+          try { await appointmentsQuery.refetch(); } catch (_) {}
           onClose();
         } catch (err: any) {
         const status = err?.response?.status;
@@ -414,7 +450,7 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose }) 
         <Button onClick={onClose}>Close</Button>
         <Button onClick={handleResolve} loading={state.resolving} disabled={state.resolving}>Resolve</Button>
         <Button onClick={runPreflightCheck} disabled={state.selectedDates.length === 0}>Refresh Availability</Button>
-        <Button type="primary" onClick={confirm} loading={state.saving} disabled={state.selectedDates.length === 0 || !state.availabilityOk}>Confirm Appointment</Button>
+        <Button type="primary" onClick={confirm} loading={state.saving} disabled={state.selectedDates.length === 0 || !state.availabilityOk}>{(localStatus || record?.status) === 'scheduled' ? 'Save Changes' : 'Confirm Appointment'}</Button>
       </Space>
     </Modal>
   );

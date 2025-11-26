@@ -31,6 +31,25 @@ export async function getAppointmentDetails(inquiryId: string): Promise<Appointm
   }
 }
 
+export async function getAppointmentWithSlots(inquiryId: string): Promise<{ inquiry: AppointmentInquiry | null; slots: { date: string; startTime: string; endTime: string }[] } | null> {
+  try {
+    const resp = await axiosInstance.get(`/inquiries/${inquiryId}/appointment`);
+    return resp.data as { inquiry: AppointmentInquiry | null; slots: { date: string; startTime: string; endTime: string }[] };
+  } catch (err: any) {
+    if (err?.response?.status === 404) return null;
+    return handleError(err);
+  }
+}
+
+export async function getSlotsByDate(date: string): Promise<{ slots: { date: string; startTime: string; endTime: string; residentName?: string }[] } | null> {
+  try {
+    const resp = await axiosInstance.get(`/inquiries/slots`, { params: { date } });
+    return resp.data as { slots: { date: string; startTime: string; endTime: string; residentName?: string }[] };
+  } catch (err: any) {
+    return handleError(err);
+  }
+}
+
 export async function getScheduledAppointmentsByDate(date: string): Promise<ScheduledAppointment[]> {
   try {
     const all = await getAppointmentInquiries();
@@ -52,7 +71,8 @@ export async function getScheduledAppointmentsByDate(date: string): Promise<Sche
 export async function scheduleAppointment(payload: { id: string; scheduledDates: ScheduledAppointment[] }): Promise<{ success?: boolean; conflicts?: ConflictItem[] } | any> {
   try {
     const { id, scheduledDates } = payload;
-    const resp = await axiosInstance.post(`/inquiries/${id}`, { scheduledDates, status: 'scheduled' });
+    // Use dedicated schedule endpoint for clarity and to support edit mode
+    const resp = await axiosInstance.put(`/inquiries/${id}/schedule`, { scheduledDates, status: 'scheduled' });
     return resp.data;
   } catch (err: any) {
     return handleError(err);
@@ -71,6 +91,7 @@ export async function resolveAppointment(inquiryId: string): Promise<any> {
 export default {
   getAppointmentInquiries,
   getAppointmentDetails,
+  getAppointmentWithSlots,
   getScheduledAppointmentsByDate,
   scheduleAppointment,
   resolveAppointment,
