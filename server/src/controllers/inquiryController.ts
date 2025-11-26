@@ -6,8 +6,13 @@ export const getMyInquiries = async (req: any, res: Response, next: NextFunction
     }
     // Find inquiries by username and barangayID
     const inquiries = await Inquiry.find({ username: user.username, barangayID: user.barangayID })
-      .sort({ createdAt: -1 });
-    res.json(inquiries);
+      .sort({ createdAt: -1 }).lean();
+    // Remove staffNotes for residents (this endpoint is for residents)
+    const sanitized = (inquiries || []).map((iq: any) => {
+      if (iq && iq.staffNotes) delete iq.staffNotes;
+      return iq;
+    });
+    res.json(sanitized);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching resident inquiries', error });
   }
@@ -262,8 +267,18 @@ export const getAllInquiries = async (req: any, res: Response, next: NextFunctio
     }
     const inquiries = await Inquiry.find(filter)
       .populate('createdBy', 'fullName username')
-      .populate('assignedTo', 'fullName username');
-    res.json(inquiries);
+      .populate('assignedTo', 'fullName username')
+      .lean();
+    // If requester is a resident, strip staffNotes from results
+    const role = String((req as any).user?.role || '').toLowerCase();
+        const sanitized = (inquiries || []).map((iq: any) => {
+          if (role.includes('resident')) {
+            if (iq && iq.staffNotes) delete iq.staffNotes;
+            if (iq && Array.isArray(iq.messages)) iq.messages = iq.messages.filter((m: any) => m.visibleToResident === true);
+          }
+          return iq;
+        });
+    res.json(sanitized);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching inquiries', error });
   }
@@ -273,11 +288,20 @@ export const getInquiryById = async (req: any, res: Response, next: NextFunction
   try {
     const inquiry = await Inquiry.findById(req.params.id)
       .populate('createdBy', 'firstName lastName')
-      .populate('assignedTo', 'firstName lastName');
-    if (!inquiry) {
-      return res.status(404).json({ message: 'Inquiry not found' });
+      .populate('assignedTo', 'firstName lastName')
+      .lean();
+    if (!inquiry) return res.status(404).json({ message: 'Inquiry not found' });
+
+    // Hide staffNotes and filter messages for residents
+    const role = String((req as any).user?.role || '').toLowerCase();
+    const out: any = inquiry;
+    if (role.includes('resident')) {
+      if (out.staffNotes) delete out.staffNotes;
+      if (Array.isArray(out.messages)) {
+        out.messages = out.messages.filter((m: any) => m.visibleToResident === true);
+      }
     }
-    res.json(inquiry);
+    return res.json(out);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching inquiry', error });
   }
@@ -712,5 +736,100 @@ export const addResponse = async (req: any, res: Response, next: NextFunction) =
   } catch (error) {
     console.error('Error in addResponse:', error);
     res.status(500).json({ message: 'Error adding response', error });
+  }
+};
+
+export const addStaffNote = async (req: any, res: Response, next: NextFunction) => {
+  try {
+    const id = req.params.id;
+    const noteText = req.body && typeof req.body.note === 'string' ? String(req.body.note).trim() : '';
+    if (!noteText || noteText.length === 0) return res.status(400).json({ message: 'Note text is required.' });
+
+    const inquiry = await Inquiry.findById(id);
+    if (!inquiry) return res.status(404).json({ message: 'Inquiry not found' });
+
+    // Only allow staff or admin to add notes — route should already enforce, but double-check
+    const role = String((req as any).user?.role || '').toLowerCase();
+    if (!(role.includes('staff') || role.includes('admin'))) return res.status(403).json({ message: 'Forbidden' });
+
+    const note = { text: noteText, createdBy: (req as any).user?._id, createdAt: new Date() } as any;
+    inquiry.staffNotes = Array.isArray(inquiry.staffNotes) ? inquiry.staffNotes : [];
+    inquiry.staffNotes.push(note);
+
+    try {
+      await inquiry.save();
+    } catch (e) {
+      console.error('Failed to save staff note:', e);
+      return res.status(500).json({ message: 'Failed to save note' });
+    }
+
+    // Return populated notes list (populate staff name)
+    const updated = await Inquiry.findById(id).populate('staffNotes.createdBy', 'fullName username').lean();
+    const notes = (updated && updated.staffNotes) ? (updated.staffNotes as any[]).map(n => ({
+      _id: n._id,
+      text: n.text,
+      createdAt: n.createdAt,
+      updatedAt: n.updatedAt,
+      createdBy: n.createdBy?._id || n.createdBy,
+      staffName: n.createdBy ? (n.createdBy.fullName || n.createdBy.username) : undefined,
+    })) : [];
+
+    return res.json({ notes });
+  } catch (err) {
+    console.error('Error in addStaffNote:', err);
+    return res.status(500).json({ message: 'Failed to add staff note' });
+  }
+};
+
+export const addMessage = async (req: any, res: Response, next: NextFunction) => {
+  try {
+    const id = req.params.id;
+    const msgText = req.body && typeof req.body.message === 'string' ? String(req.body.message).trim() : '';
+    if (!msgText || msgText.length === 0) return res.status(400).json({ message: 'Message text is required.' });
+
+    const inquiry = await Inquiry.findById(id);
+    if (!inquiry) return res.status(404).json({ message: 'Inquiry not found' });
+
+    // Ensure only staff/admin can send
+    const role = String((req as any).user?.role || '').toLowerCase();
+    if (!(role.includes('staff') || role.includes('admin'))) return res.status(403).json({ message: 'Forbidden' });
+
+    const msg = { text: msgText, createdBy: (req as any).user?._id, createdAt: new Date(), visibleToResident: true } as any;
+    inquiry.messages = Array.isArray(inquiry.messages) ? inquiry.messages : [];
+    inquiry.messages.push(msg);
+
+    try {
+      await inquiry.save();
+    } catch (e) {
+      console.error('Failed to save message:', e);
+      return res.status(500).json({ message: 'Failed to save message' });
+    }
+
+    // Populate createdBy for messages
+    const updated = await Inquiry.findById(id).populate('messages.createdBy', 'fullName username').lean();
+    const msgs = (updated && updated.messages) ? (updated.messages as any[]).map(m => ({
+      _id: m._id,
+      text: m.text,
+      createdAt: m.createdAt,
+      visibleToResident: m.visibleToResident,
+      createdBy: m.createdBy?._id || m.createdBy,
+      staffName: m.createdBy ? (m.createdBy.fullName || m.createdBy.username) : undefined,
+    })) : [];
+
+    // Send a resident notification (best-effort)
+    try {
+      const resident = await User.findOne({ username: inquiry.username, barangayID: inquiry.barangayID, role: 'resident' }).lean().catch(() => null);
+      if (resident) {
+        const Notification = require('../../models/Notification');
+        await Notification.create({ userId: resident._id, type: 'APPOINTMENT_MESSAGE', title: 'New Appointment Message', message: msgText });
+      }
+    } catch (notifErr) {
+      console.warn('Failed to create notification for message', notifErr);
+    }
+
+    return res.json({ messages: msgs });
+  } catch (err) {
+    console.error('Error in addMessage:', err);
+    return res.status(500).json({ message: 'Failed to add message' });
   }
 };

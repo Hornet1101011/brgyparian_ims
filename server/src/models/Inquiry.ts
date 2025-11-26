@@ -1,5 +1,19 @@
 import mongoose, { Document } from 'mongoose';
 
+export interface IStaffNote {
+  text: string;
+  createdBy: mongoose.Types.ObjectId;
+  createdAt: Date;
+  updatedAt?: Date;
+}
+
+export interface IStaffMessage {
+  text: string;
+  createdBy: mongoose.Types.ObjectId;
+  createdAt: Date;
+  visibleToResident?: boolean;
+}
+
 export interface IInquiry extends Document {
   subject: string;
   message: string;
@@ -40,6 +54,8 @@ export interface IInquiry extends Document {
   cancellationReason?: string;
   canceledBy?: mongoose.Types.ObjectId;
   canceledAt?: Date;
+  staffNotes?: IStaffNote[];
+  messages?: IStaffMessage[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -133,9 +149,24 @@ const inquirySchema = new mongoose.Schema({
   cancellationReason: { type: String },
   canceledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   canceledAt: { type: Date },
+  // Internal staff-only notes
+  staffNotes: [{
+    text: { type: String, required: true },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date }
+  }],
+  // Messages that staff can send to the resident (resident-visible when flagged)
+  messages: [{
+    text: { type: String, required: true },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    createdAt: { type: Date, default: Date.now },
+    visibleToResident: { type: Boolean, default: true }
+  }],
 }, {
   timestamps: true,
 });
+
 
 // Guard against recompilation in dev
 export const Inquiry: mongoose.Model<IInquiry> = (mongoose.models && (mongoose.models as any).Inquiry)

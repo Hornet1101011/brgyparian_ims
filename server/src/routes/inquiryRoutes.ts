@@ -15,6 +15,8 @@ import {
   getAppointmentAuditLogs,
   cancelInquiry,
   checkAvailability,
+  addStaffNote,
+  addMessage,
 } from '../controllers/inquiryController';
 import { Request, Response, NextFunction } from 'express';
 
@@ -72,5 +74,11 @@ router.patch('/:id/cancel', auth, authorize('admin', 'staff'), (req: any, res: R
 // Add a response to an inquiry (allow resident and staff replies)
 // Allow file attachments with responses as well
 router.post('/:id/responses', auth, upload.array('attachments'), (req: any, res: Response, next: NextFunction) => addResponse(req, res, next));
+
+// Add staff note (staff/admin only)
+router.post('/:id/staff-notes', auth, authorize('admin', 'staff'), (req: any, res: Response, next: NextFunction) => addStaffNote(req, res, next));
+
+// Send message to resident (staff/admin only)
+router.post('/:id/messages', auth, authorize('admin', 'staff'), (req: any, res: Response, next: NextFunction) => addMessage(req, res, next));
 
 export default router;

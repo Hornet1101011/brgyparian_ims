@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, Descriptions, Tag, Spin, Button, Divider, List, Typography, message } from 'antd';
+import { Modal, Descriptions, Tag, Spin, Button, Divider, List, Typography, message, Input } from 'antd';
 import { useAppointmentDetailsQuery } from '../hooks/useAppointments';
 import appointmentsAPI from '../api/appointments';
 import AppointmentDetailsModal from './AppointmentDetailsModal';
@@ -16,6 +16,10 @@ const InquiryDetailsModal: React.FC<Props> = ({ visible, inquiryId, onClose, onC
   const loading = query.isLoading;
   const data = query.data as any | null;
   const [openSchedule, setOpenSchedule] = useState(false);
+  const [newNote, setNewNote] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
+  const [newMessage, setNewMessage] = useState('');
+  const [sendingMessage, setSendingMessage] = useState(false);
 
   const handleCancel = async () => {
     if (!inquiryId) return;
@@ -95,7 +99,7 @@ const InquiryDetailsModal: React.FC<Props> = ({ visible, inquiryId, onClose, onC
           </Descriptions>
 
           <Divider />
-          <div style={{ fontWeight: 600, marginBottom: 8 }}>Conversation / Staff Notes</div>
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>Conversation</div>
           {(data?.responses && data.responses.length) ? (
             <List
               dataSource={data.responses}
@@ -105,7 +109,82 @@ const InquiryDetailsModal: React.FC<Props> = ({ visible, inquiryId, onClose, onC
                 </List.Item>
               )}
             />
+          ) : <div style={{ color: '#666' }}>No conversation entries</div>}
+
+          <Divider />
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>Staff Notes</div>
+          {(data?.staffNotes && data.staffNotes.length) ? (
+            <List
+              dataSource={[...data.staffNotes].sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())}
+              renderItem={(n: any) => (
+                <List.Item>
+                  <List.Item.Meta
+                    title={n.staffName || (n.createdBy ? String(n.createdBy) : 'Staff')}
+                    description={<div>{n.text}<div style={{ fontSize: 12, color: '#666' }}>{n.createdAt ? new Date(n.createdAt).toLocaleString() : ''}</div></div>}
+                  />
+                </List.Item>
+              )}
+            />
           ) : <div style={{ color: '#666' }}>No staff notes</div>}
+
+          <div style={{ marginTop: 8 }}>
+            <Input.TextArea rows={3} value={newNote} onChange={(e) => setNewNote(e.target.value)} placeholder="Add internal staff note (visible to staff only)" />
+            <div style={{ marginTop: 8, textAlign: 'right' }}>
+              <Button type="primary" onClick={async () => {
+                if (!inquiryId) return;
+                const text = String(newNote || '').trim();
+                if (!text || text.length === 0) { message.error('Note cannot be empty'); return; }
+                setSavingNote(true);
+                try {
+                  const resp = await appointmentsAPI.postStaffNote(inquiryId, text);
+                  message.success('Note saved');
+                  setNewNote('');
+                  try { query.refetch(); if (onChanged) onChanged(); } catch (_) {}
+                } catch (err: any) {
+                  console.error('Failed to save staff note', err);
+                  message.error((err && err.message) ? err.message : 'Failed to save note');
+                } finally {
+                  setSavingNote(false);
+                }
+              }} loading={savingNote}>Save Note</Button>
+            </div>
+          </div>
+
+          <Divider />
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>Message To Resident</div>
+          {(data?.messages && data.messages.length) ? (
+            <List
+              dataSource={[...data.messages].filter((m: any) => m.visibleToResident === true).sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())}
+              renderItem={(m: any) => (
+                <List.Item>
+                  <List.Item.Meta title={m.staffName || (m.createdBy ? String(m.createdBy) : 'Staff')} description={<div>{m.text}<div style={{ fontSize: 12, color: '#666' }}>{m.createdAt ? new Date(m.createdAt).toLocaleString() : ''}</div></div>} />
+                </List.Item>
+              )}
+            />
+          ) : <div style={{ color: '#666' }}>No messages to resident</div>}
+
+          <div style={{ marginTop: 8 }}>
+            <Input.TextArea rows={3} value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder="Compose message to resident" />
+            <div style={{ marginTop: 8, textAlign: 'right' }}>
+              <Button type="primary" onClick={async () => {
+                if (!inquiryId) return;
+                const text = String(newMessage || '').trim();
+                if (!text) { message.error('Message cannot be empty'); return; }
+                setSendingMessage(true);
+                try {
+                  await appointmentsAPI.postMessage(inquiryId, text);
+                  message.success('Message sent');
+                  setNewMessage('');
+                  try { query.refetch(); if (onChanged) onChanged(); } catch (_) {}
+                } catch (err: any) {
+                  console.error('Failed to send message', err);
+                  message.error((err && err.message) ? err.message : 'Failed to send message');
+                } finally {
+                  setSendingMessage(false);
+                }
+              }} loading={sendingMessage}>Send Message</Button>
+            </div>
+          </div>
 
           {openSchedule && data && (
             <AppointmentDetailsModal visible={true} record={data} onClose={() => { setOpenSchedule(false); query.refetch(); if (onChanged) onChanged(); }} />

@@ -115,6 +115,24 @@ export async function cancelAppointment(inquiryId: string, reason: string): Prom
   }
 }
 
+export async function postStaffNote(inquiryId: string, note: string): Promise<{ notes: any[] } | any> {
+  try {
+    const resp = await axiosInstance.post(`/inquiries/${inquiryId}/staff-notes`, { note });
+    return resp.data;
+  } catch (err: any) {
+    return handleError(err);
+  }
+}
+
+export async function postMessage(inquiryId: string, message: string): Promise<{ messages: any[] } | any> {
+  try {
+    const resp = await axiosInstance.post(`/inquiries/${inquiryId}/messages`, { message });
+    return resp.data;
+  } catch (err: any) {
+    return handleError(err);
+  }
+}
+
 export default {
   getAppointmentInquiries,
   getAppointmentDetails,
@@ -123,6 +141,8 @@ export default {
   scheduleAppointment,
   resolveAppointment,
   cancelAppointment,
+  postStaffNote,
+  postMessage,
   getDailySummary,
   getSlotsByDate,
   getSlotsForRange,
