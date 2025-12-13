@@ -7,6 +7,10 @@ import { Request, Response } from 'express';
 import { Resident } from '../models/Resident';
 import { DocumentRequest } from '../models/DocumentRequest';
 
+console.log('[Analytics] Controller loading...');
+console.log('[Analytics] Resident model loaded:', !!Resident);
+console.log('[Analytics] DocumentRequest model loaded:', !!DocumentRequest);
+
 // Helper to build date filter
 const buildDateFilter = (startDate?: string, endDate?: string): Record<string, any> | undefined => {
   if (!startDate || !endDate) return undefined;

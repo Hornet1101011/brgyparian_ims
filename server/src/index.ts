@@ -466,7 +466,9 @@ try {
 } catch (e) {
   console.error('Failed to mount /api/officials public route in src/index.ts', e);
 }
+console.log('📊 [Router] Mounting /api/analytics routes');
 app.use('/api/analytics', analyticsRoutes);
+console.log('✓ [Router] /api/analytics routes mounted');
 app.use('/api/resident', residentsRoutes);
 // Backward-compatible alias: some clients call the plural '/api/residents'
 // Mount the same router on the plural path to avoid 404s from older clients.
