@@ -373,6 +373,7 @@ export const getPersonalInfoRecords = async (req: Request, res: Response) => {
       filter.residentType = residentType;
     }
 
+    console.log('Fetching personal info with filter:', filter);
     const result = await mongoService.getResidents(filter, parseInt(limit as string) || 10000);
     
     // Return normalized response format
@@ -384,10 +385,13 @@ export const getPersonalInfoRecords = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Error fetching personal info records:', error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error('Full error:', error);
     res.status(500).json({
       success: false,
       message: 'Error fetching personal info records',
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: errorMsg,
+      details: error instanceof Error ? error.stack : undefined
     });
   }
 };
@@ -411,6 +415,7 @@ export const getDocumentRequests = async (req: Request, res: Response) => {
       };
     }
 
+    console.log('Fetching document requests with filter:', filter);
     const result = await mongoService.getDocumentRequests(filter, parseInt(limit as string) || 10000);
     
     // Return normalized response format
@@ -422,10 +427,13 @@ export const getDocumentRequests = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Error fetching document requests:', error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error('Full error:', error);
     res.status(500).json({
       success: false,
       message: 'Error fetching document requests',
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: errorMsg,
+      details: error instanceof Error ? error.stack : undefined
     });
   }
 };

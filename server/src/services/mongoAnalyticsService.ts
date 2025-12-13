@@ -76,20 +76,54 @@ class MongoAnalyticsService {
   }
 
   /**
-   * Get residents collection
+   * Get residents collection - tries multiple possible names
    */
   private async getResidentsCollection(): Promise<Collection> {
     await this.connect();
     if (!this.db) throw new Error('Database not connected');
+    
+    // Try different collection name variations
+    const possibleNames = ['residents', 'Residents', 'user', 'users', 'User', 'Users'];
+    
+    for (const name of possibleNames) {
+      try {
+        const collection = this.db.collection(name);
+        const count = await collection.countDocuments({});
+        console.log(`Found residents collection: ${name} (${count} documents)`);
+        return collection;
+      } catch (e) {
+        // Continue to next name
+      }
+    }
+    
+    // If nothing found, return default and let it fail with clear error
+    console.warn('Could not find residents collection, using default "residents"');
     return this.db.collection('residents');
   }
 
   /**
-   * Get document requests collection
+   * Get document requests collection - tries multiple possible names
    */
   private async getDocumentRequestsCollection(): Promise<Collection> {
     await this.connect();
     if (!this.db) throw new Error('Database not connected');
+    
+    // Try different collection name variations
+    const possibleNames = ['documentrequests', 'DocumentRequest', 'documentRequest', 'DocumentRequests', 'document_requests', 'requests'];
+    
+    for (const name of possibleNames) {
+      try {
+        const collection = this.db.collection(name);
+        const count = await collection.countDocuments({});
+        console.log(`Found document requests collection: ${name} (${count} documents)`);
+        return collection;
+      } catch (e) {
+        // Continue to next name
+      }
+    }
+    
+    // If nothing found, return default and let it fail with clear error
+    console.warn('Could not find document requests collection, using default "documentrequests"');
     return this.db.collection('documentrequests');
   }
 
