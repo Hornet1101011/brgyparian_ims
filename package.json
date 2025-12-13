@@ -23,6 +23,8 @@
     "concurrently": "^8.2.2"
   },
   "dependencies": {
+    "echarts": "^6.0.0",
+    "echarts-for-react": "^3.0.5",
     "mongodb": "^7.0.0",
     "mongosh": "^2.5.9"
   }

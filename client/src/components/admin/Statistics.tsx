@@ -1,27 +1,35 @@
-import React, { useEffect, useState, useCallback, useRef, useMemo, useTransition } from 'react';
-import { Card, Row, Col, Divider, Skeleton, Empty, Form, Select, DatePicker, Space, Typography, Checkbox, Drawer, Button, Switch, Modal, message, Alert, Dropdown, Spin } from 'antd';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { Card, Row, Col, Divider, Skeleton, Empty, Form, Select, DatePicker, Space, Typography, Checkbox, Drawer, Button, Switch, Modal, message, Alert, Dropdown } from 'antd';
 import { DownOutlined, DownloadOutlined, FileTextOutlined, BarChartOutlined, SyncOutlined } from '@ant-design/icons';
 import { QueryClient, QueryClientProvider, useQueries } from '@tanstack/react-query';
-import { Pie, Bar, Line, Area } from '@ant-design/charts';
-import { axiosInstance, analyticsAPI } from '../../services/api';
+import type { UseQueryResult } from '@tanstack/react-query';
+import type { EChartsOption } from 'echarts';
+import { axiosInstance } from '../../services/api';
+import EChartRenderer from '../statistics/EChartRenderer';
+import { buildChartOption } from '../statistics/chartOptionFactory';
 import type { Moment } from 'moment';
 import jsPDF from 'jspdf';
 
+
 const { RangePicker } = DatePicker;
+
+// Type definitions
+type ChartDataRecord = Record<string, unknown>;
+type ChartQueryType = UseQueryResult<unknown[], Error>;
 
 // Chart definitions with proper typing
 const CHART_DEFINITIONS = {
-  gender: { title: 'Sex Distribution', chartType: 'pie' as const, endpoint: '/analytics/gender', colors: ['#1890ff', '#00bcd4', '#888888'] as string[] },
-  age: { title: 'Age Groups', chartType: 'bar' as const, endpoint: '/analytics/age', colors: ['#1890ff'] as string[] },
-  occupation: { title: 'Occupation', chartType: 'line' as const, endpoint: '/analytics/occupation', colors: ['#f5222d'] as string[] },
-  nationality: { title: 'Nationality', chartType: 'area' as const, endpoint: '/analytics/nationality', colors: ['#13c2c2'] as string[] },
-  'blood-type': { title: 'Blood Type', chartType: 'bar' as const, endpoint: '/analytics/blood-type', colors: ['#722ed1'] as string[] },
-  disability: { title: 'Disability Status', chartType: 'pie' as const, endpoint: '/analytics/disability', colors: ['#faad14', '#52c41a'] as string[] },
-  'business-type': { title: 'Business Type', chartType: 'area' as const, endpoint: '/analytics/business-type', colors: ['#1890ff'] as string[] },
-  'business-size': { title: 'Business Size', chartType: 'bar' as const, endpoint: '/analytics/business-size', colors: ['#52c41a'] as string[] },
-  'children-count': { title: 'Children Count', chartType: 'line' as const, endpoint: '/analytics/children-count', colors: ['#eb2f96'] as string[] },
-  'income-brackets': { title: 'Income Brackets', chartType: 'area' as const, endpoint: '/analytics/income-brackets', colors: ['#faad14'] as string[] },
-};
+  gender: { title: 'Sex Distribution', chartType: 'pie' as const, endpoint: '/analytics/gender' },
+  age: { title: 'Age Groups', chartType: 'bar' as const, endpoint: '/analytics/age' },
+  occupation: { title: 'Occupation', chartType: 'line' as const, endpoint: '/analytics/occupation' },
+  nationality: { title: 'Nationality', chartType: 'area' as const, endpoint: '/analytics/nationality' },
+  'blood-type': { title: 'Blood Type', chartType: 'bar' as const, endpoint: '/analytics/blood-type' },
+  disability: { title: 'Disability Status', chartType: 'pie' as const, endpoint: '/analytics/disability' },
+  'business-type': { title: 'Business Type', chartType: 'area' as const, endpoint: '/analytics/business-type' },
+  'business-size': { title: 'Business Size', chartType: 'bar' as const, endpoint: '/analytics/business-size' },
+  'children-count': { title: 'Children Count', chartType: 'line' as const, endpoint: '/analytics/children-count' },
+  'income-brackets': { title: 'Income Brackets', chartType: 'area' as const, endpoint: '/analytics/income-brackets' },
+} as const;
 
 type ChartId = keyof typeof CHART_DEFINITIONS;
 
@@ -37,7 +45,6 @@ const defaultQueryClient = new QueryClient({
 });
 
 const StatisticsInner: React.FC = () => {
-  const [isPending, startTransition] = useTransition();
   const [loadingSummary, setLoadingSummary] = useState(true);
   const [summary, setSummary] = useState<any>(null);
 
@@ -121,105 +128,133 @@ const StatisticsInner: React.FC = () => {
     }))
   });
   
-  // Stable data key from query results
-  const chartQueryDataKey = useMemo(
-    () => chartQueryResults.map(r => JSON.stringify(r?.data || '')).join('|'),
-    [chartQueryResults]
-  );
-
   // Build queries map
   const chartQueriesMapMemo = useMemo(() => {
-    const m: Record<ChartId, any> = {} as any;
-    chartIds.forEach((id, idx) => { m[id] = chartQueryResults[idx]; });
+    const m: Record<ChartId, ChartQueryType> = Object.create(null);
+    chartIds.forEach((id, idx) => { m[id] = chartQueryResults[idx] as ChartQueryType; });
     return m;
   }, [chartQueryResults, chartIds]);
 
-  // Sync query results to state with transition
+  // Sync query results to state - use ref to prevent infinite updates
+  const lastDataHashRef = useRef<string>('');
+  
   useEffect(() => {
-    const newData: Record<ChartId, any[]> = {} as any;
-    const newLoading: Record<ChartId, boolean> = {} as any;
+    const newData: Record<ChartId, ChartDataRecord[]> = Object.create(null);
+    const newLoading: Record<ChartId, boolean> = Object.create(null);
     
     chartIds.forEach((id) => {
       const q = chartQueriesMapMemo[id];
+      const rawData = q?.data || [];
       
       if (id === 'gender') {
-        newData[id] = (q?.data || [])
-          .filter((p: any) => {
-            const rawType = (p?.name ?? p?.type ?? p?._id ?? '').toString().trim().toLowerCase();
-            return rawType && rawType !== 'unknown' && rawType !== 'null' && rawType !== 'undefined' && rawType !== 'none';
-          })
-          .map((p: any) => {
-            const rawType = (p?.name ?? p?.type ?? p?._id ?? '').toString().trim();
+        // Normalize gender data
+        newData[id] = rawData
+          .map((p: unknown) => {
+            const pd = p as ChartDataRecord;
+            const rawType = (pd?.name ?? pd?.type ?? pd?._id ?? '').toString().trim();
             const lower = (rawType || '').toLowerCase();
-            let norm = 'Other';
-            if (/^m/.test(lower)) norm = 'Male';
-            else if (/^f/.test(lower)) norm = 'Female';
-            return { type: norm, value: Number(p?.value ?? p?.count ?? 0) };
+            let norm = rawType; // Keep original if not m/f
+            if (/^m/i.test(lower)) norm = 'Male';
+            else if (/^f/i.test(lower)) norm = 'Female';
+            return { type: norm, value: Number(pd?.value ?? pd?.count ?? 0) || 0 } as ChartDataRecord;
           })
-          .reduce((acc: any[], cur: any) => {
-            const found = acc.find(a => a.type === cur.type);
-            if (found) found.value += cur.value; else acc.push({ ...cur });
+          // Remove unknown/null entries
+          .filter((p: ChartDataRecord) => {
+            const t = String(p?.type ?? '').toLowerCase();
+            const v = Number(p?.value ?? 0);
+            return v > 0 && 
+                   t !== 'unknown' && 
+                   t !== 'null' && 
+                   t !== 'undefined' &&
+                   t !== 'none' &&
+                   t !== '';
+          })
+          // Aggregate by normalized type
+          .reduce((acc: ChartDataRecord[], cur: ChartDataRecord) => {
+            const found = acc.find(a => String(a?.type) === String(cur?.type));
+            if (found) found.value = Number((found.value || 0)) + Number((cur.value || 0));
+            else acc.push({ ...cur });
             return acc;
-          }, [] as any[])
-          .filter((p: any) => p?.value > 0);
+          }, [] as ChartDataRecord[]);
       } else {
-        newData[id] = (q?.data || [])
-          .filter((p: any) => {
-            const type = (p?.name ?? p?.type ?? p?._id ?? '').toString().trim().toLowerCase();
-            const val = Number(p?.value ?? p?.count ?? 0);
-            return type && type !== 'unknown' && type !== 'null' && type !== 'undefined' && type !== 'none' && val > 0;
+        // For other charts, extract type/value and filter
+        newData[id] = rawData
+          .map((p: unknown) => {
+            const pd = p as ChartDataRecord;
+            const type = (pd?.name ?? pd?.type ?? pd?._id ?? '').toString().trim();
+            const value = Number(pd?.value ?? pd?.count ?? 0) || 0;
+            return { type, value } as ChartDataRecord;
           })
-          .map((p: any) => ({
-            ...p,
-            type: (p?.name ?? p?.type ?? p?._id ?? '').toString().trim(),
-            value: Number(p?.value ?? p?.count ?? 0)
-          }));
+          // Filter out unknown/null/zero entries
+          .filter((p: ChartDataRecord) => {
+            const t = String(p?.type ?? '').toLowerCase();
+            const v = Number(p?.value ?? 0);
+            return v > 0 && 
+                   t !== 'unknown' && 
+                   t !== 'null' && 
+                   t !== 'undefined' &&
+                   t !== 'none' &&
+                   t !== '';
+          });
       }
       
       newLoading[id] = q?.isFetching || q?.isLoading || false;
     });
     
-    startTransition(() => {
-      setChartData(newData as any);
-      setChartLoading(newLoading as any);
-    });
-  }, [chartQueryDataKey, chartQueriesMapMemo, chartIds]);
+    // Only update state if data hash changed
+    const newDataHash = JSON.stringify(newData);
+    if (newDataHash !== lastDataHashRef.current) {
+      lastDataHashRef.current = newDataHash;
+      setChartData(newData as Record<string, ChartDataRecord[]>);
+      setChartLoading(newLoading);
+    }
+  }, [chartQueriesMapMemo, chartIds]);
 
-  // Compute charts with data
-  const chartsWithData = useMemo(() => {
-    const keys = Object.keys(chartData || {}).filter(k => 
+  // Track previous auto-enable state to detect changes
+  const autoEnableRef = useRef<boolean>(false);
+  
+  // Auto-enable when data toggle - triggers only when toggle changes to true
+  useEffect(() => {
+    const prevAutoEnable = autoEnableRef.current;
+    autoEnableRef.current = autoEnableWhenData;
+    
+    // Only run when autoEnableWhenData changes from false to true
+    if (!autoEnableWhenData || prevAutoEnable === autoEnableWhenData) return;
+    
+    // Find charts that have data
+    const chartsWithData = (Object.keys(chartData || {}) as ChartId[]).filter(k => 
       Array.isArray(chartData[k as ChartId]) && chartData[k as ChartId].length > 0
     );
-    return new Set(keys as ChartId[]);
-  }, [chartData]);
-
-  // Auto-enable when data toggle
-  useEffect(() => {
-    if (autoEnableWhenData) {
-      prevSelectionRef.current = selectedCharts;
-      const available = Array.from(chartsWithData);
-      const newSel = chartIds.filter(id => available.includes(id)).slice(0, 6) as ChartId[];
-      if (newSel.length) setSelectedCharts(newSel);
-    } else {
-      if (prevSelectionRef.current) {
-        setSelectedCharts(prevSelectionRef.current);
-        prevSelectionRef.current = null;
-      }
+    
+    if (chartsWithData.length === 0) return;
+    
+    // Build new selection from available charts
+    const newSel = chartIds.filter(id => chartsWithData.includes(id)).slice(0, 6) as ChartId[];
+    
+    // Only update if selection actually changed
+    if (newSel.length > 0 && JSON.stringify(newSel) !== JSON.stringify(selectedCharts)) {
+      setSelectedCharts(newSel);
     }
-  }, [autoEnableWhenData, chartsWithData, chartIds]);
+  }, [autoEnableWhenData]);
 
   // Memoized computations
   const totalResidents = useMemo(() => summary?.totalResidents ?? 0, [summary]);
   const totalDocuments = useMemo(() => summary?.totalDocumentRequests ?? 0, [summary]);
   
-  const ageBarData = useMemo(() => (chartData['age'] as any[]) || [], [chartData]);
+  const ageBarData = useMemo(() => {
+    const ageData = chartData['age'];
+    return (Array.isArray(ageData) ? ageData : []) as ChartDataRecord[];
+  }, [chartData]);
   const ageMax = useMemo(() => {
     if (!Array.isArray(ageBarData) || ageBarData.length === 0) return 0;
-    return Math.max(...ageBarData.map((d: any) => Number(d.value) || 0));
+    return Math.max(...ageBarData.map((d: ChartDataRecord) => Number(d.value) || 0));
   }, [ageBarData]);
   const ageAxisMax = useMemo(() => Math.ceil(ageMax / 5) * 5 || 5, [ageMax]);
   
-  const monthlyDocData = useMemo(() => (chartData['documents-monthly'] as any[]) || [], [chartData]);
+  const monthlyDocData = useMemo(() => {
+    const monthlyData = chartData['documents-monthly'];
+    return (Array.isArray(monthlyData) ? monthlyData : []) as ChartDataRecord[];
+  }, [chartData]);
 
   // Report state
   const [reportModalOpen, setReportModalOpen] = useState(false);
@@ -235,36 +270,36 @@ const StatisticsInner: React.FC = () => {
   }, []);
 
   // Report generation
-  const generateNarrativeReport = (state: { summary?: any; charts?: Record<string, any[]> }) => {
+  const generateNarrativeReport = (state: { summary?: Record<string, unknown>; charts?: Record<string, ChartDataRecord[]> }) => {
     const s = state.summary || summary || {};
     const charts = state.charts || chartData || {};
 
     const totalResidents = Number(s.totalResidents ?? 0);
-    const gender = (charts['gender'] as any[]) || [];
-    const age = (charts['age'] as any[]) || [];
-    const cs = (charts['civil-status'] as any[]) || [];
-    const ed = (charts['education'] as any[]) || [];
-    const monthly = (charts['documents-monthly'] as any[]) || [];
+    const gender = (Array.isArray(charts['gender']) ? charts['gender'] : []) as ChartDataRecord[];
+    const age = (Array.isArray(charts['age']) ? charts['age'] : []) as ChartDataRecord[];
+    const cs = (Array.isArray(charts['civil-status']) ? charts['civil-status'] : []) as ChartDataRecord[];
+    const ed = (Array.isArray(charts['education']) ? charts['education'] : []) as ChartDataRecord[];
+    const monthly = (Array.isArray(charts['documents-monthly']) ? charts['documents-monthly'] : []) as ChartDataRecord[];
 
-    const maleCount = Number(gender.find((g:any) => (g.type||'').toLowerCase().startsWith('m'))?.value || 0);
-    const femaleCount = Number(gender.find((g:any) => (g.type||'').toLowerCase().startsWith('f'))?.value || 0);
-    const otherCount = Math.max(0, (gender || []).reduce((sum:number, g:any) => sum + (Number(g.value)||0), 0) - maleCount - femaleCount);
+    const maleCount = Number(gender.find((g: ChartDataRecord) => (g.type||'').toString().toLowerCase().startsWith('m'))?.value || 0);
+    const femaleCount = Number(gender.find((g: ChartDataRecord) => (g.type||'').toString().toLowerCase().startsWith('f'))?.value || 0);
+    const otherCount = Math.max(0, (gender || []).reduce((sum: number, g: ChartDataRecord) => sum + (Number(g.value)||0), 0) - maleCount - femaleCount);
 
     let topAgeGroup = '';
     if (age.length) {
-      const sorted = [...age].sort((a:any,b:any) => (Number(b.value)||0) - (Number(a.value)||0));
-      topAgeGroup = sorted[0]?.type || sorted[0]?.group || '';
+      const sorted = [...age].sort((a: ChartDataRecord, b: ChartDataRecord) => (Number(b.value)||0) - (Number(a.value)||0));
+      topAgeGroup = sorted[0]?.type?.toString() || '';
     }
 
-    const topCivil = cs.length ? cs.slice(0,3).map((c:any) => `${c.type} (${c.value})`).join(', ') : '';
-    const topEducation = ed.length ? ed.slice(0,3).map((c:any) => `${c.type} (${c.value})`).join(', ') : '';
+    const topCivil = cs.length ? cs.slice(0,3).map((c: ChartDataRecord) => `${c.type} (${c.value})`).join(', ') : '';
+    const topEducation = ed.length ? ed.slice(0,3).map((c: ChartDataRecord) => `${c.type} (${c.value})`).join(', ') : '';
 
-    const monthlyTotal = monthly.length ? monthly.reduce((sum:number,m:any) => sum + (Number(m.value)||0), 0) : 0;
+    const monthlyTotal = monthly.length ? monthly.reduce((sum: number, m: ChartDataRecord) => sum + (Number(m.value)||0), 0) : 0;
     let peakMonth = '';
     let peakVal = 0;
     if (monthly.length) {
-      const peak = monthly.reduce((best:any, m:any) => (Number(m.value)||0) > (Number(best.value)||0) ? m : best, monthly[0]);
-      peakMonth = peak?.type || '';
+      const peak = monthly.reduce((best: ChartDataRecord, m: ChartDataRecord) => (Number(m.value)||0) > (Number(best.value)||0) ? m : best, monthly[0]);
+      peakMonth = peak?.type?.toString() || '';
       peakVal = Number(peak?.value || 0);
     }
 
@@ -347,92 +382,21 @@ const StatisticsInner: React.FC = () => {
   const chartRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const dashboardRef = useRef<HTMLDivElement | null>(null);
 
-  // Memoized ChartCard component
-  const ChartCard = useMemo(() => React.memo((props: { 
-    id?: ChartId; 
-    title: string; 
-    chartType: 'pie'|'bar'|'line'|'area'; 
-    data?: any[]; 
-    loading?: boolean; 
-    colors?: string[] 
-  }) => {
-    const { id, title, chartType, data = [], loading, colors } = props;
-    const hasData = Array.isArray(data) && data.length > 0;
-    const cs = id ? (chartSettings[id] || {}) : {};
-    const effectiveChartType = cs.chartType || chartType;
-    const showLabels = cs.showLabels ?? true;
-    const showTooltips = cs.showTooltips ?? true;
-    const showLegend = cs.showLegend ?? true;
-
-    return (
-      <Card
-        title={
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <BarChartOutlined style={{ color: '#1890ff', fontSize: 18 }} />
-            <span style={{ fontWeight: 600, color: '#0f172a', fontSize: 15 }}>{title}</span>
-          </div>
-        }
-        style={{ 
-          borderRadius: 12, 
-          boxShadow: '0 2px 12px rgba(15,23,42,0.08)',
-          border: '1px solid #e2e8f0',
-          height: '100%'
-        }}
-        styles={{ 
-          body: { padding: 16 },
-          header: { padding: '16px 20px', borderBottom: '1px solid #e2e8f0' }
-        }}
-      >
-        {loading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 220 }}>
-            <Spin size="large" />
-          </div>
-        ) : hasData ? (
-          effectiveChartType === 'pie' ? (
-            <div ref={(el) => { if (id) chartRefs.current[id] = el; }} style={{ background: '#ffffff' }}>
-              {(() => {
-                const pieData = (data || []).map((d: any) => ({
-                  label: (d?.type ?? d?.name ?? d?.group ?? d?._id ?? 'Unknown').toString().trim(),
-                  valueNumber: Number(d?.value ?? d?.count ?? 0)
-                }));
-                return (
-                  <Pie
-                    data={pieData}
-                    angleField="valueNumber"
-                    colorField="label"
-                    radius={0.9}
-                    label={showLabels ? { formatter: (datum: any) => {
-                      const label = datum?.data?.label ?? 'Unknown';
-                      const val = Number(datum?.data?.valueNumber ?? 0) || 0;
-                      return `${label} (${val})`;
-                    }} : false}
-                    tooltip={showTooltips ? { formatter: (datum: any) => ({
-                      name: datum?.data?.label ?? 'Unknown', 
-                      value: Number(datum?.data?.valueNumber ?? 0) || 0 
-                    })} : false}
-                    color={colors}
-                    height={220}
-                  />
-                );
-              })()}
-            </div>
-          ) : effectiveChartType === 'bar' ? (
-            <div ref={(el) => { if (id) chartRefs.current[id] = el; }}>
-              <Bar data={data} xField="type" yField="value" color={colors?.[0]} label={showLabels ? undefined : false} legend={showLegend ? undefined : false} tooltip={showTooltips ? undefined : false} yAxis={{ min: 0, max: ageAxisMax, tickInterval: 5 }} height={220} />
-            </div>
-          ) : effectiveChartType === 'line' ? (
-            <div ref={(el) => { if (id) chartRefs.current[id] = el; }}>
-              <Line data={data} xField="type" yField="value" legend={showLegend ? undefined : false} tooltip={showTooltips ? undefined : false} height={220} />
-            </div>
-          ) : (
-            <div ref={(el) => { if (id) chartRefs.current[id] = el; }}>
-              <Area data={data} xField="type" yField="value" legend={showLegend ? undefined : false} tooltip={showTooltips ? undefined : false} height={220} />
-            </div>
-          )
-        ) : <Empty description="No data available" />}
-      </Card>
-    );
-  }), [chartSettings, ageAxisMax]);
+  // Memoize all chart options at component level
+  const chartOptions = useMemo(() => {
+    const opts: Record<ChartId, EChartsOption | undefined> = Object.create(null);
+    selectedCharts.forEach((chartId) => {
+      const rawData = chartData[chartId];
+      const data = (Array.isArray(rawData) ? rawData : []) as ChartDataRecord[];
+      const hasData = Array.isArray(data) && data.length > 0;
+      const cs = chartSettings[chartId] || {};
+      const effectiveChartType = cs.chartType || CHART_DEFINITIONS[chartId].chartType;
+      const chartTitle = CHART_DEFINITIONS[chartId].title;
+      
+      opts[chartId] = hasData ? buildChartOption(effectiveChartType, chartTitle, data as never) : undefined;
+    });
+    return opts;
+  }, [selectedCharts, chartData, chartSettings]);
 
   return (
     <Card
@@ -530,11 +494,11 @@ const StatisticsInner: React.FC = () => {
                     Requests (Period)
                   </Typography.Text>
                   <Typography.Title level={2} style={{ margin: 0, color: '#f59e0b', fontWeight: 700 }}>
-                    {monthlyDocData ? monthlyDocData.reduce((s:any,m:any)=>s + (Number(m.value)||0), 0).toLocaleString() : 0}
+                    {monthlyDocData ? monthlyDocData.reduce((s: number, m: ChartDataRecord) => s + (Number(m?.value) || 0), 0).toLocaleString() : 0}
                   </Typography.Title>
                   {monthlyDocData && monthlyDocData.length ? (
                     <Typography.Text type="secondary" style={{ display: 'block', fontSize: 12, marginTop: 8, color: '#78909c' }}>
-                      Latest: {monthlyDocData[monthlyDocData.length-1].type} ({monthlyDocData[monthlyDocData.length-1].value})
+                      Latest: {String((monthlyDocData[monthlyDocData.length-1] as ChartDataRecord)?.type || '')} ({String((monthlyDocData[monthlyDocData.length-1] as ChartDataRecord)?.value || '')})
                     </Typography.Text>
                   ) : null}
                 </div>
@@ -554,7 +518,7 @@ const StatisticsInner: React.FC = () => {
           <Form layout={isMobile ? "vertical" : "inline"} style={{ marginBottom: 0, width: '100%', boxSizing: 'border-box', display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-end' }}>
             <Form.Item label="Date Range" style={{ marginBottom: 0 }}>
               <RangePicker
-                value={filters.dateRange as any}
+                value={filters.dateRange.length > 0 ? (filters.dateRange as any) : undefined}
                 onChange={dates => setFilters(f => ({ ...f, dateRange: (dates ? dates.filter(Boolean) : []) as Moment[] }))}
                 allowClear
                 style={{ width: 280 }}
@@ -749,18 +713,42 @@ const StatisticsInner: React.FC = () => {
             <Empty description="No charts selected" style={{ padding: '60px 20px', color: '#94a3b8' }} />
           ) : (
             <Row gutter={[24, 24]}>
-              {selectedCharts.map((chartId) => (
-                <Col key={chartId} xs={24} md={12} lg={12}>
-                  <ChartCard 
-                    id={chartId} 
-                    title={CHART_DEFINITIONS[chartId].title} 
-                    chartType={CHART_DEFINITIONS[chartId].chartType} 
-                    data={chartData[chartId] as any[]} 
-                    loading={chartLoading[chartId]} 
-                    colors={CHART_DEFINITIONS[chartId].colors} 
-                  />
-                </Col>
-              ))}
+              {selectedCharts.map((chartId) => {
+                const chartTitle = CHART_DEFINITIONS[chartId].title;
+                const loading = chartLoading[chartId];
+                const chartOption = chartOptions[chartId];
+
+                return (
+                  <Col key={chartId} xs={24} md={12} lg={12}>
+                    <Card
+                      title={
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <BarChartOutlined style={{ color: '#1890ff', fontSize: 18 }} />
+                          <span style={{ fontWeight: 600, color: '#0f172a', fontSize: 15 }}>{chartTitle}</span>
+                        </div>
+                      }
+                      style={{ 
+                        borderRadius: 12, 
+                        boxShadow: '0 2px 12px rgba(15,23,42,0.08)',
+                        border: '1px solid #e2e8f0',
+                        height: '100%'
+                      }}
+                      styles={{ 
+                        body: { padding: 16 },
+                        header: { padding: '16px 20px', borderBottom: '1px solid #e2e8f0' }
+                      }}
+                    >
+                      <div ref={(el) => { chartRefs.current[chartId] = el; }} style={{ background: '#ffffff' }}>
+                        <EChartRenderer 
+                          option={chartOption} 
+                          loading={loading} 
+                          height={300} 
+                        />
+                      </div>
+                    </Card>
+                  </Col>
+                );
+              })}
             </Row>
           )}
         </div>
