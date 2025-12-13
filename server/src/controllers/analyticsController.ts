@@ -428,30 +428,13 @@ export const getPersonalInfoRecords = async (req: Request, res: Response) => {
       query.residentType = residentType;
     }
 
-    // Fetch residents with necessary fields
-    const residents = await Resident.find(query).select({
-      _id: 1,
-      sex: 1,
-      age: 1,
-      occupation: 1,
-      nationality: 1,
-      bloodType: 1,
-      disabilityStatus: 1,
-      numberOfChildren: 1,
-      annualGrossIncome: 1,
-      educationalAttainment: 1,
-      maritalStatus: 1,
-      religion: 1,
-      businessType: 1,
-      numberOfEmployees: 1,
-      createdAt: 1,
-      barangayID: 1
-    }).lean()
+    // Fetch residents - return all fields
+    const residents = await Resident.find(query).lean().exec();
 
     // Return with data wrapper format expected by client
     res.json({
-      data: residents,
-      total: residents.length,
+      data: residents || [],
+      total: (residents || []).length,
       success: true
     });
   } catch (error) {
@@ -484,28 +467,23 @@ export const getDocumentRequests = async (req: Request, res: Response) => {
       query.barangayID = barangayID;
     }
 
-    // Fetch document requests with necessary fields
-    const documents = await DocumentRequest.find(query).select({
-      _id: 1,
-      documentType: 1,
-      status: 1,
-      createdAt: 1,
-      completedAt: 1,
-      residentID: 1,
-      barangayID: 1
-    }).lean();
+    // Fetch document requests - return all fields
+    const documents = await DocumentRequest.find(query).lean().exec();
 
     // Return with data wrapper format expected by client
     res.json({
-      data: documents,
-      total: documents.length,
+      data: documents || [],
+      total: (documents || []).length,
       success: true
     });
   } catch (error) {
     console.error('Error fetching document requests:', error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error('Full error details:', error);
     res.status(500).json({
       message: 'Error fetching document requests',
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: errorMsg,
+      details: error instanceof Error ? error.stack : undefined
     });
   }
 };
