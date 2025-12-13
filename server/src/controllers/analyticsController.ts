@@ -439,15 +439,14 @@ export const getPersonalInfoRecords = async (req: Request, res: Response) => {
       disabilityStatus: 1,
       numberOfChildren: 1,
       annualGrossIncome: 1,
-      education: 1,
-      civilStatus: 1,
+      educationalAttainment: 1,
+      maritalStatus: 1,
       religion: 1,
       businessType: 1,
       numberOfEmployees: 1,
       createdAt: 1,
-      residentType: 1,
       barangayID: 1
-    }).lean();
+    }).lean()
 
     // Return with data wrapper format expected by client
     res.json({
