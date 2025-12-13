@@ -1,13 +1,13 @@
 
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Typography, Button, Badge, Modal, Table, Tooltip, Checkbox, Tag, List, Space, message } from 'antd';
-import { FileTextOutlined, MailOutlined, NotificationOutlined, QuestionCircleOutlined } from '@ant-design/icons';
+import { Row, Col, Card, Typography, Button, Badge, Modal, Table, Tooltip, Checkbox, Tag, List, Space, Tabs, message } from 'antd';
+import { FileTextOutlined, MailOutlined, NotificationOutlined, QuestionCircleOutlined, CalendarOutlined, MessageOutlined } from '@ant-design/icons';
 import AvatarImage from './AvatarImage';
 import styles from './dashboard.module.css';
 import { getAbsoluteApiUrl } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { documentsAPI, contactAPI, verificationAPI } from '../services/api';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom'
 
 interface DocumentRequest {
   _id: string;
@@ -29,13 +29,25 @@ const Dashboard: React.FC = () => {
   const [, setLoading] = useState(true);
   const [announcementsCount, setAnnouncementsCount] = useState<number>(0);
   const [, setAnnouncementsLoading] = useState<boolean>(false);
+  const [announcementsLatestAt, setAnnouncementsLatestAt] = useState<string | null>(null);
+  const [hasUnreadAnnouncements, setHasUnreadAnnouncements] = useState<boolean>(false);
+  const [announcementsUnreadCount, setAnnouncementsUnreadCount] = useState<number>(0);
+  const [inquiriesLatestAt, setInquiriesLatestAt] = useState<string | null>(null);
+  const [hasUnreadInquiries, setHasUnreadInquiries] = useState<boolean>(false);
   const [inquiriesCount, setInquiriesCount] = useState<number>(0);
+  const [inquiriesUnreadCount, setInquiriesUnreadCount] = useState<number>(0);
   const [pendingModalVisible, setPendingModalVisible] = useState(false);
   const [pendingRequestsList, setPendingRequestsList] = useState<any[]>([]);
   const [pendingLoading, setPendingLoading] = useState(false);
   const [approvedModalVisible, setApprovedModalVisible] = useState(false);
   const [approvedRequestsList, setApprovedRequestsList] = useState<any[]>([]);
   const [approvedLoading, setApprovedLoading] = useState(false);
+  const [pendingLatestAt, setPendingLatestAt] = useState<string | null>(null);
+  const [approvedLatestAt, setApprovedLatestAt] = useState<string | null>(null);
+  const [hasUnreadPending, setHasUnreadPending] = useState<boolean>(false);
+  const [hasUnreadApproved, setHasUnreadApproved] = useState<boolean>(false);
+  const [pendingUnreadCount, setPendingUnreadCount] = useState<number>(0);
+  const [approvedUnreadCount, setApprovedUnreadCount] = useState<number>(0);
   const [tipsModalVisible, setTipsModalVisible] = useState(false);
   const [hideTips, setHideTips] = useState<boolean>(() => {
     try {
@@ -50,6 +62,14 @@ const Dashboard: React.FC = () => {
   const [appointmentsLoading, setAppointmentsLoading] = useState(false);
   const [apptModalVisible, setApptModalVisible] = useState(false);
   const [selectedAppt, setSelectedAppt] = useState<any | null>(null);
+  const [appointmentsSortBy, setAppointmentsSortBy] = useState<'latest' | 'upcoming'>('upcoming');
+  const [appointmentsScheduledCount, setAppointmentsScheduledCount] = useState<number>(0);
+  const [appointmentsPendingCount, setAppointmentsPendingCount] = useState<number>(0);
+  const [appointmentsCanceledCount, setAppointmentsCanceledCount] = useState<number>(0);
+  const [appointmentsCategoryModalVisible, setAppointmentsCategoryModalVisible] = useState(false);
+  const [appointmentsScheduled, setAppointmentsScheduled] = useState<any[]>([]);
+  const [appointmentsPending, setAppointmentsPending] = useState<any[]>([]);
+  const [appointmentsCanceled, setAppointmentsCanceled] = useState<any[]>([]);
 
   const formatDate = (val?: any) => {
     if (!val) return '';
@@ -70,6 +90,64 @@ const Dashboard: React.FC = () => {
           response = await documentsAPI.getMyDocuments();
         }
         setDocuments(response);
+        // compute latest timestamps for pending/approved to show unread indicators
+        try {
+          const list = Array.isArray(response) ? response : (response && response.data) ? response.data : [];
+          // pending
+          const pendingItems = (list || []).filter((d: any) => (d.status || '').toString().toLowerCase() === 'pending');
+          if (pendingItems.length) {
+            const latestPending = pendingItems.reduce((acc: string|null, cur: any) => {
+              const created = cur.createdAt || cur.updatedAt || null;
+              if (!created) return acc;
+              if (!acc) return created;
+              return new Date(created) > new Date(acc) ? created : acc;
+            }, null as string | null);
+            setPendingLatestAt(latestPending);
+            try {
+              const seen = localStorage.getItem('pending.seenAt');
+              const unread = pendingItems.filter((it: any) => {
+                const created = it.createdAt || it.updatedAt || it.date || null;
+                if (!created) return false;
+                if (!seen) return true;
+                return new Date(created) > new Date(seen);
+              }).length;
+              setPendingUnreadCount(unread);
+              setHasUnreadPending(unread > 0);
+            } catch (e) { setHasUnreadPending(true); setPendingUnreadCount(pendingItems.length); }
+          } else {
+            setPendingLatestAt(null);
+            setHasUnreadPending(false);
+            setPendingUnreadCount(0);
+          }
+          // approved
+          const approvedItems = (list || []).filter((d: any) => (d.status || '').toString().toLowerCase() === 'approved');
+          if (approvedItems.length) {
+            const latestApproved = approvedItems.reduce((acc: string|null, cur: any) => {
+              const created = cur.createdAt || cur.updatedAt || null;
+              if (!created) return acc;
+              if (!acc) return created;
+              return new Date(created) > new Date(acc) ? created : acc;
+            }, null as string | null);
+            setApprovedLatestAt(latestApproved);
+            try {
+              const seen = localStorage.getItem('approved.seenAt');
+              const unread = approvedItems.filter((it: any) => {
+                const created = it.createdAt || it.updatedAt || it.date || null;
+                if (!created) return false;
+                if (!seen) return true;
+                return new Date(created) > new Date(seen);
+              }).length;
+              setApprovedUnreadCount(unread);
+              setHasUnreadApproved(unread > 0);
+            } catch (e) { setHasUnreadApproved(true); setApprovedUnreadCount(approvedItems.length); }
+          } else {
+            setApprovedLatestAt(null);
+            setHasUnreadApproved(false);
+            setApprovedUnreadCount(0);
+          }
+        } catch (err) {
+          // ignore
+        }
       } catch (error) {
         console.error('Error fetching documents:', error);
       } finally {
@@ -130,8 +208,34 @@ const Dashboard: React.FC = () => {
       try {
         const res = await contactAPI.getMyInquiries();
         if (!mounted) return;
+        // Get all inquiries
+        const allInquiries = Array.isArray(res) ? res : (res && res.data) ? res.data : [];
+        
         // Keep only inquiries that have scheduledDates or status 'scheduled'
-        const list = (Array.isArray(res) ? res : (res && res.data) ? res.data : []).filter((r: any) => (r.scheduledDates && r.scheduledDates.length) || (r.status === 'scheduled'));
+        const list = allInquiries.filter((r: any) => (r.scheduledDates && r.scheduledDates.length) || (r.status === 'scheduled'));
+        
+        // Categorize by status - filter by SCHEDULE_APPOINTMENT type
+        const scheduledList = allInquiries.filter((r: any) => 
+          (r.type === 'SCHEDULE_APPOINTMENT') && 
+          ((r.status === 'scheduled' || (r.scheduledDates && r.scheduledDates.length)) && r.status !== 'resolved' && r.status !== 'canceled')
+        );
+        const pendingList = allInquiries.filter((r: any) => 
+          (r.type === 'SCHEDULE_APPOINTMENT') && 
+          r.status === 'pending'
+        );
+        const canceledList = allInquiries.filter((r: any) => 
+          (r.type === 'SCHEDULE_APPOINTMENT') && 
+          r.status === 'canceled'
+        );
+        
+        setAppointmentsScheduledCount(scheduledList.length);
+        setAppointmentsPendingCount(pendingList.length);
+        setAppointmentsCanceledCount(canceledList.length);
+        
+        setAppointmentsScheduled(scheduledList);
+        setAppointmentsPending(pendingList);
+        setAppointmentsCanceled(canceledList);
+        
         // normalize and sort by next appointment date
         const normalized = list.map((r: any) => {
           const next = (r.scheduledDates && r.scheduledDates.length) ? r.scheduledDates[0] : null;
@@ -145,6 +249,12 @@ const Dashboard: React.FC = () => {
       } catch (err) {
         console.error('Failed to load resident appointments', err);
         setAppointments([]);
+        setAppointmentsScheduledCount(0);
+        setAppointmentsPendingCount(0);
+        setAppointmentsCanceledCount(0);
+        setAppointmentsScheduled([]);
+        setAppointmentsPending([]);
+        setAppointmentsCanceled([]);
       } finally {
         setAppointmentsLoading(false);
       }
@@ -186,8 +296,35 @@ const Dashboard: React.FC = () => {
           res = await contactAPI.getMyInquiries();
         }
         // API may return array or object with count
-        if (Array.isArray(res)) setInquiriesCount(res.length);
-        else if (res && typeof res.count === 'number') setInquiriesCount(res.count);
+        if (Array.isArray(res)) {
+          // Exclude SCHEDULE_APPOINTMENT type inquiries
+          const filteredInquiries = res.filter((r: any) => r.type !== 'SCHEDULE_APPOINTMENT');
+          setInquiriesCount(filteredInquiries.length);
+          // compute latest inquiry timestamp for unread indicator
+          try {
+            const list = filteredInquiries;
+            if (Array.isArray(list) && list.length) {
+              const latest = list.reduce((acc: string|null, cur: any) => {
+                const created = cur.createdAt || cur.updatedAt || null;
+                if (!created) return acc;
+                if (!acc) return created;
+                return new Date(created) > new Date(acc) ? created : acc;
+              }, null as string | null);
+              setInquiriesLatestAt(latest);
+              try {
+                const seen = localStorage.getItem('inquiries.seenAt');
+                const unread = Array.isArray(list) ? list.filter((it: any) => {
+                  const created = it.createdAt || it.updatedAt || it.date || null;
+                  if (!created) return false;
+                  if (!seen) return true;
+                  return new Date(created) > new Date(seen);
+                }).length : 0;
+                setInquiriesUnreadCount(unread);
+                setHasUnreadInquiries(unread > 0);
+              } catch (e) { setHasUnreadInquiries(true); setInquiriesUnreadCount(list.length || 0); }
+            }
+          } catch (e) { /* ignore */ }
+        } else if (res && typeof res.count === 'number') setInquiriesCount(res.count);
         else setInquiriesCount((res && res.length) || 0);
       } catch (err) {
         console.error('Failed to load inquiries:', err);
@@ -203,6 +340,36 @@ const Dashboard: React.FC = () => {
         if (Array.isArray(res)) setAnnouncementsCount(res.length);
         else if (res && typeof res.count === 'number') setAnnouncementsCount(res.count);
         else setAnnouncementsCount((res && res.length) || 0);
+        // determine latest announcement timestamp to drive unread badge
+        try {
+          const list = Array.isArray(res) ? res : (res && res.data) ? res.data : [];
+          if (Array.isArray(list) && list.length) {
+            const latest = list.reduce((acc: string|null, cur: any) => {
+              const created = cur.createdAt || cur.updatedAt || cur.date || null;
+              if (!created) return acc;
+              if (!acc) return created;
+              return new Date(created) > new Date(acc) ? created : acc;
+            }, null as string | null);
+            setAnnouncementsLatestAt(latest);
+            try {
+              const seen = localStorage.getItem('announcements.seenAt');
+              const unread = Array.isArray(list) ? list.filter((it: any) => {
+                const created = it.createdAt || it.updatedAt || it.date || null;
+                if (!created) return false;
+                if (!seen) return true;
+                return new Date(created) > new Date(seen);
+              }).length : 0;
+              setAnnouncementsUnreadCount(unread);
+              setHasUnreadAnnouncements(unread > 0);
+            } catch (e) { setHasUnreadAnnouncements(true); setAnnouncementsUnreadCount(list.length || 0); }
+          } else {
+            setAnnouncementsLatestAt(null);
+            setHasUnreadAnnouncements(false);
+            setAnnouncementsUnreadCount(0);
+          }
+        } catch (e) {
+          // ignore parsing errors
+        }
       } catch (err) {
         console.error('Failed to fetch announcements:', err);
         setAnnouncementsCount(0);
@@ -212,6 +379,36 @@ const Dashboard: React.FC = () => {
     };
     fetchAnnouncements();
   }, [user]);
+
+  const getSortedAppointments = () => {
+    const sorted = [...appointments];
+    if (appointmentsSortBy === 'latest') {
+      // Sort by creation date (latest first)
+      return sorted.sort((a: any, b: any) => {
+        const da = new Date(a.createdAt).getTime();
+        const db = new Date(b.createdAt).getTime();
+        return db - da;
+      });
+    } else {
+      // Sort by upcoming appointment date (soonest first, excluding past dates)
+      const now = new Date();
+      return sorted
+        .map((appt: any) => {
+          const apptDate = appt.nextAppointment ? new Date(appt.nextAppointment.date) : null;
+          return { appt, apptDate };
+        })
+        .filter(({ apptDate }) => apptDate && apptDate >= now)
+        .sort((a, b) => (a.apptDate?.getTime() || 0) - (b.apptDate?.getTime() || 0))
+        .map(({ appt }) => appt)
+        .concat(
+          // Add past appointments at the end
+          sorted.filter((appt: any) => {
+            const apptDate = appt.nextAppointment ? new Date(appt.nextAppointment.date) : null;
+            return !apptDate || apptDate < now;
+          })
+        );
+    }
+  };
 
   const pendingCount = documents.filter(doc => (doc.status || '').toString().toLowerCase() === 'pending').length;
   const approvedCount = documents.filter(doc => (doc.status || '').toString().toLowerCase() === 'approved').length;
@@ -238,10 +435,11 @@ const Dashboard: React.FC = () => {
             style={{
               width: '100%',
               margin: '0 auto 32px',
-              borderRadius: 32,
-              boxShadow: '0 8px 32px #bfc7d6cc',
-              background: 'linear-gradient(120deg, #e3e6f3 0%, #f8fafc 60%, #f6f1f7 100%)',
-              border: 'none',
+              borderRadius: 14,
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)',
+              background: '#ffffff',
+              border: '1px solid #f0f0f0',
+              borderTop: '4px solid #1890ff',
               padding: 0,
               position: 'relative',
               overflow: 'hidden',
@@ -249,16 +447,6 @@ const Dashboard: React.FC = () => {
             }}
             styles={{ body: { padding: 0 } }}
           >
-            {/* Subtle pattern/gradient background */}
-            <div style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              height: '100%',
-              background: 'radial-gradient(circle at 80% 20%, #e3e6f3 0%, #f8fafc 60%, #f6f1f7 100%)',
-              opacity: 0.18,
-              zIndex: 0
-            }} />
             <Row align="middle" className={styles.heroRow} style={{ minHeight: 170, padding: '32px 32px', position: 'relative', zIndex: 1 }} justify="space-between">
               <Col xs={24} md={14} style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 18, width: '100%', justifyContent: 'space-between' }}>
@@ -291,8 +479,10 @@ const Dashboard: React.FC = () => {
                       {/* verification tag moved next to name (rendered in userInfo) */}
                     </div>
                     <div className={styles.userInfo}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div>
                         <Typography.Title level={3} className={styles.userName} style={{ marginBottom: 0, fontWeight: 800 }}>{user?.fullName ?? user?.username ?? user?.email ?? ''}</Typography.Title>
+                      </div>
+                      <div style={{ marginTop: 4 }}>
                         <Typography.Text type="secondary" className={styles.userMeta}>
                           Barangay ID: {user?.barangayID ?? (() => {
                             try {
@@ -322,17 +512,27 @@ const Dashboard: React.FC = () => {
             <Card
               hoverable
               style={{
-                borderRadius: 20,
-                minHeight: 170,
-                boxShadow: '0 2px 12px #faad1444',
-                transition: 'box-shadow 0.2s, transform 0.2s',
+                borderRadius: 14,
+                height: 240,
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)',
+                transition: 'all 0.2s ease',
                 padding: 0,
-                cursor: 'pointer'
+                cursor: 'pointer',
+                display: 'flex',
+                flexDirection: 'column',
+                background: '#ffffff',
+                border: '1px solid #f5f5f5',
+                borderTop: '4px solid #faad14',
+                position: 'relative',
+                overflow: 'hidden'
               }}
               onClick={async () => {
                 setPendingModalVisible(true);
                 setPendingLoading(true);
                 try {
+                  // mark pending as seen when opening
+                  try { if (pendingLatestAt) localStorage.setItem('pending.seenAt', pendingLatestAt); } catch (e) {}
+                  setHasUnreadPending(false);
                   let res;
                   if (user?.role === 'admin' || user?.role === 'staff') {
                     res = await documentsAPI.getAllDocuments();
@@ -348,13 +548,23 @@ const Dashboard: React.FC = () => {
                   setPendingLoading(false);
                 }
               }}
-              styles={{ body: { padding: 24 } }}
-              onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-6px) scale(1.03)'}
-              onMouseLeave={e => e.currentTarget.style.transform = 'none'}
+              styles={{ body: { padding: 24, display: 'flex', flexDirection: 'column', justifyContent: 'center', flex: 1 } }}
+              onMouseEnter={e => {
+                e.currentTarget.style.transform = 'translateY(-4px)';
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.1)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.transform = 'none';
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.06)';
+              }}
             >
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-                <div style={{ background: '#faad14', borderRadius: '50%', width: 54, height: 54, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
-                  <MailOutlined style={{ color: '#fff', fontSize: 28, transition: 'transform 0.2s' }} />
+                <div style={{ position: 'relative', marginBottom: 8 }}>
+                  <Badge className={styles.smallBadge} count={pendingUnreadCount} overflowCount={99} offset={[8, -6]} style={{ backgroundColor: '#ff4d4f' }}>
+                    <div style={{ background: '#faad14', borderRadius: '50%', width: 54, height: 54, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <MailOutlined style={{ color: '#fff', fontSize: 28, transition: 'transform 0.2s' }} />
+                    </div>
+                  </Badge>
                 </div>
                 <Typography.Title level={2} style={{ margin: 0, fontWeight: 800 }}>{pendingCount}</Typography.Title>
                 <Typography.Text style={{ fontSize: 18, color: '#faad14', fontWeight: 700 }}>Pending Requests</Typography.Text>
@@ -366,17 +576,27 @@ const Dashboard: React.FC = () => {
             <Card
               hoverable
               style={{
-                borderRadius: 20,
-                minHeight: 170,
-                boxShadow: '0 2px 12px #52c41a44',
-                transition: 'box-shadow 0.2s, transform 0.2s',
+                borderRadius: 14,
+                height: 240,
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)',
+                transition: 'all 0.2s ease',
                 padding: 0,
-                cursor: 'pointer'
+                cursor: 'pointer',
+                display: 'flex',
+                flexDirection: 'column',
+                background: '#ffffff',
+                border: '1px solid #f5f5f5',
+                borderTop: '4px solid #52c41a',
+                position: 'relative',
+                overflow: 'hidden'
               }}
-              styles={{ body: { padding: 24 } }}
+              styles={{ body: { padding: 24, display: 'flex', flexDirection: 'column', justifyContent: 'center', flex: 1 } }}
               onClick={async () => {
                 setApprovedModalVisible(true);
                 setApprovedLoading(true);
+                // mark approved as seen when opening
+                try { if (approvedLatestAt) localStorage.setItem('approved.seenAt', approvedLatestAt); } catch (e) {}
+                setHasUnreadApproved(false);
                 try {
                   let res;
                   if (user?.role === 'admin' || user?.role === 'staff') {
@@ -393,12 +613,22 @@ const Dashboard: React.FC = () => {
                   setApprovedLoading(false);
                 }
               }}
-              onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-6px) scale(1.03)'}
-              onMouseLeave={e => e.currentTarget.style.transform = 'none'}
+              onMouseEnter={e => {
+                e.currentTarget.style.transform = 'translateY(-4px)';
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.1)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.transform = 'none';
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.06)';
+              }}
             >
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-                <div style={{ background: '#52c41a', borderRadius: '50%', width: 54, height: 54, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
-                  <FileTextOutlined style={{ color: '#fff', fontSize: 28, transition: 'transform 0.2s' }} />
+                <div style={{ position: 'relative', marginBottom: 8 }}>
+                  <Badge className={styles.smallBadge} count={approvedUnreadCount} overflowCount={99} offset={[8, -6]} style={{ backgroundColor: '#ff4d4f' }}>
+                    <div style={{ background: '#52c41a', borderRadius: '50%', width: 54, height: 54, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <FileTextOutlined style={{ color: '#fff', fontSize: 28, transition: 'transform 0.2s' }} />
+                    </div>
+                  </Badge>
                 </div>
                 <Typography.Title level={2} style={{ margin: 0, fontWeight: 800 }}>{approvedCount}</Typography.Title>
                 <Typography.Text style={{ fontSize: 18, color: '#52c41a', fontWeight: 700 }}>Approved Documents</Typography.Text>
@@ -410,52 +640,85 @@ const Dashboard: React.FC = () => {
             <Card
               hoverable
               style={{
-                borderRadius: 20,
-                minHeight: 170,
-                boxShadow: '0 2px 12px #1890ff44',
-                transition: 'box-shadow 0.2s, transform 0.2s',
+                borderRadius: 14,
+                height: 240,
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)',
+                transition: 'all 0.2s ease',
                 padding: 0,
-                cursor: 'pointer'
+                cursor: 'pointer',
+                display: 'flex',
+                flexDirection: 'column',
+                background: '#ffffff',
+                border: '1px solid #f5f5f5',
+                borderTop: '4px solid #8b5cf6',
+                position: 'relative',
+                overflow: 'hidden'
               }}
-              onClick={() => navigate('/inbox')}
-              styles={{ body: { padding: 24 } }}
-              onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-6px) scale(1.03)'}
-              onMouseLeave={e => e.currentTarget.style.transform = 'none'}
+              styles={{ body: { padding: 24, display: 'flex', flexDirection: 'column', justifyContent: 'center', flex: 1 } }}
+              onClick={() => setAppointmentsCategoryModalVisible(true)}
+              onMouseEnter={e => {
+                e.currentTarget.style.transform = 'translateY(-4px)';
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.1)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.transform = 'none';
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.06)';
+              }}
             >
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-                <div style={{ background: '#1890ff', borderRadius: '50%', width: 54, height: 54, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
-                  <MailOutlined style={{ color: '#fff', fontSize: 28, transition: 'transform 0.2s' }} />
+                <div style={{ position: 'relative', marginBottom: 8 }}>
+                  <div style={{ background: '#8b5cf6', borderRadius: '50%', width: 54, height: 54, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <CalendarOutlined style={{ color: '#fff', fontSize: 28, transition: 'transform 0.2s' }} />
+                  </div>
                 </div>
-                <Typography.Title level={2} style={{ margin: 0, fontWeight: 800 }}>{inquiriesCount}</Typography.Title>
-                <Typography.Text style={{ fontSize: 18, color: '#1890ff', fontWeight: 700 }}>Active Inquiries</Typography.Text>
-                {/* subtitle and action button removed */}
+                <Typography.Title level={2} style={{ margin: 0, fontWeight: 800 }}>{appointmentsScheduledCount + appointmentsPendingCount + appointmentsCanceledCount}</Typography.Title>
+                <Typography.Text style={{ fontSize: 18, color: '#8b5cf6', fontWeight: 700 }}>Appointments</Typography.Text>
               </div>
             </Card>
           </Col>
           <Col xs={24} sm={12} md={6}>
             <Card
-              onClick={() => navigate('/announcements')}
               hoverable
               style={{
-                borderRadius: 20,
-                minHeight: 170,
-                boxShadow: '0 2px 12px #eb2f9644',
-                transition: 'box-shadow 0.2s, transform 0.2s',
+                borderRadius: 14,
+                height: 240,
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)',
+                transition: 'all 0.2s ease',
                 padding: 0,
-                cursor: 'pointer'
+                cursor: 'pointer',
+                display: 'flex',
+                flexDirection: 'column',
+                background: '#ffffff',
+                border: '1px solid #f5f5f5',
+                borderTop: '4px solid #0891b2',
+                position: 'relative',
+                overflow: 'hidden'
               }}
-              styles={{ body: { padding: 24 } }}
-              onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-6px) scale(1.03)'}
-              onMouseLeave={e => e.currentTarget.style.transform = 'none'}
+              onClick={() => {
+                try { if (inquiriesLatestAt) localStorage.setItem('inquiries.seenAt', inquiriesLatestAt); } catch (e) {}
+                setHasUnreadInquiries(false);
+                navigate('/inbox');
+              }}
+              styles={{ body: { padding: 24, display: 'flex', flexDirection: 'column', justifyContent: 'center', flex: 1 } }}
+              onMouseEnter={e => {
+                e.currentTarget.style.transform = 'translateY(-4px)';
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.1)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.transform = 'none';
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.06)';
+              }}
             >
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-                <div style={{ background: '#eb2f96', borderRadius: '50%', width: 54, height: 54, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
-                  <Badge count={announcementsCount} offset={[8, 0]}>
-                    <NotificationOutlined style={{ color: '#fff', fontSize: 28, transition: 'transform 0.2s' }} />
+                <div style={{ position: 'relative', marginBottom: 8 }}>
+                  <Badge className={styles.smallBadge} count={inquiriesUnreadCount} overflowCount={99} offset={[8, -6]} style={{ backgroundColor: '#ff4d4f' }}>
+                    <div style={{ background: '#0891b2', borderRadius: '50%', width: 54, height: 54, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <MessageOutlined style={{ color: '#fff', fontSize: 28, transition: 'transform 0.2s' }} />
+                    </div>
                   </Badge>
                 </div>
-                <Typography.Title level={2} style={{ margin: 0, fontWeight: 800 }}>{announcementsCount}</Typography.Title>
-                <Typography.Text style={{ fontSize: 18, color: '#eb2f96', fontWeight: 700 }}>Announcements</Typography.Text>
+                <Typography.Title level={2} style={{ margin: 0, fontWeight: 800 }}>{inquiriesCount}</Typography.Title>
+                <Typography.Text style={{ fontSize: 18, color: '#0891b2', fontWeight: 700 }}>Active Inquiries</Typography.Text>
                 {/* subtitle and action button removed */}
               </div>
             </Card>
@@ -465,11 +728,47 @@ const Dashboard: React.FC = () => {
         {/* Resident Appointments (only for residents) */}
         {user?.role === 'resident' && (
           <div style={{ marginBottom: 28 }}>
-            <Card title="Your Appointments" bordered={false} style={{ borderRadius: 12 }}>
+            <Card 
+              title="Your Appointments" 
+              bordered={false} 
+              style={{ 
+                borderRadius: 14,
+                background: '#ffffff',
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)',
+                border: '1px solid #f5f5f5',
+                borderTop: '4px solid #8b5cf6',
+                position: 'relative',
+                overflow: 'hidden'
+              }}
+              extra={
+                <Space>
+                  <span style={{ fontSize: 12, color: '#666' }}>Sort by:</span>
+                  <select 
+                    value={appointmentsSortBy} 
+                    onChange={(e) => setAppointmentsSortBy(e.target.value as 'latest' | 'upcoming')}
+                    style={{
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      border: '1px solid #d9d9d9',
+                      fontSize: '12px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="upcoming">Upcoming</option>
+                    <option value="latest">Latest</option>
+                  </select>
+                </Space>
+              }
+            >
               <List
                 loading={appointmentsLoading}
-                dataSource={appointments}
+                dataSource={getSortedAppointments()}
                 locale={{ emptyText: 'No scheduled appointments' }}
+                pagination={{
+                  pageSize: 5,
+                  showSizeChanger: false,
+                  showTotal: (total, range) => `${range[0]}-${range[1]} of ${total}`,
+                }}
                 renderItem={(item: any) => {
                   const next = item.nextAppointment;
                   const dateLabel = next ? new Date(next.date).toLocaleDateString() : 'N/A';
@@ -479,7 +778,7 @@ const Dashboard: React.FC = () => {
                     <List.Item
                       actions={[
                         <Button key="view" type="link" onClick={() => { setSelectedAppt(item); setApptModalVisible(true); }}>View</Button>,
-                        <Button key="cancel" type="link" danger onClick={async () => {
+                        <Button key="cancel" type="link" danger disabled={item.status === 'canceled'} onClick={async () => {
                           Modal.confirm({
                             title: 'Cancel appointment',
                             content: 'Are you sure you want to cancel this appointment? This will mark the inquiry as resolved.',
@@ -501,8 +800,8 @@ const Dashboard: React.FC = () => {
                       ]}
                     >
                       <List.Item.Meta
-                        avatar={<div style={{ width: 52, height: 52, borderRadius: 8, background: '#f5f7fb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FileTextOutlined style={{ color: '#1890ff', fontSize: 20 }} /></div>}
-                        title={<div style={{ display: 'flex', gap: 12, alignItems: 'center' }}><strong>{item.subject || 'Appointment'}</strong> <Tag color={status === 'scheduled' ? 'blue' : (status === 'resolved' ? 'default' : 'orange')}>{status}</Tag></div>}
+                        avatar={<div style={{ width: 52, height: 52, borderRadius: 8, background: '#f5f7fb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CalendarOutlined style={{ color: '#722ed1', fontSize: 20 }} /></div>}
+                        title={<div style={{ display: 'flex', gap: 12, alignItems: 'center' }}><strong>{item.subject || 'Appointment'}</strong> <Tag color={status === 'scheduled' ? 'blue' : (status === 'resolved' ? 'default' : (status === 'canceled' ? 'red' : 'orange'))}>{status}</Tag></div>}
                         description={<div><div style={{ fontWeight: 600 }}>{dateLabel} · {timeLabel}</div><div style={{ color: '#666', marginTop: 6 }}>{item.message || ''}</div></div>}
                       />
                     </List.Item>
@@ -625,6 +924,7 @@ const Dashboard: React.FC = () => {
             <li>All document requests are processed during office hours only.</li>
           </ul>
         </Modal>
+
         {/* Floating help button (bottom-right) */}
         <div style={{ position: 'fixed', right: 20, bottom: 24, zIndex: 1050 }}>
           <Tooltip title={hideTips ? 'Tips hidden (will remain hidden if checked)' : 'Resident Tool Tips'}>
@@ -659,18 +959,182 @@ const Dashboard: React.FC = () => {
         >
           {selectedAppt ? (
             <div>
-              <Typography.Title level={4}>{selectedAppt.subject || 'Appointment'}</Typography.Title>
-              <Typography.Paragraph>{selectedAppt.message}</Typography.Paragraph>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography.Title level={4} style={{ marginBottom: 4 }}>{selectedAppt.subject || 'Appointment'}</Typography.Title>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ marginBottom: 6 }}>
+                    <Tag color={selectedAppt.status === 'canceled' ? 'red' : (selectedAppt.status === 'scheduled' ? 'blue' : 'orange')}>{selectedAppt.status || (selectedAppt.scheduledDates && selectedAppt.scheduledDates.length ? 'scheduled' : 'pending')}</Tag>
+                  </div>
+                  <div style={{ fontSize: 12, color: '#666' }}>Created: {formatDate(selectedAppt.createdAt)}</div>
+                </div>
+              </div>
+
+              {selectedAppt.message && <Typography.Paragraph style={{ marginTop: 8 }}>{selectedAppt.message}</Typography.Paragraph>}
+
               <div style={{ marginTop: 12 }}>
-                <strong>Scheduled Dates:</strong>
+                <strong>Scheduled Appointment Dates:</strong>
                 <ul>
-                  {(selectedAppt.scheduledDates || []).map((s: any, i: number) => (
-                    <li key={i}>{new Date(s.date).toLocaleDateString()} — {s.startTime} to {s.endTime}</li>
-                  ))}
+                  {(selectedAppt.scheduledDates || []).map((s: any, i: number) => {
+                    const rawDate = s && (s.date || s);
+                    const d = rawDate ? new Date(rawDate) : null;
+                    const dateLabel = d && !isNaN(d.getTime()) ? d.toLocaleDateString() : 'Invalid Date';
+                    const start = s && (s.startTime || s.start || s.time) || '—';
+                    const end = s && (s.endTime || s.end) || '—';
+                    return (<li key={i}>{dateLabel} — {start} to {end}</li>);
+                  })}
                 </ul>
               </div>
+
+              {(selectedAppt.appointmentDates && selectedAppt.appointmentDates.length > 0) && (
+                <div style={{ marginTop: 12 }}>
+                  <strong>Preferred Appointment Dates:</strong>
+                  <ul>
+                    {(selectedAppt.appointmentDates || []).map((s: any, i: number) => {
+                      const rawDate = s && (s.date || s);
+                      const d = rawDate ? new Date(rawDate) : null;
+                      const dateLabel = d && !isNaN(d.getTime()) ? d.toLocaleDateString() : 'Invalid Date';
+                      const timeLabel = s && (s.startTime || s.time || s.start) || '—';
+                      return (<li key={i}>{dateLabel} — {timeLabel}</li>);
+                    })}
+                  </ul>
+                </div>
+              )}
+
+              {selectedAppt.status === 'canceled' || selectedAppt.cancellationReason ? (
+                <div style={{ marginTop: 12 }}>
+                  <strong style={{ color: '#d93025' }}>Cancellation</strong>
+                  <div style={{ marginTop: 6, color: '#666' }}>Canceled At: {formatDate(selectedAppt.canceledAt || selectedAppt.updatedAt || selectedAppt.cancelledAt)}</div>
+                  {selectedAppt.cancellationReason && (
+                    <div style={{ marginTop: 8 }}>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                        <strong style={{ color: '#d93025', fontWeight: 800, fontSize: 14 }}>Reason:</strong>
+                        <span style={{ color: '#7a1212', background: '#fff2f2', padding: '6px 10px', borderRadius: 6, fontWeight: 600, boxShadow: 'inset 0 0 0 1px rgba(217,48,37,0.06)' }}>{selectedAppt.cancellationReason}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+
+              {/* Messages / Responses */}
+              {( (selectedAppt.messages && selectedAppt.messages.length) || (selectedAppt.responses && selectedAppt.responses.length) ) ? (
+                <div style={{ marginTop: 16 }}>
+                  <strong>Messages</strong>
+                  <List
+                    dataSource={(selectedAppt.messages && selectedAppt.messages.length) ? selectedAppt.messages : selectedAppt.responses}
+                    renderItem={(m: any, idx: number) => (
+                      <List.Item key={idx} style={{ paddingLeft: 0, paddingRight: 0 }}>
+                        <div style={{ width: '100%' }}>
+                          <div style={{ fontWeight: 600 }}>{m.username || m.from || m.author || (m.sender && m.sender.username) || 'Staff'}</div>
+                          <div style={{ fontSize: 13, color: '#666' }}>{m.message || m.body || m.text || ''}</div>
+                          <div style={{ fontSize: 12, color: '#999', marginTop: 6 }}>{formatDate(m.createdAt || m.date || m.timestamp)}</div>
+                        </div>
+                      </List.Item>
+                    )}
+                  />
+                </div>
+              ) : null}
+
+              {selectedAppt.attachments && selectedAppt.attachments.length > 0 && (
+                <div style={{ marginTop: 12 }}>
+                  <strong>Attachments</strong>
+                  <ul>
+                    {selectedAppt.attachments.map((a: any, i: number) => (
+                      <li key={i}><a href={a.url || a} target="_blank" rel="noreferrer">{a.name || a.filename || `Attachment ${i+1}`}</a></li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div style={{ marginTop: 12, fontSize: 12, color: '#999' }}>Last updated: {formatDate(selectedAppt.updatedAt || selectedAppt.modifiedAt)}</div>
             </div>
           ) : <div>No appointment selected</div>}
+        </Modal>
+
+        {/* Appointments Category Modal */}
+        <Modal
+          title="Appointments"
+          open={appointmentsCategoryModalVisible}
+          onCancel={() => setAppointmentsCategoryModalVisible(false)}
+          footer={null}
+          width={700}
+          centered
+        >
+          <Tabs defaultActiveKey="scheduled" type="line">
+            <Tabs.TabPane tab={`Scheduled (${appointmentsScheduledCount})`} key="scheduled">
+              {appointmentsScheduled.length > 0 ? (
+                <List
+                  dataSource={appointmentsScheduled}
+                  renderItem={(item: any) => (
+                    <List.Item
+                      key={item._id}
+                      style={{ paddingLeft: 0, paddingRight: 0, borderBottom: '1px solid #f0f0f0' }}
+                      actions={[<Button key="view" type="link" onClick={() => { setSelectedAppt(item); setApptModalVisible(true); }}>View</Button>]}
+                    >
+                      <div style={{ width: '100%' }}>
+                        <div style={{ fontWeight: 600, marginBottom: 4 }}>{item.subject || 'Appointment'}</div>
+                        <div style={{ fontSize: 13, color: '#666' }}>
+                          {item.scheduledDates && item.scheduledDates.length > 0
+                            ? `${new Date(item.scheduledDates[0].date).toLocaleDateString()} — ${item.scheduledDates[0].startTime}`
+                            : 'No date scheduled'
+                          }
+                        </div>
+                      </div>
+                    </List.Item>
+                  )}
+                />
+              ) : (
+                <Typography.Text type="secondary">No scheduled appointments</Typography.Text>
+              )}
+            </Tabs.TabPane>
+
+            <Tabs.TabPane tab={`Pending (${appointmentsPendingCount})`} key="pending">
+              {appointmentsPending.length > 0 ? (
+                <List
+                  dataSource={appointmentsPending}
+                  renderItem={(item: any) => (
+                    <List.Item
+                      key={item._id}
+                      style={{ paddingLeft: 0, paddingRight: 0, borderBottom: '1px solid #f0f0f0' }}
+                      actions={[<Button key="view" type="link" onClick={() => { setSelectedAppt(item); setApptModalVisible(true); }}>View</Button>]}
+                    >
+                      <div style={{ width: '100%' }}>
+                        <div style={{ fontWeight: 600, marginBottom: 4 }}>{item.subject || 'Appointment'}</div>
+                        <div style={{ fontSize: 13, color: '#666' }}>
+                          Requested: {new Date(item.createdAt).toLocaleDateString()}
+                        </div>
+                      </div>
+                    </List.Item>
+                  )}
+                />
+              ) : (
+                <Typography.Text type="secondary">No pending appointments</Typography.Text>
+              )}
+            </Tabs.TabPane>
+
+            <Tabs.TabPane tab={`Canceled (${appointmentsCanceledCount})`} key="canceled">
+              {appointmentsCanceled.length > 0 ? (
+                <List
+                  dataSource={appointmentsCanceled}
+                  renderItem={(item: any) => (
+                    <List.Item
+                      key={item._id}
+                      style={{ paddingLeft: 0, paddingRight: 0, borderBottom: '1px solid #f0f0f0' }}
+                      actions={[<Button key="view" type="link" onClick={() => { setSelectedAppt(item); setApptModalVisible(true); }}>View</Button>]}
+                    >
+                      <div style={{ width: '100%' }}>
+                        <div style={{ fontWeight: 600, marginBottom: 4 }}>{item.subject || 'Appointment'}</div>
+                        <div style={{ fontSize: 13, color: '#666' }}>
+                          Canceled: {new Date(item.updatedAt || item.createdAt).toLocaleDateString()}
+                        </div>
+                      </div>
+                    </List.Item>
+                  )}
+                />
+              ) : (
+                <Typography.Text type="secondary">No canceled appointments</Typography.Text>
+              )}
+            </Tabs.TabPane>
+          </Tabs>
         </Modal>
 
         {/* ...other dashboard sections... */}
@@ -681,3 +1145,5 @@ const Dashboard: React.FC = () => {
 
 export default Dashboard;
                 
+
+

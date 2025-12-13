@@ -8,7 +8,7 @@
 .heroRow .avatarContainer {
   width: 96px;
   height: 96px;
-  border-radius: 12px;
+  border-radius: 50%;
   overflow: hidden;
   background: #fff;
   display: flex;
@@ -21,7 +21,7 @@
   width: 96px;
   height: 96px;
   object-fit: cover;
-  border-radius: 12px;
+  border-radius: 50%;
 }
 
 /* explicit class for runtime-inserted img elements when using CSS modules */
@@ -29,7 +29,7 @@
   width: 96px;
   height: 96px;
   object-fit: cover;
-  border-radius: 12px;
+  border-radius: 50%;
   display: block;
 }
 
@@ -80,11 +80,12 @@
   .heroRow .avatarContainer {
     width: 80px;
     height: 80px;
-    border-radius: 10px;
+    border-radius: 50%;
   }
   .heroRow .avatarContainer img {
     width: 80px;
     height: 80px;
+    border-radius: 50%;
   }
   .heroRow .userInfo {
     margin-top: 12px;
@@ -107,11 +108,12 @@
   .heroRow .avatarContainer {
     width: 64px;
     height: 64px;
-    border-radius: 10px;
+    border-radius: 50%;
   }
   .heroRow .avatarContainer img {
     width: 64px;
     height: 64px;
+    border-radius: 50%;
   }
   .heroRow .userName {
     font-size: 16px;
@@ -151,4 +153,93 @@
 .verificationUnderAvatar .ant-tag {
   font-size: 12px;
   padding: 0 8px;
+}
+
+/* Small badge adjustments (scoped via .smallBadge class) */
+.smallBadge .ant-badge-count {
+  /* default slightly tighter badge */
+  min-width: 20px;
+  height: 20px;
+  line-height: 20px;
+  padding: 0 6px;
+  font-size: 12px;
+  border-radius: 10px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+  transition: all 0.15s ease;
+}
+
+@media (max-width: 768px) {
+  .smallBadge .ant-badge-count {
+    min-width: 18px;
+    height: 18px;
+    line-height: 18px;
+    padding: 0 5px;
+    font-size: 10px;
+    border-radius: 9px;
+  }
+}
+
+@media (max-width: 420px) {
+  .smallBadge .ant-badge-count {
+    min-width: 16px;
+    height: 16px;
+    line-height: 16px;
+    padding: 0 4px;
+    font-size: 9px;
+    border-radius: 8px;
+  }
+}
+
+/* Responsive dashboard statistics cards */
+.statisticsCard {
+  border-radius: 20px;
+  transition: box-shadow 0.2s, transform 0.2s;
+  padding: 0;
+  cursor: pointer;
+}
+
+.statisticsCard :global(.ant-card-body) {
+  padding: 24px;
+}
+
+@media (max-width: 1200px) {
+  .statisticsCard :global(.ant-card-body) {
+    padding: 20px;
+  }
+  
+  .statisticsCard :global(.ant-typography-heading-2) {
+    font-size: 28px;
+  }
+  
+  .statisticsCard :global(.ant-typography-text) {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 768px) {
+  .statisticsCard :global(.ant-card-body) {
+    padding: 18px;
+  }
+  
+  .statisticsCard :global(.ant-typography-heading-2) {
+    font-size: 24px;
+  }
+  
+  .statisticsCard :global(.ant-typography-text) {
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .statisticsCard :global(.ant-card-body) {
+    padding: 16px;
+  }
+  
+  .statisticsCard :global(.ant-typography-heading-2) {
+    font-size: 20px;
+  }
+  
+  .statisticsCard :global(.ant-typography-text) {
+    font-size: 12px;
+  }
 }

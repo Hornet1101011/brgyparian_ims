@@ -12,7 +12,7 @@ const DailyAppointmentsCard: React.FC = () => {
   });
 
   return (
-    <Card title="Today's Appointments" size="small" className="dashboard-card">
+    <>
       {isLoading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}><Spin /></div>
       ) : error ? (
@@ -21,35 +21,87 @@ const DailyAppointmentsCard: React.FC = () => {
         <Empty description="No data" />
       ) : (
         <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-            <div>
-              <Typography.Text strong>Total scheduled: </Typography.Text>
-              <Typography.Text>{data.totalScheduledToday}</Typography.Text>
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: '1fr 1fr',
+            gap: 12,
+            marginBottom: 16,
+            padding: '12px',
+            background: '#faf5ff',
+            borderRadius: 10
+          }}>
+            <div style={{ borderRight: '1px solid #ede9fe', paddingRight: 12 }}>
+              <Typography.Text type="secondary" style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Total Scheduled
+              </Typography.Text>
+              <div style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', marginTop: 4 }}>
+                {data.totalScheduledToday}
+              </div>
             </div>
-            <div>
-              <Typography.Text strong>Open slots left: </Typography.Text>
-              <Typography.Text>{data.totalAvailableSlotsToday}</Typography.Text>
+            <div style={{ paddingLeft: 12 }}>
+              <Typography.Text type="secondary" style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Available Slots
+              </Typography.Text>
+              <div style={{ fontSize: '24px', fontWeight: 700, color: '#8b5cf6', marginTop: 4 }}>
+                {data.totalAvailableSlotsToday}
+              </div>
             </div>
           </div>
+          
           <div>
-            <Typography.Text strong>Upcoming (2 hrs)</Typography.Text>
+            <Typography.Text strong style={{ fontSize: '12px', color: '#1f2937', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Upcoming (Next 2 Hours)
+            </Typography.Text>
             {Array.isArray(data.nextAppointments) && data.nextAppointments.length > 0 ? (
               <List
                 size="small"
                 dataSource={data.nextAppointments}
+                split={false}
+                style={{ marginTop: 8 }}
                 renderItem={item => (
-                  <List.Item>
-                    <Typography.Text>{`${item.startTime}–${item.endTime} – ${item.residentName}`}</Typography.Text>
+                  <List.Item
+                    style={{ 
+                      padding: '10px 8px',
+                      borderRadius: 8,
+                      transition: 'all 0.2s ease',
+                      marginBottom: 4,
+                      border: '1px solid transparent'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#faf5ff';
+                      e.currentTarget.style.borderColor = '#ede9fe';
+                      e.currentTarget.style.boxShadow = '0 2px 6px rgba(139, 92, 246, 0.08)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                      e.currentTarget.style.borderColor = 'transparent';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                  >
+                    <div style={{ width: '100%' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Typography.Text strong style={{ fontSize: '13px', color: '#0f172a' }}>
+                          {item.residentName}
+                        </Typography.Text>
+                        <Typography.Text type="secondary" style={{ fontSize: '12px', color: '#8b5cf6', fontWeight: 600 }}>
+                          {item.startTime}–{item.endTime}
+                        </Typography.Text>
+                      </div>
+                    </div>
                   </List.Item>
                 )}
               />
             ) : (
-              <div style={{ marginTop: 8 }}><Typography.Text type="secondary">No upcoming appointments</Typography.Text></div>
+              <div style={{ marginTop: 8, padding: '12px', background: '#f9fafb', borderRadius: 8, textAlign: 'center' }}>
+                <Typography.Text type="secondary" style={{ fontSize: '12px' }}>
+                  No upcoming appointments
+                </Typography.Text>
+              </div>
             )}
           </div>
         </div>
       )}
-    </Card>
+    </>
   );
 };
 

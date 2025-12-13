@@ -1,0 +1,29 @@
+/* Message Inbox List Styling */
+.message-inbox-item {
+  border-radius: 12px !important;
+}
+
+.message-inbox-item:hover {
+  background: linear-gradient(135deg, rgba(64, 201, 255, 0.1) 0%, rgba(232, 28, 255, 0.1) 100%) !important;
+}
+
+/* Ant Design List customizations for modern look */
+.ant-list-header {
+  padding: 0 0 16px 0 !important;
+  border-bottom: none !important;
+}
+
+.ant-list-item {
+  padding-inline: 0 !important;
+}
+
+/* Badge customizations */
+.ant-badge {
+  display: flex !important;
+  gap: 12px;
+}
+
+/* Typography adjustments for better hierarchy */
+.message-inbox-item .ant-typography {
+  line-height: 1.5;
+}

@@ -9,133 +9,453 @@
   gap: 12px;
 }
 
-
-@media (max-width: 600px) {
-  .responsive-system-title {
-    font-size: 1.1rem !important;
-    word-break: normal !important;
-    text-align: left !important;
-    padding: 0 4px !important;
-    overflow: hidden !important;
-    position: relative !important;
-    width: auto !important;
-    max-width: calc(100% - 120px) !important; /* leave room for date/avatar */
-  }
-  /* Disable marquee/animation on small screens to avoid layout shifts */
-  .responsive-system-title > span,
-  .responsive-system-title span {
-    display: inline-block !important;
-    min-width: 0 !important;
-    animation: none !important;
-    transform: none !important;
-  }
-}
-
-@keyframes slide-title {
-  0% {
-    transform: translateX(100%);
-  }
-  10% {
-    transform: translateX(0%);
-  }
-  90% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(-100%);
-  }
-}
-
-/* Header responsiveness and icon preserve */
+/* Base Header Responsive Styles */
 .app-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   box-sizing: border-box;
+  width: 100%;
 }
+
 .app-header .responsive-system-title img,
 .app-header img {
   object-fit: contain;
-}
-.app-header .responsive-system-title .title-logo {
-  /* make the logo scale with the title font-size so it stays aligned */
-  height: 1.4em; /* larger than the title by default */
-  width: auto;
-  vertical-align: middle;
-  margin-right: 0.6rem;
-  display: inline-block;
-  /* subtle lift for better separation from white background */
-  filter: drop-shadow(0 6px 12px rgba(0,0,0,0.08));
-  transition: filter 160ms ease, transform 160ms ease;
-}
-.app-header .responsive-system-title .title-main {
-  /* Fluid sizing: grows with viewport but clamps to sensible min/max */
-  font-size: clamp(18px, 2.6vw + 10px, 40px);
-  font-weight: 600;
-  display: inline-block;
-  max-width: 100%;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  /* Gradient text */
-  background: linear-gradient(90deg, #40c9ff 0%, #e81cff 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-.app-header .ant-avatar {
-  width: 36px !important;
-  height: 36px !important;
+  flex-shrink: 0;
 }
 
-.app-header .responsive-system-title { flex: 1 1 auto; min-width: 0; }
-.app-header .header-controls { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-
-@media (max-width: 900px) {
-  .app-header {
-    padding: 0 12px !important;
-  }
-  .app-header .responsive-system-title .title-main {
-    font-size: clamp(16px, 2.4vw + 8px, 30px) !important;
-  }
-  .app-header .responsive-system-title .title-logo {
-    height: 1.25em;
-  }
-  .app-header .ant-avatar {
-    width: 28px !important;
-    height: 28px !important;
-  }
+.app-header .responsive-system-title {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
-@media (max-width: 480px) {
+.app-header .header-controls {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+/* ============================================
+   BREAKPOINT: Small Phones (320px - 374px)
+   e.g., iPhone SE, older Android devices
+   ============================================ */
+@media (max-width: 374px) {
   .app-header {
     padding: 0 8px !important;
+    height: 48px !important;
   }
+
   .app-header .responsive-system-title {
-    gap: 8px !important;
+    gap: 6px !important;
   }
-  .app-header .responsive-system-title .title-main {
-    font-size: clamp(14px, 3.6vw, 22px) !important;
-  }
-  .app-header .responsive-system-title .title-logo {
-    height: 1.05em;
-  }
-  .app-header .ant-avatar {
+
+  .app-header .responsive-system-title img {
     width: 24px !important;
     height: 24px !important;
   }
+
+  .app-header .ant-btn-circle {
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+    font-size: 12px !important;
+  }
+
+  .app-header .date-time {
+    font-size: 10px !important;
+    display: none !important;
+  }
+
+  .responsive-system-title > span {
+    font-size: 12px !important;
+  }
 }
 
-/* Tweak DateTimeDisplay appearance */
-.app-header .date-time {
-  font-size: 13px;
-  color: #666;
+/* ============================================
+   BREAKPOINT: Standard Phones (375px - 412px)
+   e.g., iPhone 12/13/14, common Android (360x800)
+   ============================================ */
+@media (min-width: 375px) and (max-width: 412px) {
+  .app-header {
+    padding: 0 10px !important;
+    height: 52px !important;
+  }
+
+  .app-header .responsive-system-title {
+    gap: 8px !important;
+  }
+
+  .app-header .responsive-system-title img {
+    width: 28px !important;
+    height: 28px !important;
+  }
+
+  .responsive-system-title > span {
+    font-size: 14px !important;
+    font-weight: 500 !important;
+  }
+
+  .app-header .ant-btn-circle {
+    width: 34px !important;
+    height: 34px !important;
+    min-width: 34px !important;
+  }
+
+  .app-header .date-time {
+    font-size: 11px !important;
+    display: none !important;
+  }
 }
 
-/* Keep the date/time visible on mobile but smaller */
-@media (max-width: 480px) {
-  .app-header .date-time { font-size: 11px; color: #666; }
+/* ============================================
+   BREAKPOINT: Medium Phones (413px - 479px)
+   e.g., iPhone 15 Plus, larger Android phones
+   ============================================ */
+@media (min-width: 413px) and (max-width: 479px) {
+  .app-header {
+    padding: 0 12px !important;
+    height: 56px !important;
+  }
+
+  .app-header .responsive-system-title {
+    gap: 10px !important;
+  }
+
+  .app-header .responsive-system-title img {
+    width: 30px !important;
+    height: 30px !important;
+  }
+
+  .responsive-system-title > span {
+    font-size: 15px !important;
+    font-weight: 500 !important;
+  }
+
+  .app-header .ant-btn-circle {
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px !important;
+  }
+
+  .app-header .date-time {
+    font-size: 11px !important;
+  }
 }
 
-/* Prevent header contents from wrapping to next line */
-.app-header { flex-wrap: nowrap; }
+/* ============================================
+   BREAKPOINT: Large Phones (480px - 599px)
+   e.g., iPhone 16 Plus, large Android phones
+   ============================================ */
+@media (min-width: 480px) and (max-width: 599px) {
+  .app-header {
+    padding: 0 14px !important;
+    height: 56px !important;
+  }
+
+  .app-header .responsive-system-title {
+    gap: 12px !important;
+  }
+
+  .app-header .responsive-system-title img {
+    width: 32px !important;
+    height: 32px !important;
+  }
+
+  .responsive-system-title > span {
+    font-size: 16px !important;
+    font-weight: 500 !important;
+  }
+
+  .app-header .ant-btn-circle {
+    width: 38px !important;
+    height: 38px !important;
+    min-width: 38px !important;
+  }
+
+  .app-header .date-time {
+    font-size: 12px !important;
+  }
+}
+
+/* ============================================
+   BREAKPOINT: Small Tablets (600px - 767px)
+   e.g., iPad Mini, smaller Android tablets
+   ============================================ */
+@media (min-width: 600px) and (max-width: 767px) {
+  .app-header {
+    padding: 0 16px !important;
+    height: 60px !important;
+  }
+
+  .app-header .responsive-system-title {
+    gap: 12px !important;
+  }
+
+  .app-header .responsive-system-title img {
+    width: 34px !important;
+    height: 34px !important;
+  }
+
+  .responsive-system-title > span {
+    font-size: 18px !important;
+    font-weight: 500 !important;
+  }
+
+  .app-header .ant-btn-circle {
+    width: 40px !important;
+    height: 40px !important;
+    min-width: 40px !important;
+  }
+
+  .app-header .date-time {
+    font-size: 12px !important;
+  }
+}
+
+/* ============================================
+   BREAKPOINT: Medium Tablets (768px - 1023px)
+   e.g., iPad, Samsung Galaxy Tab S, larger tablets
+   ============================================ */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .app-header {
+    padding: 0 18px !important;
+    height: 64px !important;
+  }
+
+  .app-header .responsive-system-title {
+    gap: 14px !important;
+  }
+
+  .app-header .responsive-system-title img {
+    width: 36px !important;
+    height: 36px !important;
+  }
+
+  .responsive-system-title > span {
+    font-size: 20px !important;
+    font-weight: 500 !important;
+  }
+
+  .app-header .ant-btn-circle {
+    width: 40px !important;
+    height: 40px !important;
+    min-width: 40px !important;
+  }
+
+  .app-header .date-time {
+    font-size: 12px !important;
+  }
+}
+
+/* ============================================
+   BREAKPOINT: Large Tablets (1024px - 1279px)
+   e.g., iPad Pro, large Galaxy Tab, desktop screens
+   ============================================ */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .app-header {
+    padding: 0 48px !important;
+    height: 64px !important;
+  }
+
+  .app-header .responsive-system-title {
+    gap: 14px !important;
+  }
+
+  .app-header .responsive-system-title img {
+    width: 36px !important;
+    height: 36px !important;
+  }
+
+  .responsive-system-title > span {
+    font-size: 22px !important;
+    font-weight: 500 !important;
+  }
+
+  .app-header .ant-btn-circle {
+    width: 40px !important;
+    height: 40px !important;
+    min-width: 40px !important;
+  }
+
+  .app-header .date-time {
+    font-size: 13px !important;
+  }
+}
+
+/* ============================================
+   BREAKPOINT: Large Desktop (1280px+)
+   Full desktop experience
+   ============================================ */
+@media (min-width: 1280px) {
+  .app-header {
+    padding: 0 56px !important;
+    height: 64px !important;
+  }
+
+  .app-header .responsive-system-title {
+    gap: 16px !important;
+  }
+
+  .app-header .responsive-system-title img {
+    width: 36px !important;
+    height: 36px !important;
+  }
+
+  .responsive-system-title > span {
+    font-size: 26px !important;
+    font-weight: 400 !important;
+  }
+
+  .app-header .ant-btn-circle {
+    width: 40px !important;
+    height: 40px !important;
+    min-width: 40px !important;
+  }
+
+  .app-header .date-time {
+    font-size: 13px !important;
+  }
+}
+
+/* ============================================
+   Content Area Responsive Padding
+   ============================================ */
+
+@media (max-width: 374px) {
+  .ant-layout-content {
+    padding: 8px !important;
+  }
+}
+
+@media (min-width: 375px) and (max-width: 599px) {
+  .ant-layout-content {
+    padding: 12px !important;
+  }
+}
+
+@media (min-width: 600px) and (max-width: 1023px) {
+  .ant-layout-content {
+    padding: 16px !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  .ant-layout-content {
+    padding: 32px !important;
+  }
+}
+
+/* ============================================
+   Text Truncation & Overflow Handling
+   ============================================ */
+
+.responsive-system-title > span {
+  display: inline-block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ============================================
+   Antd Component Responsive Overrides
+   ============================================ */
+
+/* Responsive menu item sizing */
+@media (max-width: 599px) {
+  .ant-menu-item {
+    font-size: 14px !important;
+    height: 40px !important;
+    line-height: 40px !important;
+  }
+
+  .ant-menu-submenu-title {
+    font-size: 14px !important;
+    height: 40px !important;
+    line-height: 40px !important;
+  }
+}
+
+@media (min-width: 600px) and (max-width: 1023px) {
+  .ant-menu-item {
+    font-size: 15px !important;
+    height: 44px !important;
+    line-height: 44px !important;
+  }
+
+  .ant-menu-submenu-title {
+    font-size: 15px !important;
+    height: 44px !important;
+    line-height: 44px !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  .ant-menu-item {
+    font-size: 17px !important;
+    height: 50px !important;
+    line-height: 50px !important;
+  }
+
+  .ant-menu-submenu-title {
+    font-size: 17px !important;
+    height: 50px !important;
+    line-height: 50px !important;
+  }
+}
+
+/* ============================================
+   Mobile-Specific Optimizations
+   ============================================ */
+
+@media (max-width: 767px) {
+  /* Hide less important elements on mobile */
+  .app-header .date-time:not(:nth-child(1)) {
+    display: none;
+  }
+
+  /* Increase tap target size on mobile */
+  .ant-btn-circle {
+    min-width: 44px !important;
+    min-height: 44px !important;
+  }
+
+  /* Ensure proper spacing for mobile */
+  .header-controls {
+    gap: 6px !important;
+  }
+}
+
+/* ============================================
+   Landscape Orientation (Mobile)
+   ============================================ */
+
+@media (max-height: 500px) and (orientation: landscape) {
+  .app-header {
+    height: 48px !important;
+  }
+
+  .responsive-system-title > span {
+    font-size: 14px !important;
+  }
+
+  .ant-menu-item {
+    height: 36px !important;
+    line-height: 36px !important;
+  }
+}
+
+/* ============================================
+   Prevent Layout Shifts
+   ============================================ */
+
+.app-header {
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.responsive-system-title {
+  will-change: auto;
+}

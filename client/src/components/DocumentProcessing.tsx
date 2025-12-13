@@ -4,7 +4,7 @@ import './DocumentProcessingHighlight.css';
 import styles from './DocumentProcessing.module.css';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Card, Typography, Modal, Spin, Table, Input, Tooltip, Tag, Space, Button, Radio, Select, DatePicker, notification } from 'antd';
-import { SearchOutlined } from '@ant-design/icons';
+import { SearchOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import { FileWordOutlined, FilePdfOutlined, FileImageOutlined, EyeOutlined } from '@ant-design/icons';
 import { documentsAPI, API_URL } from '../services/api';
 import { formatDate as formatDateUtil } from '../utils/formatDate';
@@ -382,34 +382,122 @@ const DocumentProcessing: React.FC = () => {
   }
 
   return (
-    <div className={styles.wrapper}>
-      <Typography.Title level={3} className={styles.pageTitle}></Typography.Title>
-      {/* Document Processing Table */}
-      <Card title="Document Processing" extra={
-        <div className={styles.controls}>
-          <Input
-            prefix={<SearchOutlined />}
-            placeholder="Search documents"
-            className={styles.controlInput}
-            value={filterQuery}
-            onChange={(e) => setFilterQuery(e.target.value)}
-            onPressEnter={() => {}}
-          />
-          <Select allowClear placeholder="Document Type" className={styles.controlSelect} value={filterType} onChange={(v) => setFilterType(v)}>
-            {requestedTypes.map((t) => <Select.Option key={t} value={t}>{t}</Select.Option>)}
-          </Select>
-          <Select allowClear placeholder="Status" className={styles.controlSelect} value={filterStatus} onChange={(v) => setFilterStatus(v)}>
-            <Select.Option value="pending">Pending</Select.Option>
-            <Select.Option value="approved">Approved</Select.Option>
-            <Select.Option value="rejected">Rejected</Select.Option>
-          </Select>
-          <DatePicker.RangePicker className={styles.controlDate} onChange={(vals) => setFilterRange(vals)} />
+    <div style={{ 
+      minHeight: '100vh', 
+      background: 'linear-gradient(135deg, #fafbfc 0%, #f5f8fc 100%)',
+      padding: '16px'
+    }}>
+      {/* Shiny Container */}
+      <div style={{
+        background: '#ffffff',
+        borderRadius: '12px',
+        boxShadow: '0 4px 20px rgba(24, 144, 255, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.6)',
+        border: '1px solid rgba(24, 144, 255, 0.1)',
+        padding: '24px',
+        minHeight: '100vh'
+      }}>
+      <Spin spinning={loading} tip="Loading documents...">
+        <div className={styles.wrapper}>
+        {/* Header Section */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
+            <div style={{
+              width: 64,
+              height: 64,
+              borderRadius: '14px',
+              background: 'linear-gradient(135deg, #722ed1 0%, #1890ff 50%, #13c2c2 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 6px 20px rgba(114, 46, 209, 0.35)',
+              flexShrink: 0
+            }}>
+              <FileWordOutlined style={{ fontSize: 32, color: '#ffffff' }} />
+            </div>
+            <div>
+              <h2 style={{ margin: 0, background: 'linear-gradient(135deg, #722ed1 0%, #1890ff 50%, #13c2c2 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', fontSize: 28, fontWeight: 700, letterSpacing: '-0.5px' }}>
+                Document Processing
+              </h2>
+              <p style={{ margin: '8px 0 0 0', background: 'linear-gradient(90deg, #722ed1 0%, #1890ff 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', fontSize: 13, fontWeight: 600 }}>
+                Manage and process document requests
+              </p>
+            </div>
+          </div>
+
+          {/* Filters Section */}
+          <Card
+            style={{
+              borderRadius: 12,
+              border: '1px solid rgba(24, 144, 255, 0.1)',
+              boxShadow: '0 2px 12px rgba(114, 46, 209, 0.06)',
+              background: 'linear-gradient(135deg, #f9f5ff 0%, #f0e6ff 50%, #e6f7ff 100%)',
+              padding: '18px'
+            }}
+          >
+            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+                <Typography.Text style={{ fontSize: 12, fontWeight: 700, background: 'linear-gradient(90deg, #722ed1 0%, #1890ff 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', display: 'block', marginBottom: 8 }}>
+                  🔍 Search
+                </Typography.Text>
+                <Input
+                  placeholder="Search by document name..."
+                  prefix={<SearchOutlined style={{ color: '#722ed1' }} />}
+                  value={filterQuery}
+                  onChange={(e) => setFilterQuery(e.target.value)}
+                  style={{ borderRadius: 8, border: '1px solid rgba(114, 46, 209, 0.2)' }}
+                  size="large"
+                />
+              </div>
+              <div style={{ flex: '0 1 180px' }}>
+                <Typography.Text style={{ fontSize: 12, fontWeight: 700, background: 'linear-gradient(90deg, #722ed1 0%, #1890ff 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', display: 'block', marginBottom: 8 }}>
+                  📋 Document Type
+                </Typography.Text>
+                <Select 
+                  allowClear 
+                  placeholder="All types" 
+                  value={filterType} 
+                  onChange={(v) => setFilterType(v)}
+                  style={{ width: '100%' }}
+                  size="large"
+                >
+                  {requestedTypes.map((t) => <Select.Option key={t} value={t}>{t}</Select.Option>)}
+                </Select>
+              </div>
+              <div style={{ flex: '0 1 140px' }}>
+                <Typography.Text style={{ fontSize: 12, fontWeight: 700, background: 'linear-gradient(90deg, #722ed1 0%, #1890ff 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', display: 'block', marginBottom: 8 }}>
+                  ⚡ Status
+                </Typography.Text>
+                <Select 
+                  allowClear 
+                  placeholder="All statuses" 
+                  value={filterStatus} 
+                  onChange={(v) => setFilterStatus(v)}
+                  style={{ width: '100%' }}
+                  size="large"
+                >
+                  <Select.Option value="pending">⏳ Pending</Select.Option>
+                  <Select.Option value="approved">✓ Approved</Select.Option>
+                  <Select.Option value="rejected">✕ Rejected</Select.Option>
+                </Select>
+              </div>
+              <div style={{ flex: '0 1 240px' }}>
+                <Typography.Text style={{ fontSize: 12, fontWeight: 700, background: 'linear-gradient(90deg, #722ed1 0%, #1890ff 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', display: 'block', marginBottom: 8 }}>
+                  📅 Date Range
+                </Typography.Text>
+                <DatePicker.RangePicker 
+                  onChange={(vals) => setFilterRange(vals)}
+                  style={{ width: '100%' }}
+                  size="large"
+                />
+              </div>
+            </div>
+          </Card>
         </div>
-      }>
+
+        {/* Content Section */}
         {isMobile ? (
-          <div className={styles.mobileList}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {files.filter((file: any) => {
-              // client-side filtering
               if (filterQuery && !(file.filename || '').toLowerCase().includes(filterQuery.toLowerCase())) return false;
               if (filterType && ((file.type || '').toLowerCase() !== filterType.toLowerCase())) return false;
               const primary = getPrimaryRequest(file._id);
@@ -422,186 +510,319 @@ const DocumentProcessing: React.FC = () => {
                 if (d < start || d > end) return false;
               }
               return true;
-            }).map((file: any) => {
-              const name = file.filename || '';
-              const ext = (name.split('.').pop() || '').toLowerCase();
-              let icon = <FileWordOutlined style={{ color: '#2B6CB0', fontSize: 20 }} />;
-              if (ext === 'pdf') icon = <FilePdfOutlined style={{ color: '#E53E3E', fontSize: 20 }} />;
-              if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'bmp'].includes(ext)) icon = <FileImageOutlined style={{ color: '#319795', fontSize: 20 }} />;
-              const primary = getPrimaryRequest(file._id);
-              const status = primary?.status || '';
-              return (
-                  <Card key={file._id} size="small" className={styles.mobileCard} ref={(el: any) => { /* mobile cards keyed by primary request id if exists */
-                    const primary = getPrimaryRequest(file._id);
-                    const rid = primary && (primary._id || primary.requestId);
-                    if (rid) rowRefs.current[rid] = el;
-                  }}>
-                    <div className={styles.mobileCardRow}>
-                      <div className={styles.mobileMeta}>
-                        <div className={styles.iconWrap}>{icon}</div>
-                        <div className={styles.mobileTitleWrap}>
-                          <Tooltip title={name}><div className={styles.mobileTitle}>{name.replace(/\.docx$/i, '')}</div></Tooltip>
-                          <div className={styles.mobileSubtitle}>{file.type || 'Unknown'}</div>
+            }).length === 0 ? (
+              <Card style={{ textAlign: 'center', padding: '40px 20px' }}>
+                <FileWordOutlined style={{ fontSize: 48, color: '#ccc', marginBottom: 12 }} />
+                <Typography.Text type="secondary">No documents found</Typography.Text>
+              </Card>
+            ) : (
+              files.filter((file: any) => {
+                if (filterQuery && !(file.filename || '').toLowerCase().includes(filterQuery.toLowerCase())) return false;
+                if (filterType && ((file.type || '').toLowerCase() !== filterType.toLowerCase())) return false;
+                const primary = getPrimaryRequest(file._id);
+                const status = primary?.status || '';
+                if (filterStatus && status.toLowerCase() !== filterStatus.toLowerCase()) return false;
+                if (filterRange && filterRange[0] && filterRange[1] && file.uploadDate) {
+                  const d = new Date(file.uploadDate);
+                  const start = filterRange[0].toDate();
+                  const end = filterRange[1].toDate();
+                  if (d < start || d > end) return false;
+                }
+                return true;
+              }).map((file: any) => {
+                const name = file.filename || '';
+                const ext = (name.split('.').pop() || '').toLowerCase();
+                let icon = <FileWordOutlined style={{ color: '#2B6CB0', fontSize: 24 }} />;
+                if (ext === 'pdf') icon = <FilePdfOutlined style={{ color: '#E53E3E', fontSize: 24 }} />;
+                if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'bmp'].includes(ext)) icon = <FileImageOutlined style={{ color: '#319795', fontSize: 24 }} />;
+                const primary = getPrimaryRequest(file._id);
+                const status = primary?.status || '';
+
+                let statusConfig = { label: 'Pending', color: '#1890ff', bgColor: 'linear-gradient(135deg, #e6f4ff 0%, #bae0ff 100%)', icon: '⏳', borderColor: '#1890ff' };
+                if (status === 'approved') statusConfig = { label: 'Approved', color: '#52c41a', bgColor: 'linear-gradient(135deg, #f6ffed 0%, #d9f7be 100%)', icon: '✓', borderColor: '#52c41a' };
+                if (status === 'rejected') statusConfig = { label: 'Rejected', color: '#ff4d4f', bgColor: 'linear-gradient(135deg, #fff2f0 0%, #ffe7e6 100%)', icon: '✕', borderColor: '#ff4d4f' };
+
+                return (
+                  <Card 
+                    key={file._id}
+                    hoverable
+                    style={{
+                      borderRadius: 12,
+                      border: '1px solid rgba(114, 46, 209, 0.12)',
+                      boxShadow: '0 4px 16px rgba(114, 46, 209, 0.1)',
+                      transition: 'all 0.3s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.boxShadow = '0 12px 32px rgba(114, 46, 209, 0.2)';
+                      e.currentTarget.style.transform = 'translateY(-4px)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.boxShadow = '0 4px 16px rgba(114, 46, 209, 0.1)';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}
+                    ref={(el: any) => {
+                      const primary = getPrimaryRequest(file._id);
+                      const rid = primary && (primary._id || primary.requestId);
+                      if (rid) rowRefs.current[rid] = el;
+                    }}
+                  >
+                    <div style={{ display: 'flex', gap: 12 }}>
+                      <div style={{
+                        width: 52,
+                        height: 52,
+                        borderRadius: 10,
+                        background: 'linear-gradient(135deg, #722ed1 0%, #1890ff 50%, #13c2c2 100%)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                        color: '#ffffff',
+                        fontSize: 20
+                      }}>
+                        {icon}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: 14, background: 'linear-gradient(135deg, #722ed1 0%, #1890ff 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {name.replace(/\.docx$/i, '')}
+                        </div>
+                        <div style={{ fontSize: 12, color: '#666', marginBottom: 6 }}>{file.type || 'Unknown'}</div>
+                        <div style={{ fontSize: 11, color: '#999' }}>
+                          {file.uploadDate ? formatDateUtil(file.uploadDate) : 'No date'}
                         </div>
                       </div>
-                      <div className={styles.mobileActions}>
-                        <Tag className={styles.statusTag} color={status === 'pending' ? 'orange' : status === 'approved' ? 'green' : status === 'rejected' ? 'red' : 'default'}>{(status || '').toUpperCase()}</Tag>
-                        <div className={styles.actionButtons}><Button size="small" icon={<EyeOutlined />} onClick={() => openPreview(file)}>{isMobile ? null : 'Preview'}</Button></div>
-                        <div className={styles.uploadDate}>{file.uploadDate ? formatDateUtil(file.uploadDate) : ''}</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+                        <div style={{
+                          padding: '6px 12px',
+                          background: statusConfig.bgColor,
+                          color: statusConfig.color,
+                          borderRadius: 6,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          border: `2px solid ${statusConfig.borderColor}`
+                        }}>
+                          {statusConfig.icon} {statusConfig.label}
+                        </div>
+                        <Button 
+                          size="small"
+                          icon={<EyeOutlined />}
+                          onClick={() => openPreview(file)}
+                          style={{ borderRadius: 4, fontSize: 12 }}
+                        >
+                          Preview
+                        </Button>
                       </div>
                     </div>
                   </Card>
                 );
-            })}
-            </div>
+              })
+            )}
+          </div>
         ) : (
-          <Table
-            rowKey={(record) => record._id}
-            dataSource={files.filter((file: any) => {
-              if (filterQuery && !(file.filename || '').toLowerCase().includes(filterQuery.toLowerCase())) return false;
-              if (filterType && ((file.type || '').toLowerCase() !== filterType.toLowerCase())) return false;
-              const primary = getPrimaryRequest(file._id);
-              const status = primary?.status || '';
-              if (filterStatus && status.toLowerCase() !== filterStatus.toLowerCase()) return false;
-              if (filterRange && filterRange[0] && filterRange[1] && file.uploadDate) {
-                const d = new Date(file.uploadDate);
-                const start = filterRange[0].toDate();
-                const end = filterRange[1].toDate();
-                if (d < start || d > end) return false;
-              }
-              return true;
-            })}
-            pagination={{ pageSize: 10 }}
-            columns={[
-              {
-                title: 'File',
-                dataIndex: 'filename',
-                key: 'filename',
-                sorter: (a: any, b: any) => (a.filename || '').localeCompare(b.filename || ''),
-                render: (text: string, rec: any) => {
-                  // derive icon by extension
-                  const name = text || '';
-                  const ext = (name.split('.').pop() || '').toLowerCase();
-                  let icon = <FileWordOutlined style={{ color: '#2B6CB0' }} />;
-                  if (ext === 'pdf') icon = <FilePdfOutlined style={{ color: '#E53E3E' }} />;
-                  if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'bmp'].includes(ext)) icon = <FileImageOutlined style={{ color: '#319795' }} />;
-                      return (
-                    <Tooltip title={name}>
-                      <span style={{ maxWidth: 280, display: 'inline-block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        <Space align="center">
-                          {icon}
-                          <span>{name.replace(/\.docx$/i, '')}</span>
-                        </Space>
-                      </span>
-                    </Tooltip>
-                  );
-                }
-              },
-              // Type column removed per request
-              {
-                title: 'Status',
-                dataIndex: 'status',
-                key: 'status',
-                render: (_: any, record: any) => {
-                  // Show document availability (online/offline) based on GridFS file metadata
-                  // Prefer explicit flags if present, otherwise infer from contentType/length
-                  const file = record || {};
-                  const isOnline = (file.metadata && file.metadata.online === true) || (typeof file.length === 'number' ? file.length > 0 : Boolean(file.contentType));
-                  const label = isOnline ? 'ONLINE' : 'OFFLINE';
-                  const color = isOnline ? 'green' : 'red';
-                  return (<Tag color={color}>{label}</Tag>);
-                }
-              },
-              {
-                title: 'Uploaded On',
-                dataIndex: 'uploadDate',
-                key: 'uploadDate',
-                sorter: (a: any, b: any) => new Date(a.uploadDate).getTime() - new Date(b.uploadDate).getTime(),
-                render: (d: any) => d ? formatDateUtil(d) : ''
-              },
-              {
-                title: 'Actions',
-                key: 'actions',
-                render: (_: any, record: any) => (
-                  <Space>
-                    <Button size="small" icon={<EyeOutlined />} onClick={() => openPreview(record)}>Preview</Button>
-                  </Space>
-                )
-              }
-            ]}
-            // Attach a rowClassName and onRow so we can populate rowRefs for direct scrolling/highlighting
-            rowClassName={(record) => ''}
-            onRow={(record) => {
-              const primary = getPrimaryRequest(record._id);
-              const rid = primary && (primary._id || primary.requestId);
-              return {
-                ref: (el: HTMLDivElement | null) => {
-                  if (rid) rowRefs.current[rid] = el;
-                }
-              } as any;
+          <Card
+            style={{
+              borderRadius: 12,
+              border: '1px solid rgba(24, 144, 255, 0.1)',
+              boxShadow: '0 4px 20px rgba(114, 46, 209, 0.1)',
+              background: '#ffffff'
             }}
-          />
+          >
+            <Table
+              rowKey={(record) => record._id}
+              dataSource={files.filter((file: any) => {
+                if (filterQuery && !(file.filename || '').toLowerCase().includes(filterQuery.toLowerCase())) return false;
+                if (filterType && ((file.type || '').toLowerCase() !== filterType.toLowerCase())) return false;
+                const primary = getPrimaryRequest(file._id);
+                const status = primary?.status || '';
+                if (filterStatus && status.toLowerCase() !== filterStatus.toLowerCase()) return false;
+                if (filterRange && filterRange[0] && filterRange[1] && file.uploadDate) {
+                  const d = new Date(file.uploadDate);
+                  const start = filterRange[0].toDate();
+                  const end = filterRange[1].toDate();
+                  if (d < start || d > end) return false;
+                }
+                return true;
+              })}
+              pagination={{ pageSize: 10, position: ['bottomCenter'] }}
+              columns={[
+                {
+                  title: '📄 File',
+                  dataIndex: 'filename',
+                  key: 'filename',
+                  width: 300,
+                  sorter: (a: any, b: any) => (a.filename || '').localeCompare(b.filename || ''),
+                  render: (text: string, rec: any) => {
+                    const name = text || '';
+                    const ext = (name.split('.').pop() || '').toLowerCase();
+                    let icon = <FileWordOutlined style={{ color: '#2B6CB0', fontSize: 16 }} />;
+                    if (ext === 'pdf') icon = <FilePdfOutlined style={{ color: '#E53E3E', fontSize: 16 }} />;
+                    if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'bmp'].includes(ext)) icon = <FileImageOutlined style={{ color: '#319795', fontSize: 16 }} />;
+                    return (
+                      <Tooltip title={name}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{
+                            width: 36,
+                            height: 36,
+                            borderRadius: 6,
+                            background: '#f0f5ff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0
+                          }}>
+                            {icon}
+                          </div>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>
+                            {name.replace(/\.docx$/i, '')}
+                          </span>
+                        </span>
+                      </Tooltip>
+                    );
+                  }
+                },
+                {
+                  title: '🏷️ Type',
+                  dataIndex: 'type',
+                  key: 'type',
+                  width: 150,
+                  render: (text: string) => (
+                    <Tag style={{ borderRadius: 4, fontSize: 12, padding: '4px 10px', background: '#f0f5ff', color: '#1890ff', border: 'none' }}>
+                      {text || 'Unknown'}
+                    </Tag>
+                  )
+                },
+                {
+                  title: '⏳ Status',
+                  dataIndex: '_id',
+                  key: 'status',
+                  width: 120,
+                  render: (id: string) => {
+                    const primary = getPrimaryRequest(id);
+                    const status = primary?.status || 'pending';
+                    let config = { label: 'Pending', color: '#1890ff', bgColor: 'linear-gradient(135deg, #e6f4ff 0%, #bae0ff 100%)', borderColor: '#1890ff' };
+                    if (status === 'approved') config = { label: 'Approved', color: '#52c41a', bgColor: 'linear-gradient(135deg, #f6ffed 0%, #d9f7be 100%)', borderColor: '#52c41a' };
+                    if (status === 'rejected') config = { label: 'Rejected', color: '#ff4d4f', bgColor: 'linear-gradient(135deg, #fff2f0 0%, #ffe7e6 100%)', borderColor: '#ff4d4f' };
+                    return (
+                      <Tag style={{ borderRadius: 6, background: config.bgColor, color: config.color, border: `2px solid ${config.borderColor}`, fontSize: 12, fontWeight: 700, padding: '6px 12px' }}>
+                        {config.label}
+                      </Tag>
+                    );
+                  }
+                },
+                {
+                  title: '📅 Uploaded',
+                  dataIndex: 'uploadDate',
+                  key: 'uploadDate',
+                  width: 140,
+                  render: (date: any) => (
+                    <span style={{ fontSize: 12, color: '#666', fontWeight: 500 }}>
+                      {date ? formatDateUtil(date) : 'N/A'}
+                    </span>
+                  )
+                },
+                {
+                  title: '🔧 Actions',
+                  key: 'actions',
+                  width: 200,
+                  align: 'right' as const,
+                  render: (_: any, record: any) => (
+                    <Space size={8}>
+                      <Button 
+                        icon={<EyeOutlined />}
+                        onClick={() => openPreview(record)}
+                        style={{ borderRadius: 6, fontSize: 12, border: '1px solid rgba(114, 46, 209, 0.3)', fontWeight: 600 }}
+                      >
+                        Preview
+                      </Button>
+                      <Button 
+                        type="primary"
+                        onClick={() => { setSelectedFile(record); setModalVisible(true); }}
+                        style={{ borderRadius: 6, fontSize: 12, fontWeight: 600, background: 'linear-gradient(135deg, #722ed1 0%, #1890ff 50%, #13c2c2 100%)', border: 'none', boxShadow: '0 4px 12px rgba(114, 46, 209, 0.3)' }}
+                      >
+                        Process
+                      </Button>
+                    </Space>
+                  )
+                }
+              ]}
+              style={{ background: 'transparent' }}
+            />
+          </Card>
         )}
-      </Card>
 
+        {/* Modals */}
+      {/* Process Modal */}
       <Modal
-        title={selectedFile ? selectedFile.filename.replace(/\.docx$/i, '') : ''}
+        title={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><FileWordOutlined style={{ color: '#1890ff' }} />Process Document</div>}
         open={modalVisible}
         onCancel={() => setModalVisible(false)}
         footer={null}
-        width={800}
+        width={720}
+        bodyStyle={{ padding: '24px' }}
+        style={{ borderRadius: 12 }}
       >
         {selectedFile ? (
-          <div className={styles.modalContent}>
-            <Table
-              dataSource={[
-                      {
-                        ...selectedFile,
-                        requesterName: getPrimaryRequest(selectedFile._id)?.username || getPrimaryRequest(selectedFile._id)?.requesterName || 'Unknown',
-                        barangayID: getPrimaryRequest(selectedFile._id)?.barangayID || 'Unknown',
-                        status: getPrimaryRequest(selectedFile._id)?.status || 'Unknown',
-                      },
-              ]}
-              pagination={false}
-              rowKey="_id"
-              columns={[
-                {
-                  title: 'Requester Name',
-                  dataIndex: 'requesterName',
-                  key: 'requesterName',
-                  render: (text: string) => text || 'Unknown',
-                },
-                {
-                  title: 'Barangay ID',
-                  dataIndex: 'barangayID',
-                  key: 'barangayID',
-                  render: (text: string) => text || 'Unknown',
-                },
-                {
-                  title: 'Status',
-                  dataIndex: 'status',
-                  key: 'status',
-                  render: (text: string) => text || 'Unknown',
-                },
-                {
-                  title: 'Actions',
-                  key: 'actions',
-                  render: (_: any, record: any) => (
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button
-                        style={{ background: '#2196F3', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 12px', cursor: 'pointer', fontWeight: 600 }}
-                        onClick={() => handleProcessClick(record)}
-                      >Process</button>
-                      <button style={{ background: '#43D96B', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 12px', cursor: 'pointer', fontWeight: 600 }}>Complete</button>
-                      <button style={{ background: '#FF3B3B', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 12px', cursor: 'pointer', fontWeight: 600 }}>Reject</button>
-                    </div>
-                  ),
-                },
-              ]}
-            />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <Card style={{ borderRadius: 8, background: '#f9f9f9', border: 'none', padding: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#666', marginBottom: 4, textTransform: 'uppercase' }}>File Name</div>
+                  <div style={{ fontSize: 14, color: '#333', fontWeight: 500 }}>{selectedFile.filename}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#666', marginBottom: 4, textTransform: 'uppercase' }}>Requester</div>
+                  <div style={{ fontSize: 14, color: '#333', fontWeight: 500 }}>
+                    {getPrimaryRequest(selectedFile._id)?.username || getPrimaryRequest(selectedFile._id)?.requesterName || 'Unknown'}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#666', marginBottom: 4, textTransform: 'uppercase' }}>Barangay ID</div>
+                  <div style={{ fontSize: 14, color: '#333', fontWeight: 500 }}>
+                    {getPrimaryRequest(selectedFile._id)?.barangayID || 'N/A'}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#666', marginBottom: 4, textTransform: 'uppercase' }}>Status</div>
+                  <Tag style={{ borderRadius: 4, padding: '4px 12px' }}>
+                    {getPrimaryRequest(selectedFile._id)?.status || 'Unknown'}
+                  </Tag>
+                </div>
+              </div>
+            </Card>
+
+            <Card
+              title={<div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 600 }}>⚙️ Processing Actions</div>}
+              style={{ borderRadius: 8, border: '1px solid #f0f0f0' }}
+            >
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <Button 
+                  type="primary" 
+                  onClick={() => handleProcessClick(selectedFile)}
+                  size="large"
+                  style={{ borderRadius: 6, flex: '1 1 150px', background: '#1890ff' }}
+                  icon={<FileWordOutlined />}
+                >
+                  Process
+                </Button>
+                <Button 
+                  style={{ borderRadius: 6, flex: '1 1 150px', color: '#52c41a', borderColor: '#52c41a' }}
+                  size="large"
+                  icon={<CheckCircleOutlined />}
+                >
+                  Approve
+                </Button>
+                <Button 
+                  danger 
+                  style={{ borderRadius: 6, flex: '1 1 150px' }}
+                  size="large"
+                  icon={<FileWordOutlined />}
+                >
+                  Reject
+                </Button>
+              </div>
+            </Card>
           </div>
         ) : (
-          <Spin />
+          <Spin tip="Loading..." />
         )}
       </Modal>
 
@@ -880,6 +1101,9 @@ const DocumentProcessing: React.FC = () => {
           </>
         )}
       </Modal>
+        </div>
+      </Spin>
+      </div>
     </div>
   );
 }

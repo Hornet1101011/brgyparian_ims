@@ -393,20 +393,22 @@ const AdminDashboard: React.FC = () => {
             hoverable
             onClick={card.onClick}
             style={{
-              background: card.bg,
-              color: '#fff',
-              borderRadius: 20,
-              minHeight: 170,
-              boxShadow: '0 2px 8px 0 rgba(0,0,0,0.08)',
+              background: 'linear-gradient(135deg, #ffffff 0%, #f8fafb 100%)',
+              color: '#000',
+              borderRadius: 16,
+              minHeight: 240,
+              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8)',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
               cursor: card.onClick ? 'pointer' : 'default',
-              transition: 'box-shadow 0.2s, transform 0.2s',
+              transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
               position: 'relative',
-              marginBottom: 8,
-              padding: 24,
+              marginBottom: 0,
+              padding: 32,
+              border: `2px solid ${card.color}`,
+              borderTop: `6px solid ${card.color}`,
             }}
             styles={{
               body: {
@@ -420,19 +422,33 @@ const AdminDashboard: React.FC = () => {
               }
             }}
             onMouseEnter={e => {
-              e.currentTarget.style.boxShadow = '0 8px 32px 0 rgba(0,0,0,0.18)';
-              e.currentTarget.style.transform = 'translateY(-4px)';
+              e.currentTarget.style.boxShadow = '0 16px 48px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.95), inset 0 -1px 2px rgba(0, 0, 0, 0.03)';
+              e.currentTarget.style.transform = 'translateY(-8px) scale(1.01)';
             }}
             onMouseLeave={e => {
-              e.currentTarget.style.boxShadow = '0 2px 8px 0 rgba(0,0,0,0.08)';
+              e.currentTarget.style.boxShadow = '0 4px 16px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8)';
               e.currentTarget.style.transform = 'none';
             }}
           >
-            <span style={{ fontSize: 40, marginBottom: 8, opacity: 0.92 }}>{card.icon}</span>
-            <span style={{ fontSize: 38, fontWeight: 700, lineHeight: 1 }}>{card.value}</span>
-            <span style={{ fontSize: 15, color: card.labelColor, fontWeight: 500, marginTop: 2, letterSpacing: 0.5 }}>{card.label}</span>
-            <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 2, fontWeight: 400 }}>{statCardSubtitles[idx]}</span>
-            {card.chart}
+            <div style={{
+              width: 80,
+              height: 80,
+              borderRadius: 18,
+              background: `linear-gradient(135deg, ${card.color}15 0%, ${card.color}08 100%)`,
+              border: `2px solid ${card.color}30`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: 20,
+              fontSize: 40,
+              boxShadow: `inset 0 2px 4px rgba(255,255,255,0.5), 0 2px 8px ${card.color}20`,
+            }}>
+              {card.icon}
+            </div>
+            <span style={{ fontSize: 44, fontWeight: 900, lineHeight: 1.1, background: `linear-gradient(135deg, ${card.color} 0%, ${card.color}cc 100%)`, backgroundClip: 'text', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: 8 }}>{card.value}</span>
+            <span style={{ fontSize: 16, color: card.color, fontWeight: 700, marginBottom: 4, letterSpacing: '-0.3px' }}>{card.label}</span>
+            <span style={{ fontSize: 13, color: '#9ca3af', fontWeight: 500, textAlign: 'center', letterSpacing: '0.3px' }}>{statCardSubtitles[idx]}</span>
+            {card.chart && <div style={{ marginTop: 12, width: '100%' }}>{card.chart}</div>}
           </Card>
         </Col>
       ))}
@@ -443,21 +459,23 @@ const AdminDashboard: React.FC = () => {
 
   const renderNotifications = () => (
     <Card
-      title={<Space><BellOutlined /> Staff Access Approval</Space>}
-      style={{ marginTop: 0, background: '#fafbfc', borderRadius: 12, boxShadow: '0 2px 8px #d9d9d933', border: '1px solid #f0f0f0', position: 'relative' }}
-  styles={{ body: { padding: 16 } }}
+      title={<Space><BellOutlined style={{ color: '#1890ff', fontSize: 20 }} /> <span style={{ fontWeight: 700, fontSize: 17, letterSpacing: '-0.3px', color: '#1f2937' }}>Staff Access Approval</span></Space>}
+      style={{ marginTop: 0, background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)', borderRadius: 16, boxShadow: '0 6px 20px rgba(24, 144, 255, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8)', border: '2px solid #1890ff', borderTop: '6px solid #1890ff', position: 'relative' }}
+      styles={{ body: { padding: 16 } }}
       size="small"
       hoverable={false}
     >
   {/* Render a dedicated table for unread staff access approval requests */}
       {/* Show staff approval notifications (type === 'staff_approval') if present */}
       {staffAccessNotifs && staffAccessNotifs.length > 0 && (
-        <div style={{ marginBottom: 12 }}>
+        <div style={{ maxHeight: 360, overflowY: 'auto', paddingRight: 6, paddingBottom: 12 }}>
           <Table
             size="small"
-            pagination={{ pageSize: 5 }}
+            pagination={{ pageSize: 100, hideOnSinglePage: true, position: ['bottomCenter'] }}
             dataSource={staffAccessNotifs}
             rowKey={r => r._id || String(r.createdAt)}
+            style={{ borderRadius: 8 }}
+            rowClassName={() => 'staff-access-row'}
             columns={[
               {
                 title: 'Name',
@@ -467,24 +485,24 @@ const AdminDashboard: React.FC = () => {
                   const nameFromData = d.fullName || (d.userId && (d.userId.fullName || d.userId.username));
                   const requestedByName = (record as any).requestedByName;
                   const displayName = nameFromData || (requestedByName || record.message) || 'Unknown';
-                  return <span style={{ fontWeight: 600 }}>{displayName}</span>;
+                  return <span style={{ fontWeight: 700, color: '#1f2937', fontSize: 14, display: 'block', padding: '6px 0' }}>{displayName}</span>;
                 }
               },
               {
                 title: 'Requested At',
                 dataIndex: 'createdAt',
                 key: 'createdAt',
-                render: (val: any, record: Notification) => <span style={{ fontSize: 12, color: '#888' }}>{new Date(record.createdAt || val).toLocaleString()}</span>
+                render: (val: any, record: Notification) => <span style={{ fontSize: 14, color: '#6b7280', display: 'block', padding: '6px 0' }}>{new Date(record.createdAt || val).toLocaleString()}</span>
               },
               {
                 title: 'Actions',
                 key: 'actions',
                 render: (_: any, record: Notification) => (
-                  <Space>
+                  <Space size="small">
                     {!record.read && (
-                      <Button type="primary" size="small" onClick={() => handleApproveStaff(record)} icon={<CheckOutlined />}>Approve</Button>
+                      <Button type="primary" size="small" onClick={() => handleApproveStaff(record)} icon={<CheckOutlined />} style={{ background: '#10b981', border: 'none', fontWeight: 600 }}>Approve</Button>
                     )}
-                    <Button danger size="small" onClick={() => handleRejectStaff(record)} icon={<ExclamationCircleOutlined />}>Reject</Button>
+                    <Button danger size="small" onClick={() => handleRejectStaff(record)} icon={<ExclamationCircleOutlined />} style={{ fontWeight: 600 }}>Reject</Button>
                   </Space>
                 )
               }
@@ -572,10 +590,11 @@ const AdminDashboard: React.FC = () => {
 
   const renderVerificationWidget = () => (
     <Card
-      title={<Space><UserOutlined /> Verification Requests</Space>}
-      style={{ marginTop: 0, background: '#fff', borderRadius: 12, boxShadow: '0 2px 8px #d9d9d933', border: '1px solid #f0f0f0' }}
+      title={<Space><UserOutlined style={{ color: '#722ed1', fontSize: 20 }} /> <span style={{ fontWeight: 700, fontSize: 17, letterSpacing: '-0.3px', color: '#1f2937' }}>Verification Requests</span></Space>}
+      style={{ marginTop: 0, background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)', borderRadius: 16, boxShadow: '0 6px 20px rgba(114, 46, 209, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8)', border: '2px solid #722ed1', borderTop: '6px solid #722ed1' }}
       size="small"
       hoverable={false}
+      styles={{ body: { padding: 20 } }}
     >
       {verifsLoading ? (
         <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
@@ -591,25 +610,41 @@ const AdminDashboard: React.FC = () => {
             {
               title: 'Resident',
               key: 'resident',
-              render: (_: any, record: any) => <span style={{ fontWeight: 600 }}>{(record.userId && (record.userId.fullName || record.userId.username)) || 'Unknown Resident'}</span>
+              render: (_: any, record: any) => <span style={{ fontWeight: 700, color: '#1f2937', fontSize: 14 }}>{(record.userId && (record.userId.fullName || record.userId.username)) || 'Unknown Resident'}</span>
             },
             {
               title: 'Status',
               dataIndex: 'status',
               key: 'status',
-              render: (val: any) => <span style={{ color: val === 'approved' ? '#167d3b' : '#d48806', fontWeight: 600 }}>{val || 'pending'}</span>
+              render: (val: any) => {
+                const isApproved = val === 'approved';
+                return (
+                  <span style={{ 
+                    color: isApproved ? '#059669' : '#d97706',
+                    fontWeight: 700,
+                    fontSize: 14,
+                    backgroundColor: isApproved ? '#ecfdf5' : '#fffbeb',
+                    padding: '6px 14px',
+                    borderRadius: 6,
+                    display: 'inline-block',
+                    border: `1px solid ${isApproved ? '#a7f3d0' : '#fcd34d'}`
+                  }}>
+                    {val || 'pending'}
+                  </span>
+                );
+              }
             },
             {
               title: 'Submitted',
               dataIndex: 'createdAt',
               key: 'createdAt',
-              render: (val: any) => <span style={{ color: '#888' }}>{val ? new Date(val).toLocaleString() : '-'}</span>
+              render: (val: any) => <span style={{ color: '#6b7280', fontSize: 14 }}>{val ? new Date(val).toLocaleString() : '-'}</span>
             },
             {
               title: 'Verified',
               dataIndex: 'approvedAt',
               key: 'approvedAt',
-              render: (val: any) => <span style={{ color: '#888' }}>{val ? new Date(val).toLocaleString() : '-'}</span>
+              render: (val: any) => <span style={{ color: '#6b7280', fontSize: 14 }}>{val ? new Date(val).toLocaleString() : '-'}</span>
             },
             {
               title: 'Files',
@@ -620,7 +655,7 @@ const AdminDashboard: React.FC = () => {
                 return (
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     {files.map((f: any, i: number) => (
-                      <a key={i} href={getAbsoluteApiUrl(`/verification/file/${f.gridFileId || f.filename}`)} target="_blank" rel="noreferrer">{f.fileType ? `${f.fileType}` : 'Open'}</a>
+                      <a key={i} href={getAbsoluteApiUrl(`/verification/file/${f.gridFileId || f.filename}`)} target="_blank" rel="noreferrer" style={{ color: '#3b82f6', fontWeight: 600, fontSize: 13 }}>{f.fileType ? `${f.fileType}` : 'Open'}</a>
                     ))}
                   </div>
                 );
@@ -630,14 +665,14 @@ const AdminDashboard: React.FC = () => {
               title: 'Action',
               key: 'action',
               render: (_: any, record: any) => (
-                <Space>
-                  <Button size="small" onClick={() => openCheckId(record)}>Check ID</Button>
+                <Space size="small">
+                  <Button size="small" onClick={() => openCheckId(record)} style={{ fontWeight: 600 }}>Check ID</Button>
                   {record.status === 'approved' ? (
-                    <Button size="small" onClick={() => handleUnverifyVerif(record)}>Unverify</Button>
+                    <Button size="small" onClick={() => handleUnverifyVerif(record)} danger style={{ fontWeight: 600 }}>Unverify</Button>
                   ) : (
-                    <Button type="primary" size="small" onClick={() => handleApproveVerif(record)}>Verify</Button>
+                    <Button type="primary" size="small" onClick={() => handleApproveVerif(record)} style={{ background: '#10b981', border: 'none', fontWeight: 600 }}>Verify</Button>
                   )}
-                  {record.status === 'approved' ? null : <Button danger size="small" onClick={() => handleRejectVerif(record)}>Reject</Button>}
+                  {record.status === 'approved' ? null : <Button danger size="small" onClick={() => handleRejectVerif(record)} style={{ fontWeight: 600 }}>Reject</Button>}
                 </Space>
               )
             }
@@ -723,9 +758,9 @@ const AdminDashboard: React.FC = () => {
 
   const renderRecentActivity = () => (
     <Card
-      title={<Space><FileTextOutlined /> Announcements</Space>}
-      style={{ marginTop: 0, background: '#fafbfc', borderRadius: 12, boxShadow: '0 2px 8px #d9d9d933', border: '1px solid #f0f0f0', position: 'relative' }}
-      styles={{ body: { padding: 12 } }}
+      title={<Space><FileTextOutlined style={{ color: '#52c41a', fontSize: 20 }} /> <span style={{ fontWeight: 700, fontSize: 17, letterSpacing: '-0.3px', color: '#1f2937' }}>Announcements</span></Space>}
+      style={{ marginTop: 0, background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)', borderRadius: 16, boxShadow: '0 6px 20px rgba(82, 196, 26, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8)', border: '2px solid #52c41a', borderTop: '6px solid #52c41a', position: 'relative' }}
+      styles={{ body: { padding: 16 } }}
       size="small"
       hoverable={false}
     >
@@ -735,26 +770,26 @@ const AdminDashboard: React.FC = () => {
           description={<span style={{ color: '#888' }}>No announcements</span>}
         />
       ) : (
-  <div style={{ maxHeight: 320, overflowY: 'auto', paddingRight: 6, paddingBottom: 48 }}>
+  <div style={{ maxHeight: 360, overflowY: 'auto', paddingRight: 6, paddingBottom: 48 }}>
           <List
             loading={miniLoading}
             dataSource={miniAnns}
             renderItem={(item) => (
-              <List.Item style={{ cursor: 'pointer', padding: '10px 8px', alignItems: 'center' }} onClick={() => { setMiniSelected(item); setDrawerVisible(true); }}>
+              <List.Item style={{ cursor: 'pointer', padding: '16px 10px', alignItems: 'flex-start', borderBottom: '1px solid #f0f0f0', transition: 'background 0.2s' }} onClick={() => { setMiniSelected(item); setDrawerVisible(true); }} onMouseEnter={(e) => e.currentTarget.style.background = '#fafbfc'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
                 <List.Item.Meta
-                  title={<div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                  title={<div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, width: '100%' }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: '1.2em' }}>{item.text || 'Untitled'}</div>
-                      <div style={{ fontSize: 12, color: '#888', marginTop: 6 }}>{timeAgo(item.createdAt)}</div>
+                      <div style={{ fontWeight: 700, fontSize: 15, color: '#1f2937', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: '1.3em' }}>{item.text || 'Untitled'}</div>
+                      <div style={{ fontSize: 13, color: '#9ca3af', marginTop: 8, fontWeight: 500 }}>{timeAgo(item.createdAt)}</div>
                     </div>
+                    {item.imagePath && (
+                      <div style={{ marginLeft: 8, width: 88, flexShrink: 0 }}>
+                        <img loading="lazy" className="rounded-img" src={getAbsoluteApiUrl(`/announcements/${item._id}/image`)} alt="ann" style={{ width: 80, height: 56, objectFit: 'cover', borderRadius: 8, background: '#f3f4f6', border: '1px solid #e5e7eb' }} />
+                      </div>
+                    )}
                   </div>}
                   description={null}
                 />
-                  {item.imagePath && (
-                    <div style={{ marginLeft: 12, width: 92, display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
-                      <img loading="lazy" className="rounded-img" src={getAbsoluteApiUrl(`/announcements/${item._id}/image`)} alt="ann" style={{ width: 92, height: 60, objectFit: 'cover', borderRadius: 6, background: '#f0f0f0' }} />
-                    </div>
-                  )}
               </List.Item>
             )}
             size="small"
@@ -785,10 +820,13 @@ const AdminDashboard: React.FC = () => {
 
   return (
     <Spin spinning={loading}>
-      <div style={{ padding: 24, backgroundColor: '#f0f2f5', minHeight: '100vh' }}>
-        <Title level={4} style={{ marginBottom: 24 }}>Admin Dashboard</Title>
+      <div style={{ padding: '32px', background: 'linear-gradient(135deg, #f5f7fa 0%, #ffffff 50%, #f5f7fa 100%)', minHeight: '100vh' }}>
+        <div style={{ marginBottom: 40, paddingBottom: 24, borderBottom: '2px solid rgba(24, 144, 255, 0.1)' }}>
+          <Title level={2} style={{ marginBottom: 8, fontWeight: 900, color: '#0f172a', fontSize: 36, letterSpacing: '-0.5px' }}>Admin Dashboard</Title>
+          <Text style={{ color: '#6b7280', fontSize: 16, fontWeight: 500 }}>Monitor system activity, manage requests, and verify residents</Text>
+        </div>
         {renderStatCards()}
-        <Row gutter={[24, 24]} style={{ marginTop: 0 }}>
+        <Row gutter={[28, 28]} style={{ marginTop: 8 }}>
           <Col xs={24} lg={12}>
             {renderNotifications()}
           </Col>
@@ -796,7 +834,7 @@ const AdminDashboard: React.FC = () => {
             {renderRecentActivity()}
           </Col>
         </Row>
-        <Row gutter={[24, 24]} style={{ marginTop: 24 }}>
+        <Row gutter={[28, 28]} style={{ marginTop: 28 }}>
           <Col xs={24}>
             {renderVerificationWidget()}
           </Col>

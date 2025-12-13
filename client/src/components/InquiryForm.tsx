@@ -379,24 +379,33 @@ const InquiryForm: React.FC = () => {
   // Note: Upload components use `beforeUpload={() => false}` inline to prevent auto upload.
 
   return (
-    <div style={{ maxWidth: 900, margin: '32px auto', padding: '0 12px' }}>
+    <div style={{ maxWidth: 900, margin: '32px auto', padding: '0 12px', minHeight: '100vh' }}>
       <Card
-        style={{ borderRadius: 18, boxShadow: '0 4px 24px 0 rgba(64,201,255,0.10)', padding: 0, background: '#fff' }}
+        style={{ 
+          borderRadius: 18, 
+          boxShadow: '0 20px 60px rgba(64, 201, 255, 0.1), 0 8px 32px rgba(64, 201, 255, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.8)',
+          padding: 0, 
+          background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(240, 248, 255, 0.95) 100%)',
+          border: '2px solid rgba(64, 201, 255, 0.2)',
+          position: 'relative',
+          overflow: 'hidden'
+        }}
         headStyle={{
           borderRadius: '18px 18px 0 0',
-          background: 'linear-gradient(90deg, rgba(64,169,255,0.08) 0%, rgba(146,84,222,0.06) 100%)',
-          padding: '16px 24px',
+          background: 'linear-gradient(135deg, #40c9ff 0%, #e81cff 100%)',
+          padding: '24px',
+          border: 'none'
         }}
         styles={{ body: { padding: 24 } }}
         bordered={false}
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <MailOutlined style={{ fontSize: 28, color: '#1890ff' }} />
+            <MailOutlined style={{ fontSize: 28, color: '#ffffff' }} />
             <div style={{ lineHeight: 1 }}>
-              <Typography.Title level={4} style={{ margin: 0, color: '#1890ff', fontWeight: 700, fontFamily: 'Poppins, Arial, sans-serif' }}>
+              <Typography.Title level={4} style={{ margin: 0, color: '#ffffff', fontWeight: 700, fontFamily: 'Poppins, Arial, sans-serif' }}>
                 Submit an Inquiry
               </Typography.Title>
-              <div style={{ fontSize: 12, color: '#6c757d', marginTop: 4 }}>
+              <div style={{ fontSize: 12, color: 'rgba(255, 255, 255, 0.9)', marginTop: 4 }}>
                 Fill out the form below and our staff will get back to you.
               </div>
             </div>
@@ -662,34 +671,38 @@ const InquiryForm: React.FC = () => {
           {/* Appointment scheduling mode (shows when user selects SCHEDULE_APPOINTMENT) */}
           {appointmentMode && (
             <div style={{ marginTop: 12, marginBottom: 12 }}>
-              <Card style={{ borderRadius: 12, marginBottom: 12, boxShadow: '0 8px 20px rgba(31, 41, 55, 0.06)' }}>
-                {/* Top bar: Title + consolidated month/year dropdown */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', padding: '8px 12px', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 8 : 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <Typography.Title level={5} style={{ margin: 0 }}>Appointment Scheduling</Typography.Title>
-                    <div style={{ color: '#6c757d', fontSize: 13 }}>{/* helper in header if needed */}</div>
-                  </div>
-                  <div>
-                    <Select
-                      value={calendarValue.format('YYYY-MM')}
-                      onChange={(val: string) => {
-                        const [y, m] = val.split('-').map((x: string) => parseInt(x, 10));
-                        if (!isNaN(y) && !isNaN(m)) setCalendarValue(dayjs().year(y).month(m - 1).date(1));
-                      }}
-                      className="af-month-year-select"
-                      style={{ minWidth: 160, marginTop: isMobile ? 6 : 0 }}
-                    >
-                      {Array.from({ length: 12 }).map((_, i) => {
-                        const opt = now.startOf('month').add(i, 'month');
-                        return (
-                          <Select.Option key={opt.format('YYYY-MM')} value={opt.format('YYYY-MM')}>
-                            {opt.format('MMMM YYYY')}
-                          </Select.Option>
-                        );
-                      })}
-                    </Select>
-                  </div>
-                </div>
+              <Card style={{ 
+                borderRadius: 12, 
+                marginBottom: 12, 
+                boxShadow: '0 20px 60px rgba(64, 201, 255, 0.1), 0 8px 32px rgba(64, 201, 255, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.8)',
+                background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(240, 248, 255, 0.95) 100%)',
+                border: '1px solid rgba(64, 201, 255, 0.15)',
+                position: 'relative',
+                overflow: 'hidden'
+              }}>
+                {/* Top bar: Title + centered month/year + consolidated month/year dropdown */}
+                {(() => {
+                  const monthYearLabel = calendarValue ? calendarValue.format('MMMM YYYY') : dayjs().format('MMMM YYYY');
+                  return (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', padding: '8px 12px', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 8 : 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <Typography.Title level={5} style={{ margin: 0 }}>Appointment Scheduling</Typography.Title>
+                        <div style={{ color: '#6c757d', fontSize: 13 }}>{/* helper in header if needed */}</div>
+                      </div>
+
+                      {/* Centered month/year for easy visibility */}
+                      <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: isMobile ? 16 : 18, fontWeight: 700, color: '#111' }}>{monthYearLabel}</div>
+                          <div style={{ fontSize: 12, color: '#666' }}>Selected month</div>
+                        </div>
+                      </div>
+
+                      {/* Empty right placeholder - month selector moved into the action panel */}
+                      <div style={{ width: 160 }} />
+                    </div>
+                  );
+                })()}
 
                 {/* Rules text under the nav */}
                 <div style={{ padding: '6px 12px 12px 12px', color: '#6c757d', fontSize: 13 }}>
@@ -736,6 +749,7 @@ const InquiryForm: React.FC = () => {
 
                   {/* Right action panel */}
                   <div className="af-action-panel" style={{ width: isMobile ? '100%' : 320, borderLeft: isMobile ? 'none' : '1px solid #f0f0f0', paddingLeft: isMobile ? 0 : 16, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', marginTop: isMobile ? 12 : 0 }}>
+                    {/* Month selector moved here for easier access in the action panel */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                       <strong>Selected Dates ({appointmentDates.length}/3)</strong>
                       <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
@@ -760,10 +774,31 @@ const InquiryForm: React.FC = () => {
                         </div>
                       ))}
                     </div>
+                    {/* Month selector moved below selected dates as requested */}
+                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+                      <Select
+                        value={calendarValue.format('YYYY-MM')}
+                        onChange={(val: string) => {
+                          const [y, m] = val.split('-').map((x: string) => parseInt(x, 10));
+                          if (!isNaN(y) && !isNaN(m)) setCalendarValue(dayjs().year(y).month(m - 1).date(1));
+                        }}
+                        className="af-month-year-select"
+                        style={{ minWidth: 160 }}
+                      >
+                        {Array.from({ length: 12 }).map((_, i) => {
+                          const opt = now.startOf('month').add(i, 'month');
+                          return (
+                            <Select.Option key={opt.format('YYYY-MM')} value={opt.format('YYYY-MM')}>
+                              {opt.format('MMMM YYYY')}
+                            </Select.Option>
+                          );
+                        })}
+                      </Select>
+                    </div>
 
                     <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
-                      <Button type="default" ghost onClick={() => setAppointmentDates([])} style={{ borderRadius: 8 }}>Clear</Button>
-                      <Button type="primary" onClick={applyAppointmentDatesToForm} disabled={appointmentDates.length === 0} style={{ borderRadius: 8 }}>Add Dates to Inquiry</Button>
+                      <Button className="inquiry-outline-btn" onClick={() => setAppointmentDates([])} style={{ borderRadius: 20, padding: '6px 14px' }}>Clear</Button>
+                      <Button className="inquiry-gradient-btn" onClick={applyAppointmentDatesToForm} disabled={appointmentDates.length === 0} style={{ borderRadius: 20, padding: '6px 18px', minWidth: 160 }}>Add Dates to Inquiry</Button>
                     </div>
                   </div>
                 </div>

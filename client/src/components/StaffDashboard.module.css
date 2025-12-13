@@ -1,0 +1,260 @@
+/* StaffDashboard Modern Professional Styling */
+
+:root {
+  --primary-color: #0f766e;
+  --secondary-color: #0891b2;
+  --success-color: #52c41a;
+  --warning-color: #faad14;
+  --danger-color: #dc2626;
+  --text-primary: #0f172a;
+  --text-secondary: #6b7280;
+  --text-tertiary: #9ca3af;
+  --bg-primary: #ffffff;
+  --bg-secondary: #f9fafb;
+  --bg-tertiary: #f8fafb;
+  --border-color: #e5e7eb;
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.1), 0 8px 24px rgba(0, 0, 0, 0.08);
+  --shadow-hover: 0 10px 32px rgba(0, 0, 0, 0.12), 0 16px 48px rgba(0, 0, 0, 0.1);
+}
+
+/* Global Ant Design Overrides */
+.ant-card {
+  border-radius: 12px !important;
+  border: 1px solid var(--border-color) !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.ant-card-head {
+  border-bottom: 1px solid var(--border-color) !important;
+  padding: 16px !important;
+}
+
+.ant-card-body {
+  padding: 16px !important;
+}
+
+.ant-card:hover {
+  box-shadow: var(--shadow-md) !important;
+  transform: translateY(-2px) !important;
+}
+
+.ant-modal {
+  border-radius: 12px !important;
+}
+
+.ant-modal-content {
+  border-radius: 12px !important;
+}
+
+.ant-modal-header {
+  border-bottom: 1px solid var(--border-color) !important;
+  border-radius: 12px 12px 0 0 !important;
+}
+
+.ant-modal-title {
+  color: var(--text-primary) !important;
+  font-weight: 700 !important;
+  font-size: 16px !important;
+}
+
+.ant-button-primary {
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%) !important;
+  border: none !important;
+  box-shadow: 0 4px 12px rgba(15, 118, 110, 0.25) !important;
+  font-weight: 500 !important;
+  transition: all 0.3s ease !important;
+}
+
+.ant-button-primary:hover {
+  box-shadow: 0 8px 24px rgba(15, 118, 110, 0.35) !important;
+  transform: translateY(-2px) !important;
+}
+
+.ant-button {
+  border-radius: 6px !important;
+  font-weight: 500 !important;
+  transition: all 0.3s ease !important;
+}
+
+.ant-button:hover {
+  transform: translateY(-1px) !important;
+}
+
+.ant-tag {
+  border-radius: 6px !important;
+  font-weight: 500 !important;
+}
+
+.ant-collapse {
+  border: none !important;
+  background: transparent !important;
+}
+
+.ant-collapse-header {
+  padding: 12px 0 !important;
+  font-weight: 600 !important;
+}
+
+.ant-collapse-content {
+  border-top: 1px solid var(--border-color) !important;
+  padding-top: 12px !important;
+}
+
+.ant-list-item {
+  border-bottom: 1px solid var(--border-color) !important;
+  padding: 12px 0 !important;
+  transition: all 0.2s ease !important;
+}
+
+.ant-list-item:hover {
+  background-color: var(--bg-secondary) !important;
+}
+
+.ant-input,
+.ant-input-textarea {
+  border-radius: 6px !important;
+  border: 1px solid var(--border-color) !important;
+  font-size: 13px !important;
+  transition: all 0.3s ease !important;
+}
+
+.ant-input:hover,
+.ant-input-textarea:hover {
+  border-color: var(--secondary-color) !important;
+}
+
+.ant-input:focus,
+.ant-input-textarea:focus {
+  border-color: var(--primary-color) !important;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.1) !important;
+}
+
+.ant-badge {
+  font-weight: 600 !important;
+}
+
+.ant-empty-description {
+  color: var(--text-tertiary) !important;
+}
+
+/* Professional Modal */
+.professional-modal .ant-modal-header {
+  background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
+}
+
+.professional-modal .ant-modal-content {
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
+}
+
+/* Dashboard Card Styles */
+.dashboard-card {
+  overflow: hidden;
+}
+
+.dashboard-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.dashboard-card:hover::before {
+  opacity: 1;
+}
+
+/* Table Styling */
+.ant-table {
+  font-size: 13px;
+}
+
+.ant-table-thead > tr > th {
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+  font-weight: 600 !important;
+  border-bottom: 2px solid var(--border-color) !important;
+}
+
+.ant-table-tbody > tr {
+  transition: all 0.2s ease;
+}
+
+.ant-table-tbody > tr:hover > td {
+  background-color: var(--bg-secondary) !important;
+}
+
+/* Drawer Styling */
+.ant-drawer {
+  border-radius: 12px 0 0 12px;
+}
+
+.ant-drawer-header {
+  border-bottom: 1px solid var(--border-color) !important;
+  padding: 16px !important;
+}
+
+.ant-drawer-close {
+  color: var(--text-secondary) !important;
+}
+
+.ant-drawer-close:hover {
+  color: var(--text-primary) !important;
+}
+
+/* Spin/Loading */
+.ant-spin-spinning {
+  opacity: 0.6;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  :root {
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
+    --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .ant-card {
+    border-radius: 10px !important;
+  }
+
+  .ant-modal {
+    border-radius: 10px !important;
+  }
+
+  .ant-button {
+    border-radius: 5px !important;
+    font-size: 12px !important;
+  }
+}
+
+/* Animations */
+@keyframes slideInUp {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.ant-card {
+  animation: slideInUp 0.3s ease-out;
+}
+
+/* Accessibility */
+.ant-button:focus {
+  outline: 2px solid var(--primary-color) !important;
+  outline-offset: 2px !important;
+}
+
+.ant-input:focus {
+  outline: 2px solid var(--primary-color) !important;
+  outline-offset: 2px !important;
+}

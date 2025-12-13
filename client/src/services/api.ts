@@ -3,7 +3,11 @@ import {
   SystemSettings,
   User,
   ActivityLog,
-  SystemStatistics
+  SystemStatistics,
+  AnalyticsDataPoint,
+  AnalyticsSummary,
+  AnalyticsDistribution,
+  MonthlyAnalytics
 } from '../types/admin';
 import { Notification } from '../types/notification';
 import { localDB } from './localDatabase';
@@ -337,6 +341,9 @@ export const contact = {
   // Public announcements
   getAnnouncements: () =>
     axiosInstance.get('/announcements').then(response => response.data),
+  // Public events
+  getEvents: () =>
+    axiosInstance.get('/events').then(response => response.data),
   getAnnouncementById: (id: string) =>
     axiosInstance.get(`/announcements/${id}`).then(response => response.data),
 };
@@ -745,6 +752,42 @@ const admin = {
     });
     return response.data;
   },
+  
+  // Analytics Methods
+  getAnalyticsSummary: async (params?: { startDate?: string; endDate?: string; residentType?: string }) =>
+    analyticsAPI.getSummary(params),
+  
+  getGenderAnalytics: async () =>
+    analyticsAPI.getGenderDistribution(),
+  
+  getAgeAnalytics: async () =>
+    analyticsAPI.getAgeDistribution(),
+  
+  getCivilStatusAnalytics: async () =>
+    analyticsAPI.getCivilStatusDistribution(),
+  
+  getEducationAnalytics: async () =>
+    analyticsAPI.getEducationDistribution(),
+  
+  getMonthlyDocumentsAnalytics: async () =>
+    analyticsAPI.getMonthlyDocuments(),
+  
+  getAllAnalytics: async () => {
+    try {
+      const [summary, gender, age, civilStatus, education, monthly] = await Promise.all([
+        analyticsAPI.getSummary(),
+        analyticsAPI.getGenderDistribution(),
+        analyticsAPI.getAgeDistribution(),
+        analyticsAPI.getCivilStatusDistribution(),
+        analyticsAPI.getEducationDistribution(),
+        analyticsAPI.getMonthlyDocuments(),
+      ]);
+      return { summary, gender, age, civilStatus, education, monthly };
+    } catch (error) {
+      console.error('Error fetching all analytics:', error);
+      throw error;
+    }
+  },
 };
 
 // Resident Personal Info API
@@ -793,6 +836,69 @@ export const authAPI = {
     }
   }
 };
+// Analytics API
+export const analyticsAPI = {
+  // Get summary statistics
+  getSummary: async (params?: { startDate?: string; endDate?: string; residentType?: string }) =>
+    axiosInstance.get('/analytics/summary', { params }).then(res => res.data),
+
+  // Get gender distribution
+  getGenderDistribution: async () =>
+    axiosInstance.get('/analytics/gender').then(res => res.data),
+
+  // Get age buckets
+  getAgeDistribution: async () =>
+    axiosInstance.get('/analytics/age').then(res => res.data),
+
+  // Get civil status
+  getCivilStatusDistribution: async () =>
+    axiosInstance.get('/analytics/civil-status').then(res => res.data),
+
+  // Get education
+  getEducationDistribution: async () =>
+    axiosInstance.get('/analytics/education').then(res => res.data),
+
+  // Get monthly documents
+  getMonthlyDocuments: async () =>
+    axiosInstance.get('/analytics/documents-monthly').then(res => res.data),
+
+  // Get occupation distribution
+  getOccupationDistribution: async () =>
+    axiosInstance.get('/analytics/occupation').then(res => res.data),
+
+  // Get nationality distribution
+  getNationalityDistribution: async () =>
+    axiosInstance.get('/analytics/nationality').then(res => res.data),
+
+  // Get blood type distribution
+  getBloodTypeDistribution: async () =>
+    axiosInstance.get('/analytics/blood-type').then(res => res.data),
+
+  // Get disability distribution
+  getDisabilityDistribution: async () =>
+    axiosInstance.get('/analytics/disability').then(res => res.data),
+
+  // Get business type distribution
+  getBusinessTypeDistribution: async () =>
+    axiosInstance.get('/analytics/business-type').then(res => res.data),
+
+  // Get business size distribution
+  getBusinessSizeDistribution: async () =>
+    axiosInstance.get('/analytics/business-size').then(res => res.data),
+
+  // Get children count distribution
+  getChildrenCountDistribution: async () =>
+    axiosInstance.get('/analytics/children-count').then(res => res.data),
+
+  // Get income brackets
+  getIncomeBrackets: async () =>
+    axiosInstance.get('/analytics/income-brackets').then(res => res.data),
+
+  // Get monthly analytics
+  getMonthlyAnalytics: async () =>
+    axiosInstance.get('/analytics').then(res => res.data),
+};
+
 export { 
   contact as contactAPI, 
   admin as adminAPI,

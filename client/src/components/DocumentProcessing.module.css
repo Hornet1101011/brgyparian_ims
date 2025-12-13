@@ -1,14 +1,252 @@
-/* DocumentProcessing.module.css
-   Mobile-first responsive styles for DocumentProcessing
-*/
+/* DocumentProcessing.module.css - Modern Design */
+
 .wrapper {
-  max-width: 1200px;
-  margin: 12px auto;
-  padding: 12px 16px;
+  max-width: 1400px;
+  margin: 24px auto;
+  padding: 0 16px;
 }
+
 .pageTitle {
-  margin: 0 0 8px 0;
+  margin: 0 0 24px 0;
+  color: #333;
+  font-size: 28px;
+  font-weight: 700;
 }
+
+/* Responsive Grid for Mobile */
+@media (max-width: 768px) {
+  .wrapper {
+    padding: 0 12px;
+  }
+
+  .pageTitle {
+    font-size: 20px;
+  }
+}
+
+/* Empty State */
+.emptyState {
+  text-align: center;
+  padding: 60px 20px;
+}
+
+.emptyIcon {
+  font-size: 48px;
+  color: #ccc;
+  margin-bottom: 16px;
+}
+
+/* Modal Content */
+.modalContent {
+  padding: 16px;
+}
+
+/* Document Card Styles */
+.documentCard {
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.3s ease-in-out;
+}
+
+.documentCard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+/* Status Badge Styles */
+.statusBadgePending {
+  background-color: #e6f7ff;
+  color: #1890ff;
+  border: 1px solid #1890ff;
+}
+
+.statusBadgeApproved {
+  background-color: #f6ffed;
+  color: #52c41a;
+  border: 1px solid #52c41a;
+}
+
+.statusBadgeRejected {
+  background-color: #fff2f0;
+  color: #ff4d4f;
+  border: 1px solid #ff4d4f;
+}
+
+/* Table Enhancements */
+.tableWrapper {
+  background: linear-gradient(135deg, #fafbfc 0%, #f5f8fc 100%);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* Mobile List Styles */
+.mobileList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mobileCard {
+  border-radius: 12px;
+  border: 1px solid #f0f0f0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  transition: all 0.3s ease;
+}
+
+.mobileCard:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
+}
+
+.mobileCardRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+}
+
+.mobileMeta {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.iconWrap {
+  width: 52px;
+  height: 52px;
+  border-radius: 8px;
+  background: #f0f5ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.mobileTitleWrap {
+  min-width: 0;
+  flex: 1;
+}
+
+.mobileTitle {
+  max-width: 100%;
+  font-weight: 600;
+  font-size: 14px;
+  color: #333;
+  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobileSubtitle {
+  font-size: 12px;
+  color: #666;
+}
+
+.mobileActions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.statusTag {
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 11px;
+  padding: 4px 10px;
+}
+
+.actionButtons {
+  display: flex;
+  gap: 6px;
+}
+
+.actionButtons button {
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.uploadDate {
+  font-size: 11px;
+  color: #999;
+  white-space: nowrap;
+}
+
+/* Filter Section */
+.filterSection {
+  background: #fafbfc;
+  border-radius: 12px;
+  border: 1px solid #f0f0f0;
+  padding: 16px;
+  margin-bottom: 24px;
+}
+
+.filterGroup {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.filterInput {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.filterSelect {
+  flex: 0 1 180px;
+}
+
+.filterDate {
+  flex: 0 1 240px;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 1024px) {
+  .filterGroup {
+    gap: 8px;
+  }
+
+  .filterSelect {
+    flex: 0 1 140px;
+  }
+
+  .filterDate {
+    flex: 0 1 180px;
+  }
+}
+
+@media (max-width: 768px) {
+  .filterGroup {
+    flex-direction: column;
+  }
+
+  .filterInput,
+  .filterSelect,
+  .filterDate {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .mobileCardRow {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .mobileActions {
+    width: 100%;
+    align-items: flex-start;
+  }
+}
+
+/* Loading Spinner */
 .loadingWrap {
   width: 100%;
   min-height: 300px;
@@ -16,88 +254,11 @@
   align-items: center;
   justify-content: center;
 }
-.controls {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-.controlInput {
-  width: 420px;
-}
-.controlSelect {
-  width: 160px;
-}
-.controlDate {
-  min-width: 220px;
-}
 
-/* Mobile list and card styles */
-.mobileList {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+/* Capitalize Text */
+.capitalize {
+  text-transform: capitalize;
 }
-.mobileCard {
-  padding: 8px;
-  border-radius: 8px;
-}
-.mobileCardRow {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 8px;
-}
-.mobileMeta {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  flex: 1 1 auto;
-}
-.iconWrap {
-  font-size: 20px;
-  width: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.mobileTitleWrap {
-  min-width: 0;
-}
-.mobileTitle {
-  max-width: 220px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-weight: 600;
-}
-.mobileSubtitle {
-  font-size: 12px;
-  color: #666;
-}
-.mobileActions {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-  min-width: 90px;
-}
-.statusTag {
-  font-weight: 700;
-}
-.actionButtons button {
-  padding: 4px 8px;
-}
-.uploadDate {
-  font-size: 11px;
-  color: #999;
-}
-
-/* Modal content sizing */
-.modalContent {
-  min-width: 480px;
-}
-
 /* Preview layout: side-by-side preview + request selector */
 .previewWrapper {
   display: flex;

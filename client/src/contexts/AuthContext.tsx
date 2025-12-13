@@ -179,6 +179,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('token', token);
     // Set cookie for backend authentication (expires in 1 day)
     document.cookie = `token=${token}; path=/; max-age=86400; SameSite=Lax`;
+    // Clear sidebar hidden flags so announcements/events always appear on login
+    try {
+      localStorage.removeItem('announcements.sidebar.hidden');
+      localStorage.removeItem('events.sidebar.hidden');
+    } catch (e) {}
     dispatch({ type: 'LOGIN', payload: token });
     // Fetch and persist full profile after login
     (async () => {

@@ -1,6 +1,6 @@
 import './responsive-system-title.css';
-import React, { useState, useEffect } from 'react';
-import { Layout, Menu, Button, Space, Dropdown } from 'antd';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Layout, Menu, Button, Space, Dropdown, Drawer } from 'antd';
 import {
   LogoutOutlined,
   ClockCircleOutlined,
@@ -19,10 +19,12 @@ import {
   UserOutlined,
   BellOutlined,
   CalendarOutlined,
+  CloseOutlined,
 } from '@ant-design/icons';
 import './AppLayoutSidebar.css';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import AnnouncementsBanner from './AnnouncementsBanner';
 
 // Date and Time display component (smaller, subtle, top-right)
 const DateTimeDisplay: React.FC = () => {
@@ -151,6 +153,9 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [screenSize, setScreenSize] = useState<'mobile' | 'tablet' | 'desktop'>('desktop');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  
   // Prefer the richer persisted full profile in localStorage when available.
   // AuthContext keeps a token-decoded user in context; the full profile fetched
   // from the server is stored in `localStorage.userProfile`. Merge them so
@@ -176,12 +181,43 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
 
   // SSE for verification/profile updates is disabled while feature is paused
 
+  // Detect screen size for responsive behavior
+  useEffect(() => {
+    const handleResize = () => {
+      const width = window.innerWidth;
+      if (width < 768) {
+        setScreenSize('mobile');
+      } else if (width < 1200) {
+        setScreenSize('tablet');
+      } else {
+        setScreenSize('desktop');
+      }
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Close mobile menu when navigation happens
+  const handleNavigate = useCallback((key: string) => {
+    if (location.pathname !== key) {
+      navigate(key);
+      setMobileMenuOpen(false);
+    }
+  }, [location.pathname, navigate]);
+
+  // Determine sidebar configuration based on screen size
+  const sidebarWidth = screenSize === 'mobile' ? 0 : SIDEBAR_WIDTH;
+  const sidebarCollapsedWidth = screenSize === 'mobile' ? 0 : SIDEBAR_COLLAPSED_WIDTH;
+  const marginLeft = user ? (screenSize === 'mobile' ? 0 : (collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH)) : 0;
+
   // Close dropdown on outside click
   // Removed notification dropdown logic
 
   return (
     <Layout style={{ minHeight: '100vh', background: '#000' }}>
-      {user && (
+      {user && screenSize !== 'mobile' && (
         <Sider
           width={SIDEBAR_WIDTH}
           collapsed={collapsed}
@@ -243,69 +279,153 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           </div>
         </Sider>
       )}
-  <Layout style={{ marginLeft: user ? (collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH) : 0 }}>
+
+      {/* Mobile Navigation Drawer */}
+      {user && screenSize === 'mobile' && (
+        <Drawer
+          title={
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: '#fff' }}>
+              <img 
+                src={`${process.env.PUBLIC_URL}/logo-parian2.png`} 
+                alt="Logo" 
+                style={{ width: 28, height: 28 }} 
+              />
+              <span style={{ fontSize: 16, fontWeight: 600 }}>Menu</span>
+            </div>
+          }
+          placement="left"
+          onClose={() => setMobileMenuOpen(false)}
+          open={mobileMenuOpen}
+          bodyStyle={{ padding: 0, background: '#f8f9fa' }}
+          headerStyle={{
+            background: 'linear-gradient(135deg, #40c9ff 0%, #e81cff 100%)',
+            borderBottom: 'none',
+            padding: '12px 16px',
+          }}
+          closeIcon={<CloseOutlined style={{ color: '#fff', fontSize: 20 }} />}
+          width={280}
+        >
+          <div style={{ padding: '8px 0' }}>
+            <Menu
+              theme="light"
+              mode="vertical"
+              selectedKeys={[location.pathname]}
+              style={{
+                background: 'transparent',
+                fontWeight: 500,
+                fontSize: 15,
+                border: 'none',
+                padding: '8px 0',
+              }}
+              items={
+                navConfig[
+                  user?.role === 'admin'
+                    ? 'admin'
+                    : user?.role === 'staff'
+                    ? 'staff'
+                    : 'resident'
+                ].map(item => ({
+                  ...item,
+                  className: location.pathname === item.key ? 'mobile-menu-item-active' : 'mobile-menu-item'
+                }))
+              }
+              onClick={({ key }) => handleNavigate(key)}
+            />
+          </div>
+        </Drawer>
+      )}
+
+  <Layout style={{ marginLeft }}>
         <Header
           className="app-header"
           style={{
-            height: HEADER_HEIGHT,
+            height: screenSize === 'mobile' ? 56 : HEADER_HEIGHT,
             background: '#fff',
             display: 'flex',
             flexWrap: 'nowrap',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: '0 32px',
+            padding: screenSize === 'mobile' ? '0 12px' : '0 32px',
             position: 'fixed',
-            left: user ? (collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH) : 0,
+            left: marginLeft,
             right: 0,
             top: 0,
             zIndex: 101,
             boxShadow: '0 2px 8px #e3e6f3',
           }}
         >
+          {/* Mobile Menu Toggle Button */}
+          {user && screenSize === 'mobile' && (
+            <Button
+              type="default"
+              shape="circle"
+              size="small"
+              icon={<MenuOutlined />}
+              onClick={() => setMobileMenuOpen(true)}
+              style={{ marginRight: 8 }}
+            />
+          )}
+
           <div
             className="responsive-system-title"
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: 12,
+              gap: screenSize === 'mobile' ? 8 : 12,
               maxWidth: '100%',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
+              flex: 1,
+              minWidth: 0,
             }}
           >
-            {/* collapse button removed per design — sidebar remains static per current layout */}
             {/* Logo icon (served from public/) */}
-            <img src={`${process.env.PUBLIC_URL}/logo-parian2.png`} alt="Logo" style={{ width: 36, height: 36, marginRight: 4 }} />
-            <span style={{
-              fontSize: 26,
-              fontWeight: 400,
-              letterSpacing: 1,
-              background: 'linear-gradient(90deg, #40c9ff, #e81cff)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              display: 'inline-block',
-              maxWidth: '100%',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}>
-              Barangay Information <span style={{ fontWeight: 800 }}>Management System</span>
-            </span>
+            <img 
+              src={`${process.env.PUBLIC_URL}/logo-parian2.png`} 
+              alt="Logo" 
+              style={{ 
+                width: screenSize === 'mobile' ? 28 : 36, 
+                height: screenSize === 'mobile' ? 28 : 36, 
+                marginRight: screenSize === 'mobile' ? 0 : 4,
+                flexShrink: 0,
+              }} 
+            />
+            {screenSize !== 'mobile' && (
+              <span style={{
+                fontSize: screenSize === 'tablet' ? 18 : 26,
+                fontWeight: 400,
+                letterSpacing: 1,
+                background: 'linear-gradient(90deg, #40c9ff, #e81cff)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                display: 'inline-block',
+                maxWidth: '100%',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}>
+                Barangay Information <span style={{ fontWeight: 800 }}>Management System</span>
+              </span>
+            )}
           </div>
-          <div className="header-controls" style={{ display: 'flex', alignItems: 'center', gap: 16, position: 'relative', marginRight: 8 }}>
-            <span style={{ marginRight: 8 }}>
-              <DateTimeDisplay />
-            </span>
+          <div className="header-controls" style={{ display: 'flex', alignItems: 'center', gap: screenSize === 'mobile' ? 8 : 16, position: 'relative', marginRight: screenSize === 'mobile' ? 0 : 48, flexShrink: 0 }}>
+            {screenSize !== 'mobile' && (
+              <span style={{ marginRight: 8 }}>
+                <DateTimeDisplay />
+              </span>
+            )}
             {/* Utility bar: quick actions */}
-            <Space size={12}>
-              {displayUser && (
-                // Route admins to admin management, others to public announcements
-                <Button size="small" onClick={() => navigate(displayUser?.role === 'admin' ? '/admin/announcements' : '/announcements')}
-                  icon={<NotificationOutlined />}
-                />
-              )}
-            </Space>
+            {screenSize !== 'mobile' && (
+              <Space size={12}>
+                {displayUser && (
+                  // Route admins to admin management, others to public announcements
+                  <Button size="small" onClick={() => navigate(displayUser?.role === 'admin' ? '/admin/announcements' : '/announcements')}
+                    icon={<NotificationOutlined />}
+                  />
+                )}
+              </Space>
+            )}
             {/* Verification status indicator removed while feature is paused */}
             {/* profile/menu icons (uses icons instead of Avatar) */}
             {(() => {
@@ -326,7 +446,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                   trigger={["click"]}
                 >
                   <div style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8, padding: 2 }}>
-                    <Button type="default" shape="circle" size="small" icon={<MenuOutlined />} />
+                    <Button type="default" shape="circle" size={screenSize === 'mobile' ? 'small' : 'small'} icon={<UserOutlined />} />
                   </div>
                 </Dropdown>
               );
@@ -338,12 +458,13 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   <div style={{ height: 1, background: '#f0f0f0', width: '100%', margin: 0, boxShadow: 'none' }} />
         <Content
           style={{
-            marginTop: HEADER_HEIGHT,
-            padding: 32,
+            marginTop: screenSize === 'mobile' ? 56 : HEADER_HEIGHT,
+            padding: screenSize === 'mobile' ? 12 : screenSize === 'tablet' ? 16 : 32,
             background: 'linear-gradient(135deg, #e3f6fd 0%, #b3e0ff 60%,  #b3e0ff 100%)',
-            minHeight: `calc(100vh - ${HEADER_HEIGHT}px)`,
+            minHeight: `calc(100vh - ${screenSize === 'mobile' ? 56 : HEADER_HEIGHT}px)`,
           }}
         >
+          {(user?.role === 'resident' || user?.role === 'staff') && <AnnouncementsBanner />}
           {children}
         </Content>
       </Layout>

@@ -5,7 +5,6 @@ import {
   Table,
   Button,
   Space,
-  Tag,
   Typography,
   Spin,
   Form,
@@ -18,14 +17,13 @@ import {
   DatePicker,
   Row,
   Col,
-  Breadcrumb,
   Popconfirm,
   Modal,
   Tabs,
   Upload,
 } from 'antd';
 import AppAvatar from '../AppAvatar';
-import { EditOutlined, DeleteOutlined, MoreOutlined, EyeOutlined, StopOutlined, CheckOutlined, ReloadOutlined } from '@ant-design/icons';
+import { EditOutlined, DeleteOutlined, MoreOutlined, EyeOutlined, StopOutlined, CheckOutlined, ReloadOutlined, FormOutlined } from '@ant-design/icons';
 import type { SortOrder } from 'antd/es/table/interface';
 import { adminAPI } from '../../services/api';
 import dayjs from 'dayjs';
@@ -229,13 +227,13 @@ const UserManagement: React.FC = () => {
                 style={{ backgroundColor: '#1890ff', verticalAlign: 'middle' }}
                 src={record.avatar}
                 user={displayUser}
-                size={36}
+                size={40}
               >
                 {(text && text.length > 0) ? text.charAt(0).toUpperCase() : '?'}
               </AppAvatar>
             );
           })()}
-          <b>{text}</b>
+          <div style={{ fontWeight: 700, color: '#1f2937', fontSize: 15 }}>{text}</div>
         </Space>
       ),
       sorter: (a: any, b: any) => a.fullName.localeCompare(b.fullName),
@@ -246,13 +244,32 @@ const UserManagement: React.FC = () => {
       title: 'Barangay ID',
       dataIndex: 'barangayId',
       key: 'barangayId',
-      render: (id: string) => id || '—',
+      render: (id: string) => (
+        <span style={{ 
+          fontSize: 14,
+          color: '#6b7280',
+          fontWeight: 500,
+          letterSpacing: '-0.2px'
+        }}>
+          {id || '—'}
+        </span>
+      ),
       width: 160,
     },
     {
       title: 'Email',
       dataIndex: 'email',
       key: 'email',
+      render: (email: string) => (
+        <span style={{ 
+          fontSize: 14,
+          color: '#6b7280',
+          fontWeight: 500,
+          letterSpacing: '-0.2px'
+        }}>
+          {email || '-'}
+        </span>
+      ),
       sorter: (a: any, b: any) => a.email.localeCompare(b.email),
       sortDirections: ['ascend' as SortOrder, 'descend' as SortOrder],
     },
@@ -262,7 +279,26 @@ const UserManagement: React.FC = () => {
       key: 'role',
       render: (role: string) => {
         const r = role || '';
-        return <Tag color={r === 'admin' ? 'magenta' : r === 'staff' ? 'blue' : 'green'}>{r ? (r.charAt(0).toUpperCase() + r.slice(1)) : ''}</Tag>;
+        const roleColors: any = {
+          'admin': { bg: '#fef3c7', text: '#d97706', border: '#fcd34d' },
+          'staff': { bg: '#dbeafe', text: '#1890ff', border: '#93c5fd' },
+          'resident': { bg: '#d1fae5', text: '#059669', border: '#a7f3d0' }
+        };
+        const colors = roleColors[r] || { bg: '#f3f4f6', text: '#6b7280', border: '#e5e7eb' };
+        return (
+          <span style={{ 
+            background: colors.bg,
+            color: colors.text, 
+            padding: '6px 14px',
+            borderRadius: 6,
+            fontWeight: 700,
+            fontSize: 13,
+            border: `1px solid ${colors.border}`,
+            display: 'inline-block'
+          }}>
+            {r ? (r.charAt(0).toUpperCase() + r.slice(1)) : ''}
+          </span>
+        );
       },
       filters: roleOptions,
       onFilter: (value: any, record: any) => record.role === value,
@@ -271,7 +307,20 @@ const UserManagement: React.FC = () => {
       title: 'Status',
       dataIndex: 'isActive',
       key: 'isActive',
-      render: (active: boolean) => <Tag color={active ? 'green' : 'red'}>{active ? 'Active' : 'Inactive'}</Tag>,
+      render: (active: boolean) => (
+        <span style={{ 
+          background: active ? '#d1fae5' : '#fee2e2',
+          color: active ? '#059669' : '#dc2626', 
+          padding: '6px 14px',
+          borderRadius: 6,
+          fontWeight: 700,
+          fontSize: 13,
+          border: `1px solid ${active ? '#a7f3d0' : '#fecaca'}`,
+          display: 'inline-block'
+        }}>
+          {active ? 'Active' : 'Inactive'}
+        </span>
+      ),
       filters: statusOptions,
       onFilter: (value: any, record: any) => record.isActive === value,
     },
@@ -279,7 +328,16 @@ const UserManagement: React.FC = () => {
       title: 'Created',
       dataIndex: 'createdAt',
       key: 'createdAt',
-      render: (date: string) => dayjs(date).format('YYYY-MM-DD'),
+      render: (date: string) => (
+        <span style={{ 
+          fontSize: 14,
+          color: '#6b7280',
+          fontWeight: 500,
+          letterSpacing: '-0.2px'
+        }}>
+          {dayjs(date).format('YYYY-MM-DD')}
+        </span>
+      ),
       sorter: (a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
       sortDirections: ['ascend' as SortOrder, 'descend' as SortOrder],
     },
@@ -290,17 +348,22 @@ const UserManagement: React.FC = () => {
       render: (_: any, record: any) => (
         <Dropdown
           popupRender={() => (
-            <Menu>
-              <Menu.Item key="edit" icon={<EditOutlined />} onClick={() => { setSelectedUser(record); setDrawerOpen(true); }}>
+            <Menu style={{ 
+              borderRadius: 8,
+              boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+              minWidth: 160,
+              padding: '4px 0'
+            }}>
+              <Menu.Item key="edit" icon={<EditOutlined style={{ color: '#1890ff' }} />} style={{ color: '#1f2937' }} onClick={() => { setSelectedUser(record); setDrawerOpen(true); }}>
                 Edit
               </Menu.Item>
-              <Menu.Item key="logs" icon={<EyeOutlined />} onClick={() => { /* View logs logic */ }}>
+              <Menu.Item key="logs" icon={<EyeOutlined style={{ color: '#0891b2' }} />} style={{ color: '#1f2937' }} onClick={() => { /* View logs logic */ }}>
                 View Logs
               </Menu.Item>
-              <Menu.Item key="deactivate" icon={<StopOutlined />} onClick={() => { /* Deactivate logic */ }}>
+              <Menu.Item key="deactivate" icon={<StopOutlined style={{ color: '#faad14' }} />} style={{ color: '#1f2937' }} onClick={() => { /* Deactivate logic */ }}>
                 Deactivate
               </Menu.Item>
-              <Menu.Item key="toggleVerified" icon={<CheckOutlined />} onClick={async () => {
+              <Menu.Item key="toggleVerified" icon={<CheckOutlined style={{ color: '#52c41a' }} />} style={{ color: '#1f2937' }} onClick={async () => {
                 if (!record || !record._id) { message.error('No user selected'); return; }
                 const confirmText = record.verified ? `Mark ${record.fullName || record.email} as unverified?` : `Mark ${record.fullName || record.email} as verified?`;
                 Modal.confirm({
@@ -311,7 +374,7 @@ const UserManagement: React.FC = () => {
               }}>
                 {record.verified ? 'Unverify' : 'Verify'}
               </Menu.Item>
-              <Menu.Item key="disable_now" icon={<StopOutlined />} onClick={async () => {
+              <Menu.Item key="disable_now" icon={<StopOutlined style={{ color: '#faad14' }} />} style={{ color: '#1f2937' }} onClick={async () => {
                 if (!record || !record._id) { message.error('No user selected'); return; }
                 // confirm and disable immediately
                 Modal.confirm({
@@ -323,7 +386,7 @@ const UserManagement: React.FC = () => {
                 Disable
               </Menu.Item>
               {record.role === 'staff' && (
-                <Menu.Item key="demote" icon={<ReloadOutlined />} onClick={async () => {
+                <Menu.Item key="demote" icon={<ReloadOutlined style={{ color: '#8b5cf6' }} />} style={{ color: '#1f2937' }} onClick={async () => {
                   if (!record || !record._id) { message.error('No user selected'); return; }
                   Modal.confirm({
                     title: 'Demote user',
@@ -334,7 +397,7 @@ const UserManagement: React.FC = () => {
                   Demote to Resident
                 </Menu.Item>
               )}
-              <Menu.Item key="enable_now" icon={<CheckOutlined />} onClick={async () => {
+              <Menu.Item key="enable_now" icon={<CheckOutlined style={{ color: '#52c41a' }} />} style={{ color: '#1f2937' }} onClick={async () => {
                 if (!record || !record._id) { message.error('No user selected'); return; }
                 Modal.confirm({
                   title: 'Enable user',
@@ -344,14 +407,34 @@ const UserManagement: React.FC = () => {
               }}>
                 Enable
               </Menu.Item>
-              <Menu.Item key="delete" icon={<DeleteOutlined />} danger onClick={() => { /* Delete logic */ }}>
+              <Menu.Item key="delete" icon={<DeleteOutlined style={{ color: '#dc2626' }} />} danger style={{ color: '#dc2626' }} onClick={() => { /* Delete logic */ }}>
                 Delete
               </Menu.Item>
             </Menu>
           )}
           trigger={['click']}
         >
-          <Button icon={<MoreOutlined />} size="small" />
+          <Button 
+            icon={<MoreOutlined />} 
+            size="small"
+            style={{
+              background: 'transparent',
+              border: '1px solid #e5e7eb',
+              color: '#6b7280',
+              fontWeight: 600,
+              borderRadius: 6
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = '#f3f4f6';
+              e.currentTarget.style.borderColor = '#d1d5db';
+              e.currentTarget.style.color = '#1f2937';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.borderColor = '#e5e7eb';
+              e.currentTarget.style.color = '#6b7280';
+            }}
+          />
         </Dropdown>
       ),
     },
@@ -375,78 +458,111 @@ const UserManagement: React.FC = () => {
   const endIdx = Math.min(page * pageSize, filteredUsers.length);
 
   return (
-    <div>
-      <Card
-        style={{ marginBottom: 16, borderRadius: 8, background: '#fff' }}
-        styles={{ body: { padding: 0 } }}
-        bordered={false}
-        title={
-          <Row align="middle" justify="space-between">
-            <Col>
-              <Typography.Title level={4} style={{ margin: 0 }}>User Management</Typography.Title>
-              <Breadcrumb>
-                <Breadcrumb.Item>Admin</Breadcrumb.Item>
-                <Breadcrumb.Item>User Management</Breadcrumb.Item>
-              </Breadcrumb>
-            </Col>
-            <Col>
-              <Space>
-                {/* Add-user buttons removed per request */}
-              </Space>
-            </Col>
-          </Row>
-        }
-      />
-      <Card style={{ borderRadius: 16, boxShadow: '0 2px 16px #40c9ff11' }}>
-        <Row gutter={16} style={{ marginBottom: 16 }} align="middle">
-          <Col>
+    <div style={{ padding: '32px', background: 'linear-gradient(135deg, #f5f7fa 0%, #ffffff 50%, #f5f7fa 100%)', minHeight: '100vh' }}>
+      {/* Header Section */}
+      <div style={{ marginBottom: 40, paddingBottom: 28, borderBottom: '2px solid rgba(24, 144, 255, 0.1)' }}>
+        <Typography.Title level={2} style={{ marginBottom: 12, fontWeight: 900, color: '#0f172a', fontSize: 36, letterSpacing: '-0.5px' }}>User Management</Typography.Title>
+        <Typography.Text style={{ color: '#6b7280', fontSize: 15, fontWeight: 500, lineHeight: 1.6 }}>Manage system users, roles, and permissions</Typography.Text>
+      </div>
+
+      {/* Filters Card */}
+      <Card 
+        style={{ marginBottom: 32, background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)', borderRadius: 16, boxShadow: '0 6px 20px rgba(24, 144, 255, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8)', border: '2px solid #e5f0ff' }}
+        styles={{ body: { padding: 24 } }}
+        hoverable={false}
+      >
+        <Row gutter={[16, 16]} align="middle" style={{ marginBottom: 20 }}>
+          <Col xs={24} sm={12} md={6}>
+            <div style={{ marginBottom: 8 }}>
+              <Typography.Text style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Search</Typography.Text>
+            </div>
             <Input.Search
               placeholder="Search by name or email"
               value={search}
               onChange={e => setSearch(e.target.value)}
               allowClear
-              style={{ width: 200 }}
+              style={{ width: '100%' }}
+              size="large"
             />
           </Col>
-          <Col>
+          <Col xs={24} sm={12} md={5}>
+            <div style={{ marginBottom: 8 }}>
+              <Typography.Text style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Role</Typography.Text>
+            </div>
             <Select
-              placeholder="Role"
+              placeholder="Filter by role"
               allowClear
-              style={{ width: 120 }}
+              style={{ width: '100%' }}
               value={roleFilter}
               onChange={setRoleFilter}
               options={roleOptions}
+              size="large"
             />
           </Col>
-          <Col>
+          <Col xs={24} sm={12} md={5}>
+            <div style={{ marginBottom: 8 }}>
+              <Typography.Text style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Status</Typography.Text>
+            </div>
             <Select
-              placeholder="Status"
+              placeholder="Filter by status"
               allowClear
-              style={{ width: 120 }}
+              style={{ width: '100%' }}
               value={statusFilter}
               onChange={setStatusFilter}
               options={statusOptions}
+              size="large"
             />
           </Col>
-          <Col>
+          <Col xs={24} sm={12} md={8}>
+            <div style={{ marginBottom: 8 }}>
+              <Typography.Text style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Date Range</Typography.Text>
+            </div>
             <DatePicker.RangePicker
               value={dateRange}
               onChange={setDateRange}
-              style={{ width: 220 }}
+              style={{ width: '100%' }}
               allowClear
+              size="large"
             />
           </Col>
+        </Row>
+        <Row>
           <Col>
-            <Button icon={<ReloadOutlined />} onClick={() => {
-              setSearch('');
-              setRoleFilter(undefined);
-              setStatusFilter(undefined);
-              setDateRange(null);
-            }}>Reset Filters</Button>
+            <Button 
+              icon={<ReloadOutlined />} 
+              onClick={() => {
+                setSearch('');
+                setRoleFilter(undefined);
+                setStatusFilter(undefined);
+                setDateRange(null);
+              }}
+              size="large"
+              style={{ fontWeight: 600 }}
+            >
+              Reset Filters
+            </Button>
           </Col>
         </Row>
-        {bulkBar}
-        {loading ? <Spin size="large" /> : (
+      </Card>
+
+      {/* Bulk Actions Bar */}
+      {bulkBar && (
+        <div style={{ marginBottom: 28, padding: '16px 20px', background: 'linear-gradient(135deg, #eff6ff 0%, #f0f9ff 100%)', borderRadius: 12, border: '2px solid #bfdbfe', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Space style={{ fontSize: 14, fontWeight: 600, color: '#1f2937' }}>
+            {bulkBar}
+          </Space>
+        </div>
+      )}
+
+      {/* Users Table Card */}
+      <Card 
+        style={{ background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)', borderRadius: 16, boxShadow: '0 6px 20px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8)', border: '2px solid #f0f0f0', borderTop: '6px solid #1890ff' }}
+        styles={{ body: { padding: 0 } }}
+        hoverable={false}
+      >
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: 80 }}><Spin size="large" /></div>
+        ) : (
           <Table
             columns={columns}
             dataSource={filteredUsers}
@@ -462,6 +578,7 @@ const UserManagement: React.FC = () => {
               pageSizeOptions: ['10', '20', '50', '100'],
               onShowSizeChange: (_current, size) => setPageSize(size),
               showTotal: (total) => `Showing ${startIdx}–${endIdx} of ${total} users`,
+              style: { paddingTop: 24, paddingBottom: 24, paddingLeft: 24, paddingRight: 24 }
             }}
             onRow={record => ({
               onClick: () => {
@@ -481,11 +598,22 @@ const UserManagement: React.FC = () => {
         title={selectedUser ? selectedUser.fullName : 'User Profile'}
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        width={400}
+        width={420}
+        styles={{
+          header: {
+            background: 'linear-gradient(135deg, #ffffff 0%, #f8fafb 100%)',
+            borderBottom: '2px solid rgba(24,144,255,0.1)',
+            padding: '20px 24px'
+          },
+          body: {
+            background: 'linear-gradient(135deg, #f5f7fa 0%, #ffffff 50%, #f5f7fa 100%)',
+            padding: '0px'
+          }
+        }}
       >
         {selectedUser && (
-          <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-            <Row align="middle" gutter={16}>
+          <Space direction="vertical" size="large" style={{ width: '100%', padding: '28px 24px', display: 'flex' }}>
+            <Row align="middle" gutter={16} style={{ marginBottom: 8 }}>
               <Col>
                 {(() => {
                   let displayUser = selectedUser as any;
@@ -497,305 +625,355 @@ const UserManagement: React.FC = () => {
                     ? (selectedResident.profileImage ? selectedResident.profileImage : getAbsoluteApiUrl(`/resident/personal-info/avatar/${selectedResident.profileImageId}`))
                     : (selectedUser.avatar || null);
                   return (
-                    <AppAvatar size={64} style={{ backgroundColor: '#1890ff' }} src={src} user={displayUser}>
+                    <AppAvatar size={72} style={{ backgroundColor: '#1890ff' }} src={src} user={displayUser}>
                       {(selectedUser.fullName && selectedUser.fullName.length > 0) ? selectedUser.fullName.charAt(0).toUpperCase() : '?'}
                     </AppAvatar>
                   );
                 })()}
               </Col>
-              <Col>
-                <Typography.Title level={5} style={{ margin: 0 }}>{selectedUser.fullName}</Typography.Title>
-                <div style={{ marginTop: 4 }}>
-                  <Tag color={selectedUser.isActive ? 'green' : 'red'} style={{ marginRight: 8 }}>{selectedUser.isActive ? 'Active' : 'Inactive'}</Tag>
-                  <Tag color={selectedUser.verified ? 'green' : 'default'} style={{ marginRight: 8 }}>{selectedUser.verified ? 'Verified' : 'Unverified'}</Tag>
-                  <Tag color={selectedUser.role === 'admin' ? 'magenta' : selectedUser.role === 'staff' ? 'blue' : 'green'}>{(selectedUser.role ? (selectedUser.role.charAt(0).toUpperCase() + selectedUser.role.slice(1)) : '')}</Tag>
+              <Col style={{ flex: 1 }}>
+                <Typography.Title level={4} style={{ margin: 0, marginBottom: 12, fontWeight: 700, color: '#1f2937', fontSize: 18 }}>{selectedUser.fullName}</Typography.Title>
+                <div style={{ marginTop: 4, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ 
+                    background: selectedUser.isActive ? '#d1fae5' : '#fee2e2',
+                    color: selectedUser.isActive ? '#059669' : '#dc2626', 
+                    padding: '4px 12px',
+                    borderRadius: 6,
+                    fontWeight: 700,
+                    fontSize: 12,
+                    border: `1px solid ${selectedUser.isActive ? '#a7f3d0' : '#fecaca'}`
+                  }}>
+                    {selectedUser.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                  <span style={{ 
+                    background: selectedUser.verified ? '#d1fae5' : '#f3f4f6',
+                    color: selectedUser.verified ? '#059669' : '#6b7280', 
+                    padding: '4px 12px',
+                    borderRadius: 6,
+                    fontWeight: 700,
+                    fontSize: 12,
+                    border: `1px solid ${selectedUser.verified ? '#a7f3d0' : '#d1d5db'}`
+                  }}>
+                    {selectedUser.verified ? 'Verified' : 'Unverified'}
+                  </span>
+                  <span style={{ 
+                    background: selectedUser.role === 'admin' ? '#fef3c7' : selectedUser.role === 'staff' ? '#dbeafe' : '#d1fae5',
+                    color: selectedUser.role === 'admin' ? '#d97706' : selectedUser.role === 'staff' ? '#1890ff' : '#059669', 
+                    padding: '4px 12px',
+                    borderRadius: 6,
+                    fontWeight: 700,
+                    fontSize: 12,
+                    border: `1px solid ${selectedUser.role === 'admin' ? '#fcd34d' : selectedUser.role === 'staff' ? '#93c5fd' : '#a7f3d0'}`
+                  }}>
+                    {(selectedUser.role ? (selectedUser.role.charAt(0).toUpperCase() + selectedUser.role.slice(1)) : '')}
+                  </span>
                 </div>
                 {selectedUser.barangayId && (
-                  <div style={{ marginTop: 8 }}>
-                    <Typography.Text type="secondary">Barangay ID: </Typography.Text>
-                    <Typography.Text copyable>{selectedUser.barangayId}</Typography.Text>
+                  <div style={{ marginTop: 10 }}>
+                    <Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Barangay ID</Typography.Text>
+                    <Typography.Text copyable style={{ display: 'block', marginTop: 4, color: '#1f2937', fontWeight: 600, fontSize: 13 }}>{selectedUser.barangayId}</Typography.Text>
                   </div>
                 )}
               </Col>
             </Row>
-            <Typography.Text strong>Email:</Typography.Text>
-            <Typography.Text>{selectedUser.email}</Typography.Text>
+            <div style={{ paddingTop: 12, paddingBottom: 12, borderTop: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb' }}>
+              <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Email</Typography.Text>
+              <Typography.Text style={{ display: 'block', marginTop: 6, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>{selectedUser.email}</Typography.Text>
+            </div>
+
+            <Row style={{ marginTop: 12, marginBottom: 16, paddingLeft: 0, paddingRight: 0 }} gutter={[16, 8]}>
+              <Col span={12}>
+                <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Created At</Typography.Text>
+                <Typography.Text style={{ display: 'block', marginTop: 4, color: '#1f2937', fontWeight: 500, fontSize: 13 }}>{selectedResident?.createdAt ? dayjs(selectedResident.createdAt).format('YYYY-MM-DD HH:mm') : (selectedUser.createdAt ? dayjs(selectedUser.createdAt).format('YYYY-MM-DD HH:mm') : 'N/A')}</Typography.Text>
+              </Col>
+              <Col span={12}>
+                <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Last Login</Typography.Text>
+                <Typography.Text style={{ display: 'block', marginTop: 4, color: '#1f2937', fontWeight: 500, fontSize: 13 }}>{selectedUser.lastLogin ? dayjs(selectedUser.lastLogin).format('YYYY-MM-DD HH:mm') : 'N/A'}</Typography.Text>
+              </Col>
+            </Row>
 
             {/* Resident Information section (prefer resident container) */}
-            <Typography.Title level={5} style={{ marginTop: 12 }}>Resident Information</Typography.Title>
+            <Typography.Title level={5} style={{ marginTop: 24, marginBottom: 16, color: '#1f2937', fontWeight: 700, letterSpacing: '-0.3px', fontSize: 15 }}>Resident Information</Typography.Title>
             {residentLoading ? (
               <Spin />
             ) : selectedResident ? (
               <>
                 {/* Personal / Identity */}
-                <Typography.Title level={5}>Personal Information</Typography.Title>
-                <Row gutter={[8, 8]}>
+                <div style={{ marginTop: 16, padding: '16px 16px', background: '#f9fafb', borderRadius: 10, border: '1px solid #e5e7eb' }}>
+                  <Typography.Title level={5} style={{ marginBottom: 16, color: '#1f2937', fontWeight: 700, letterSpacing: '-0.3px', margin: 0, fontSize: 14 }}>Personal Information</Typography.Title>
+                  <Row gutter={[16, 16]}>
                   <Col span={12}>
-                    <Typography.Text strong>Full Name:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{`${selectedResident.firstName || ''} ${selectedResident.middleName || ''} ${selectedResident.lastName || ''}`.trim() || 'N/A'}</Typography.Text>
+                    <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Full Name</Typography.Text>
+                    <Typography.Text style={{ display: 'block', marginTop: 6, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>{`${selectedResident.firstName || ''} ${selectedResident.middleName || ''} ${selectedResident.lastName || ''}`.trim() || 'N/A'}</Typography.Text>
                   </Col>
                   <Col span={12}>
-                    <Typography.Text strong>Barangay ID:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{selectedResident.barangayID || 'N/A'}</Typography.Text>
-                  </Col>
-
-                  <Col span={12}>
-                    <Typography.Text strong>Username:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{selectedResident.username || 'N/A'}</Typography.Text>
-                  </Col>
-                  <Col span={12}>
-                    <Typography.Text strong>Email:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{selectedResident.email || selectedUser.email || 'N/A'}</Typography.Text>
+                    <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Barangay ID</Typography.Text>
+                    <Typography.Text style={{ display: 'block', marginTop: 6, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>{selectedResident.barangayID || 'N/A'}</Typography.Text>
                   </Col>
 
                   <Col span={12}>
-                    <Typography.Text strong>Phone:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{selectedResident.contactNumber || 'N/A'}</Typography.Text>
+                    <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Username</Typography.Text>
+                    <Typography.Text style={{ display: 'block', marginTop: 6, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>{selectedResident.username || 'N/A'}</Typography.Text>
                   </Col>
                   <Col span={12}>
-                    <Typography.Text strong>Landline:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{selectedResident.landlineNumber || 'N/A'}</Typography.Text>
+                    <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Email</Typography.Text>
+                    <Typography.Text style={{ display: 'block', marginTop: 6, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>{selectedResident.email || selectedUser.email || 'N/A'}</Typography.Text>
+                  </Col>
+
+                  <Col span={12}>
+                    <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Phone</Typography.Text>
+                    <Typography.Text style={{ display: 'block', marginTop: 6, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>{selectedResident.contactNumber || 'N/A'}</Typography.Text>
+                  </Col>
+                  <Col span={12}>
+                    <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Landline</Typography.Text>
+                    <Typography.Text style={{ display: 'block', marginTop: 6, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>{selectedResident.landlineNumber || 'N/A'}</Typography.Text>
                   </Col>
 
                   <Col span={24}>
-                    <Typography.Text strong>Address:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{selectedResident.address || 'N/A'}</Typography.Text>
+                    <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Address</Typography.Text>
+                    <Typography.Text style={{ display: 'block', marginTop: 6, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>{selectedResident.address || 'N/A'}</Typography.Text>
                   </Col>
 
                   <Col span={12}>
-                    <Typography.Text strong>DOB:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{selectedResident.birthDate ? dayjs(selectedResident.birthDate).format('YYYY-MM-DD') : (selectedResident.birthDate || 'N/A')}</Typography.Text>
+                    <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>DOB</Typography.Text>
+                    <Typography.Text style={{ display: 'block', marginTop: 6, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>{selectedResident.birthDate ? dayjs(selectedResident.birthDate).format('YYYY-MM-DD') : (selectedResident.birthDate || 'N/A')}</Typography.Text>
                   </Col>
                   <Col span={12}>
-                    <Typography.Text strong>Sex/Gender:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{selectedResident.sex || selectedResident.gender || 'N/A'}</Typography.Text>
+                    <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Sex/Gender</Typography.Text>
+                    <Typography.Text style={{ display: 'block', marginTop: 6, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>{selectedResident.sex || selectedResident.gender || 'N/A'}</Typography.Text>
                   </Col>
 
                   <Col span={12}>
-                    <Typography.Text strong>Civil/Marital Status:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{selectedResident.civilStatus || selectedResident.maritalStatus || 'N/A'}</Typography.Text>
+                    <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Civil/Marital Status</Typography.Text>
+                    <Typography.Text style={{ display: 'block', marginTop: 6, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>{selectedResident.civilStatus || selectedResident.maritalStatus || 'N/A'}</Typography.Text>
                   </Col>
                   <Col span={12}>
-                    <Typography.Text strong>Nationality:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{selectedResident.nationality || 'N/A'}</Typography.Text>
+                    <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Nationality</Typography.Text>
+                    <Typography.Text style={{ display: 'block', marginTop: 6, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>{selectedResident.nationality || 'N/A'}</Typography.Text>
                   </Col>
 
                   <Col span={12}>
-                    <Typography.Text strong>Occupation:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{selectedResident.occupation || 'N/A'}</Typography.Text>
+                    <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Occupation</Typography.Text>
+                    <Typography.Text style={{ display: 'block', marginTop: 6, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>{selectedResident.occupation || 'N/A'}</Typography.Text>
                   </Col>
                   <Col span={12}>
-                    <Typography.Text strong>Education:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{selectedResident.educationalAttainment || 'N/A'}</Typography.Text>
+                    <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Education</Typography.Text>
+                    <Typography.Text style={{ display: 'block', marginTop: 6, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>{selectedResident.educationalAttainment || 'N/A'}</Typography.Text>
                   </Col>
-                </Row>
+                  </Row>
+                </div>
 
                 {/* Identification & IDs */}
-                <Typography.Title level={5} style={{ marginTop: 12 }}>Identification</Typography.Title>
-                <Row gutter={[8, 8]}>
-                  <Col span={12}>
-                    <Typography.Text strong>Passport #:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{selectedResident.passportNumber || 'N/A'}</Typography.Text>
-                  </Col>
-                  <Col span={12}>
-                    <Typography.Text strong>Gov ID #:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{selectedResident.governmentIdNumber || 'N/A'}</Typography.Text>
-                  </Col>
-                  <Col span={12}>
-                    <Typography.Text strong>TIN:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{selectedResident.tin || 'N/A'}</Typography.Text>
-                  </Col>
-                  <Col span={12}>
-                    <Typography.Text strong>Barangay Clearance #:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{selectedResident.barangayClearanceNumber || 'N/A'}</Typography.Text>
-                  </Col>
-                </Row>
+                <div style={{ marginTop: 18, padding: '16px 16px', background: '#f9fafb', borderRadius: 10, border: '1px solid #e5e7eb' }}>
+                  <Typography.Title level={5} style={{ marginBottom: 16, color: '#1f2937', fontWeight: 700, letterSpacing: '-0.3px', margin: 0, fontSize: 14 }}>Identification</Typography.Title>
+                  <Row gutter={[16, 16]}>
+                    <Col span={12}>
+                      <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Passport #</Typography.Text>
+                      <Typography.Text style={{ display: 'block', marginTop: 6, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>{selectedResident.passportNumber || 'N/A'}</Typography.Text>
+                    </Col>
+                    <Col span={12}>
+                      <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Gov ID #</Typography.Text>
+                      <Typography.Text style={{ display: 'block', marginTop: 6, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>{selectedResident.governmentIdNumber || 'N/A'}</Typography.Text>
+                    </Col>
+                    <Col span={12}>
+                      <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>TIN</Typography.Text>
+                      <Typography.Text style={{ display: 'block', marginTop: 6, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>{selectedResident.tin || 'N/A'}</Typography.Text>
+                    </Col>
+                    <Col span={12}>
+                      <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Barangay Clearance #</Typography.Text>
+                      <Typography.Text style={{ display: 'block', marginTop: 6, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>{selectedResident.barangayClearanceNumber || 'N/A'}</Typography.Text>
+                    </Col>
+                  </Row>
+                </div>
 
                 {/* Family */}
-                <Typography.Title level={5} style={{ marginTop: 12 }}>Family</Typography.Title>
-                <Row gutter={[8, 8]}>
-                  <Col span={24}>
-                    <Typography.Text strong>Spouse:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{selectedResident.spouseName ? `${selectedResident.spouseName} ${selectedResident.spouseLastName || ''}` : 'N/A'}</Typography.Text>
-                  </Col>
-                  <Col span={12}>
-                    <Typography.Text strong>Number of Children:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{(selectedResident.numberOfChildren || selectedResident.numberOfChildren === 0) ? selectedResident.numberOfChildren : 'N/A'}</Typography.Text>
-                  </Col>
-                  <Col span={12}>
-                    <Typography.Text strong>Children Names/Ages:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{selectedResident.childrenNames ? `${selectedResident.childrenNames} (${selectedResident.childrenAges || ''})` : 'N/A'}</Typography.Text>
-                  </Col>
-                  <Col span={12}>
-                    <Typography.Text strong>Mother:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{selectedResident.motherName || 'N/A'}</Typography.Text>
-                  </Col>
-                  <Col span={12}>
-                    <Typography.Text strong>Father:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{selectedResident.fatherName || 'N/A'}</Typography.Text>
-                  </Col>
-                </Row>
+                <div style={{ marginTop: 18, padding: '16px 16px', background: '#f9fafb', borderRadius: 10, border: '1px solid #e5e7eb' }}>
+                  <Typography.Title level={5} style={{ marginBottom: 16, color: '#1f2937', fontWeight: 700, letterSpacing: '-0.3px', margin: 0, fontSize: 14 }}>Family</Typography.Title>
+                  <Row gutter={[16, 16]}>
+                    <Col span={24}>
+                      <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Spouse</Typography.Text>
+                      <Typography.Text style={{ display: 'block', marginTop: 6, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>{selectedResident.spouseName ? `${selectedResident.spouseName} ${selectedResident.spouseLastName || ''}` : 'N/A'}</Typography.Text>
+                    </Col>
+                    <Col span={12}>
+                      <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Number of Children</Typography.Text>
+                      <Typography.Text style={{ display: 'block', marginTop: 6, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>{(selectedResident.numberOfChildren || selectedResident.numberOfChildren === 0) ? selectedResident.numberOfChildren : 'N/A'}</Typography.Text>
+                    </Col>
+                    <Col span={12}>
+                      <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Children Names/Ages</Typography.Text>
+                      <Typography.Text style={{ display: 'block', marginTop: 6, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>{selectedResident.childrenNames ? `${selectedResident.childrenNames} (${selectedResident.childrenAges || ''})` : 'N/A'}</Typography.Text>
+                    </Col>
+                    <Col span={12}>
+                      <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Mother</Typography.Text>
+                      <Typography.Text style={{ display: 'block', marginTop: 6, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>{selectedResident.motherName || 'N/A'}</Typography.Text>
+                    </Col>
+                    <Col span={12}>
+                      <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Father</Typography.Text>
+                      <Typography.Text style={{ display: 'block', marginTop: 6, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>{selectedResident.fatherName || 'N/A'}</Typography.Text>
+                    </Col>
+                  </Row>
+                </div>
 
                 {/* Emergency */}
-                <Typography.Title level={5} style={{ marginTop: 12 }}>Emergency Contact</Typography.Title>
-                <Row gutter={[8, 8]}>
-                  <Col span={12}>
-                    <Typography.Text strong>Contact Name:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{selectedResident.emergencyContactName || selectedResident.emergencyContact || 'N/A'}</Typography.Text>
-                  </Col>
-                  <Col span={12}>
-                    <Typography.Text strong>Relationship:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{selectedResident.emergencyContactRelationship || 'N/A'}</Typography.Text>
-                  </Col>
-                  <Col span={12}>
-                    <Typography.Text strong>Emergency Phone:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{selectedResident.emergencyContact || selectedResident.spouseContactNumber || 'N/A'}</Typography.Text>
-                  </Col>
-                </Row>
+                <div style={{ marginTop: 18, padding: '16px 16px', background: '#f9fafb', borderRadius: 10, border: '1px solid #e5e7eb' }}>
+                  <Typography.Title level={5} style={{ marginBottom: 16, color: '#1f2937', fontWeight: 700, letterSpacing: '-0.3px', margin: 0, fontSize: 14 }}>Emergency Contact</Typography.Title>
+                  <Row gutter={[16, 16]}>
+                    <Col span={12}>
+                      <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Contact Name</Typography.Text>
+                      <Typography.Text style={{ display: 'block', marginTop: 6, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>{selectedResident.emergencyContactName || selectedResident.emergencyContact || 'N/A'}</Typography.Text>
+                    </Col>
+                    <Col span={12}>
+                      <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Relationship</Typography.Text>
+                      <Typography.Text style={{ display: 'block', marginTop: 6, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>{selectedResident.emergencyContactRelationship || 'N/A'}</Typography.Text>
+                    </Col>
+                    <Col span={12}>
+                      <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Emergency Phone</Typography.Text>
+                      <Typography.Text style={{ display: 'block', marginTop: 6, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>{selectedResident.emergencyContact || selectedResident.spouseContactNumber || 'N/A'}</Typography.Text>
+                    </Col>
+                  </Row>
+                </div>
 
                 {/* Business */}
-                <Typography.Title level={5} style={{ marginTop: 12 }}>Business / Employment</Typography.Title>
-                <Row gutter={[8, 8]}>
-                  <Col span={24}>
-                    <Typography.Text strong>Business Name:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{selectedResident.businessName || 'N/A'}</Typography.Text>
-                  </Col>
+                <div style={{ marginTop: 18, padding: '16px 16px', background: '#f9fafb', borderRadius: 10, border: '1px solid #e5e7eb' }}>
+                  <Typography.Title level={5} style={{ marginBottom: 16, color: '#1f2937', fontWeight: 700, letterSpacing: '-0.3px', margin: 0, fontSize: 14 }}>Business / Employment</Typography.Title>
+                  <Row gutter={[16, 16]}>
+                    <Col span={24}>
+                      <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Business Name</Typography.Text>
+                      <Typography.Text style={{ display: 'block', marginTop: 6, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>{selectedResident.businessName || 'N/A'}</Typography.Text>
+                    </Col>
+                    <Col span={12}>
+                      <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Business Type</Typography.Text>
+                      <Typography.Text style={{ display: 'block', marginTop: 6, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>{selectedResident.businessType || 'N/A'}</Typography.Text>
+                    </Col>
                   <Col span={12}>
-                    <Typography.Text strong>Business Type:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{selectedResident.businessType || 'N/A'}</Typography.Text>
-                  </Col>
-                  <Col span={12}>
-                    <Typography.Text strong>Business Contact:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{selectedResident.businessContactNumber || 'N/A'}</Typography.Text>
+                    <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Business Contact</Typography.Text>
+                    <Typography.Text style={{ display: 'block', marginTop: 6, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>{selectedResident.businessContactNumber || 'N/A'}</Typography.Text>
                   </Col>
                   <Col span={24}>
-                    <Typography.Text strong>Business Address:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{selectedResident.businessAddress || 'N/A'}</Typography.Text>
+                    <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Business Address</Typography.Text>
+                    <Typography.Text style={{ display: 'block', marginTop: 6, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>{selectedResident.businessAddress || 'N/A'}</Typography.Text>
                   </Col>
-                </Row>
+                  </Row>
+                </div>
 
                 {/* Other fields / meta */}
-                <Typography.Title level={5} style={{ marginTop: 12 }}>Other</Typography.Title>
-                <Row gutter={[8, 8]}>
-                  <Col span={12}>
-                    <Typography.Text strong>Blood Type:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{selectedResident.bloodType || 'N/A'}</Typography.Text>
-                  </Col>
-                  <Col span={12}>
-                    <Typography.Text strong>Disability Status:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{selectedResident.disabilityStatus || 'N/A'}</Typography.Text>
-                  </Col>
-                </Row>
+                <div style={{ marginTop: 18, padding: '16px 16px', background: '#f9fafb', borderRadius: 10, border: '1px solid #e5e7eb' }}>
+                  <Typography.Title level={5} style={{ marginBottom: 16, color: '#1f2937', fontWeight: 700, letterSpacing: '-0.3px', margin: 0, fontSize: 14 }}>Other</Typography.Title>
+                  <Row gutter={[16, 16]}>
+                    <Col span={12}>
+                      <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Blood Type</Typography.Text>
+                      <Typography.Text style={{ display: 'block', marginTop: 6, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>{selectedResident.bloodType || 'N/A'}</Typography.Text>
+                    </Col>
+                    <Col span={12}>
+                      <Typography.Text strong style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Disability Status</Typography.Text>
+                      <Typography.Text style={{ display: 'block', marginTop: 6, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>{selectedResident.disabilityStatus || 'N/A'}</Typography.Text>
+                    </Col>
+                  </Row>
+                </div>
 
-                <Row style={{ marginTop: 12 }} gutter={[8, 8]}>
-                  <Col span={12}>
-                    <Typography.Text strong>Created At:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{selectedResident.createdAt ? dayjs(selectedResident.createdAt).format('YYYY-MM-DD HH:mm') : 'N/A'}</Typography.Text>
-                  </Col>
-                  <Col span={12}>
-                    <Typography.Text strong>Last Login:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{selectedUser.lastLogin ? dayjs(selectedUser.lastLogin).format('YYYY-MM-DD HH:mm') : 'N/A'}</Typography.Text>
-                  </Col>
-                </Row>
-
-                <Typography.Title level={5} style={{ marginTop: 12 }}>Social Media / Links</Typography.Title>
-                <Row gutter={[8, 8]}>
-                  <Col span={24}>
-                    <Typography.Text strong>Facebook:</Typography.Text>
-                    {selectedResident.facebook ? (
-                      <Typography.Text style={{ display: 'block' }}>
-                        <a href={selectedResident.facebook} target="_blank" rel="noreferrer">{selectedResident.facebook}</a>
-                      </Typography.Text>
-                    ) : <Typography.Text style={{ display: 'block' }}>N/A</Typography.Text>}
-                  </Col>
-                  <Col span={24}>
-                    <Typography.Text strong>Instagram:</Typography.Text>
-                    {selectedResident.instagram ? (
-                      <Typography.Text style={{ display: 'block' }}>
-                        <a href={selectedResident.instagram} target="_blank" rel="noreferrer">{selectedResident.instagram}</a>
-                      </Typography.Text>
-                    ) : <Typography.Text style={{ display: 'block' }}>N/A</Typography.Text>}
-                  </Col>
-                  <Col span={24}>
-                    <Typography.Text strong>Other Link:</Typography.Text>
-                    <Typography.Text style={{ display: 'block' }}>{selectedResident.website || 'N/A'}</Typography.Text>
-                  </Col>
-                </Row>
+                {/* Social Media / Links */}
+                <div style={{ marginTop: 16, padding: 12, background: '#f9fafb', borderRadius: 8, border: '1px solid #e5e7eb' }}>
+                  <Typography.Title level={5} style={{ marginBottom: 12, color: '#1f2937', fontWeight: 700, letterSpacing: '-0.3px', margin: 0 }}>Social Media / Links</Typography.Title>
+                  <Row gutter={[12, 12]}>
+                    <Col span={24}>
+                      <Typography.Text strong style={{ fontSize: 13, color: '#6b7280', fontWeight: 600 }}>Facebook:</Typography.Text>
+                      {selectedResident.facebook ? (
+                        <Typography.Text style={{ display: 'block', marginTop: 4 }}>
+                          <a href={selectedResident.facebook} target="_blank" rel="noreferrer" style={{ color: '#1890ff', fontWeight: 500 }}>{selectedResident.facebook}</a>
+                        </Typography.Text>
+                      ) : <Typography.Text style={{ display: 'block', marginTop: 4, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>N/A</Typography.Text>}
+                    </Col>
+                    <Col span={24}>
+                      <Typography.Text strong style={{ fontSize: 13, color: '#6b7280', fontWeight: 600 }}>Instagram:</Typography.Text>
+                      {selectedResident.instagram ? (
+                        <Typography.Text style={{ display: 'block', marginTop: 4 }}>
+                          <a href={selectedResident.instagram} target="_blank" rel="noreferrer" style={{ color: '#1890ff', fontWeight: 500 }}>{selectedResident.instagram}</a>
+                        </Typography.Text>
+                      ) : <Typography.Text style={{ display: 'block', marginTop: 4, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>N/A</Typography.Text>}
+                    </Col>
+                    <Col span={24}>
+                      <Typography.Text strong style={{ fontSize: 13, color: '#6b7280', fontWeight: 600 }}>Other Link:</Typography.Text>
+                      <Typography.Text style={{ display: 'block', marginTop: 4, color: '#1f2937', fontWeight: 500, fontSize: 14 }}>{selectedResident.website || 'N/A'}</Typography.Text>
+                    </Col>
+                  </Row>
+                </div>
               </>
             ) : (
               <Typography.Text type="warning">This resident doesn't have resident info yet.</Typography.Text>
             )}
 
-            {/* Social Media section */}
-            <Typography.Title level={5} style={{ marginTop: 12 }}>Social Media</Typography.Title>
-            <Row gutter={[8, 8]}>
-              <Col span={24}>
-                <Typography.Text strong>Facebook:</Typography.Text>
-                {selectedUser.facebook ? (
-                  <Typography.Text style={{ display: 'block' }}>
-                    <a href={selectedUser.facebook} target="_blank" rel="noreferrer">{selectedUser.facebook}</a>
-                  </Typography.Text>
-                ) : <Typography.Text style={{ display: 'block' }}>N/A</Typography.Text>}
-              </Col>
-              <Col span={24}>
-                <Typography.Text strong>Twitter:</Typography.Text>
-                {selectedUser.twitter ? (
-                  <Typography.Text style={{ display: 'block' }}>
-                    <a href={selectedUser.twitter} target="_blank" rel="noreferrer">{selectedUser.twitter}</a>
-                  </Typography.Text>
-                ) : <Typography.Text style={{ display: 'block' }}>N/A</Typography.Text>}
-              </Col>
-              <Col span={24}>
-                <Typography.Text strong>Instagram:</Typography.Text>
-                {selectedUser.instagram ? (
-                  <Typography.Text style={{ display: 'block' }}>
-                    <a href={selectedUser.instagram} target="_blank" rel="noreferrer">{selectedUser.instagram}</a>
-                  </Typography.Text>
-                ) : <Typography.Text style={{ display: 'block' }}>N/A</Typography.Text>}
-              </Col>
-            </Row>
-
-            <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <Space>
-                <Button icon={<EditOutlined />} onClick={() => {
-                  setUserFormValues(selectedUser || {});
-                  setEditUserModalOpen(true);
-                }}>Edit User</Button>
-                <Button onClick={() => {
-                  if (selectedResident) {
-                    setEditFormValues(selectedResident || {});
-                    setEditModalOpen(true);
-                  } else {
-                    message.warning('No resident data to edit');
-                  }
-                }}>Edit Resident</Button>
-              </Space>
-
-              <Space>
-                <Button icon={<EyeOutlined />} onClick={() => { /* view logs action (kept as placeholder) */ }}>View Logs</Button>
-                {selectedUser && selectedUser.role === 'staff' && (
-                  <Popconfirm
-                    title={`Demote ${selectedUser.fullName || selectedUser.email}?`}
-                    onConfirm={async () => { if (selectedUser) await handleDemoteUser(selectedUser._id); }}
-                    okText="Yes"
-                    cancelText="No"
+            {/* Action buttons */}
+            <div style={{ marginTop: 28, paddingTop: 20, paddingBottom: 8, borderTop: '2px solid #e5e7eb', display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-start' }}>
+              <Button 
+                icon={<EditOutlined />} 
+                onClick={() => setEditUserModalOpen(true)}
+                style={{
+                  background: '#1890ff',
+                  color: 'white',
+                  fontWeight: 600,
+                  border: 'none',
+                  height: 36,
+                  paddingLeft: 16,
+                  paddingRight: 16
+                }}
+              >
+                Edit User
+              </Button>
+              {selectedResident && (
+                <Button 
+                  icon={<FormOutlined />}
+                  onClick={() => setEditModalOpen(true)}
+                  style={{
+                    background: '#52c41a',
+                    color: 'white',
+                    fontWeight: 600,
+                    border: 'none',
+                    height: 36,
+                    paddingLeft: 16,
+                    paddingRight: 16
+                  }}
+                >
+                  Edit Resident
+                </Button>
+              )}
+              {selectedUser && selectedUser.isActive ? (
+                <Popconfirm 
+                  title="Disable user" 
+                  description="Are you sure you want to disable this user?" 
+                  onConfirm={async () => { if (selectedUser) await handleDisableUser(selectedUser._id); }}
+                  okText="Yes" 
+                  cancelText="No"
+                >
+                  <Button 
+                    danger
+                    style={{
+                      background: '#faad14',
+                      color: 'white',
+                      fontWeight: 600,
+                      border: 'none',
+                      height: 36,
+                      paddingLeft: 16,
+                      paddingRight: 16
+                    }}
                   >
-                    <Button icon={<ReloadOutlined />}>Demote</Button>
-                  </Popconfirm>
-                )}
-                {selectedUser && selectedUser.isActive ? (
-                  <Popconfirm
-                    title={`Disable ${selectedUser.fullName || selectedUser.email}?`}
-                    onConfirm={async () => { await handleDisableUser(selectedUser._id); }}
-                    okText="Yes"
-                    cancelText="No"
-                  >
-                    <Button icon={<StopOutlined />} danger>Deactivate</Button>
-                  </Popconfirm>
-                ) : (
-                  <Button icon={<CheckOutlined />} onClick={async () => { if (selectedUser) await handleEnableUser(selectedUser._id); }}>Enable</Button>
-                )}
-              </Space>
+                    Disable
+                  </Button>
+                </Popconfirm>
+              ) : (
+                <Button 
+                  onClick={async () => { if (selectedUser) await handleEnableUser(selectedUser._id); }}
+                  style={{
+                    background: '#52c41a',
+                    color: 'white',
+                    fontWeight: 600,
+                    border: 'none',
+                    height: 36,
+                    paddingLeft: 16,
+                    paddingRight: 16
+                  }}
+                >
+                  Enable
+                </Button>
+              )}
             </div>
             {/* Full resident JSON view removed per design */}
           </Space>
@@ -1032,7 +1210,7 @@ const UserManagement: React.FC = () => {
 
       {/* User Registration Modal */}
       {/* User Registration Modal removed */}
-  </div>
+    </div>
   );
 };
 

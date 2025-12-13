@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Row, Col, Form, Input, Button, Card, Typography, message, Modal } from 'antd';
+import { Row, Col, Form, Input, Button, Card, Typography, message, Modal, Radio, notification } from 'antd';
 import { UserOutlined, LockOutlined } from '@ant-design/icons';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -14,9 +14,15 @@ const LoginForm: React.FC = () => {
   const { login, isAuthenticated, user, setUser } = useAuth() as any;
   const [guestModalVisible, setGuestModalVisible] = useState(false);
   const [emergencyModalVisible, setEmergencyModalVisible] = useState(false);
+  const [forgotPasswordModalVisible, setForgotPasswordModalVisible] = useState(false);
   const [guestForm] = Form.useForm();
+  const [forgotPasswordForm] = Form.useForm();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
+  const [forgotPasswordSent, setForgotPasswordSent] = useState(false);
+  const [forgotPasswordMode, setForgotPasswordMode] = useState<'link' | 'otp'>('link');
+  const [forgotPasswordSubmittedEmail, setForgotPasswordSubmittedEmail] = useState<string | null>(null);
   const [officials, setOfficials] = useState<PublicOfficial[]>([]);
   const [, setOfficialsStatus] = useState<string>('loading');
   const carouselRef = useRef<HTMLDivElement | null>(null);
@@ -121,6 +127,21 @@ const LoginForm: React.FC = () => {
     }
   };
 
+  const onForgotPasswordFinish = async (values: { email: string }) => {
+    setForgotPasswordLoading(true);
+    try {
+      const res = await axiosPublic.post('/auth/forgot-password', { email: values.email, mode: forgotPasswordMode });
+      notification.success({ message: 'Request sent', description: res.data?.message || 'Check your email for instructions.' });
+      setForgotPasswordSent(true);
+      setForgotPasswordSubmittedEmail(values.email);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err.message || 'Failed to send reset email';
+      notification.error({ message: 'Error', description: msg });
+    } finally {
+      setForgotPasswordLoading(false);
+    }
+  };
+
   return (
     <>
     <div className="login-page">
@@ -154,8 +175,9 @@ const LoginForm: React.FC = () => {
                                   try {
                                     const t = e.currentTarget as HTMLImageElement;
                                     t.onerror = null;
-                                    // Use lightweight data-URI fallback to avoid missing static asset
-                                    t.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=';
+                                    // Fallback to ui-avatars.com like AvatarImage does
+                                    const name = (off.name || 'Official').toString().trim();
+                                    t.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1677ff&color=fff&size=140`;
                                   } catch (err) {}
                                 }}
                               />
@@ -212,7 +234,9 @@ const LoginForm: React.FC = () => {
                 </Form.Item>
 
                 <div className="links-row">
-                  <RouterLink to="/forgot-password"><Typography.Text type="secondary">Forgot Password?</Typography.Text></RouterLink>
+                  <Button type="link" onClick={() => { setForgotPasswordModalVisible(true); setForgotPasswordSent(false); forgotPasswordForm.resetFields(); }}>
+                    <Typography.Text type="secondary">Forgot Password?</Typography.Text>
+                  </Button>
                   <RouterLink to="/register"><Typography.Text type="secondary">Sign Up</Typography.Text></RouterLink>
                 </div>
                 <div style={{ marginTop: 8, textAlign: 'center' }}>
@@ -312,6 +336,83 @@ const LoginForm: React.FC = () => {
           Philippine National Police (Emergency Hotline): <strong>9-1-1</strong> / <strong>8723-0401</strong> / <strong>8537-4500</strong>
         </Typography.Paragraph>
       </div>
+    </Modal>
+    <Modal
+      title="Forgot Password"
+      open={forgotPasswordModalVisible}
+      onCancel={() => { setForgotPasswordModalVisible(false); setForgotPasswordSent(false); forgotPasswordForm.resetFields(); }}
+      footer={null}
+      centered
+      width={500}
+    >
+      {forgotPasswordSent ? (
+        <div style={{ textAlign: 'center' }}>
+          <Typography.Paragraph style={{ marginBottom: 24 }}>
+            Check your email at <strong>{forgotPasswordSubmittedEmail}</strong> for password reset instructions.
+          </Typography.Paragraph>
+          <Button
+            type="primary"
+            block
+            onClick={() => {
+              setForgotPasswordModalVisible(false);
+              setForgotPasswordSent(false);
+              forgotPasswordForm.resetFields();
+            }}
+          >
+            Back to Login
+          </Button>
+        </div>
+      ) : (
+        <Form
+          layout="vertical"
+          form={forgotPasswordForm}
+          onFinish={onForgotPasswordFinish}
+          requiredMark={false}
+        >
+          <Form.Item label="How would you like to reset your password?">
+            <Radio.Group
+              value={forgotPasswordMode}
+              onChange={(e) => setForgotPasswordMode(e.target.value)}
+            >
+              <Radio value="link">Send reset link (email)</Radio>
+              <Radio value="otp">Send 6-digit code (email)</Radio>
+            </Radio.Group>
+          </Form.Item>
+          <Form.Item
+            name="email"
+            label="Email"
+            rules={[
+              { required: true, message: 'Please enter your email' },
+              { type: 'email', message: 'Enter a valid email' }
+            ]}
+          >
+            <Input placeholder="your@example.com" size="large" />
+          </Form.Item>
+          <Form.Item>
+            <Button
+              htmlType="submit"
+              type="primary"
+              size="large"
+              loading={forgotPasswordLoading}
+              disabled={forgotPasswordLoading}
+              block
+            >
+              Send Reset Instructions
+            </Button>
+          </Form.Item>
+          <Button
+            type="link"
+            block
+            onClick={() => {
+              setForgotPasswordModalVisible(false);
+              setForgotPasswordSent(false);
+              forgotPasswordForm.resetFields();
+            }}
+          >
+            Cancel
+          </Button>
+        </Form>
+      )}
     </Modal>
     </>
   );

@@ -1,32 +1,76 @@
-/* ...existing code... */
+/* Modern gradient button with shiny effect */
 .inquiry-gradient-btn {
-  background: linear-gradient(90deg, #40a9ff 0%, #9254de 100%) !important;
+  background: linear-gradient(135deg, #40c9ff 0%, #e81cff 100%) !important;
   border: none !important;
   color: #fff !important;
-  box-shadow: 0 2px 8px 0 rgba(64, 201, 255, 0.15);
-  transition: box-shadow 0.2s, transform 0.2s, background 0.2s;
-}
-.inquiry-gradient-btn:hover, .inquiry-gradient-btn:focus {
-  background: linear-gradient(90deg, #1890ff 0%, #e81cff 100%) !important;
-  box-shadow: 0 6px 24px 0 rgba(146, 84, 222, 0.18);
-  transform: translateY(-2px) scale(1.03);
-}.inquiry-rounded-input {
-  border-radius: 10px !important;
-  transition: box-shadow 0.2s, border-color 0.2s;
-}
-.inquiry-rounded-input:hover, .inquiry-rounded-input:focus, .inquiry-rounded-input.ant-input-focused, .inquiry-rounded-input.ant-select-focused {
-  box-shadow: 0 0 0 2px #bae7ff;
-  border-color: #40a9ff !important;
-}
-.inquiry-large-textarea {
-  min-height: 120px !important;
-  font-size: 16px;
+  box-shadow: 0 12px 30px rgba(64, 201, 255, 0.3), 0 4px 12px rgba(232, 28, 255, 0.2) !important;
+  transition: box-shadow 0.3s ease, transform 0.3s ease, background 0.3s ease;
+  font-weight: 700;
+  letter-spacing: 0.5px;
 }
 
-/* Calendar improvements for appointment scheduler */
+.inquiry-gradient-btn:hover, .inquiry-gradient-btn:focus {
+  background: linear-gradient(135deg, #1890ff 0%, #c41d7f 100%) !important;
+  box-shadow: 0 16px 40px rgba(24, 144, 255, 0.35), 0 6px 16px rgba(193, 29, 127, 0.25) !important;
+  transform: translateY(-4px) scale(1.02);
+}
+
+.inquiry-gradient-btn:active {
+  transform: translateY(-1px) scale(0.98);
+}
+
+/* Modern rounded inputs with cyan accent */
+.inquiry-rounded-input {
+  border-radius: 10px !important;
+  border: 1px solid rgba(64, 201, 255, 0.3) !important;
+  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+  background: rgba(255, 255, 255, 0.95) !important;
+}
+
+.inquiry-rounded-input:hover {
+  border-color: #40c9ff !important;
+  box-shadow: 0 0 0 3px rgba(64, 201, 255, 0.1) !important;
+}
+
+.inquiry-rounded-input:focus, 
+.inquiry-rounded-input.ant-input-focused, 
+.inquiry-rounded-input.ant-select-focused,
+.inquiry-rounded-input.ant-input:focus {
+  box-shadow: 0 0 0 3px rgba(64, 201, 255, 0.2) !important;
+  border-color: #40c9ff !important;
+}
+
+.inquiry-large-textarea {
+  min-height: 120px !important;
+  font-size: 15px;
+}
+
+/* Modern outline button for calendar */
+.inquiry-outline-btn {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(240, 248, 255, 0.95) 100%);
+  border: 1.5px solid rgba(64, 201, 255, 0.3);
+  color: #1890ff;
+  box-shadow: 0 4px 12px rgba(24, 144, 255, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.inquiry-outline-btn:hover {
+  transform: translateY(-2px);
+  border-color: #40c9ff;
+  box-shadow: 0 8px 20px rgba(64, 201, 255, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.inquiry-outline-btn:active {
+  transform: translateY(0);
+}
+
+/* Calendar improvements */
 .af-calendar-cell {
   padding: 10px 6px !important;
 }
+
 .af-calendar-indicator {
   width: 18px;
   height: 18px;
@@ -246,4 +290,50 @@
     -webkit-overflow-scrolling: touch;
     padding-bottom: 8px;
   }
+}
+
+/* Modern Steps styling */
+.ant-steps {
+  margin-bottom: 24px;
+}
+
+.ant-steps-item-process .ant-steps-item-icon {
+  background: linear-gradient(135deg, #40c9ff 0%, #e81cff 100%) !important;
+  box-shadow: 0 4px 12px rgba(64, 201, 255, 0.2) !important;
+}
+
+.ant-steps-item-finish .ant-steps-item-icon {
+  background: #40c9ff !important;
+  box-shadow: 0 4px 12px rgba(64, 201, 255, 0.15) !important;
+}
+
+.ant-steps-item-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* Form label styling */
+.ant-form-item-label > label {
+  font-weight: 600;
+  color: #333;
+}
+
+/* Upload dragger with modern styling */
+.ant-upload-dragger {
+  border: 2px dashed rgba(64, 201, 255, 0.3) !important;
+  background: rgba(64, 201, 255, 0.02) !important;
+  border-radius: 10px !important;
+  transition: all 0.3s ease;
+}
+
+.ant-upload-dragger:hover {
+  border-color: #40c9ff !important;
+  background: rgba(64, 201, 255, 0.05) !important;
+  box-shadow: 0 4px 12px rgba(64, 201, 255, 0.1) !important;
+}
+
+.ant-upload-dragger.ant-upload-dragger-active {
+  border-color: #40c9ff !important;
+  background: rgba(64, 201, 255, 0.08) !important;
+  box-shadow: 0 8px 24px rgba(64, 201, 255, 0.15) !important;
 }

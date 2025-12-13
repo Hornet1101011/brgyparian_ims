@@ -1,22 +1,386 @@
 .filter-controls{
-  display:flex;
-  gap:8px;
-  align-items:center;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
-.filter-select{
-  /* allow selects to shrink if needed */
-  min-width:0;
+.filter-select {
+  min-width: 0;
+  flex: 1;
+  min-width: 150px;
+}
+
+.category-select,
+.sort-select {
+  border-radius: 6px !important;
+  border: 1px solid rgba(64, 201, 255, 0.3) !important;
+  transition: all 0.3s ease !important;
+}
+
+.category-select:hover,
+.sort-select:hover {
+  border-color: #40c9ff !important;
+  box-shadow: 0 0 0 2px rgba(64, 201, 255, 0.1) !important;
+}
+
+.category-select-focused,
+.sort-select-focused {
+  border-color: #40c9ff !important;
+  box-shadow: 0 0 0 3px rgba(64, 201, 255, 0.2) !important;
+}
+
+/* Document Search Input */
+.document-search .ant-input-search {
+  border-radius: 6px !important;
+}
+
+.document-search .ant-input {
+  border: 1px solid rgba(64, 201, 255, 0.3) !important;
+  border-radius: 6px !important;
+  background: rgba(255, 255, 255, 0.9) !important;
+  transition: all 0.3s ease !important;
+}
+
+.document-search .ant-input:hover {
+  border-color: #40c9ff !important;
+  box-shadow: 0 0 0 2px rgba(64, 201, 255, 0.1) !important;
+}
+
+.document-search .ant-input:focus {
+  border-color: #40c9ff !important;
+  box-shadow: 0 0 0 3px rgba(64, 201, 255, 0.2) !important;
+}
+
+/* Document Card Styling */
+.document-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.document-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #40c9ff 0%, #e81cff 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.document-card:hover::before {
+  opacity: 1;
+}
+
+.document-card:hover {
+  box-shadow: 0 8px 24px rgba(64, 201, 255, 0.15) !important;
+  transform: translateY(-4px);
 }
 
 /* On small screens stack the controls vertically */
-@media (max-width: 600px){
-  .filter-controls{
-    display:flex;
-    flex-direction:column;
-    align-items:stretch;
+@media (max-width: 768px) {
+  .filter-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
   }
-  .filter-select{
-    width:100% !important;
+
+  .filter-select {
+    width: 100% !important;
+  }
+
+  .category-select,
+  .sort-select {
+    width: 100% !important;
+  }
+
+  .document-card {
+    margin: 0 !important;
+  }
+}
+
+@media (max-width: 600px) {
+  .filter-controls {
+    gap: 8px;
+  }
+
+  .filter-select {
+    font-size: 13px;
+  }
+}
+
+/* ============================================
+   Document Request Modal Styling
+   ============================================ */
+
+.document-request-modal-wrapper .ant-modal {
+  border-radius: 12px !important;
+  overflow: hidden !important;
+}
+
+.document-request-modal-wrapper .ant-modal-content {
+  padding: 24px !important;
+  background: #fff !important;
+}
+
+.document-request-modal-wrapper .ant-modal-header {
+  border-bottom: 1px solid #f0f0f0 !important;
+  padding: 16px 24px !important;
+  margin: -24px -24px 24px -24px !important;
+  background: #fafafa !important;
+}
+
+.document-request-modal-wrapper .ant-modal-title {
+  font-size: 18px !important;
+  font-weight: 600 !important;
+}
+
+.document-request-modal-wrapper .ant-modal-close-x {
+  color: #666 !important;
+}
+
+.document-request-modal-wrapper .ant-modal-close-x:hover {
+  color: #333 !important;
+}
+
+/* Form Styling */
+.document-request-form .ant-form-item-label > label {
+  color: #333 !important;
+  font-weight: 600 !important;
+  font-size: 14px !important;
+}
+
+.document-request-form .ant-form-item-required::before {
+  color: #ff4d4f !important;
+}
+
+/* Input Styling */
+.document-request-input {
+  border: 1px solid #d9d9d9 !important;
+  border-radius: 6px !important;
+  transition: all 0.3s ease !important;
+}
+
+.document-request-input:hover {
+  border-color: #40c9ff !important;
+  box-shadow: 0 0 0 2px rgba(64, 201, 255, 0.1) !important;
+}
+
+.document-request-input:focus,
+.document-request-input:focus-within {
+  border-color: #40c9ff !important;
+  box-shadow: 0 0 0 3px rgba(64, 201, 255, 0.2) !important;
+}
+
+.document-request-form .ant-input-textarea-focused .ant-input-textarea-show-count::after {
+  color: #40c9ff !important;
+}
+
+/* Button Styling */
+.document-request-modal-wrapper .ant-btn-primary {
+  background: linear-gradient(135deg, #40c9ff 0%, #e81cff 100%) !important;
+  border: none !important;
+  font-weight: 600 !important;
+  box-shadow: 0 2px 8px rgba(64, 201, 255, 0.2) !important;
+  transition: all 0.3s ease !important;
+}
+
+.document-request-modal-wrapper .ant-btn-primary:hover {
+  box-shadow: 0 4px 12px rgba(64, 201, 255, 0.3) !important;
+  transform: translateY(-2px);
+}
+
+.document-request-modal-wrapper .ant-btn-primary:active {
+  transform: translateY(0);
+}
+
+.document-request-modal-wrapper .ant-btn-default {
+  border-color: #d9d9d9 !important;
+  color: #666 !important;
+  font-weight: 600 !important;
+  transition: all 0.3s ease !important;
+}
+
+.document-request-modal-wrapper .ant-btn-default:hover {
+  border-color: #40c9ff !important;
+  color: #40c9ff !important;
+}
+
+/* DatePicker Styling */
+.document-request-form .ant-picker {
+  width: 100% !important;
+  border-radius: 6px !important;
+  border: 1px solid #d9d9d9 !important;
+  transition: all 0.3s ease !important;
+}
+
+.document-request-form .ant-picker:hover {
+  border-color: #40c9ff !important;
+}
+
+.document-request-form .ant-picker-focused {
+  border-color: #40c9ff !important;
+  box-shadow: 0 0 0 3px rgba(64, 201, 255, 0.2) !important;
+}
+
+/* Error State */
+.document-request-form .ant-form-item-has-error .ant-input,
+.document-request-form .ant-form-item-has-error .ant-input-textarea,
+.document-request-form .ant-form-item-has-error .ant-picker {
+  border-color: #ff4d4f !important;
+}
+
+.document-request-form .ant-form-item-has-error .ant-input:focus,
+.document-request-form .ant-form-item-has-error .ant-input-textarea-focused,
+.document-request-form .ant-form-item-has-error .ant-picker-focused {
+  box-shadow: 0 0 0 3px rgba(255, 77, 79, 0.2) !important;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .document-request-modal-wrapper .ant-modal {
+    width: 95vw !important;
+  }
+
+  .document-request-modal-wrapper .ant-modal-content {
+    padding: 16px !important;
+  }
+
+  .document-request-modal-wrapper .ant-modal-header {
+    margin: -16px -16px 16px -16px !important;
+    padding: 12px 16px !important;
+  }
+
+  .document-request-form .ant-col {
+    width: 100% !important;
+  }
+
+  .document-request-modal-wrapper .ant-space-item {
+    width: 100%;
+  }
+
+  .document-request-modal-wrapper .ant-btn {
+    width: 100%;
+  }
+}
+
+/* ============================================
+   Available Information Modal Styling
+   ============================================ */
+
+.available-info-modal-wrapper .ant-modal {
+  border-radius: 12px !important;
+  overflow: hidden !important;
+}
+
+.available-info-modal-wrapper .ant-modal-content {
+  padding: 24px !important;
+  background: #fff !important;
+}
+
+.available-info-modal-wrapper .ant-modal-header {
+  border-bottom: 1px solid #f0f0f0 !important;
+  padding: 16px 24px !important;
+  margin: -24px -24px 24px -24px !important;
+  background: #fafafa !important;
+}
+
+.available-info-modal-wrapper .ant-modal-title {
+  font-size: 18px !important;
+  font-weight: 600 !important;
+}
+
+/* Info List Styling */
+.info-list {
+  background: transparent !important;
+}
+
+.info-list-item {
+  padding: 12px 0 !important;
+  border-bottom: 1px solid #f0f0f0 !important;
+  transition: all 0.3s ease !important;
+}
+
+.info-list-item:last-child {
+  border-bottom: none !important;
+}
+
+.info-list-item:hover {
+  background: #fafafa !important;
+  padding: 12px 8px !important;
+  border-radius: 6px !important;
+}
+
+.info-list .ant-list-item-meta-title {
+  color: #333 !important;
+  font-weight: 600 !important;
+  font-size: 14px !important;
+  margin-bottom: 4px !important;
+}
+
+.info-list .ant-list-item-meta-description {
+  color: #666 !important;
+  font-size: 13px !important;
+}
+
+.info-list .ant-tag {
+  margin-top: 4px;
+}
+
+/* Info Modal Button */
+.available-info-modal-wrapper .ant-btn-primary {
+  background: linear-gradient(135deg, #40c9ff 0%, #e81cff 100%) !important;
+  border: none !important;
+  font-weight: 600 !important;
+  box-shadow: 0 2px 8px rgba(64, 201, 255, 0.2) !important;
+  transition: all 0.3s ease !important;
+}
+
+.available-info-modal-wrapper .ant-btn-primary:hover {
+  box-shadow: 0 4px 12px rgba(64, 201, 255, 0.3) !important;
+  transform: translateY(-2px);
+}
+
+/* Document Request Modal Footer Button */
+.document-request-form .ant-space-item:first-child .ant-btn {
+  color: #40c9ff !important;
+  border-color: #40c9ff !important;
+  transition: all 0.3s ease !important;
+}
+
+.document-request-form .ant-space-item:first-child .ant-btn:hover {
+  background: rgba(64, 201, 255, 0.1) !important;
+  border-color: #e81cff !important;
+  color: #e81cff !important;
+}
+
+/* Responsive Design for Info Modal */
+@media (max-width: 768px) {
+  .available-info-modal-wrapper .ant-modal {
+    width: 95vw !important;
+  }
+
+  .available-info-modal-wrapper .ant-modal-content {
+    padding: 16px !important;
+  }
+
+  .available-info-modal-wrapper .ant-modal-header {
+    margin: -16px -16px 16px -16px !important;
+    padding: 12px 16px !important;
+  }
+
+  .available-info-modal-wrapper .ant-modal-title {
+    font-size: 16px !important;
+  }
+
+  .info-list-item {
+    padding: 10px 0 !important;
+  }
+
+  .info-list-item:hover {
+    padding: 10px 6px !important;
   }
 }

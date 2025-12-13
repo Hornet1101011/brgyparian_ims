@@ -1,8 +1,10 @@
-import mongoose, { Document } from 'mongoose';
+import mongoose, { Schema, Document, Types } from 'mongoose';
 
 export interface IStaffNote {
+  _id: Types.ObjectId;
   text: string;
-  createdBy: mongoose.Types.ObjectId;
+  createdBy: Types.ObjectId;
+  createdByName?: string;
   createdAt: Date;
   updatedAt?: Date;
 }
@@ -59,6 +61,16 @@ export interface IInquiry extends Document {
   createdAt: Date;
   updatedAt: Date;
 }
+
+// define schema for embedded staff note subdocument
+const StaffNoteSchema = new Schema<IStaffNote>(
+  {
+    text: { type: String, required: true },
+    createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    createdByName: { type: String },
+  },
+  { timestamps: { createdAt: 'createdAt', updatedAt: 'updatedAt' } }
+);
 
 const inquirySchema = new mongoose.Schema({
   subject: {
@@ -149,13 +161,8 @@ const inquirySchema = new mongoose.Schema({
   cancellationReason: { type: String },
   canceledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   canceledAt: { type: Date },
-  // Internal staff-only notes
-  staffNotes: [{
-    text: { type: String, required: true },
-    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    createdAt: { type: Date, default: Date.now },
-    updatedAt: { type: Date }
-  }],
+  // Internal staff-only notes (embedded subdocuments)
+  staffNotes: { type: [StaffNoteSchema], default: [] },
   // Messages that staff can send to the resident (resident-visible when flagged)
   messages: [{
     text: { type: String, required: true },

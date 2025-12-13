@@ -71,3 +71,27 @@ export interface SystemStatistics {
     totalInquiries: number;
   }[];
 }
+
+// Analytics Data Interfaces
+export interface AnalyticsDataPoint {
+  type: string;
+  value: number;
+  name?: string;
+}
+
+export interface AnalyticsSummary {
+  totalResidents: number;
+  totalDocumentRequests: number;
+  requestsByType: AnalyticsDataPoint[];
+}
+
+export interface AnalyticsDistribution {
+  data: AnalyticsDataPoint[];
+  totalResidents?: number;
+}
+
+export interface MonthlyAnalytics {
+  documentRequests: Array<{ _id: { month: number }; count: number }>;
+  inquiries: Array<{ _id: { month: number }; count: number }>;
+  residents: Array<{ _id: { month: number }; count: number }>;
+}

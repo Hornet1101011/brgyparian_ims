@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card, Row, Col, Statistic, List, Typography, Space, Spin, Button, Modal, Input, Collapse, Tag, Empty, Badge, Drawer, Table, notification, Grid } from 'antd';
 import AppAvatar from './AppAvatar';
+import styles from './StaffDashboard.module.css';
 import {
   HourglassOutlined,
   CaretUpOutlined,
@@ -11,7 +12,6 @@ import {
   InboxOutlined,
   RightOutlined,
   FileTextOutlined,
-  
   ExclamationCircleOutlined,
   FileDoneOutlined,
   MessageOutlined,
@@ -19,6 +19,7 @@ import {
   ProfileOutlined,
   FileSearchOutlined,
   MailOutlined,
+  CalendarOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -127,20 +128,19 @@ const StaffDashboard: React.FC = () => {
   const categorizeRequests = (requests: DocumentRequest[]) => {
     const categories = {
       'Certificates': {
-        icon: <SafetyCertificateOutlined style={{ fontSize: '18px', color: '#1890ff' }} />,
+        icon: <SafetyCertificateOutlined style={{ fontSize: '20px', color: '#0891b2' }} />,
         items: [] as DocumentRequest[],
-        color: '#1890ff',
+        color: '#0891b2',
         description: 'Birth, Death, Residency Certificates and more'
       },
       'Permits': {
-        icon: <ProfileOutlined style={{ fontSize: '18px', color: '#52c41a' }} />,
+        icon: <ProfileOutlined style={{ fontSize: '20px', color: '#52c41a' }} />,
         items: [] as DocumentRequest[],
         color: '#52c41a',
         description: 'Building, Business, and Special Event Permits'
-      }
-      ,
+      },
       'Complete': {
-        icon: <FileDoneOutlined style={{ fontSize: '18px', color: '#52c41a' }} />,
+        icon: <FileDoneOutlined style={{ fontSize: '20px', color: '#52c41a' }} />,
         items: [] as DocumentRequest[],
         color: '#52c41a',
         description: 'All completed and approved document requests'
@@ -284,10 +284,11 @@ const StaffDashboard: React.FC = () => {
       ]);
       setDocumentRequests(docRecords);
       setInquiries(inq);
-      // Filter for inbox: assignedRole matches user.role or assignedTo includes user._id
+      // Filter for inbox: assignedRole matches user.role or assignedTo includes user._id, exclude SCHEDULE_APPOINTMENT
       const filtered = inq.filter((inq: any) =>
-        (inq.assignedRole && user && inq.assignedRole === user.role) ||
-        (inq.assignedTo && Array.isArray(inq.assignedTo) && user && inq.assignedTo.includes(user._id))
+        inq.type !== 'SCHEDULE_APPOINTMENT' &&
+        ((inq.assignedRole && user && inq.assignedRole === user.role) ||
+        (inq.assignedTo && Array.isArray(inq.assignedTo) && user && inq.assignedTo.includes(user._id)))
       );
       setInboxInquiries(filtered);
       // Attempt to get count of processed documents from server-side processed_documents metadata
@@ -450,16 +451,24 @@ const StaffDashboard: React.FC = () => {
 
   return (
     <Spin spinning={loading} tip="Loading...">
-      <div>
-        {/* KPI Cards Row */}
-        <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
+      <div style={{ padding: '24px', background: '#f8fafb', minHeight: '100vh' }}>
+        {/* Header */}
+        <div style={{ marginBottom: 32 }}>
+          <Typography.Title level={2} style={{ margin: 0, color: '#0f172a', fontWeight: 700 }}>
+            Staff Dashboard
+          </Typography.Title>
+          <Typography.Text type="secondary" style={{ fontSize: 14, marginTop: 4, display: 'block' }}>
+            Welcome back. Here's your overview for today.
+          </Typography.Text>
+        </div>
+
+        {/* KPI Stats Row - Modern Card Design */}
+        <Row gutter={[16, 16]} style={{ marginBottom: 28 }}>
           <Col xs={24} sm={12} md={6}>
             <Card 
               hoverable 
               bordered={false}
-              size="small"
               onClick={() => {
-                // If there are pending requests, navigate to document processing and open the first one
                 const pending = documentRequests.find(d => d.status === 'pending');
                 if (pending && pending._id) {
                   goWithState('/document-processing', { openRequestId: pending._id });
@@ -469,149 +478,239 @@ const StaffDashboard: React.FC = () => {
               }} 
               style={{ 
                 cursor: 'pointer',
-                transition: 'all 0.3s',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(250, 173, 20, 0.08)',
+                background: '#ffffff',
+                border: '1px solid #fef3c7',
+                borderTop: '4px solid #faad14',
+                borderRadius: 12,
+                height: '100%'
               }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.boxShadow = '0 4px 16px rgba(250, 173, 20, 0.15), 0 8px 24px rgba(250, 173, 20, 0.1)';
+                e.currentTarget.style.transform = 'translateY(-4px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(250, 173, 20, 0.08)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+              styles={{ body: { padding: 20 } }}
             >
-              <Statistic
-                title={
-                  <Space>
-                    <AppAvatar size="small" background="#fff7e6" color="#faad14" icon={<HourglassOutlined style={{ fontSize: '14px' }} />} />
-                    <span>Pending Requests</span>
-                  </Space>
-                }
-                value={stats.pendingRequests}
-                valueStyle={{ color: '#faad14', fontSize: '28px', marginBottom: '4px' }}
-                prefix={<CaretUpOutlined style={{ fontSize: '16px' }} />}
-              />
-              <Typography.Link style={{ fontSize: '13px', color: '#faad14' }}>
-                View Pending Requests
-                <RightOutlined style={{ fontSize: '11px', marginLeft: '4px' }} />
-              </Typography.Link>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Pending Requests</div>
+                  <div style={{ fontSize: 32, fontWeight: 700, color: '#faad14', marginBottom: 12, lineHeight: 1 }}>{stats.pendingRequests}</div>
+                  <Typography.Link style={{ fontSize: 12, color: '#faad14', fontWeight: 500 }}>
+                    View details <RightOutlined style={{ fontSize: 10, marginLeft: 4 }} />
+                  </Typography.Link>
+                </div>
+                <AppAvatar size={56} background="#fef3c7" color="#faad14" icon={<HourglassOutlined style={{ fontSize: 24 }} />} />
+              </div>
             </Card>
           </Col>
           <Col xs={24} sm={12} md={6}>
             <Card 
               hoverable 
               bordered={false}
-              size="small"
               onClick={() => fetchAllProcessedDocuments()} 
               style={{ 
                 cursor: 'pointer',
-                transition: 'all 0.3s',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(8, 145, 178, 0.08)',
+                background: '#ffffff',
+                border: '1px solid #cffafe',
+                borderTop: '4px solid #0891b2',
+                borderRadius: 12,
+                height: '100%'
               }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.boxShadow = '0 4px 16px rgba(8, 145, 178, 0.15), 0 8px 24px rgba(8, 145, 178, 0.1)';
+                e.currentTarget.style.transform = 'translateY(-4px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(8, 145, 178, 0.08)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+              styles={{ body: { padding: 20 } }}
             >
-              <Statistic
-                title={
-                  <Space>
-                    <AppAvatar size="small" background="#e6f7ff" color="#1890ff" icon={<FolderOutlined style={{ fontSize: '14px' }} />} />
-                    <span>Total Documents</span>
-                  </Space>
-                }
-                value={stats.totalDocuments}
-                valueStyle={{ color: '#1890ff', fontSize: '28px', marginBottom: '4px' }}
-                prefix={<DatabaseOutlined style={{ fontSize: '16px' }} />}
-              />
-              <Typography.Link style={{ fontSize: '13px', color: '#1890ff' }}>
-                Browse Documents
-                <RightOutlined style={{ fontSize: '11px', marginLeft: '4px' }} />
-              </Typography.Link>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Documents</div>
+                  <div style={{ fontSize: 32, fontWeight: 700, color: '#0891b2', marginBottom: 12, lineHeight: 1 }}>{stats.totalDocuments}</div>
+                  <Typography.Link style={{ fontSize: 12, color: '#0891b2', fontWeight: 500 }}>
+                    Browse all <RightOutlined style={{ fontSize: 10, marginLeft: 4 }} />
+                  </Typography.Link>
+                </div>
+                <AppAvatar size={56} background="#cffafe" color="#0891b2" icon={<FolderOutlined style={{ fontSize: 24 }} />} />
+              </div>
             </Card>
           </Col>
           <Col xs={24} sm={12} md={6}>
             <Card 
               hoverable 
               bordered={false}
-              size="small"
               onClick={() => setCompletedModalVisible(true)} 
               style={{ 
                 cursor: 'pointer',
-                transition: 'all 0.3s',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(82, 196, 26, 0.08)',
+                background: '#ffffff',
+                border: '1px solid #dcfce7',
+                borderTop: '4px solid #52c41a',
+                borderRadius: 12,
+                height: '100%'
               }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.boxShadow = '0 4px 16px rgba(82, 196, 26, 0.15), 0 8px 24px rgba(82, 196, 26, 0.1)';
+                e.currentTarget.style.transform = 'translateY(-4px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(82, 196, 26, 0.08)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+              styles={{ body: { padding: 20 } }}
             >
-              <Statistic
-                title={
-                  <Space>
-                    <AppAvatar size="small" background="#f6ffed" color="#52c41a" icon={<CheckCircleOutlined style={{ fontSize: '14px' }} />} />
-                    <span>Completed Requests</span>
-                  </Space>
-                }
-                value={stats.completedRequests}
-                valueStyle={{ color: '#52c41a', fontSize: '28px', marginBottom: '4px' }}
-                prefix={<CheckOutlined style={{ fontSize: '16px' }} />}
-              />
-              <Typography.Link style={{ fontSize: '13px', color: '#52c41a' }}>
-                View Completed
-                <RightOutlined style={{ fontSize: '11px', marginLeft: '4px' }} />
-              </Typography.Link>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Completed</div>
+                  <div style={{ fontSize: 32, fontWeight: 700, color: '#52c41a', marginBottom: 12, lineHeight: 1 }}>{stats.completedRequests}</div>
+                  <Typography.Link style={{ fontSize: 12, color: '#52c41a', fontWeight: 500 }}>
+                    View completed <RightOutlined style={{ fontSize: 10, marginLeft: 4 }} />
+                  </Typography.Link>
+                </div>
+                <AppAvatar size={56} background="#dcfce7" color="#52c41a" icon={<CheckCircleOutlined style={{ fontSize: 24 }} />} />
+              </div>
             </Card>
           </Col>
           <Col xs={24} sm={12} md={6}>
             <Card 
               hoverable 
               bordered={false}
-              size="small"
               onClick={() => go('/staff/inbox')} 
               style={{ 
                 cursor: 'pointer',
-                transition: 'all 0.3s',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(220, 38, 38, 0.08)',
+                background: '#ffffff',
+                border: '1px solid #fee2e2',
+                borderTop: '4px solid #dc2626',
+                borderRadius: 12,
+                height: '100%'
               }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.boxShadow = '0 4px 16px rgba(220, 38, 38, 0.15), 0 8px 24px rgba(220, 38, 38, 0.1)';
+                e.currentTarget.style.transform = 'translateY(-4px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(220, 38, 38, 0.08)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+              styles={{ body: { padding: 20 } }}
             >
-              <Statistic
-                title={
-                  <Space>
-                    <AppAvatar size="small" background="#f9f0ff" color="#722ed1" icon={<InboxOutlined style={{ fontSize: '14px' }} />} />
-                    <span>Staff Inbox</span>
-                  </Space>
-                }
-                value={inboxInquiries.length}
-                valueStyle={{ color: '#722ed1', fontSize: '28px', marginBottom: '4px' }}
-                prefix={<MessageOutlined style={{ fontSize: '16px' }} />}
-              />
-              <Typography.Link style={{ fontSize: '13px', color: '#722ed1' }}>
-                Open Inbox
-                <RightOutlined style={{ fontSize: '11px', marginLeft: '4px' }} />
-              </Typography.Link>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Inbox Messages</div>
+                  <div style={{ fontSize: 32, fontWeight: 700, color: '#dc2626', marginBottom: 12, lineHeight: 1 }}>{inboxInquiries.length}</div>
+                  <Typography.Link style={{ fontSize: 12, color: '#dc2626', fontWeight: 500 }}>
+                    Open inbox <RightOutlined style={{ fontSize: 10, marginLeft: 4 }} />
+                  </Typography.Link>
+                </div>
+                <AppAvatar size={56} background="#fee2e2" color="#dc2626" icon={<InboxOutlined style={{ fontSize: 24 }} />} />
+              </div>
             </Card>
           </Col>
         </Row>
-        {/* Staff Calendar centered below KPI cards */}
-        <Row justify="center" style={{ marginBottom: 12 }}>
-          <Col xs={24} lg={20}>
-            <StaffCalendar />
+        {/* Staff Calendar */}
+        <Row style={{ marginBottom: 32 }}>
+          <Col xs={24}>
+            <Card
+              bordered={false}
+              style={{
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)',
+                borderRadius: 14,
+                border: '1px solid #ede9fe',
+                borderTop: '4px solid #8b5cf6',
+                background: '#ffffff',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.1)';
+                e.currentTarget.style.transform = 'translateY(-4px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.06)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+              styles={{ body: { padding: 20 } }}
+            >
+              <StaffCalendar />
+            </Card>
           </Col>
         </Row>
 
-        {/* Main Content Cards */}
-        <Row gutter={[12, 12]}>
+        {/* Main Content Grid */}
+        <Row gutter={[20, 20]}>
           <Col xs={24} lg={7}>
             <Card 
-              title={<Space><FileSearchOutlined /> Document Categories</Space>} 
+              title={
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 8,
+                    background: '#f0f9f8',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 2px 6px rgba(15, 118, 110, 0.1)'
+                  }}>
+                    <FileSearchOutlined style={{ fontSize: 18, color: '#0f766e' }} />
+                  </div>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>Document Categories</span>
+                </div>
+              }
               hoverable
               bordered={false}
               size="small"
               className="dashboard-card"
               style={{ 
-                transition: 'all 0.3s',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06), 0 4px 16px rgba(15, 118, 110, 0.08)',
+                borderRadius: 14,
+                border: '1px solid #e0f2f1',
+                borderTop: '4px solid #0f766e',
+                background: '#ffffff',
+                height: '100%',
+                overflow: 'hidden'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(15, 118, 110, 0.15), 0 12px 32px rgba(15, 118, 110, 0.1)';
+                e.currentTarget.style.transform = 'translateY(-4px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.06), 0 4px 16px rgba(15, 118, 110, 0.08)';
+                e.currentTarget.style.transform = 'translateY(0)';
               }}
               styles={{ body: { 
-                padding: '0',
-                height: '360px',
-                maxHeight: '360px',
-                overflow: 'hidden'
+                padding: '16px',
+                height: 'calc(100% - 60px)',
+                maxHeight: 'calc(100% - 60px)',
+                overflow: 'auto',
+                display: 'flex',
+                flexDirection: 'column'
               } }}
             >
               <Collapse
                 defaultActiveKey={['Certificates']}
-                expandIcon={({ isActive }) => <RightOutlined rotate={isActive ? 90 : 0} />}
+                expandIcon={({ isActive }) => <RightOutlined rotate={isActive ? 90 : 0} style={{ color: '#0f766e', transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)', fontSize: 16 }} />}
                 style={{ 
-                  background: 'white',
-                  height: '400px',
-                  overflowY: 'auto'
+                  background: 'transparent',
+                  border: 'none',
+                  flex: 1,
+                  overflow: 'auto',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8
                 }}
               >
                 {Object.entries(categorizeRequests(documentRequests)).map(([category, data]) => {
@@ -620,28 +719,38 @@ const StaffDashboard: React.FC = () => {
                     <Collapse.Panel
                       key={category}
                       header={
-                        <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-                          <Space align="center">
-                            <AppAvatar size="small" background={data.color + '15'} color={data.color} icon={data.icon} />
-                            <span style={{ fontWeight: 500, fontSize: '14px' }}>{category}</span>
-                          </Space>
-                          <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', width: '100%', gap: 12, padding: '4px 0' }}>
+                          <div style={{
+                            width: 44,
+                            height: 44,
+                            borderRadius: 10,
+                            background: `${data.color}10`,
+                            border: `1.5px solid ${data.color}20`,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            boxShadow: `0 2px 8px ${data.color}12`,
+                            transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                            flexShrink: 0
+                          }}>
+                            {data.icon}
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <span style={{ fontWeight: 700, fontSize: '14px', color: '#0f172a', letterSpacing: '0.3px' }}>{category}</span>
+                            <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: 2 }}>{data.items.length} items</div>
+                          </div>
+                          <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}>
                             {pendingCount > 0 && (
-                              <Tag color="gold" style={{ marginRight: 0 }}>
-                                {pendingCount} pending
+                              <Tag color="gold" style={{ marginRight: 0, fontWeight: 600, borderRadius: 4, fontSize: '11px' }}>
+                                {pendingCount}
                               </Tag>
                             )}
-                            <Badge 
-                              count={data.items.length} 
-                              style={{ backgroundColor: data.color }}
-                              size="small"
-                            />
                           </div>
                         </div>
                       }
                     >
-                      <div style={{ marginBottom: '16px' }}>
-                        <Typography.Text type="secondary" style={{ fontSize: '13px' }}>
+                      <div style={{ marginBottom: '12px', padding: '8px 0' }}>
+                        <Typography.Text type="secondary" style={{ fontSize: '12px', color: '#6b7280', lineHeight: 1.5 }}>
                           {data.description}
                         </Typography.Text>
                       </div>
@@ -649,7 +758,8 @@ const StaffDashboard: React.FC = () => {
                       <List
                         size="small"
                         dataSource={data.items.slice(0, 5)}
-                        split={true}
+                        split={false}
+                        style={{ marginTop: 8 }}
                         renderItem={request => {
                           const statusColors = {
                             PENDING: { color: '#faad14', bg: '#fff7e6' },
@@ -666,60 +776,102 @@ const StaffDashboard: React.FC = () => {
                               onClick={() => navigate('/document-processing', { state: { openRequestId: request._id } })}
                               actions={[
                                 request.status === 'PENDING' && (
-                                  <Space size={4}>
+                                  <Space size={6} style={{ display: 'flex', gap: 2 }}>
                                     <Button
                                       type="text"
                                       size="small"
-                                      icon={<CheckOutlined style={{ color: '#52c41a' }} />}
+                                      icon={<CheckOutlined style={{ color: '#52c41a', fontSize: 16, fontWeight: 600 }} />}
                                       onClick={(e) => { e.stopPropagation(); setSelectedDocument(request); setDocumentStatus('APPROVED'); }}
+                                      title="Approve this request"
+                                      style={{
+                                        width: 32,
+                                        height: 32,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        borderRadius: 6,
+                                        transition: 'all 0.2s ease',
+                                        background: 'transparent'
+                                      }}
+                                      onMouseEnter={(e) => {
+                                        e.currentTarget.style.background = '#f0fdf4';
+                                        e.currentTarget.style.boxShadow = '0 2px 6px rgba(82, 196, 26, 0.12)';
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        e.currentTarget.style.background = 'transparent';
+                                        e.currentTarget.style.boxShadow = 'none';
+                                      }}
                                     />
                                     <Button
                                       type="text"
                                       size="small"
-                                      icon={<ExclamationCircleOutlined style={{ color: '#ff4d4f' }} />}
+                                      icon={<ExclamationCircleOutlined style={{ color: '#ff4d4f', fontSize: 16, fontWeight: 600 }} />}
                                       onClick={(e) => { e.stopPropagation(); setSelectedDocument(request); setDocumentStatus('REJECTED'); }}
+                                      title="Reject this request"
+                                      style={{
+                                        width: 32,
+                                        height: 32,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        borderRadius: 6,
+                                        transition: 'all 0.2s ease',
+                                        background: 'transparent'
+                                      }}
+                                      onMouseEnter={(e) => {
+                                        e.currentTarget.style.background = '#fef2f2';
+                                        e.currentTarget.style.boxShadow = '0 2px 6px rgba(255, 77, 79, 0.12)';
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        e.currentTarget.style.background = 'transparent';
+                                        e.currentTarget.style.boxShadow = 'none';
+                                      }}
                                     />
                                   </Space>
                                 )
                               ].filter(Boolean)}
-                              style={{ padding: '12px 0' }}
+                              style={{ padding: '10px 8px', borderRadius: 8, transition: 'all 0.2s ease', marginBottom: 4 }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = '#f9fafb';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = 'transparent';
+                              }}
                             >
                               <List.Item.Meta
                                 avatar={
                                   <AppAvatar
-                                    size={36}
+                                    size={40}
                                     background={statusStyle.bg}
                                     color={statusStyle.color}
-                                    icon={<FileTextOutlined />}
+                                    icon={<FileTextOutlined style={{ fontSize: 18 }} />}
                                   />
                                 }
                                 title={
-                                  <Space size={8} style={{ marginBottom: 4 }}>
-                                    <Typography.Text strong style={{ fontSize: '14px' }}>
+                                  <div style={{ marginBottom: 4 }}>
+                                    <Typography.Text strong style={{ fontSize: '13px', color: '#0f172a' }}>
                                       {formatDocumentType(request.type || request.title)}
                                     </Typography.Text>
                                     <Tag
                                       color={statusStyle.color}
                                       style={{ 
-                                        margin: 0,
-                                        padding: '0 6px',
-                                        fontSize: '12px',
-                                        lineHeight: '18px'
+                                        marginLeft: 8,
+                                        padding: '2px 8px',
+                                        fontSize: '11px',
+                                        lineHeight: '16px',
+                                        fontWeight: 600,
+                                        borderRadius: 4
                                       }}
                                     >
                                       {status}
                                     </Tag>
-                                  </Space>
+                                  </div>
                                 }
                                 description={
-                                  <Space direction="vertical" size={0}>
-                                    <Typography.Text type="secondary" style={{ fontSize: '13px' }}>
-                                      Requested by: {request.username || 'Unknown'}
-                                    </Typography.Text>
-                                    <Typography.Text type="secondary" style={{ fontSize: '12px' }}>
-                                      {formatDate(request.dateRequested || '')}
-                                    </Typography.Text>
-                                  </Space>
+                                  <div style={{ fontSize: '12px', color: '#6b7280', lineHeight: 1.4 }}>
+                                    <div>{request.username || 'Unknown'}</div>
+                                    <div style={{ color: '#9ca3af', marginTop: 2 }}>{formatDate(request.dateRequested || '')}</div>
+                                  </div>
                                 }
                               />
                             </List.Item>
@@ -762,18 +914,89 @@ const StaffDashboard: React.FC = () => {
             </Card>
           </Col>
           <Col xs={24} lg={10}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div>
-                <div style={{ minHeight: 140 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%' }}>
+              <div style={{ flex: 1 }}>
+                <Card
+                  title={
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: 8,
+                        background: '#faf5ff',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 2px 6px rgba(139, 92, 246, 0.1)'
+                      }}>
+                        📅
+                      </div>
+                      <span style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>Today's Appointments</span>
+                    </div>
+                  }
+                  bordered={false}
+                  style={{
+                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)',
+                    borderRadius: 14,
+                    border: '1px solid #ede9fe',
+                    borderTop: '4px solid #8b5cf6',
+                    background: '#ffffff',
+                    height: '100%',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.1)';
+                    e.currentTarget.style.transform = 'translateY(-4px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.06)';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}
+                  styles={{ body: { padding: 16 } }}
+                  size="small"
+                >
                   <DailyAppointmentsCard />
-                </div>
+                </Card>
               </div>
               <div>
-                {/* Announcements moved into center column */}
+                {/* Announcements card */}
                 <Card
-                  title={<Space><FileTextOutlined /> Announcements</Space>}
-                  style={{ marginTop: 0, background: '#fafbfc', borderRadius: 12, boxShadow: '0 2px 8px #d9d9d933', border: '1px solid #f0f0f0', position: 'relative' }}
-                  styles={{ body: { padding: 12, minHeight: 140 } }}
+                  title={
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: 8,
+                        background: '#f0f9f8',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 2px 6px rgba(8, 145, 178, 0.1)'
+                      }}>
+                        <FileTextOutlined style={{ fontSize: 18, color: '#0891b2' }} />
+                      </div>
+                      <span>Announcements</span>
+                    </div>
+                  }
+                  style={{ 
+                    marginTop: 0,
+                    background: '#ffffff',
+                    borderRadius: 14,
+                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)',
+                    border: '1px solid #e0f2f1',
+                    borderTop: '4px solid #0891b2',
+                    height: '100%',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.1)';
+                    e.currentTarget.style.transform = 'translateY(-4px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.06)';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}
+                  styles={{ body: { padding: 16, minHeight: 200, display: 'flex', flexDirection: 'column' } }}
                   size="small"
                   hoverable={false}
                 >
@@ -787,20 +1010,42 @@ const StaffDashboard: React.FC = () => {
                       <List
                         loading={miniLoading}
                         dataSource={miniAnns}
+                        split={false}
                         renderItem={(item) => (
-                          <List.Item style={{ cursor: 'pointer', padding: '10px 8px', alignItems: 'center' }} onClick={() => { setMiniSelected(item); setDrawerVisible(true); }}>
+                          <List.Item 
+                            style={{ 
+                              cursor: 'pointer',
+                              padding: '10px 8px',
+                              borderRadius: 8,
+                              transition: 'all 0.2s ease',
+                              marginBottom: 4,
+                              border: '1px solid transparent',
+                              alignItems: 'center'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = '#f0f9f8';
+                              e.currentTarget.style.borderColor = '#d0ebe9';
+                              e.currentTarget.style.boxShadow = '0 2px 6px rgba(8, 145, 178, 0.08)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = 'transparent';
+                              e.currentTarget.style.borderColor = 'transparent';
+                              e.currentTarget.style.boxShadow = 'none';
+                            }}
+                            onClick={() => { setMiniSelected(item); setDrawerVisible(true); }}
+                          >
                             <List.Item.Meta
                               title={<div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
                                 <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ fontWeight: 600, fontSize: 13, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: '1.2em' }}>{item.text || 'Untitled'}</div>
-                                  <div style={{ fontSize: 12, color: '#888', marginTop: 6 }}>{new Date(item.createdAt).toLocaleString()}</div>
+                                  <div style={{ fontWeight: 600, fontSize: '13px', color: '#0f172a', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: '1.4em' }}>{item.text || 'Untitled'}</div>
+                                  <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: 6 }}>{new Date(item.createdAt).toLocaleString()}</div>
                                 </div>
                               </div>}
                               description={null}
                             />
                             {item.imagePath && (
                               <div style={{ marginLeft: 12, width: 92, display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
-                                <img loading="lazy" className="rounded-img" src={getAbsoluteApiUrl(`/announcements/${item._id}/image`)} alt="ann" style={{ width: 92, height: 60, objectFit: 'cover', borderRadius: 6, background: '#f0f0f0' }} />
+                                <img loading="lazy" className="rounded-img" src={getAbsoluteApiUrl(`/announcements/${item._id}/image`)} alt="ann" style={{ width: 92, height: 60, objectFit: 'cover', borderRadius: 8, background: '#f0f0f0', boxShadow: '0 2px 6px rgba(0, 0, 0, 0.08)' }} />
                               </div>
                             )}
                           </List.Item>
@@ -809,266 +1054,457 @@ const StaffDashboard: React.FC = () => {
                       />
                     </div>
                   )}
-                  <Button type="link" style={{ position: 'absolute', right: 16, bottom: 0, fontSize: 13, color: '#1890ff' }} onClick={() => navigate('/admin/announcements')}>Manage</Button>
+                  <Button 
+                    type="primary"
+                    size="small"
+                    style={{ 
+                      position: 'absolute', 
+                      right: 16, 
+                      bottom: 16,
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      background: '#0891b2',
+                      borderColor: '#0891b2',
+                      height: 32,
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = '#0678a0';
+                      e.currentTarget.style.borderColor = '#0678a0';
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(8, 145, 178, 0.2)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = '#0891b2';
+                      e.currentTarget.style.borderColor = '#0891b2';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                    onClick={() => navigate('/admin/announcements')}
+                  >
+                    Manage
+                  </Button>
                 </Card>
-                <Drawer open={drawerVisible} onClose={() => { setDrawerVisible(false); setMiniSelected(null); }} title="Announcement" width={720} placement="right">
+                <Drawer 
+                  open={drawerVisible} 
+                  onClose={() => { setDrawerVisible(false); setMiniSelected(null); }} 
+                  title={null}
+                  width={720} 
+                  placement="right"
+                  closeIcon={false}
+                  styles={{ 
+                    header: { padding: 0, height: 0, borderBottom: 'none' },
+                    body: { padding: 0, height: '100%', display: 'flex', flexDirection: 'column' }
+                  }}
+                >
                   {miniSelected && (
-                    <div>
-                      <Typography.Text style={{ display: 'block', marginBottom: 12, whiteSpace: 'pre-wrap' }}>{miniSelected.text}</Typography.Text>
-                      {miniSelected.imagePath && (
-                        <img loading="lazy" className="rounded-img rounded-img-lg" src={getAbsoluteApiUrl(`/announcements/${miniSelected._id}/image`)} alt="announcement" style={{ width: '100%', height: 'auto', borderRadius: 8, background: '#f6f6f6' }} />
-                      )}
-                      <div style={{ marginTop: 8, color: '#888' }}>{new Date(miniSelected.createdAt).toLocaleString()}</div>
+                    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#ffffff' }}>
+                      {/* Header with close button */}
+                      <div style={{ 
+                        background: 'linear-gradient(135deg, #0891b2 0%, #06b6d4 100%)',
+                        padding: '24px 24px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-start',
+                        color: '#ffffff'
+                      }}>
+                        <div style={{ flex: 1 }}>
+                          <Typography.Title level={3} style={{ margin: 0, color: '#ffffff', fontWeight: 700 }}>
+                            Announcement
+                          </Typography.Title>
+                          <Typography.Text style={{ color: 'rgba(255, 255, 255, 0.85)', fontSize: 13, marginTop: 4, display: 'block' }}>
+                            {new Date(miniSelected.createdAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                          </Typography.Text>
+                        </div>
+                        <button 
+                          onClick={() => { setDrawerVisible(false); setMiniSelected(null); }}
+                          style={{
+                            background: 'rgba(255, 255, 255, 0.15)',
+                            border: 'none',
+                            color: '#ffffff',
+                            cursor: 'pointer',
+                            width: 36,
+                            height: 36,
+                            borderRadius: 8,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: 18,
+                            transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                            flexShrink: 0
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.25)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)';
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      {/* Content */}
+                      <div style={{ flex: 1, overflowY: 'auto', padding: '28px 28px' }}>
+                        {/* Image if available */}
+                        {miniSelected.imagePath && (
+                          <div style={{ marginBottom: 24, borderRadius: 12, overflow: 'hidden', boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08)' }}>
+                            <img 
+                              loading="lazy" 
+                              src={getAbsoluteApiUrl(`/announcements/${miniSelected._id}/image`)} 
+                              alt="announcement" 
+                              style={{ width: '100%', height: 'auto', display: 'block' }} 
+                            />
+                          </div>
+                        )}
+
+                        {/* Text content */}
+                        <Typography.Paragraph 
+                          style={{ 
+                            fontSize: 15, 
+                            lineHeight: 1.8,
+                            color: '#0f172a',
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word',
+                            marginBottom: 0
+                          }}
+                        >
+                          {miniSelected.text}
+                        </Typography.Paragraph>
+                      </div>
+
+                      {/* Footer */}
+                      <div style={{ 
+                        padding: '20px 28px',
+                        borderTop: '1px solid #e5e7eb',
+                        background: '#f9fafb',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}>
+                        <Typography.Text type="secondary" style={{ fontSize: 12, color: '#6b7280' }}>
+                          Posted {new Date(miniSelected.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                        </Typography.Text>
+                        <Button 
+                          type="primary" 
+                          onClick={() => {
+                            setDrawerVisible(false);
+                            setMiniSelected(null);
+                            navigate('/announcements');
+                          }}
+                          style={{
+                            background: 'linear-gradient(135deg, #0891b2 0%, #06b6d4 100%)',
+                            border: 'none',
+                            fontSize: 13,
+                            fontWeight: 500,
+                            height: 32,
+                            paddingTop: 6
+                          }}
+                        >
+                          View All
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </Drawer>
               </div>
             </div>
           </Col>
-          
-            <Col xs={24} lg={7}>
+          <Col xs={24} lg={7}>
               <Card 
               title={
-                <Space>
-                  <MailOutlined />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 8,
+                    background: '#fef2f2',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 2px 6px rgba(220, 38, 38, 0.1)'
+                  }}>
+                    <MailOutlined style={{ fontSize: 18, color: '#dc2626' }} />
+                  </div>
                   <span>Inquiries Inbox</span>
                   <Badge 
                     count={inboxInquiries.filter(i => i.status === 'open' || i.status === 'PENDING').length} 
-                    style={{ backgroundColor: '#722ed1' }}
+                    style={{ backgroundColor: '#dc2626' }}
                   />
-                </Space>
+                </div>
               }
               extra={
-                <Space>
-                  <Statistic
-                    value={inboxInquiries.length}
-                    suffix="total"
-                    valueStyle={{ fontSize: '14px', color: '#8c8c8c' }}
-                  />
-                </Space>
+                <Typography.Text type="secondary" style={{ fontSize: 12, color: '#6b7280' }}>
+                  {inboxInquiries.length} total
+                </Typography.Text>
               }
               hoverable
               bordered={false}
               size="small"
               className="dashboard-card"
               style={{ 
-                transition: 'all 0.3s',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                position: 'relative'
+                transition: 'all 0.2s ease',
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)',
+                borderRadius: 14,
+                border: '1px solid #e0f2f1',
+                borderTop: '4px solid #dc2626',
+                background: '#ffffff',
+                position: 'relative',
+                height: '100%'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.1)';
+                e.currentTarget.style.transform = 'translateY(-4px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.06)';
+                e.currentTarget.style.transform = 'translateY(0)';
               }}
               styles={{ body: { 
-                height: '360px',
-                maxHeight: '360px',
-                padding: 0,
-                overflow: 'hidden'
+                height: 'calc(100% - 57px)',
+                maxHeight: 'calc(100% - 57px)',
+                padding: 16,
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column'
               } }}
             >
-              <div style={{ padding: '0 12px' }}>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 <Collapse
                   accordion={false}
                   defaultActiveKey={[ 'open' ]}
-                  expandIcon={({ isActive }) => <RightOutlined rotate={isActive ? 90 : 0} />}
-                  style={{ background: 'white' }}
-                >
-                  <Collapse.Panel
-                    key="open"
-                    header={
-                      <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-                        <Space align="center">
-                          <MailOutlined style={{ color: '#722ed1', fontSize: '16px' }} />
-                          <Typography.Text strong>Open Inquiries</Typography.Text>
-                          <Badge count={inboxInquiries.filter(i => i.status === 'PENDING' || i.status === 'open').length} style={{ backgroundColor: '#722ed1' }} />
-                        </Space>
-                      </div>
-                    }
-                  >
-                    <div style={{ maxHeight: 300, overflowY: 'auto', paddingRight: 8 }}>
-                      {inboxInquiries.filter(i => i.status === 'PENDING' || i.status === 'open').length === 0 ? (
-                        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={<Typography.Text type="secondary">No open inquiries</Typography.Text>} />
-                      ) : (
-            <List
-                size="large"
-              dataSource={sortByDateDesc(inboxInquiries.filter(i => i.status === 'PENDING' || i.status === 'open'))}
-                          renderItem={inquiry => {
-                  const isOpen = inquiry.status === 'PENDING' || inquiry.status === 'open';
-          const avatarColor = isOpen ? '#722ed1' : '#8c8c8c';
-          const avatarBg = isOpen ? '#f9f0ff' : '#f5f5f5';
-          const isViewed = inquiry._id && viewedInquiryIds.has(String(inquiry._id));
-
-          const displayName = inquiry.username || inquiry.residentName || inquiry.subject || 'Unknown';
-          const letter = (displayName && displayName !== 'Unknown' && displayName.length > 0) ? displayName.charAt(0).toUpperCase() : '?';
-
-                      return (
-                        <List.Item
-                      style={{ 
-                        padding: '18px 20px',
-                        minHeight: 72,
-                        borderBottom: '1px solid #f0f0f0',
-                        transition: 'all 0.3s ease',
-                        cursor: 'pointer',
-                        backgroundColor: 'white'
-                      }}
-                      onClick={() => {
-                        // mark as viewed locally so the dot color changes (persisted)
-                        if (inquiry._id) markInquiryViewed(String(inquiry._id));
-                        navigate('/staff/inbox', { state: { openInquiryId: inquiry._id } });
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = '#fafafa';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'white';
-                      }}
-                      
-                      >
-                      <List.Item.Meta
-                        avatar={
-                          <Badge dot={isOpen} color={isOpen && !isViewed ? '#faad14' : '#722ed1'} offset={[-6, 6]}>
-                            <AppAvatar
-                              size={40}
-                              style={{
-                                backgroundColor: avatarBg,
-                                color: avatarColor,
-                                fontSize: '15px',
-                                fontWeight: 600
-                              }}
-                            >
-                              {letter}
-                            </AppAvatar>
-                          </Badge>
-                        }
-                        title={
-                          <div style={{ 
+                  expandIcon={({ isActive }) => <RightOutlined rotate={isActive ? 90 : 0} style={{ color: '#dc2626', transition: 'all 0.2s ease', fontSize: 14 }} />}
+                  style={{ background: 'transparent', border: 'none', flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 8 }}
+                  items={[
+                    {
+                      key: 'open',
+                      label: (
+                        <div style={{ display: 'flex', alignItems: 'center', width: '100%', gap: 10 }}>
+                          <div style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: 6,
+                            background: '#fee2e2',
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '8px',
-                            marginBottom: 0
+                            justifyContent: 'center',
+                            boxShadow: '0 2px 4px rgba(220, 38, 38, 0.08)'
                           }}>
-                            <div style={{ 
-                              fontSize: '14px',
-                              fontWeight: 600,
-                              color: 'rgba(0, 0, 0, 0.85)'
-                            }}>
-                              {inquiry.username || 'Unknown User'}
-                            </div>
-                            <Tag 
-                              color={isOpen ? 'gold' : 'success'}
-                              style={{ 
-                                margin: 0,
-                                fontSize: '12px',
-                                lineHeight: '20px',
-                                height: '22px',
-                                padding: '0 10px',
-                                fontWeight: 'normal',
-                                borderRadius: '4px'
-                              }}
-                            >
-                              {isOpen ? 'PENDING' : 'RESOLVED'}
-                            </Tag>
-                            {isOpen && !isViewed && (
-                              <Tag
-                                color="default"
-                                onClick={(e) => { e.stopPropagation(); if (inquiry._id) markInquiryViewed(String(inquiry._id)); }}
-                                style={{ marginLeft: 8, cursor: 'pointer', background: '#fff7e6', color: '#d48806', border: '1px solid #ffd591' }}
-                              >
-                                UNREAD
-                              </Tag>
-                            )}
+                            <MailOutlined style={{ color: '#dc2626', fontSize: '14px' }} />
                           </div>
-                        }
-                        description={
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%' }}>
-                            <Typography.Text
-                              style={{ 
-                                fontSize: '13px',
-                                color: 'rgba(0, 0, 0, 0.65)',
-                                flexGrow: 1,
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                lineHeight: '1.5'
-                              }}
-                            >
-                              {inquiry.message}
-                            </Typography.Text>
-                            <Typography.Text 
-                              type="secondary" 
-                              style={{ 
-                                fontSize: '12px', 
-                                flexShrink: 0,
-                                color: '#8c8c8c'
-                              }}
-                            >
-                              {formatDate(inquiry.createdAt)}
-                            </Typography.Text>
-                          </div>
-                        }
-                      />
-                    </List.Item>
-                          );
-                        }}
-                      />
-                    )}
-                  </div>
-                </Collapse.Panel>
-                <Collapse.Panel
-                  key="resolved"
-                  header={
-                    <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-                      <Space align="center">
-                        <MailOutlined style={{ color: '#52c41a', fontSize: '16px' }} />
-                        <Typography.Text strong>Resolved Inquiries</Typography.Text>
-                        <Badge count={inboxInquiries.filter(i => !(i.status === 'PENDING' || i.status === 'open')).length} style={{ backgroundColor: '#52c41a' }} />
-                      </Space>
-                    </div>
-                  }
-                >
-                  <div style={{ maxHeight: 220, overflowY: 'auto', paddingRight: 8 }}>
-                    {inboxInquiries.filter(i => !(i.status === 'PENDING' || i.status === 'open')).length === 0 ? (
-                      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={<Typography.Text type="secondary">No resolved inquiries</Typography.Text>} />
-                    ) : (
-                      <List
-                        size="small"
-                        dataSource={sortByDateDesc(inboxInquiries.filter(i => !(i.status === 'PENDING' || i.status === 'open')))}
-                        renderItem={inquiry => {
-                          const avatarColor = '#8c8c8c';
-                          const avatarBg = '#f5f5f5';
+                          <Typography.Text strong style={{ fontSize: '13px', color: '#0f172a' }}>
+                            Open Inquiries
+                          </Typography.Text>
+                          <Badge count={inboxInquiries.filter(i => i.status === 'PENDING' || i.status === 'open').length} style={{ backgroundColor: '#dc2626' }} />
+                        </div>
+                      ),
+                      children: (
+                        <div style={{ maxHeight: 300, overflowY: 'auto', paddingRight: 8 }}>
+                          {inboxInquiries.filter(i => i.status === 'PENDING' || i.status === 'open').length === 0 ? (
+                            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={<Typography.Text type="secondary">No open inquiries</Typography.Text>} />
+                          ) : (
+                <List
+                    size="large"
+                  dataSource={sortByDateDesc(inboxInquiries.filter(i => i.status === 'PENDING' || i.status === 'open'))}
+                    split={false}
+                    style={{ marginTop: 8 }}
+                              renderItem={inquiry => {
+                      const isOpen = inquiry.status === 'PENDING' || inquiry.status === 'open';
+              const avatarColor = isOpen ? '#dc2626' : '#6b7280';
+              const avatarBg = isOpen ? '#fee2e2' : '#f3f4f6';
+              const isViewed = inquiry._id && viewedInquiryIds.has(String(inquiry._id));
+
+              const displayName = inquiry.username || inquiry.residentName || inquiry.subject || 'Unknown';
+              const letter = (displayName && displayName !== 'Unknown' && displayName.length > 0) ? displayName.charAt(0).toUpperCase() : '?';
 
                           return (
                             <List.Item
-                              style={{ padding: '12px 0', borderBottom: '1px solid #f0f0f0' }}
-                            onClick={() => {
-                              if (inquiry._id) markInquiryViewed(String(inquiry._id));
-                              setSelectedInquiry(inquiry);
-                            }}
-                            >
-                              <List.Item.Meta
-                                avatar={<AppAvatar size={40} style={{ backgroundColor: avatarBg, color: avatarColor, fontSize: 14 }}>{(inquiry.username || 'Unknown').charAt(0).toUpperCase()}</AppAvatar>}
-                                title={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                  <div style={{ fontSize: 13, fontWeight: 600 }}>{inquiry.username || 'Unknown User'}</div>
-                                  <Tag color="success" style={{ margin: 0, fontSize: 12 }}>{'RESOLVED'}</Tag>
-                                </div>}
-                                description={<div style={{ fontSize: 12, color: '#888' }}>{inquiry.message}</div>}
-                              />
-                            </List.Item>
+                          style={{ 
+                            padding: '12px 10px',
+                            borderRadius: 8,
+                            transition: 'all 0.2s ease',
+                            marginBottom: 4,
+                            border: '1px solid transparent',
+                            cursor: 'pointer',
+                            backgroundColor: 'transparent'
+                          }}
+                          onClick={() => {
+                            // mark as viewed locally so the dot color changes (persisted)
+                            if (inquiry._id) markInquiryViewed(String(inquiry._id));
+                            navigate('/staff/inbox', { state: { openInquiryId: inquiry._id } });
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = '#f9fafb';
+                            e.currentTarget.style.borderColor = '#f3e8e8';
+                            e.currentTarget.style.boxShadow = '0 2px 6px rgba(220, 38, 38, 0.06)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = 'transparent';
+                            e.currentTarget.style.borderColor = 'transparent';
+                            e.currentTarget.style.boxShadow = 'none';
+                          }}
+                          
+                          >
+                          <List.Item.Meta
+                            avatar={
+                              <Badge dot={isOpen} color={isOpen && !isViewed ? '#fbbf24' : '#dc2626'} offset={[-6, 6]}>
+                                <AppAvatar
+                                  size={40}
+                                  style={{
+                                    backgroundColor: avatarBg,
+                                    color: avatarColor,
+                                    fontSize: '15px',
+                                    fontWeight: 600
+                                  }}
+                                >
+                                  {letter}
+                                </AppAvatar>
+                              </Badge>
+                            }
+                            title={
+                              <div style={{ 
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                marginBottom: 4
+                              }}>
+                                <div style={{ 
+                                  fontSize: '13px',
+                                  fontWeight: 600,
+                                  color: '#0f172a'
+                                }}>
+                                  {inquiry.username || 'Unknown User'}
+                                </div>
+                                <Tag 
+                                  color={isOpen ? 'gold' : 'success'}
+                                  style={{ 
+                                    margin: 0,
+                                    fontSize: '11px',
+                                    lineHeight: '18px',
+                                    height: '20px',
+                                    padding: '0 8px',
+                                    fontWeight: 600,
+                                    borderRadius: '4px'
+                                  }}
+                                >
+                                  {isOpen ? 'PENDING' : 'RESOLVED'}
+                                </Tag>
+                              </div>
+                            }
+                            description={
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }}>
+                                <Typography.Text
+                                  style={{ 
+                                    fontSize: '12px',
+                                    color: '#6b7280',
+                                    flexGrow: 1,
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    lineHeight: '1.4'
+                                  }}
+                                >
+                                  {inquiry.message}
+                                </Typography.Text>
+                                <Typography.Text 
+                                  type="secondary" 
+                                  style={{ 
+                                    fontSize: '11px', 
+                                    flexShrink: 0,
+                                    color: '#9ca3af'
+                                  }}
+                                >
+                                  {formatDate(inquiry.createdAt)}
+                                </Typography.Text>
+                              </div>
+                            }
+                          />
+                        </List.Item>
                           );
                         }}
                       />
                     )}
                   </div>
-                </Collapse.Panel>
-              </Collapse>
-              {/* Manage button positioned at bottom-right of the card */}
-              <div style={{ position: 'absolute', right: 12, bottom: 12, zIndex: 40 }}>
-                <Button
-                  type="link"
-                  style={{ position: 'absolute', right: 16, bottom: 0, fontSize: 13, color: '#1890ff', zIndex: 50, pointerEvents: 'auto' }}
-                  onClick={(e) => { try { e.stopPropagation(); } catch (err) {} ; navigate('/inquiry-tracker'); }}
-                >
-                  Expand
-                </Button>
+                      ),
+                    },
+                    {
+                      key: 'resolved',
+                      label: (
+                        <div style={{ display: 'flex', alignItems: 'center', width: '100%', gap: 10 }}>
+                          <div style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: 6,
+                            background: '#d1fae5',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            boxShadow: '0 2px 4px rgba(16, 185, 129, 0.08)'
+                          }}>
+                            <MailOutlined style={{ color: '#10b981', fontSize: '14px' }} />
+                          </div>
+                          <Typography.Text strong style={{ fontSize: '13px', color: '#0f172a' }}>
+                            Resolved Inquiries
+                          </Typography.Text>
+                          <Badge count={inboxInquiries.filter(i => !(i.status === 'PENDING' || i.status === 'open')).length} style={{ backgroundColor: '#10b981' }} />
+                        </div>
+                      ),
+                      children: (
+                        <div style={{ maxHeight: 220, overflowY: 'auto', paddingRight: 8 }}>
+                          {inboxInquiries.filter(i => !(i.status === 'PENDING' || i.status === 'open')).length === 0 ? (
+                            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={<Typography.Text type="secondary">No resolved inquiries</Typography.Text>} />
+                          ) : (
+                            <List
+                              size="small"
+                              dataSource={sortByDateDesc(inboxInquiries.filter(i => !(i.status === 'PENDING' || i.status === 'open')))}
+                              split={false}
+                              style={{ marginTop: 8 }}
+                              renderItem={inquiry => {
+                                const avatarColor = '#6b7280';
+                                const avatarBg = '#f3f4f6';
+
+                                return (
+                                  <List.Item
+                                    style={{ 
+                                      padding: '10px 8px',
+                                      borderRadius: 8,
+                                      transition: 'all 0.2s ease',
+                                      marginBottom: 4,
+                                      border: '1px solid transparent',
+                                      cursor: 'pointer'
+                                    }}
+                                  onClick={() => {
+                                    if (inquiry._id) markInquiryViewed(String(inquiry._id));
+                                    setSelectedInquiry(inquiry);
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.backgroundColor = '#f0fdf4';
+                                    e.currentTarget.style.borderColor = '#d1e7dd';
+                                    e.currentTarget.style.boxShadow = '0 2px 6px rgba(16, 185, 129, 0.06)';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.backgroundColor = 'transparent';
+                                    e.currentTarget.style.borderColor = 'transparent';
+                                    e.currentTarget.style.boxShadow = 'none';
+                                  }}
+                                  >
+                                    <List.Item.Meta
+                                      avatar={<AppAvatar size={40} style={{ backgroundColor: avatarBg, color: avatarColor, fontSize: 14 }}>{(inquiry.username || 'Unknown').charAt(0).toUpperCase()}</AppAvatar>}
+                                      title={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                        <div style={{ fontSize: '13px', fontWeight: 600, color: '#0f172a' }}>{inquiry.username || 'Unknown User'}</div>
+                                        <Tag color="success" style={{ margin: 0, fontSize: '11px', fontWeight: 600, lineHeight: '18px', height: '20px', padding: '0 8px', borderRadius: 4 }}>{'RESOLVED'}</Tag>
+                                      </div>}
+                                      description={<div style={{ fontSize: '12px', color: '#6b7280' }}>{inquiry.message}</div>}
+                                    />
+                                  </List.Item>
+                                );
+                              }}
+                            />
+                          )}
+                        </div>
+                      ),
+                    }
+                  ]}
+                />
               </div>
-            </div>
             </Card>
           </Col>
           
@@ -1263,32 +1699,49 @@ const StaffDashboard: React.FC = () => {
         {/* Inquiry Response Modal */}
         <Modal
           open={!!selectedInquiry}
-          title={selectedInquiry ? `Respond to Inquiry: ${selectedInquiry.subject}` : ''}
+          title={selectedInquiry ? `Reply to Inquiry` : ''}
           onCancel={() => { setSelectedInquiry(null); setResponseText(''); }}
           footer={selectedInquiry ? [
-            <Input.TextArea
-              key="response"
-              rows={4}
-              value={responseText}
-              onChange={e => setResponseText(e.target.value)}
-              placeholder="Type your response..."
-              disabled={responding}
-            />,
+            <Button
+              key="cancel"
+              onClick={() => { setSelectedInquiry(null); setResponseText(''); }}
+            >Cancel</Button>,
             <Button
               key="send"
               type="primary"
               loading={responding}
               disabled={!responseText.trim()}
               onClick={handleInquiryResponse}
-            >Send Response</Button>
+            >Send Reply</Button>
           ] : null}
+          centered
+          className="professional-modal"
         >
           {selectedInquiry && (
-            <div>
-              <Typography.Text strong>Type:</Typography.Text> {selectedInquiry.type}<br />
-              <Typography.Text strong>Message:</Typography.Text> {selectedInquiry.message}<br />
-              <Typography.Text strong>From:</Typography.Text> {selectedInquiry.username ? `${selectedInquiry.username} (Barangay ID: ${selectedInquiry.barangayID || 'Unknown'})` : 'Unknown'}<br />
-              <Typography.Text strong>Date:</Typography.Text> {formatDate(selectedInquiry.createdAt)}<br />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ padding: 12, background: '#f9fafb', borderRadius: 8, borderLeft: '3px solid #0891b2' }}>
+                <Typography.Text strong style={{ fontSize: 13, color: '#6b7280', display: 'block', marginBottom: 4 }}>FROM</Typography.Text>
+                <Typography.Text style={{ fontSize: 14, color: '#0f172a' }}>{selectedInquiry.username || 'Unknown User'}</Typography.Text>
+              </div>
+              <div style={{ padding: 12, background: '#f9fafb', borderRadius: 8, borderLeft: '3px solid #7c3aed' }}>
+                <Typography.Text strong style={{ fontSize: 13, color: '#6b7280', display: 'block', marginBottom: 4 }}>TYPE</Typography.Text>
+                <Typography.Text style={{ fontSize: 14, color: '#0f172a' }}>{selectedInquiry.type || 'General'}</Typography.Text>
+              </div>
+              <div style={{ padding: 12, background: '#f9fafb', borderRadius: 8 }}>
+                <Typography.Text strong style={{ fontSize: 13, color: '#6b7280', display: 'block', marginBottom: 4 }}>MESSAGE</Typography.Text>
+                <Typography.Paragraph style={{ fontSize: 14, color: '#0f172a', marginBottom: 0, whiteSpace: 'pre-wrap' }}>{selectedInquiry.message}</Typography.Paragraph>
+              </div>
+              <div>
+                <Typography.Text strong style={{ fontSize: 13, color: '#6b7280', display: 'block', marginBottom: 8 }}>YOUR REPLY</Typography.Text>
+                <Input.TextArea
+                  rows={4}
+                  value={responseText}
+                  onChange={e => setResponseText(e.target.value)}
+                  placeholder="Type your response here..."
+                  disabled={responding}
+                  style={{ borderRadius: 6, fontSize: 13 }}
+                />
+              </div>
             </div>
           )}
         </Modal>

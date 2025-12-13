@@ -1,10 +1,10 @@
 .chat-bubble {
   display: inline-block;
-  padding: 12px 18px;
+  padding: 12px 16px;
   border-radius: 18px;
   margin-bottom: 4px;
   max-width: 70%;
-  font-size: 15px;
+  font-size: 14px;
   word-break: break-word;
   position: relative;
 }
@@ -15,35 +15,41 @@
   align-items: flex-start;
   max-width: 80%;
 }
+
 .left {
-  background: #e6f7ff;
-  color: #1890ff;
+  background: #e5e5ea;
+  color: #000;
   text-align: left;
   border-bottom-left-radius: 4px;
   margin-right: auto;
 }
+
 .right {
-  background: #f6ffed;
-  color: #389e0d;
+  background: #e7f3ff;
+  color: #000;
   text-align: right;
   border-bottom-right-radius: 4px;
   margin-left: auto;
 }
+
 .timestamp {
   font-size: 12px;
-  color: #888;
+  color: #65676b;
   margin-top: 2px;
   text-align: right;
 }
+
 .status-badge {
   display: inline-block;
   font-size: 13px;
   margin-left: 8px;
   vertical-align: middle;
 }
+
 .status-responded {
   color: #52c41a;
 }
+
 .status-awaiting {
   color: #faad14;
 }
@@ -56,7 +62,7 @@
   }
   .chat-bubble {
     max-width: calc(100% - 64px);
-    font-size: 14px;
+    font-size: 13px;
     padding: 10px 14px;
     border-radius: 12px;
   }
@@ -71,9 +77,9 @@
 .chatImage {
   max-width: 220px;
   max-height: 140px;
-  border-radius: 8px;
+  border-radius: 12px;
   object-fit: cover;
-  border: 1px solid #f0f0f0;
+  border: none;
   display: block;
 }
 
@@ -84,14 +90,12 @@
   }
 }
 
-/* Page-level layout tweaks */
-.inboxPage {
-  padding: 16px !important;
-}
-
 /* Conversation list container */
 .conversationList {
   transition: all 180ms ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  margin: 8px;
 }
 
 /* Conversation panel/card */
@@ -103,11 +107,13 @@
 .replyBarWrap {
   padding: 6px 8px;
 }
+
 .replyBar {
   display: flex;
   gap: 8px;
   align-items: flex-end;
 }
+
 .sendButton {
   min-width: 44px;
   min-height: 44px;
@@ -115,10 +121,137 @@
   border-radius: 10px !important;
 }
 
+/* List item structure styles */
+.listItem {
+  padding: 0;
+  transition: background-color 0.2s ease;
+}
+
+.listItemInner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 10px;
+}
+
+.listItemMain {
+  flex: 1;
+  min-width: 0;
+}
+
+.listItemHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.typeIcon {
+  font-size: 18px;
+}
+
+.listItemName {
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.listItemSubject {
+  font-size: 12px;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.listItemTime {
+  margin-left: 8px;
+  font-size: 11px;
+  color: #888;
+}
+
+.listItemPreview {
+  margin-top: 6px;
+}
+
+.listItemPreviewText {
+  display: block;
+  margin: 0;
+  font-size: 13px;
+  color: #555;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.listItemResponses {
+  margin-top: 6px;
+}
+
+.listItemAvatar {
+  flex-shrink: 0;
+  margin-left: 10px;
+}
+
 /* Mobile specific adjustments */
 @media (max-width: 480px) {
   .message-container {
     gap: 6px;
+    align-items: center;
+  }
+
+  .message-container .ant-avatar {
+    width: 32px !important;
+    height: 32px !important;
+    line-height: 32px !important;
+    font-size: 12px !important;
+  }
+
+  .chat-bubble {
+    font-size: 12px;
+    padding: 8px 10px;
+    border-radius: 12px;
+    max-width: 95%;
+  }
+
+  .conversationCard {
+    padding: 8px !important;
+  }
+
+  .replyBar {
+    padding: 6px !important;
+    gap: 6px !important;
+  }
+
+  textarea {
+    font-size: 12px !important;
+    padding: 8px 10px !important;
+    min-height: 32px !important;
+  }
+
+  /* Make chat images scale nicely and stack */
+  .chatImage {
+    max-width: 100% !important;
+    height: auto !important;
+    border-radius: 6px !important;
+    max-height: 200px !important;
+  }
+
+  /* Ensure the send button fits and is not too tall */
+  .sendButton {
+    min-width: 32px !important;
+    min-height: 32px !important;
+    padding: 6px 8px !important;
+    font-size: 12px !important;
+  }
+}
+
+/* Tablet adjustments (480px to 768px) */
+@media (max-width: 768px) and (min-width: 481px) {
+  .message-container {
+    gap: 8px;
     align-items: center;
   }
 
@@ -130,14 +263,10 @@
   }
 
   .chat-bubble {
-    font-size: 14px;
-    padding: 8px 12px;
+    font-size: 13px;
+    padding: 9px 12px;
     border-radius: 12px;
-  }
-
-  .inboxPage .ant-list-item {
-    padding: 8px !important;
-    margin-bottom: 10px !important;
+    max-width: 90%;
   }
 
   .conversationCard {
@@ -146,89 +275,58 @@
 
   .replyBar {
     padding: 6px !important;
+    gap: 8px !important;
   }
 
   textarea {
-    font-size: 14px !important;
-    padding: 8px 10px !important;
+    font-size: 13px !important;
+    padding: 9px 12px !important;
+    min-height: 34px !important;
   }
 
-  /* Make chat images scale nicely and stack */
   .chatImage {
     max-width: 100% !important;
     height: auto !important;
-    border-radius: 6px !important;
+    border-radius: 8px !important;
+    max-height: 240px !important;
   }
 
-  /* Ensure the send button fits and is not too tall */
   .sendButton {
-    min-width: 40px !important;
-    min-height: 40px !important;
-    padding: 6px 8px !important;
-    font-size: 16px !important;
+    min-width: 34px !important;
+    min-height: 34px !important;
+    padding: 6px 10px !important;
+    font-size: 13px !important;
   }
 }
 
-/* New list item structure styles for better mobile wrapping */
-.listItem {
-  padding: 0;
+/* Landscape mobile adjustments */
+@media (max-height: 500px) {
+  .conversationList {
+    max-height: calc(100vh - 200px) !important;
+  }
+
+  textarea {
+    max-height: 60px !important;
+    min-height: 30px !important;
+  }
 }
-.listItemInner {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 10px;
+
+/* Large screens */
+@media (min-width: 1025px) {
+  .conversationList {
+    width: 360px;
+  }
+  
+  .listItem {
+    padding: 0;
+  }
 }
-.listItemMain {
-  flex: 1;
-  min-width: 0;
-}
-.listItemHeader {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-.typeIcon {
-  font-size: 18px;
-}
-.listItemName {
-  font-size: 14px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-}
-.listItemSubject {
-  font-size: 12px;
-  color: #666;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.listItemTime {
-  margin-left: 8px;
-  font-size: 11px;
-  color: #888;
-}
-.listItemPreview {
-  margin-top: 6px;
-}
-.listItemPreviewText {
-  display: block;
-  margin: 0;
-  font-size: 13px;
-  color: #555;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.listItemResponses {
-  margin-top: 6px;
-}
-.listItemAvatar {
-  flex-shrink: 0;
-  margin-left: 10px;
+
+/* Medium screens */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .conversationList {
+    width: 280px;
+  }
 }
 
 @media (max-width: 720px) {
@@ -251,6 +349,7 @@
     white-space: normal;
     display: -webkit-box;
     -webkit-line-clamp: 3;
+    line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
