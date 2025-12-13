@@ -8,6 +8,7 @@ import inquiryMessageRoutes from './routes/inquiryMessageRoutes';
 import messageRoutes from './routes/messageRoutes';
 import logsRoutes from './routes/logs';
 import verificationRoutes from './routes/verificationRoutes';
+import analyticsRoutes from './routes/analyticsRoutes';
 console.log('Loaded inboxRoutes in app.ts');
 import express from 'express';
 import morgan from 'morgan';
@@ -112,6 +113,7 @@ app.use('/api/templates', templatesRoutes);
 app.use('/api/resident', residentsRoutes);
 app.use('/api/document', documentsRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/analytics', analyticsRoutes);
 console.log('Mounted documentsRoutes on /api/document');
 
 // Provide direct `/api/document/request` handlers to support legacy tests
