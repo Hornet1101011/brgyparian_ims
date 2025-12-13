@@ -13,9 +13,14 @@ const { RangePicker } = DatePicker;
 const CHART_DEFINITIONS = {
   gender: { title: 'Sex Distribution', chartType: 'pie' as const, endpoint: '/analytics/gender', colors: ['#1890ff', '#00bcd4', '#888888'] as string[] },
   age: { title: 'Age Groups', chartType: 'bar' as const, endpoint: '/analytics/age', colors: ['#1890ff'] as string[] },
-  'civil-status': { title: 'Civil Status', chartType: 'bar' as const, endpoint: '/analytics/civil-status', colors: ['#1890ff'] as string[] },
-  education: { title: 'Education', chartType: 'bar' as const, endpoint: '/analytics/education', colors: ['#13c2c2'] as string[] },
-  'documents-monthly': { title: 'Monthly Document Requests', chartType: 'line' as const, endpoint: '/analytics/documents-monthly', colors: ['#722ed1'] as string[] },
+  occupation: { title: 'Occupation', chartType: 'line' as const, endpoint: '/analytics/occupation', colors: ['#f5222d'] as string[] },
+  nationality: { title: 'Nationality', chartType: 'area' as const, endpoint: '/analytics/nationality', colors: ['#13c2c2'] as string[] },
+  'blood-type': { title: 'Blood Type', chartType: 'bar' as const, endpoint: '/analytics/blood-type', colors: ['#722ed1'] as string[] },
+  disability: { title: 'Disability Status', chartType: 'pie' as const, endpoint: '/analytics/disability', colors: ['#faad14', '#52c41a'] as string[] },
+  'business-type': { title: 'Business Type', chartType: 'area' as const, endpoint: '/analytics/business-type', colors: ['#1890ff'] as string[] },
+  'business-size': { title: 'Business Size', chartType: 'bar' as const, endpoint: '/analytics/business-size', colors: ['#52c41a'] as string[] },
+  'children-count': { title: 'Children Count', chartType: 'line' as const, endpoint: '/analytics/children-count', colors: ['#eb2f96'] as string[] },
+  'income-brackets': { title: 'Income Brackets', chartType: 'area' as const, endpoint: '/analytics/income-brackets', colors: ['#faad14'] as string[] },
 };
 
 type ChartId = keyof typeof CHART_DEFINITIONS;
@@ -48,7 +53,7 @@ const StatisticsInner: React.FC = () => {
   const filterDateEnd = useMemo(() => filters.dateRange?.[1]?.format?.('YYYY-MM-DD') || null, [filters.dateRange?.[1]?.valueOf()]);
 
   // Chart selection and settings
-  const [selectedCharts, setSelectedCharts] = useState<ChartId[]>(['gender', 'age', 'civil-status', 'education']);
+  const [selectedCharts, setSelectedCharts] = useState<ChartId[]>(['gender', 'age', 'occupation', 'nationality']);
   const [autoEnableWhenData, setAutoEnableWhenData] = useState<boolean>(false);
   const prevSelectionRef = useRef<ChartId[] | null>(null);
   
@@ -67,22 +72,9 @@ const StatisticsInner: React.FC = () => {
 
   // Fetch summary callback
   const fetchSummary = useCallback(async () => {
-    setLoadingSummary(true);
-    try {
-      const res = await axiosInstance.get('/analytics/summary', {
-        params: {
-          startDate: filterDateStart,
-          endDate: filterDateEnd,
-          residentType: filters.residentType,
-        }
-      });
-      setSummary(res.data || null);
-    } catch (err) {
-      setSummary(null);
-    } finally {
-      setLoadingSummary(false);
-    }
-  }, [filterDateStart, filterDateEnd, filters.residentType]);
+    setLoadingSummary(false);
+    setSummary(null);
+  }, []);
 
   useEffect(() => {
     void fetchSummary();
@@ -152,6 +144,10 @@ const StatisticsInner: React.FC = () => {
       
       if (id === 'gender') {
         newData[id] = (q?.data || [])
+          .filter((p: any) => {
+            const rawType = (p?.name ?? p?.type ?? p?._id ?? '').toString().trim().toLowerCase();
+            return rawType && rawType !== 'unknown' && rawType !== 'null' && rawType !== 'undefined' && rawType !== 'none';
+          })
           .map((p: any) => {
             const rawType = (p?.name ?? p?.type ?? p?._id ?? '').toString().trim();
             const lower = (rawType || '').toLowerCase();
@@ -164,9 +160,20 @@ const StatisticsInner: React.FC = () => {
             const found = acc.find(a => a.type === cur.type);
             if (found) found.value += cur.value; else acc.push({ ...cur });
             return acc;
-          }, [] as any[]);
+          }, [] as any[])
+          .filter((p: any) => p?.value > 0);
       } else {
-        newData[id] = q?.data || [];
+        newData[id] = (q?.data || [])
+          .filter((p: any) => {
+            const type = (p?.name ?? p?.type ?? p?._id ?? '').toString().trim().toLowerCase();
+            const val = Number(p?.value ?? p?.count ?? 0);
+            return type && type !== 'unknown' && type !== 'null' && type !== 'undefined' && type !== 'none' && val > 0;
+          })
+          .map((p: any) => ({
+            ...p,
+            type: (p?.name ?? p?.type ?? p?._id ?? '').toString().trim(),
+            value: Number(p?.value ?? p?.count ?? 0)
+          }));
       }
       
       newLoading[id] = q?.isFetching || q?.isLoading || false;
@@ -177,14 +184,6 @@ const StatisticsInner: React.FC = () => {
       setChartLoading(newLoading as any);
     });
   }, [chartQueryDataKey, chartQueriesMapMemo, chartIds]);
-
-  // Refetch selected charts
-  useEffect(() => {
-    if (!selectedCharts || !selectedCharts.length) return;
-    selectedCharts.forEach(id => {
-      chartQueriesMapMemo[id]?.refetch?.();
-    });
-  }, [selectedCharts, chartQueriesMapMemo]);
 
   // Compute charts with data
   const chartsWithData = useMemo(() => {
