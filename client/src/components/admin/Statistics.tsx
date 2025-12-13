@@ -4,11 +4,28 @@ import { DownOutlined, DownloadOutlined, FileTextOutlined, BarChartOutlined, Syn
 import { QueryClient, QueryClientProvider, useQueries } from '@tanstack/react-query';
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { EChartsOption } from 'echarts';
-import { axiosInstance } from '../../services/api';
 import EChartRenderer from '../statistics/EChartRenderer';
 import { buildChartOption } from '../statistics/chartOptionFactory';
 import type { Moment } from 'moment';
 import jsPDF from 'jspdf';
+import {
+  useDashboardSummary,
+  useGenderAnalytics,
+  useAgeAnalytics,
+  useOccupationAnalytics,
+  useNationalityAnalytics,
+  useBloodTypeAnalytics,
+  useDisabilityAnalytics,
+  useBusinessTypeAnalytics,
+  useBusinessSizeAnalytics,
+  useChildrenCountAnalytics,
+  useIncomeAnalytics,
+  useEducationAnalytics,
+  useCivilStatusAnalytics,
+  useReligionAnalytics,
+  useDocumentAnalytics,
+} from '../../hooks/useAnalytics';
+import type { AnalyticsDataPoint } from '../../utils/dataNormalization';
 
 
 const { RangePicker } = DatePicker;
@@ -17,18 +34,22 @@ const { RangePicker } = DatePicker;
 type ChartDataRecord = Record<string, unknown>;
 type ChartQueryType = UseQueryResult<unknown[], Error>;
 
-// Chart definitions with proper typing
+// Chart definitions - maps to hooks
 const CHART_DEFINITIONS = {
-  gender: { title: 'Sex Distribution', chartType: 'pie' as const, endpoint: '/analytics/gender' },
-  age: { title: 'Age Groups', chartType: 'bar' as const, endpoint: '/analytics/age' },
-  occupation: { title: 'Occupation', chartType: 'line' as const, endpoint: '/analytics/occupation' },
-  nationality: { title: 'Nationality', chartType: 'area' as const, endpoint: '/analytics/nationality' },
-  'blood-type': { title: 'Blood Type', chartType: 'bar' as const, endpoint: '/analytics/blood-type' },
-  disability: { title: 'Disability Status', chartType: 'pie' as const, endpoint: '/analytics/disability' },
-  'business-type': { title: 'Business Type', chartType: 'area' as const, endpoint: '/analytics/business-type' },
-  'business-size': { title: 'Business Size', chartType: 'bar' as const, endpoint: '/analytics/business-size' },
-  'children-count': { title: 'Children Count', chartType: 'line' as const, endpoint: '/analytics/children-count' },
-  'income-brackets': { title: 'Income Brackets', chartType: 'area' as const, endpoint: '/analytics/income-brackets' },
+  gender: { title: 'Sex Distribution', chartType: 'pie' as const, hook: 'useGenderAnalytics' },
+  age: { title: 'Age Groups', chartType: 'bar' as const, hook: 'useAgeAnalytics' },
+  occupation: { title: 'Occupation', chartType: 'line' as const, hook: 'useOccupationAnalytics' },
+  nationality: { title: 'Nationality', chartType: 'area' as const, hook: 'useNationalityAnalytics' },
+  'blood-type': { title: 'Blood Type', chartType: 'bar' as const, hook: 'useBloodTypeAnalytics' },
+  disability: { title: 'Disability Status', chartType: 'pie' as const, hook: 'useDisabilityAnalytics' },
+  'business-type': { title: 'Business Type', chartType: 'area' as const, hook: 'useBusinessTypeAnalytics' },
+  'business-size': { title: 'Business Size', chartType: 'bar' as const, hook: 'useBusinessSizeAnalytics' },
+  'children-count': { title: 'Children Count', chartType: 'line' as const, hook: 'useChildrenCountAnalytics' },
+  'income-brackets': { title: 'Income Brackets', chartType: 'area' as const, hook: 'useIncomeAnalytics' },
+  education: { title: 'Education Level', chartType: 'bar' as const, hook: 'useEducationAnalytics' },
+  'civil-status': { title: 'Marital Status', chartType: 'pie' as const, hook: 'useCivilStatusAnalytics' },
+  religion: { title: 'Religion', chartType: 'area' as const, hook: 'useReligionAnalytics' },
+  documents: { title: 'Document Requests', chartType: 'bar' as const, hook: 'useDocumentAnalytics' },
 } as const;
 
 type ChartId = keyof typeof CHART_DEFINITIONS;
@@ -45,24 +66,44 @@ const defaultQueryClient = new QueryClient({
 });
 
 const StatisticsInner: React.FC = () => {
-  const [loadingSummary, setLoadingSummary] = useState(true);
-  const [summary, setSummary] = useState<any>(null);
+  // Use all analytics hooks
+  const summaryQuery = useDashboardSummary();
+  const genderQuery = useGenderAnalytics();
+  const ageQuery = useAgeAnalytics();
+  const occupationQuery = useOccupationAnalytics();
+  const nationalityQuery = useNationalityAnalytics();
+  const bloodTypeQuery = useBloodTypeAnalytics();
+  const disabilityQuery = useDisabilityAnalytics();
+  const businessTypeQuery = useBusinessTypeAnalytics();
+  const businessSizeQuery = useBusinessSizeAnalytics();
+  const childrenCountQuery = useChildrenCountAnalytics();
+  const incomeQuery = useIncomeAnalytics();
+  const educationQuery = useEducationAnalytics();
+  const civilStatusQuery = useCivilStatusAnalytics();
+  const religionQuery = useReligionAnalytics();
+  const documentQuery = useDocumentAnalytics();
 
-  // chart data keyed by chart id
-  const [chartData, setChartData] = useState<Record<string, any[]>>({});
-  const [chartLoading, setChartLoading] = useState<Record<string, boolean>>({});
-
-  // Filters with stable date references
-  const [filters, setFilters] = useState<{ dateRange: Moment[]; residentType: string }>({ dateRange: [], residentType: '' });
-  
-  // Memoize formatted date strings for query keys
-  const filterDateStart = useMemo(() => filters.dateRange?.[0]?.format?.('YYYY-MM-DD') || null, [filters.dateRange?.[0]?.valueOf()]);
-  const filterDateEnd = useMemo(() => filters.dateRange?.[1]?.format?.('YYYY-MM-DD') || null, [filters.dateRange?.[1]?.valueOf()]);
+  // Map all queries
+  const allQueries = {
+    gender: genderQuery,
+    age: ageQuery,
+    occupation: occupationQuery,
+    nationality: nationalityQuery,
+    'blood-type': bloodTypeQuery,
+    disability: disabilityQuery,
+    'business-type': businessTypeQuery,
+    'business-size': businessSizeQuery,
+    'children-count': childrenCountQuery,
+    'income-brackets': incomeQuery,
+    education: educationQuery,
+    'civil-status': civilStatusQuery,
+    religion: religionQuery,
+    documents: documentQuery,
+  };
 
   // Chart selection and settings
   const [selectedCharts, setSelectedCharts] = useState<ChartId[]>(['gender', 'age', 'occupation', 'nationality']);
   const [autoEnableWhenData, setAutoEnableWhenData] = useState<boolean>(false);
-  const prevSelectionRef = useRef<ChartId[] | null>(null);
   
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [chartSettings, setChartSettings] = useState<Record<string, any>>(() => {
@@ -77,15 +118,8 @@ const StatisticsInner: React.FC = () => {
   const [chartsDropdownOpen, setChartsDropdownOpen] = useState<boolean>(false);
   const [pendingSelectedCharts, setPendingSelectedCharts] = useState<ChartId[]>(selectedCharts);
 
-  // Fetch summary callback
-  const fetchSummary = useCallback(async () => {
-    setLoadingSummary(false);
-    setSummary(null);
-  }, []);
-
-  useEffect(() => {
-    void fetchSummary();
-  }, [fetchSummary]);
+  // Filters state
+  const [filters, setFilters] = useState<{ dateRange: Moment[]; residentType: string }>({ dateRange: [], residentType: '' });
 
   // Persist chart settings
   useEffect(() => {
@@ -99,147 +133,38 @@ const StatisticsInner: React.FC = () => {
   // Chart IDs list
   const chartIds = useMemo(() => Object.keys(CHART_DEFINITIONS) as ChartId[], []);
 
-  // Create stable query key function
-  const getChartQueryKey = useCallback((id: ChartId) => [
-    'chart',
-    id,
-    filterDateStart,
-    filterDateEnd,
-    (chartSettings[id]?.dateRange?.[0]?.valueOf()) || null,
-    (chartSettings[id]?.dateRange?.[1]?.valueOf()) || null,
-    filters.residentType || null
-  ], [filterDateStart, filterDateEnd, chartSettings, filters.residentType]);
-
-  // Create queries for each chart with stable keys
-  const chartQueryResults = useQueries({
-    queries: chartIds.map((id) => ({
-      queryKey: getChartQueryKey(id),
-      queryFn: async () => {
-        const cs = chartSettings[id] || {};
-        const csStart = cs.dateRange?.[0]?.format?.('YYYY-MM-DD');
-        const csEnd = cs.dateRange?.[1]?.format?.('YYYY-MM-DD');
-        const start = csStart || filterDateStart;
-        const end = csEnd || filterDateEnd;
-        const res = await axiosInstance.get(CHART_DEFINITIONS[id].endpoint, { 
-          params: { startDate: start, endDate: end, residentType: filters.residentType } 
-        });
-        return res.data?.data || [];
-      },
-    }))
-  });
-  
-  // Build queries map
-  const chartQueriesMapMemo = useMemo(() => {
-    const m: Record<ChartId, ChartQueryType> = Object.create(null);
-    chartIds.forEach((id, idx) => { m[id] = chartQueryResults[idx] as ChartQueryType; });
-    return m;
-  }, [chartQueryResults, chartIds]);
-
-  // Sync query results to state - use ref to prevent infinite updates
-  const lastDataHashRef = useRef<string>('');
-  
-  useEffect(() => {
-    const newData: Record<ChartId, ChartDataRecord[]> = Object.create(null);
-    const newLoading: Record<ChartId, boolean> = Object.create(null);
+  // Transform analytics data to chart format
+  const chartData = useMemo(() => {
+    const result: Record<ChartId, ChartDataRecord[]> = Object.create(null);
     
-    chartIds.forEach((id) => {
-      const q = chartQueriesMapMemo[id];
-      const rawData = q?.data || [];
-      
-      if (id === 'gender') {
-        // Normalize gender data
-        newData[id] = rawData
-          .map((p: unknown) => {
-            const pd = p as ChartDataRecord;
-            const rawType = (pd?.name ?? pd?.type ?? pd?._id ?? '').toString().trim();
-            const lower = (rawType || '').toLowerCase();
-            let norm = rawType; // Keep original if not m/f
-            if (/^m/i.test(lower)) norm = 'Male';
-            else if (/^f/i.test(lower)) norm = 'Female';
-            return { type: norm, value: Number(pd?.value ?? pd?.count ?? 0) || 0 } as ChartDataRecord;
-          })
-          // Remove unknown/null entries
-          .filter((p: ChartDataRecord) => {
-            const t = String(p?.type ?? '').toLowerCase();
-            const v = Number(p?.value ?? 0);
-            return v > 0 && 
-                   t !== 'unknown' && 
-                   t !== 'null' && 
-                   t !== 'undefined' &&
-                   t !== 'none' &&
-                   t !== '';
-          })
-          // Aggregate by normalized type
-          .reduce((acc: ChartDataRecord[], cur: ChartDataRecord) => {
-            const found = acc.find(a => String(a?.type) === String(cur?.type));
-            if (found) found.value = Number((found.value || 0)) + Number((cur.value || 0));
-            else acc.push({ ...cur });
-            return acc;
-          }, [] as ChartDataRecord[]);
+    (Object.entries(allQueries) as [ChartId, UseQueryResult<any, unknown>][]).forEach(([chartId, query]) => {
+      if (query.data?.data) {
+        result[chartId] = (query.data.data as AnalyticsDataPoint[]).map(point => ({
+          type: point.type || 'Unknown',
+          value: point.value || 0,
+        }));
       } else {
-        // For other charts, extract type/value and filter
-        newData[id] = rawData
-          .map((p: unknown) => {
-            const pd = p as ChartDataRecord;
-            const type = (pd?.name ?? pd?.type ?? pd?._id ?? '').toString().trim();
-            const value = Number(pd?.value ?? pd?.count ?? 0) || 0;
-            return { type, value } as ChartDataRecord;
-          })
-          // Filter out unknown/null/zero entries
-          .filter((p: ChartDataRecord) => {
-            const t = String(p?.type ?? '').toLowerCase();
-            const v = Number(p?.value ?? 0);
-            return v > 0 && 
-                   t !== 'unknown' && 
-                   t !== 'null' && 
-                   t !== 'undefined' &&
-                   t !== 'none' &&
-                   t !== '';
-          });
+        result[chartId] = [];
       }
-      
-      newLoading[id] = q?.isFetching || q?.isLoading || false;
     });
     
-    // Only update state if data hash changed
-    const newDataHash = JSON.stringify(newData);
-    if (newDataHash !== lastDataHashRef.current) {
-      lastDataHashRef.current = newDataHash;
-      setChartData(newData as Record<string, ChartDataRecord[]>);
-      setChartLoading(newLoading);
-    }
-  }, [chartQueriesMapMemo, chartIds]);
+    return result;
+  }, [allQueries]);
 
-  // Track previous auto-enable state to detect changes
-  const autoEnableRef = useRef<boolean>(false);
-  
-  // Auto-enable when data toggle - triggers only when toggle changes to true
-  useEffect(() => {
-    const prevAutoEnable = autoEnableRef.current;
-    autoEnableRef.current = autoEnableWhenData;
+  // Chart loading state
+  const chartLoading = useMemo(() => {
+    const result: Record<ChartId, boolean> = Object.create(null);
     
-    // Only run when autoEnableWhenData changes from false to true
-    if (!autoEnableWhenData || prevAutoEnable === autoEnableWhenData) return;
+    (Object.entries(allQueries) as [ChartId, UseQueryResult<any, unknown>][]).forEach(([chartId, query]) => {
+      result[chartId] = query.isLoading || query.isFetching;
+    });
     
-    // Find charts that have data
-    const chartsWithData = (Object.keys(chartData || {}) as ChartId[]).filter(k => 
-      Array.isArray(chartData[k as ChartId]) && chartData[k as ChartId].length > 0
-    );
-    
-    if (chartsWithData.length === 0) return;
-    
-    // Build new selection from available charts
-    const newSel = chartIds.filter(id => chartsWithData.includes(id)).slice(0, 6) as ChartId[];
-    
-    // Only update if selection actually changed
-    if (newSel.length > 0 && JSON.stringify(newSel) !== JSON.stringify(selectedCharts)) {
-      setSelectedCharts(newSel);
-    }
-  }, [autoEnableWhenData]);
+    return result;
+  }, [allQueries]);
 
-  // Memoized computations
-  const totalResidents = useMemo(() => summary?.totalResidents ?? 0, [summary]);
-  const totalDocuments = useMemo(() => summary?.totalDocumentRequests ?? 0, [summary]);
+  // Summary data
+  const totalResidents = useMemo(() => summaryQuery.data?.totalResidents ?? 0, [summaryQuery.data]);
+  const totalDocuments = useMemo(() => summaryQuery.data?.totalResidents ?? 0, [summaryQuery.data]);
   
   const ageBarData = useMemo(() => {
     const ageData = chartData['age'];
@@ -250,11 +175,6 @@ const StatisticsInner: React.FC = () => {
     return Math.max(...ageBarData.map((d: ChartDataRecord) => Number(d.value) || 0));
   }, [ageBarData]);
   const ageAxisMax = useMemo(() => Math.ceil(ageMax / 5) * 5 || 5, [ageMax]);
-  
-  const monthlyDocData = useMemo(() => {
-    const monthlyData = chartData['documents-monthly'];
-    return (Array.isArray(monthlyData) ? monthlyData : []) as ChartDataRecord[];
-  }, [chartData]);
 
   // Report state
   const [reportModalOpen, setReportModalOpen] = useState(false);
@@ -270,72 +190,45 @@ const StatisticsInner: React.FC = () => {
   }, []);
 
   // Report generation
-  const generateNarrativeReport = (state: { summary?: Record<string, unknown>; charts?: Record<string, ChartDataRecord[]> }) => {
-    const s = state.summary || summary || {};
-    const charts = state.charts || chartData || {};
-
-    const totalResidents = Number(s.totalResidents ?? 0);
-    const gender = (Array.isArray(charts['gender']) ? charts['gender'] : []) as ChartDataRecord[];
-    const age = (Array.isArray(charts['age']) ? charts['age'] : []) as ChartDataRecord[];
-    const cs = (Array.isArray(charts['civil-status']) ? charts['civil-status'] : []) as ChartDataRecord[];
-    const ed = (Array.isArray(charts['education']) ? charts['education'] : []) as ChartDataRecord[];
-    const monthly = (Array.isArray(charts['documents-monthly']) ? charts['documents-monthly'] : []) as ChartDataRecord[];
-
-    const maleCount = Number(gender.find((g: ChartDataRecord) => (g.type||'').toString().toLowerCase().startsWith('m'))?.value || 0);
-    const femaleCount = Number(gender.find((g: ChartDataRecord) => (g.type||'').toString().toLowerCase().startsWith('f'))?.value || 0);
-    const otherCount = Math.max(0, (gender || []).reduce((sum: number, g: ChartDataRecord) => sum + (Number(g.value)||0), 0) - maleCount - femaleCount);
-
-    let topAgeGroup = '';
-    if (age.length) {
-      const sorted = [...age].sort((a: ChartDataRecord, b: ChartDataRecord) => (Number(b.value)||0) - (Number(a.value)||0));
-      topAgeGroup = sorted[0]?.type?.toString() || '';
-    }
-
-    const topCivil = cs.length ? cs.slice(0,3).map((c: ChartDataRecord) => `${c.type} (${c.value})`).join(', ') : '';
-    const topEducation = ed.length ? ed.slice(0,3).map((c: ChartDataRecord) => `${c.type} (${c.value})`).join(', ') : '';
-
-    const monthlyTotal = monthly.length ? monthly.reduce((sum: number, m: ChartDataRecord) => sum + (Number(m.value)||0), 0) : 0;
-    let peakMonth = '';
-    let peakVal = 0;
-    if (monthly.length) {
-      const peak = monthly.reduce((best: ChartDataRecord, m: ChartDataRecord) => (Number(m.value)||0) > (Number(best.value)||0) ? m : best, monthly[0]);
-      peakMonth = peak?.type?.toString() || '';
-      peakVal = Number(peak?.value || 0);
-    }
-
+  const generateNarrativeReport = () => {
     const parts: string[] = [];
 
     if (totalResidents > 0) {
-      const genderPart = (maleCount || femaleCount || otherCount)
-        ? `There are currently ${totalResidents} residents, with ${maleCount} males, ${femaleCount} females${otherCount ? `, and ${otherCount} identifying as other` : ''}.`
-        : `There are currently ${totalResidents} residents.`;
-      parts.push(genderPart);
+      parts.push(`There are currently ${totalResidents} residents.`);
     } else {
       parts.push('Resident count is not available.');
     }
 
-    if (topAgeGroup) {
-      parts.push(`The most common age group is ${topAgeGroup}.`);
+    const genderData = chartData['gender'] || [];
+    if (genderData.length > 0) {
+      const male = genderData.find(g => String(g.type).toLowerCase().startsWith('m'));
+      const female = genderData.find(g => String(g.type).toLowerCase().startsWith('f'));
+      if (male || female) {
+        parts.push(`Gender distribution: ${male ? `${male.value} males` : ''}${male && female ? ', ' : ''}${female ? `${female.value} females` : ''}.`);
+      }
     }
 
-    if (topCivil) {
-      parts.push(`Civil status (top): ${topCivil}.`);
+    const ageData = chartData['age'] || [];
+    if (ageData.length > 0) {
+      const sorted = [...ageData].sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0));
+      const topAgeGroup = sorted[0]?.type?.toString() || '';
+      if (topAgeGroup) {
+        parts.push(`The most common age group is ${topAgeGroup}.`);
+      }
     }
 
-    if (topEducation) {
-      parts.push(`Educational attainment (top): ${topEducation}.`);
+    if (totalDocuments > 0) {
+      parts.push(`There are ${totalDocuments} document requests in the system.`);
     }
 
-    if (monthly.length) {
-      parts.push(`During the selected period there were ${monthlyTotal} document requests. The busiest month was ${peakMonth} with ${peakVal} requests.`);
-    }
-
-    return parts.join(' ');
+    setReportText(parts.join(' '));
   };
 
+  useEffect(() => {
+    generateNarrativeReport();
+  }, [chartData, totalResidents, totalDocuments]);
+
   const openReport = () => {
-    const text = generateNarrativeReport({ summary, charts: chartData });
-    setReportText(text);
     setReportModalOpen(true);
   };
 
@@ -385,7 +278,7 @@ const StatisticsInner: React.FC = () => {
   // Memoize all chart options at component level
   const chartOptions = useMemo(() => {
     const opts: Record<ChartId, EChartsOption | undefined> = Object.create(null);
-    selectedCharts.forEach((chartId) => {
+    selectedCharts.forEach((chartId: ChartId) => {
       const rawData = chartData[chartId];
       const data = (Array.isArray(rawData) ? rawData : []) as ChartDataRecord[];
       const hasData = Array.isArray(data) && data.length > 0;
@@ -433,7 +326,7 @@ const StatisticsInner: React.FC = () => {
               }} 
               styles={{ body: { padding: 20 } }}
             >
-              {loadingSummary ? (
+              {summaryQuery.isLoading ? (
                 <Skeleton active paragraph={false} />
               ) : (
                 <div>
@@ -460,7 +353,7 @@ const StatisticsInner: React.FC = () => {
               }} 
               styles={{ body: { padding: 20 } }}
             >
-              {loadingSummary ? (
+              {summaryQuery.isLoading ? (
                 <Skeleton active paragraph={false} />
               ) : (
                 <div>
@@ -486,21 +379,16 @@ const StatisticsInner: React.FC = () => {
               }} 
               styles={{ body: { padding: 20 } }}
             >
-              {loadingSummary ? (
+              {summaryQuery.isLoading ? (
                 <Skeleton active paragraph={false} />
               ) : (
                 <div>
                   <Typography.Text type="secondary" style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b', marginBottom: 8 }}>
-                    Requests (Period)
+                    Requests (Total)
                   </Typography.Text>
                   <Typography.Title level={2} style={{ margin: 0, color: '#f59e0b', fontWeight: 700 }}>
-                    {monthlyDocData ? monthlyDocData.reduce((s: number, m: ChartDataRecord) => s + (Number(m?.value) || 0), 0).toLocaleString() : 0}
+                    {totalDocuments.toLocaleString()}
                   </Typography.Title>
-                  {monthlyDocData && monthlyDocData.length ? (
-                    <Typography.Text type="secondary" style={{ display: 'block', fontSize: 12, marginTop: 8, color: '#78909c' }}>
-                      Latest: {String((monthlyDocData[monthlyDocData.length-1] as ChartDataRecord)?.type || '')} ({String((monthlyDocData[monthlyDocData.length-1] as ChartDataRecord)?.value || '')})
-                    </Typography.Text>
-                  ) : null}
                 </div>
               )}
             </Card>
@@ -684,7 +572,7 @@ const StatisticsInner: React.FC = () => {
           
           {/* Error Alerts */}
           {chartIds.map(id => {
-            const q = chartQueriesMapMemo[id];
+            const q = allQueries[id as keyof typeof allQueries];
             if (q?.isError) {
               return (
                 <Alert

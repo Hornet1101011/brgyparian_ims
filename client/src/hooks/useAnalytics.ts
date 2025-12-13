@@ -270,23 +270,32 @@ export const useMultipleAnalytics = (
   ],
   options: FetchOptions = {}
 ) => {
-  const hookMap: Record<string, (opts: FetchOptions) => UseQueryResult<NormalizedAnalyticsData>> = {
-    gender: useGenderAnalytics,
-    age: useAgeAnalytics,
-    occupation: useOccupationAnalytics,
-    nationality: useNationalityAnalytics,
-    'blood-type': useBloodTypeAnalytics,
-    disability: useDisabilityAnalytics,
-    'business-type': useBusinessTypeAnalytics,
-    'business-size': useBusinessSizeAnalytics,
-    'children-count': useChildrenCountAnalytics,
-    'income-brackets': useIncomeAnalytics,
+  // Call all hooks at the top level (this is required for React hooks)
+  const genderQuery = useGenderAnalytics(options);
+  const ageQuery = useAgeAnalytics(options);
+  const occupationQuery = useOccupationAnalytics(options);
+  const nationalityQuery = useNationalityAnalytics(options);
+  const bloodTypeQuery = useBloodTypeAnalytics(options);
+  const disabilityQuery = useDisabilityAnalytics(options);
+  const businessTypeQuery = useBusinessTypeAnalytics(options);
+  const businessSizeQuery = useBusinessSizeAnalytics(options);
+  const childrenCountQuery = useChildrenCountAnalytics(options);
+  const incomeQuery = useIncomeAnalytics(options);
+
+  const hookMap: Record<string, UseQueryResult<NormalizedAnalyticsData>> = {
+    gender: genderQuery,
+    age: ageQuery,
+    occupation: occupationQuery,
+    nationality: nationalityQuery,
+    'blood-type': bloodTypeQuery,
+    disability: disabilityQuery,
+    'business-type': businessTypeQuery,
+    'business-size': businessSizeQuery,
+    'children-count': childrenCountQuery,
+    'income-brackets': incomeQuery,
   };
   
-  const queries = chartIds.map(chartId => {
-    const hook = hookMap[chartId];
-    return hook ? hook(options) : useQuery({ queryKey: [], queryFn: async () => null });
-  });
+  const queries = chartIds.map(chartId => hookMap[chartId] || genderQuery);
   
   return {
     queries,
