@@ -427,7 +427,7 @@ const SystemSettings: React.FC = () => {
             <FormControlLabel
               control={
                 <Switch
-                  checked={Boolean((settings as any).enableVerifications)}
+                  checked={Boolean((settings as any).enableVerifications ?? false)}
                   onChange={(e) => setSettings((prev) => ({ ...(prev as any), enableVerifications: e.target.checked } as any))}
                 />
               }
@@ -690,7 +690,7 @@ const SystemSettings: React.FC = () => {
           <FormControlLabel
             control={
               <Switch
-                checked={settings.maintainanceMode}
+                checked={settings.maintainanceMode ?? false}
                 onChange={(e) => setSettings({ ...settings, maintainanceMode: e.target.checked })}
               />
             }
@@ -699,7 +699,7 @@ const SystemSettings: React.FC = () => {
           <FormControlLabel
             control={
               <Switch
-                checked={settings.allowNewRegistrations}
+                checked={settings.allowNewRegistrations ?? false}
                 onChange={(e) => setSettings({ ...settings, allowNewRegistrations: e.target.checked })}
               />
             }
@@ -710,7 +710,7 @@ const SystemSettings: React.FC = () => {
             <FormControlLabel
               control={
                 <Switch
-                  checked={(settings as any).allowMultipleAccountsPerIP}
+                  checked={(settings as any).allowMultipleAccountsPerIP ?? false}
                   onChange={(e) => setSettings({ ...settings, allowMultipleAccountsPerIP: e.target.checked } as SystemSettingsData)}
                 />
               }
@@ -736,7 +736,7 @@ const SystemSettings: React.FC = () => {
           <FormControlLabel
             control={
               <Switch
-                checked={settings.requireEmailVerification}
+                checked={settings.requireEmailVerification ?? false}
                 onChange={(e) => setSettings({ ...settings, requireEmailVerification: e.target.checked })}
               />
             }
