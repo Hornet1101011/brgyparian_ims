@@ -8,7 +8,9 @@ const Official = require('../models/Official');
 // Public: GET /api/officials - list basic official info for public pages (no auth)
 router.get('/', async (req, res) => {
   try {
+    console.log('[publicOfficials] GET / - fetching officials from database');
     const list = await Official.find().select('name title term photo photoPath photoContentType createdAt').sort({ createdAt: -1 });
+    console.log('[publicOfficials] Found', list.length, 'officials');
     // Build absolute base URL from request (respecting proxies)
     const proto = req.get('x-forwarded-proto') || req.protocol || 'http';
     const host = req.get('x-forwarded-host') || req.get('host');
@@ -19,10 +21,11 @@ router.get('/', async (req, res) => {
       const photoUrl = hasPhoto && base ? `${base}/api/officials/${o._id}/photo` : undefined;
       return { _id: o._id, name: o.name, title: o.title, term: o.term, hasPhoto, photoUrl };
     });
+    console.log('[publicOfficials] Returning', mapped.length, 'officials');
     res.json(mapped);
   } catch (err) {
-    console.error('Failed to list public officials', err);
-    res.status(500).json({ message: 'Failed to list officials' });
+    console.error('[publicOfficials] ERROR:', err && err.message ? err.message : err, '\nFull error:', err);
+    res.status(500).json({ message: 'Failed to list officials', error: err && err.message ? err.message : String(err) });
   }
 });
 

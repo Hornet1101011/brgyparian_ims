@@ -11,7 +11,7 @@ import { ensureBucket, getBucket } from '../utils/gridfs';
 import { Message } from '../models/Message';
 import { Notification } from '../models/Notification';
 import { User } from '../models/User';
-import { sendToUser, addClient, removeClient } from '../utils/sse.js';
+import { sendToUser, addClient, removeClient } from '../utils/sse';
 import SystemSettingModel from '../models/SystemSetting';
 
 const router = express.Router();

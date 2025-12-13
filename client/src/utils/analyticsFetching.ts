@@ -3,7 +3,7 @@
  * Provides efficient data fetching, caching, and transformation for analytics
  */
 
-import axios from 'axios';
+import { axiosInstance } from '../services/api';
 import type {
   PersonalInfo,
   DocumentRequest,
@@ -104,7 +104,7 @@ export const fetchPersonalInfoRecords = async (
   }
   
   try {
-    const response = await axios.get('/api/analytics/personal-info', {
+    const response = await axiosInstance.get('/analytics/personal-info', {
       params: {
         startDate: options.startDate,
         endDate: options.endDate,
@@ -146,7 +146,7 @@ export const fetchDocumentRequests = async (
   }
   
   try {
-    const response = await axios.get('/api/analytics/document-requests', {
+    const response = await axiosInstance.get('/analytics/document-requests', {
       params: {
         startDate: options.startDate,
         endDate: options.endDate,
