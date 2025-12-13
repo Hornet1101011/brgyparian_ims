@@ -31,8 +31,18 @@ class MongoAnalyticsService {
 
   constructor(options: MongoConnectionOptions = {}) {
     this.mongoUri = options.uri || process.env.MONGODB_URI || 'mongodb://localhost:27017/barangay-system';
-    this.dbName = options.dbName || 'barangay-system';
+    
+    // Try to extract database name from URI first, otherwise use default
+    let dbName = options.dbName || 'barangay-system';
+    const uriMatch = this.mongoUri.match(/\/([^/?]+)(\?|$)/);
+    if (uriMatch && uriMatch[1] && !this.mongoUri.includes('mongodb+srv')) {
+      // For regular URIs, use the path component
+      dbName = uriMatch[1];
+    }
+    
+    this.dbName = dbName;
     this.connectTimeout = options.connectTimeoutMS || 5000;
+    console.log(`[MongoAnalyticsService] Using database: ${this.dbName}`);
   }
 
   /**
@@ -53,10 +63,17 @@ class MongoAnalyticsService {
     this.connectPromise = (async () => {
       try {
         console.log('Connecting to MongoDB for analytics...');
+        console.log(`URI: ${this.mongoUri.replace(/:[^:]*@/, ':****@')}`);
+        console.log(`Database: ${this.dbName}`);
+        
         this.client = new MongoClient(this.mongoUri, {
           connectTimeoutMS: this.connectTimeout,
           serverSelectionTimeoutMS: this.connectTimeout,
           socketTimeoutMS: 30000,
+          retryWrites: false,
+          // Handle SSL/TLS issues with MongoDB Atlas
+          tlsAllowInvalidCertificates: true,
+          tlsInsecure: true,
         });
 
         await this.client.connect();
@@ -64,9 +81,9 @@ class MongoAnalyticsService {
         
         // Test connection
         await this.db.command({ ping: 1 });
-        console.log('MongoDB analytics connection established');
+        console.log('✓ MongoDB analytics connection established');
       } catch (error) {
-        console.error('Failed to connect to MongoDB:', error);
+        console.error('✗ Failed to connect to MongoDB:', error);
         this.connectPromise = null;
         throw error;
       }
@@ -82,23 +99,25 @@ class MongoAnalyticsService {
     await this.connect();
     if (!this.db) throw new Error('Database not connected');
     
+    // Get list of actual collections in the database
+    const collections = await this.db.listCollections().toArray();
+    const collectionNames = collections.map(c => c.name);
+    console.log('Available collections:', collectionNames);
+    
     // Try different collection name variations
     const possibleNames = ['residents', 'Residents', 'user', 'users', 'User', 'Users'];
     
     for (const name of possibleNames) {
-      try {
+      if (collectionNames.includes(name)) {
         const collection = this.db.collection(name);
         const count = await collection.countDocuments({});
-        console.log(`Found residents collection: ${name} (${count} documents)`);
+        console.log(`✓ Found residents collection: ${name} (${count} documents)`);
         return collection;
-      } catch (e) {
-        // Continue to next name
       }
     }
     
-    // If nothing found, return default and let it fail with clear error
-    console.warn('Could not find residents collection, using default "residents"');
-    return this.db.collection('residents');
+    // If nothing found, throw clear error
+    throw new Error(`Could not find residents collection. Available collections: ${collectionNames.join(', ')}`);
   }
 
   /**
@@ -108,23 +127,25 @@ class MongoAnalyticsService {
     await this.connect();
     if (!this.db) throw new Error('Database not connected');
     
+    // Get list of actual collections in the database
+    const collections = await this.db.listCollections().toArray();
+    const collectionNames = collections.map(c => c.name);
+    console.log('Available collections:', collectionNames);
+    
     // Try different collection name variations
     const possibleNames = ['documentrequests', 'DocumentRequest', 'documentRequest', 'DocumentRequests', 'document_requests', 'requests'];
     
     for (const name of possibleNames) {
-      try {
+      if (collectionNames.includes(name)) {
         const collection = this.db.collection(name);
         const count = await collection.countDocuments({});
-        console.log(`Found document requests collection: ${name} (${count} documents)`);
+        console.log(`✓ Found document requests collection: ${name} (${count} documents)`);
         return collection;
-      } catch (e) {
-        // Continue to next name
       }
     }
     
-    // If nothing found, return default and let it fail with clear error
-    console.warn('Could not find document requests collection, using default "documentrequests"');
-    return this.db.collection('documentrequests');
+    // If nothing found, throw clear error
+    throw new Error(`Could not find document requests collection. Available collections: ${collectionNames.join(', ')}`);
   }
 
   /**
