@@ -1,14 +1,14 @@
 /**
- * Analytics Controller - Revised to use Direct MongoDB Connection
- * All analytics queries now use direct MongoDB driver for optimal performance
+ * Analytics Controller - Using Mongoose Models
+ * All analytics queries use Mongoose models for optimal reliability with existing connection
  */
 
 import { Request, Response } from 'express';
-import { getMongoAnalyticsService } from '../services/mongoAnalyticsService';
-import { Filter } from 'mongodb';
+import { Resident } from '../models/Resident';
+import { DocumentRequest } from '../models/DocumentRequest';
 
 // Helper to build date filter
-const buildDateFilter = (startDate?: string, endDate?: string): Filter<any> | undefined => {
+const buildDateFilter = (startDate?: string, endDate?: string): Record<string, any> | undefined => {
   if (!startDate || !endDate) return undefined;
   return {
     createdAt: {
@@ -18,22 +18,53 @@ const buildDateFilter = (startDate?: string, endDate?: string): Filter<any> | un
   };
 };
 
+// Helper to aggregate field distribution
+const aggregateFieldDistribution = async (model: any, field: string, filter?: Record<string, any>) => {
+  try {
+    const result = await model.aggregate([
+      ...(filter ? [{ $match: filter }] : []),
+      {
+        $group: {
+          _id: `$${field}`,
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { count: -1 } },
+      { $project: { value: '$_id', count: '$count', _id: 0 } }
+    ]);
+
+    return {
+      success: true,
+      data: result,
+      total: result.length,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error(`Error aggregating ${field}:`, error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString()
+    };
+  }
+};
+
 /**
  * Get monthly analytics for the current year
  */
 export const getMonthlyAnalytics = async (req: Request, res: Response) => {
   try {
-    const mongoService = getMongoAnalyticsService();
-    const summary = await mongoService.getDashboardSummary();
-
-    if (!summary.success) {
-      return res.status(500).json({ message: 'Error fetching monthly analytics', error: summary.error });
-    }
-
+    const totalResidents = await Resident.countDocuments();
+    const totalDocuments = await DocumentRequest.countDocuments();
+    
     res.json({
       year: new Date().getFullYear(),
-      summary: summary.data,
-      timestamp: summary.timestamp
+      summary: {
+        totalResidents,
+        totalDocuments,
+        activeResidents: totalResidents
+      },
+      timestamp: new Date().toISOString()
     });
   } catch (error) {
     console.error('Error fetching monthly analytics:', error);
@@ -46,12 +77,39 @@ export const getMonthlyAnalytics = async (req: Request, res: Response) => {
  */
 export const getGenderDistribution = async (req: Request, res: Response) => {
   try {
-    const mongoService = getMongoAnalyticsService();
     const { startDate, endDate } = req.query;
-    const filter = buildDateFilter(startDate as string, endDate as string);
+    const filter = buildDateFilter(startDate as string, endDate as string) || {};
 
-    const result = await mongoService.getGenderDistribution(filter);
-    res.json(result);
+    const result = await Resident.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: {
+            $cond: [
+              { $eq: [{ $toLower: { $substr: ['$sex', 0, 1] } }, 'm'] },
+              'Male',
+              {
+                $cond: [
+                  { $eq: [{ $toLower: { $substr: ['$sex', 0, 1] } }, 'f'] },
+                  'Female',
+                  'Other'
+                ]
+              }
+            ]
+          },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { count: -1 } },
+      { $project: { type: '$_id', value: '$count', _id: 0 } }
+    ]);
+
+    res.json({
+      success: true,
+      data: result,
+      total: result.length,
+      timestamp: new Date().toISOString()
+    });
   } catch (error) {
     console.error('Error fetching gender distribution:', error);
     res.status(500).json({ 
@@ -67,7 +125,6 @@ export const getGenderDistribution = async (req: Request, res: Response) => {
  */
 export const getFieldDistribution = async (req: Request, res: Response) => {
   try {
-    const mongoService = getMongoAnalyticsService();
     const field = (req.query.field || '').toString().trim();
     
     if (!field) {
@@ -80,7 +137,7 @@ export const getFieldDistribution = async (req: Request, res: Response) => {
     const { startDate, endDate } = req.query;
     const filter = buildDateFilter(startDate as string, endDate as string);
 
-    const result = await mongoService.getFieldDistribution(field, filter);
+    const result = await aggregateFieldDistribution(Resident, field, filter);
     res.json(result);
   } catch (error) {
     console.error('Error fetching field distribution:', error);
@@ -97,12 +154,30 @@ export const getFieldDistribution = async (req: Request, res: Response) => {
  */
 export const getAgeBuckets = async (req: Request, res: Response) => {
   try {
-    const mongoService = getMongoAnalyticsService();
     const { startDate, endDate } = req.query;
-    const filter = buildDateFilter(startDate as string, endDate as string);
+    const filter = buildDateFilter(startDate as string, endDate as string) || {};
 
-    const result = await mongoService.getAgeDistribution(filter);
-    res.json(result);
+    const result = await Resident.aggregate([
+      { $match: filter },
+      {
+        $bucket: {
+          groupBy: '$age',
+          boundaries: [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 150],
+          default: 'Unknown',
+          output: {
+            count: { $sum: 1 }
+          }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+
+    res.json({
+      success: true,
+      data: result,
+      total: result.length,
+      timestamp: new Date().toISOString()
+    });
   } catch (error) {
     console.error('Error fetching age buckets:', error);
     res.status(500).json({ 
@@ -118,11 +193,10 @@ export const getAgeBuckets = async (req: Request, res: Response) => {
  */
 export const getOccupationDistribution = async (req: Request, res: Response) => {
   try {
-    const mongoService = getMongoAnalyticsService();
     const { startDate, endDate } = req.query;
     const filter = buildDateFilter(startDate as string, endDate as string);
 
-    const result = await mongoService.getFieldDistribution('occupation', filter);
+    const result = await aggregateFieldDistribution(Resident, 'occupation', filter);
     res.json({ field: 'occupation', ...result });
   } catch (error) {
     console.error('Error fetching occupation distribution:', error);
@@ -139,11 +213,10 @@ export const getOccupationDistribution = async (req: Request, res: Response) => 
  */
 export const getNationalityDistribution = async (req: Request, res: Response) => {
   try {
-    const mongoService = getMongoAnalyticsService();
     const { startDate, endDate } = req.query;
     const filter = buildDateFilter(startDate as string, endDate as string);
 
-    const result = await mongoService.getFieldDistribution('nationality', filter);
+    const result = await aggregateFieldDistribution(Resident, 'nationality', filter);
     res.json({ field: 'nationality', ...result });
   } catch (error) {
     console.error('Error fetching nationality distribution:', error);
@@ -160,11 +233,10 @@ export const getNationalityDistribution = async (req: Request, res: Response) =>
  */
 export const getBloodTypeDistribution = async (req: Request, res: Response) => {
   try {
-    const mongoService = getMongoAnalyticsService();
     const { startDate, endDate } = req.query;
     const filter = buildDateFilter(startDate as string, endDate as string);
 
-    const result = await mongoService.getFieldDistribution('bloodType', filter);
+    const result = await aggregateFieldDistribution(Resident, 'bloodType', filter);
     res.json({ field: 'bloodType', ...result });
   } catch (error) {
     console.error('Error fetching blood type distribution:', error);
@@ -181,11 +253,10 @@ export const getBloodTypeDistribution = async (req: Request, res: Response) => {
  */
 export const getDisabilityDistribution = async (req: Request, res: Response) => {
   try {
-    const mongoService = getMongoAnalyticsService();
     const { startDate, endDate } = req.query;
     const filter = buildDateFilter(startDate as string, endDate as string);
 
-    const result = await mongoService.getFieldDistribution('disabilityStatus', filter);
+    const result = await aggregateFieldDistribution(Resident, 'disabilityStatus', filter);
     res.json({ field: 'disabilityStatus', ...result });
   } catch (error) {
     console.error('Error fetching disability distribution:', error);
@@ -202,11 +273,10 @@ export const getDisabilityDistribution = async (req: Request, res: Response) => 
  */
 export const getChildrenCountDistribution = async (req: Request, res: Response) => {
   try {
-    const mongoService = getMongoAnalyticsService();
     const { startDate, endDate } = req.query;
     const filter = buildDateFilter(startDate as string, endDate as string);
 
-    const result = await mongoService.getFieldDistribution('numberOfChildren', filter);
+    const result = await aggregateFieldDistribution(Resident, 'numberOfChildren', filter);
     res.json({ field: 'numberOfChildren', ...result });
   } catch (error) {
     console.error('Error fetching children count distribution:', error);
@@ -223,11 +293,10 @@ export const getChildrenCountDistribution = async (req: Request, res: Response) 
  */
 export const getBusinessTypeDistribution = async (req: Request, res: Response) => {
   try {
-    const mongoService = getMongoAnalyticsService();
     const { startDate, endDate } = req.query;
     const filter = buildDateFilter(startDate as string, endDate as string);
 
-    const result = await mongoService.getFieldDistribution('businessType', filter);
+    const result = await aggregateFieldDistribution(Resident, 'businessType', filter);
     res.json({ field: 'businessType', ...result });
   } catch (error) {
     console.error('Error fetching business type distribution:', error);
@@ -244,11 +313,10 @@ export const getBusinessTypeDistribution = async (req: Request, res: Response) =
  */
 export const getBusinessSizeDistribution = async (req: Request, res: Response) => {
   try {
-    const mongoService = getMongoAnalyticsService();
     const { startDate, endDate } = req.query;
     const filter = buildDateFilter(startDate as string, endDate as string);
 
-    const result = await mongoService.getFieldDistribution('numberOfEmployees', filter);
+    const result = await aggregateFieldDistribution(Resident, 'numberOfEmployees', filter);
     res.json({ field: 'numberOfEmployees', ...result });
   } catch (error) {
     console.error('Error fetching business size distribution:', error);
@@ -265,11 +333,10 @@ export const getBusinessSizeDistribution = async (req: Request, res: Response) =
  */
 export const getIncomeBrackets = async (req: Request, res: Response) => {
   try {
-    const mongoService = getMongoAnalyticsService();
     const { startDate, endDate } = req.query;
     const filter = buildDateFilter(startDate as string, endDate as string);
 
-    const result = await mongoService.getFieldDistribution('annualGrossIncome', filter);
+    const result = await aggregateFieldDistribution(Resident, 'annualGrossIncome', filter);
     res.json({ field: 'annualGrossIncome', ...result });
   } catch (error) {
     console.error('Error fetching income brackets:', error);
@@ -286,11 +353,10 @@ export const getIncomeBrackets = async (req: Request, res: Response) => {
  */
 export const getEducationDistribution = async (req: Request, res: Response) => {
   try {
-    const mongoService = getMongoAnalyticsService();
     const { startDate, endDate } = req.query;
     const filter = buildDateFilter(startDate as string, endDate as string);
 
-    const result = await mongoService.getFieldDistribution('educationLevel', filter);
+    const result = await aggregateFieldDistribution(Resident, 'educationLevel', filter);
     res.json({ field: 'educationLevel', ...result });
   } catch (error) {
     console.error('Error fetching education distribution:', error);
@@ -307,11 +373,10 @@ export const getEducationDistribution = async (req: Request, res: Response) => {
  */
 export const getCivilStatusDistribution = async (req: Request, res: Response) => {
   try {
-    const mongoService = getMongoAnalyticsService();
     const { startDate, endDate } = req.query;
     const filter = buildDateFilter(startDate as string, endDate as string);
 
-    const result = await mongoService.getFieldDistribution('civilStatus', filter);
+    const result = await aggregateFieldDistribution(Resident, 'civilStatus', filter);
     res.json({ field: 'civilStatus', ...result });
   } catch (error) {
     console.error('Error fetching civil status distribution:', error);
@@ -328,11 +393,10 @@ export const getCivilStatusDistribution = async (req: Request, res: Response) =>
  */
 export const getReligionDistribution = async (req: Request, res: Response) => {
   try {
-    const mongoService = getMongoAnalyticsService();
     const { startDate, endDate } = req.query;
     const filter = buildDateFilter(startDate as string, endDate as string);
 
-    const result = await mongoService.getFieldDistribution('religion', filter);
+    const result = await aggregateFieldDistribution(Resident, 'religion', filter);
     res.json({ field: 'religion', ...result });
   } catch (error) {
     console.error('Error fetching religion distribution:', error);
@@ -350,7 +414,6 @@ export const getReligionDistribution = async (req: Request, res: Response) => {
  */
 export const getPersonalInfoRecords = async (req: Request, res: Response) => {
   try {
-    const mongoService = getMongoAnalyticsService();
     const { startDate, endDate, barangayID, residentType, limit = 10000 } = req.query;
 
     const filter: any = {};
@@ -374,14 +437,17 @@ export const getPersonalInfoRecords = async (req: Request, res: Response) => {
     }
 
     console.log('Fetching personal info with filter:', filter);
-    const result = await mongoService.getResidents(filter, parseInt(limit as string) || 10000);
+    const residents = await Resident.find(filter)
+      .limit(parseInt(limit as string) || 10000)
+      .lean()
+      .exec();
     
     // Return normalized response format
     res.json({
-      data: result.data || [],
-      total: result.total || 0,
-      success: result.success,
-      timestamp: result.timestamp
+      data: residents || [],
+      total: residents.length || 0,
+      success: true,
+      timestamp: new Date().toISOString()
     });
   } catch (error) {
     console.error('Error fetching personal info records:', error);
@@ -402,7 +468,6 @@ export const getPersonalInfoRecords = async (req: Request, res: Response) => {
  */
 export const getDocumentRequests = async (req: Request, res: Response) => {
   try {
-    const mongoService = getMongoAnalyticsService();
     const { startDate, endDate, limit = 10000 } = req.query;
 
     const filter: any = {};
@@ -416,14 +481,17 @@ export const getDocumentRequests = async (req: Request, res: Response) => {
     }
 
     console.log('Fetching document requests with filter:', filter);
-    const result = await mongoService.getDocumentRequests(filter, parseInt(limit as string) || 10000);
+    const documents = await DocumentRequest.find(filter)
+      .limit(parseInt(limit as string) || 10000)
+      .lean()
+      .exec();
     
     // Return normalized response format
     res.json({
-      data: result.data || [],
-      total: result.total || 0,
-      success: result.success,
-      timestamp: result.timestamp
+      data: documents || [],
+      total: documents.length || 0,
+      success: true,
+      timestamp: new Date().toISOString()
     });
   } catch (error) {
     console.error('Error fetching document requests:', error);
@@ -443,11 +511,10 @@ export const getDocumentRequests = async (req: Request, res: Response) => {
  */
 export const getDocumentTypeDistribution = async (req: Request, res: Response) => {
   try {
-    const mongoService = getMongoAnalyticsService();
     const { startDate, endDate } = req.query;
     const filter = buildDateFilter(startDate as string, endDate as string);
 
-    const result = await mongoService.getDocumentTypeDistribution(filter);
+    const result = await aggregateFieldDistribution(DocumentRequest, 'documentType', filter);
     res.json(result);
   } catch (error) {
     console.error('Error fetching document type distribution:', error);
@@ -464,11 +531,10 @@ export const getDocumentTypeDistribution = async (req: Request, res: Response) =
  */
 export const getDocumentsByStatus = async (req: Request, res: Response) => {
   try {
-    const mongoService = getMongoAnalyticsService();
     const { startDate, endDate } = req.query;
     const filter = buildDateFilter(startDate as string, endDate as string);
 
-    const result = await mongoService.getDocumentsByStatus(filter);
+    const result = await aggregateFieldDistribution(DocumentRequest, 'status', filter);
     res.json(result);
   } catch (error) {
     console.error('Error fetching documents by status:', error);
@@ -485,9 +551,22 @@ export const getDocumentsByStatus = async (req: Request, res: Response) => {
  */
 export const getDashboardSummary = async (req: Request, res: Response) => {
   try {
-    const mongoService = getMongoAnalyticsService();
-    const result = await mongoService.getDashboardSummary();
-    res.json(result);
+    const totalResidents = await Resident.countDocuments();
+    const totalDocuments = await DocumentRequest.countDocuments();
+    const pendingDocuments = await DocumentRequest.countDocuments({ status: 'pending' });
+    const approvedDocuments = await DocumentRequest.countDocuments({ status: 'approved' });
+
+    res.json({
+      success: true,
+      data: {
+        totalResidents,
+        totalDocuments,
+        pendingDocuments,
+        approvedDocuments,
+        rejectedDocuments: totalDocuments - approvedDocuments - pendingDocuments
+      },
+      timestamp: new Date().toISOString()
+    });
   } catch (error) {
     console.error('Error fetching dashboard summary:', error);
     res.status(500).json({ 
