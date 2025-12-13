@@ -11,12 +11,16 @@ import {
 	getChildrenCountDistribution,
 	getBusinessTypeDistribution,
 	getBusinessSizeDistribution,
-	getIncomeBrackets
+	getIncomeBrackets,
+	getPersonalInfoRecords,
+	getDocumentRequests
 } from '../controllers/analyticsController';
 
 const router = express.Router();
 
 router.get('/', (req: any, res: Response, next?: NextFunction) => getMonthlyAnalytics(req, res, next));
+router.get('/personal-info', (req: any, res: Response) => getPersonalInfoRecords(req, res));
+router.get('/document-requests', (req: any, res: Response) => getDocumentRequests(req, res));
 router.get('/gender', (req: any, res: Response) => getGenderDistribution(req, res));
 router.get('/field', (req: any, res: Response) => getFieldDistribution(req, res));
 router.get('/age', (req: any, res: Response) => getAgeBuckets(req, res));

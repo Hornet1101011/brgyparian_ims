@@ -400,3 +400,113 @@ export const getIncomeBrackets = async (req: Request, res: Response) => {
     res.status(500).json({ message: 'Error fetching income brackets', error });
   }
 };
+
+/**
+ * Get personal info records for analytics purposes
+ * Returns normalized resident data for all analytics computations
+ */
+export const getPersonalInfoRecords = async (req: Request, res: Response) => {
+  try {
+    const { startDate, endDate, barangayID, residentType } = req.query;
+    const query: any = {};
+
+    // Add date range to query if provided
+    if (startDate && endDate) {
+      query.createdAt = {
+        $gte: new Date(startDate as string),
+        $lte: new Date(endDate as string)
+      };
+    }
+
+    // Add barangay filter if provided
+    if (barangayID) {
+      query.barangayID = barangayID;
+    }
+
+    // Add resident type filter if provided
+    if (residentType) {
+      query.residentType = residentType;
+    }
+
+    // Fetch residents with necessary fields
+    const residents = await Resident.find(query).select({
+      _id: 1,
+      sex: 1,
+      age: 1,
+      occupation: 1,
+      nationality: 1,
+      bloodType: 1,
+      disabilityStatus: 1,
+      numberOfChildren: 1,
+      annualGrossIncome: 1,
+      education: 1,
+      civilStatus: 1,
+      religion: 1,
+      businessType: 1,
+      numberOfEmployees: 1,
+      createdAt: 1,
+      residentType: 1,
+      barangayID: 1
+    }).lean();
+
+    // Return with data wrapper format expected by client
+    res.json({
+      data: residents,
+      total: residents.length,
+      success: true
+    });
+  } catch (error) {
+    console.error('Error fetching personal info records:', error);
+    res.status(500).json({
+      message: 'Error fetching personal info records',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+};
+
+/**
+ * Get document request records for analytics purposes
+ */
+export const getDocumentRequests = async (req: Request, res: Response) => {
+  try {
+    const { startDate, endDate, barangayID } = req.query;
+    const query: any = {};
+
+    // Add date range to query if provided
+    if (startDate && endDate) {
+      query.createdAt = {
+        $gte: new Date(startDate as string),
+        $lte: new Date(endDate as string)
+      };
+    }
+
+    // Add barangay filter if provided
+    if (barangayID) {
+      query.barangayID = barangayID;
+    }
+
+    // Fetch document requests with necessary fields
+    const documents = await DocumentRequest.find(query).select({
+      _id: 1,
+      documentType: 1,
+      status: 1,
+      createdAt: 1,
+      completedAt: 1,
+      residentID: 1,
+      barangayID: 1
+    }).lean();
+
+    // Return with data wrapper format expected by client
+    res.json({
+      data: documents,
+      total: documents.length,
+      success: true
+    });
+  } catch (error) {
+    console.error('Error fetching document requests:', error);
+    res.status(500).json({
+      message: 'Error fetching document requests',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+};
