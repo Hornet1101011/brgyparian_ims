@@ -156,7 +156,8 @@ ResidentSchema.set('timestamps', true);
 // Add indexes to help enforce uniqueness and avoid duplicates at the database level.
 // Use partialFilterExpression so null/missing values don't block index creation for optional fields.
 // Avoid operators like `$ne` in partialFilterExpression for broader MongoDB compatibility.
-ResidentSchema.index({ barangayID: 1 }, { unique: true, partialFilterExpression: { barangayID: { $exists: true } }, background: true });
+// Give explicit name to avoid conflicts with existing indexes
+ResidentSchema.index({ barangayID: 1 }, { unique: true, partialFilterExpression: { barangayID: { $exists: true } }, background: true, name: 'barangayID_unique_partial' });
 ResidentSchema.index({ username: 1 }, { unique: true, sparse: true, background: true });
 ResidentSchema.index({ email: 1 }, { unique: true, sparse: true, background: true });
 
