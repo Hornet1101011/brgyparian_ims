@@ -413,8 +413,10 @@ export const getReligionDistribution = async (req: Request, res: Response) => {
  * Returns all resident data for client-side analytics computation
  */
 export const getPersonalInfoRecords = async (req: Request, res: Response) => {
+  console.log('📊 [Analytics] getPersonalInfoRecords called');
   try {
     const { startDate, endDate, barangayID, residentType, limit = 10000 } = req.query;
+    console.log('📊 [Analytics] Query params:', { startDate, endDate, barangayID, residentType, limit });
 
     const filter: any = {};
 
@@ -436,11 +438,13 @@ export const getPersonalInfoRecords = async (req: Request, res: Response) => {
       filter.residentType = residentType;
     }
 
-    console.log('Fetching personal info with filter:', filter);
+    console.log('📊 [Analytics] Using filter:', filter);
     const residents = await Resident.find(filter)
       .limit(parseInt(limit as string) || 10000)
       .lean()
       .exec();
+    
+    console.log('📊 [Analytics] Found residents:', residents.length);
     
     // Return normalized response format
     res.json({
@@ -450,14 +454,14 @@ export const getPersonalInfoRecords = async (req: Request, res: Response) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Error fetching personal info records:', error);
+    console.error('❌ [Analytics] Error fetching personal info records:', error);
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error('Full error:', error);
+    console.error('❌ [Analytics] Full error stack:', error instanceof Error ? error.stack : error);
     res.status(500).json({
       success: false,
       message: 'Error fetching personal info records',
       error: errorMsg,
-      details: error instanceof Error ? error.stack : undefined
+      stack: error instanceof Error ? error.stack : undefined
     });
   }
 };
@@ -467,8 +471,10 @@ export const getPersonalInfoRecords = async (req: Request, res: Response) => {
  * Returns all document requests for client-side analytics computation
  */
 export const getDocumentRequests = async (req: Request, res: Response) => {
+  console.log('📊 [Analytics] getDocumentRequests called');
   try {
     const { startDate, endDate, limit = 10000 } = req.query;
+    console.log('📊 [Analytics] Query params:', { startDate, endDate, limit });
 
     const filter: any = {};
 
@@ -480,11 +486,13 @@ export const getDocumentRequests = async (req: Request, res: Response) => {
       };
     }
 
-    console.log('Fetching document requests with filter:', filter);
+    console.log('📊 [Analytics] Using filter:', filter);
     const documents = await DocumentRequest.find(filter)
       .limit(parseInt(limit as string) || 10000)
       .lean()
       .exec();
+    
+    console.log('📊 [Analytics] Found documents:', documents.length);
     
     // Return normalized response format
     res.json({
@@ -494,14 +502,14 @@ export const getDocumentRequests = async (req: Request, res: Response) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Error fetching document requests:', error);
+    console.error('❌ [Analytics] Error fetching document requests:', error);
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error('Full error:', error);
+    console.error('❌ [Analytics] Full error stack:', error instanceof Error ? error.stack : error);
     res.status(500).json({
       success: false,
       message: 'Error fetching document requests',
       error: errorMsg,
-      details: error instanceof Error ? error.stack : undefined
+      stack: error instanceof Error ? error.stack : undefined
     });
   }
 };
