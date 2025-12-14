@@ -384,11 +384,14 @@ const DocumentRequestForm: React.FC = () => {
         {/* Header Section */}
         <Row justify="start" align="middle" style={{ marginBottom: 32 }}>
           <Col style={{ textAlign: 'left' }}>
-            <Breadcrumb style={{ marginBottom: 12, fontSize: 13, color: '#999' }}>
-              <Breadcrumb.Item>Home</Breadcrumb.Item>
-              <Breadcrumb.Item>Documents</Breadcrumb.Item>
-              <Breadcrumb.Item>Request</Breadcrumb.Item>
-            </Breadcrumb>
+            <Breadcrumb 
+              items={[
+                { title: 'Home' },
+                { title: 'Documents' },
+                { title: 'Request' }
+              ]}
+              style={{ marginBottom: 12, fontSize: 13, color: '#999' }}
+            />
             <Title level={2} style={{ 
               margin: 0, 
               textAlign: 'left',

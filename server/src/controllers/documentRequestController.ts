@@ -378,10 +378,22 @@ export const createDocumentRequest = async (req: any, res: Response) => {
 
     try {
       await documentRequest.save();
-    } catch (err) {
+    } catch (err: any) {
       if (handleSaveError(err, res)) return; // handled as 409
-      console.error('Error saving documentRequest during creation:', err);
-      return res.status(500).json({ message: 'Error creating document request', error: (err as Error).message });
+      console.error('Error saving documentRequest during creation:', {
+        message: err?.message,
+        name: err?.name,
+        code: err?.code,
+        errors: err?.errors,
+        stack: err?.stack
+      });
+      const errorDetails = err?.errors ? Object.entries(err.errors).map(([k, v]: [string, any]) => `${k}: ${v?.message}`) : [];
+      return res.status(500).json({ 
+        message: 'Error creating document request', 
+        error: (err as Error).message,
+        details: errorDetails.length > 0 ? errorDetails : undefined,
+        validationErrors: err?.errors
+      });
     }
     res.status(201).json({
       message: 'Document request created successfully',

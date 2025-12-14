@@ -268,17 +268,27 @@ export const documentsAPI = {
     axiosInstance.get('/document-requests/all')
       .then(response => response.data)
       .catch((err) => {
-        // If unauthenticated (401) return an empty list instead of throwing
-        // so public pages don't log parse errors or unhandled rejections.
+        // If unauthenticated (401) or forbidden (403), return an empty list
+        // instead of throwing so pages don't log parse errors or unhandled rejections.
         const status = err?.response?.status;
-        if (status === 401) {
+        if (status === 401 || status === 403) {
+          console.warn('getAllDocuments: Insufficient permissions. User must be admin or staff.', status);
           return [] as any[];
         }
         // Re-throw other errors so callers can handle them as before.
         throw err;
       }),
   getDocumentRecords: () =>
-    axiosInstance.get('/document-requests/all').then(response => response.data),
+    axiosInstance.get('/document-requests/all')
+      .then(response => response.data)
+      .catch((err) => {
+        const status = err?.response?.status;
+        if (status === 401 || status === 403) {
+          console.warn('getDocumentRecords: Insufficient permissions. User must be admin or staff.', status);
+          return [] as any[];
+        }
+        throw err;
+      }),
   updateDocumentStatus: (id: string, data: { status: string; notes?: string }) =>
     axiosInstance.patch(`/document-requests/${id}/process`, data).then(response => response.data),
   processDocument: (id: string) =>

@@ -730,7 +730,7 @@ const Dashboard: React.FC = () => {
           <div style={{ marginBottom: 28 }}>
             <Card 
               title="Your Appointments" 
-              bordered={false} 
+              variant="borderless"
               style={{ 
                 borderRadius: 14,
                 background: '#ffffff',
