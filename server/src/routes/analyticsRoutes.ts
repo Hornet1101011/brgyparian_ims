@@ -13,7 +13,9 @@ import {
 	getBusinessSizeDistribution,
 	getIncomeBrackets,
 	getPersonalInfoRecords,
-	getDocumentRequests
+	getDocumentRequests,
+	getProcessedDocumentsCount,
+	getPendingRequestsCount
 } from '../controllers/analyticsController';
 
 const router = express.Router();
@@ -21,6 +23,8 @@ const router = express.Router();
 router.get('/', (req: any, res: Response, next?: NextFunction) => getMonthlyAnalytics(req, res, next));
 router.get('/personal-info', (req: any, res: Response) => getPersonalInfoRecords(req, res));
 router.get('/document-requests', (req: any, res: Response) => getDocumentRequests(req, res));
+router.get('/processed-documents-count', (req: any, res: Response) => getProcessedDocumentsCount(req, res));
+router.get('/pending-requests-count', (req: any, res: Response) => getPendingRequestsCount(req, res));
 router.get('/gender', (req: any, res: Response) => getGenderDistribution(req, res));
 router.get('/field', (req: any, res: Response) => getFieldDistribution(req, res));
 router.get('/age', (req: any, res: Response) => getAgeBuckets(req, res));

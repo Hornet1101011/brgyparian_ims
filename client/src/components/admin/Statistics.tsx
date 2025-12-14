@@ -57,10 +57,11 @@ type ChartId = keyof typeof CHART_DEFINITIONS;
 const defaultQueryClient = new QueryClient({ 
   defaultOptions: { 
     queries: { 
-      retry: 1,
+      retry: 2,
       staleTime: 5 * 60 * 1000,
       gcTime: 10 * 60 * 1000,
-      refetchOnWindowFocus: false 
+      refetchOnWindowFocus: false,
+      throwOnError: false // Prevent throwing errors on query failure
     } 
   } 
 });
@@ -164,7 +165,8 @@ const StatisticsInner: React.FC = () => {
 
   // Summary data
   const totalResidents = useMemo(() => summaryQuery.data?.totalResidents ?? 0, [summaryQuery.data]);
-  const totalDocuments = useMemo(() => summaryQuery.data?.totalResidents ?? 0, [summaryQuery.data]);
+  const totalDocuments = useMemo(() => summaryQuery.data?.totalDocuments ?? 0, [summaryQuery.data]);
+  const pendingRequests = useMemo(() => summaryQuery.data?.pendingRequests ?? 0, [summaryQuery.data]);
   
   const ageBarData = useMemo(() => {
     const ageData = chartData['age'];
@@ -218,7 +220,11 @@ const StatisticsInner: React.FC = () => {
     }
 
     if (totalDocuments > 0) {
-      parts.push(`There are ${totalDocuments} document requests in the system.`);
+      parts.push(`There are ${totalDocuments} processed documents in the system.`);
+    }
+
+    if (pendingRequests > 0) {
+      parts.push(`There are currently ${pendingRequests} pending requests awaiting processing.`);
     }
 
     setReportText(parts.join(' '));
@@ -226,7 +232,7 @@ const StatisticsInner: React.FC = () => {
 
   useEffect(() => {
     generateNarrativeReport();
-  }, [chartData, totalResidents, totalDocuments]);
+  }, [chartData, totalResidents, totalDocuments, pendingRequests]);
 
   const openReport = () => {
     setReportModalOpen(true);
@@ -384,10 +390,10 @@ const StatisticsInner: React.FC = () => {
               ) : (
                 <div>
                   <Typography.Text type="secondary" style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b', marginBottom: 8 }}>
-                    Requests (Total)
+                    Pending Requests
                   </Typography.Text>
                   <Typography.Title level={2} style={{ margin: 0, color: '#f59e0b', fontWeight: 700 }}>
-                    {totalDocuments.toLocaleString()}
+                    {pendingRequests.toLocaleString()}
                   </Typography.Title>
                 </div>
               )}
@@ -605,20 +611,26 @@ const StatisticsInner: React.FC = () => {
                 const chartTitle = CHART_DEFINITIONS[chartId].title;
                 const loading = chartLoading[chartId];
                 const chartOption = chartOptions[chartId];
+                const q = allQueries[chartId as keyof typeof allQueries];
+                const hasError = q?.isError;
+                const hasData = chartData[chartId] && Array.isArray(chartData[chartId]) && chartData[chartId].length > 0;
 
                 return (
                   <Col key={chartId} xs={24} md={12} lg={12}>
                     <Card
                       title={
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <BarChartOutlined style={{ color: '#1890ff', fontSize: 18 }} />
-                          <span style={{ fontWeight: 600, color: '#0f172a', fontSize: 15 }}>{chartTitle}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between', width: '100%' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <BarChartOutlined style={{ color: '#1890ff', fontSize: 18 }} />
+                            <span style={{ fontWeight: 600, color: '#0f172a', fontSize: 15 }}>{chartTitle}</span>
+                          </div>
+                          {loading && <SyncOutlined spin style={{ color: '#1890ff', fontSize: 14 }} />}
                         </div>
                       }
                       style={{ 
                         borderRadius: 12, 
                         boxShadow: '0 2px 12px rgba(15,23,42,0.08)',
-                        border: '1px solid #e2e8f0',
+                        border: hasError ? '1px solid #ff7875' : '1px solid #e2e8f0',
                         height: '100%'
                       }}
                       styles={{ 
@@ -626,13 +638,33 @@ const StatisticsInner: React.FC = () => {
                         header: { padding: '16px 20px', borderBottom: '1px solid #e2e8f0' }
                       }}
                     >
-                      <div ref={(el) => { chartRefs.current[chartId] = el; }} style={{ background: '#ffffff' }}>
-                        <EChartRenderer 
-                          option={chartOption} 
-                          loading={loading} 
-                          height={300} 
+                      {hasError && (
+                        <Alert
+                          message="Failed to load chart data"
+                          type="error"
+                          showIcon
+                          action={<Button size="small" onClick={() => q?.refetch?.()}>Retry</Button>}
+                          style={{ marginBottom: 16 }}
                         />
-                      </div>
+                      )}
+                      {loading && !hasData && (
+                        <Skeleton active paragraph={{ rows: 4 }} />
+                      )}
+                      {!loading && !hasData && !hasError && (
+                        <Empty 
+                          description="No data available" 
+                          style={{ padding: '40px 20px', color: '#94a3b8' }}
+                        />
+                      )}
+                      {(hasData || chartOption) && (
+                        <div ref={(el) => { if (el) chartRefs.current[chartId] = el; }} style={{ background: '#ffffff' }}>
+                          <EChartRenderer 
+                            option={chartOption} 
+                            loading={loading && hasData} 
+                            height={300} 
+                          />
+                        </div>
+                      )}
                     </Card>
                   </Col>
                 );

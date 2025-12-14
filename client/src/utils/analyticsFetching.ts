@@ -3,7 +3,7 @@
  * Provides efficient data fetching, caching, and transformation for analytics
  */
 
-import { axiosInstance } from '../services/api';
+import { axiosInstance, axiosPublic } from '../services/api';
 import type {
   PersonalInfo,
   DocumentRequest,
@@ -597,10 +597,38 @@ export const computeAllAnalytics = async (
 /**
  * Get summary dashboard statistics
  */
+/**
+ * Fetch total processed documents from the processed_documents collection
+ */
+const fetchProcessedDocumentsCount = async (): Promise<number> => {
+  try {
+    const response = await axiosInstance.get('/analytics/processed-documents-count');
+    return response.data?.count || 0;
+  } catch (error) {
+    console.error('Failed to fetch processed documents count:', error);
+    return 0;
+  }
+};
+
+/**
+ * Fetch pending document requests from the document_requests collection
+ */
+const fetchPendingRequestsCount = async (): Promise<number> => {
+  try {
+    const response = await axiosInstance.get('/analytics/pending-requests-count');
+    return response.data?.count || 0;
+  } catch (error) {
+    console.error('Failed to fetch pending requests count:', error);
+    return 0;
+  }
+};
+
 export const fetchDashboardSummary = async (
   options: FetchOptions = {}
 ): Promise<{
   totalResidents: number;
+  totalDocuments: number;
+  pendingRequests: number;
   maleCount: number;
   femaleCount: number;
   avgAge: number;
@@ -608,10 +636,14 @@ export const fetchDashboardSummary = async (
   dataQuality: number;
 }> => {
   const records = await fetchPersonalInfoRecords(options);
+  const totalDocuments = await fetchProcessedDocumentsCount();
+  const pendingRequests = await fetchPendingRequestsCount();
   
   if (records.length === 0) {
     return {
       totalResidents: 0,
+      totalDocuments,
+      pendingRequests,
       maleCount: 0,
       femaleCount: 0,
       avgAge: 0,
@@ -639,6 +671,8 @@ export const fetchDashboardSummary = async (
   
   return {
     totalResidents: records.length,
+    totalDocuments,
+    pendingRequests,
     maleCount,
     femaleCount,
     avgAge,

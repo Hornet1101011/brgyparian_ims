@@ -3,6 +3,9 @@ import { DocumentRequest } from '../models/DocumentRequest';
 import { Inquiry } from '../models/Inquiry';
 import { Resident } from '../models/Resident';
 
+// ProcessedDocument is in CommonJS format in the parent directory
+const ProcessedDocument = require('../../models/ProcessedDocument');
+
 export const getRequestAnalytics = async (req: Request, res: Response) => {
   try {
     const { startDate, endDate } = req.query;
@@ -484,6 +487,70 @@ export const getDocumentRequests = async (req: Request, res: Response) => {
       message: 'Error fetching document requests',
       error: errorMsg,
       details: error instanceof Error ? error.stack : undefined
+    });
+  }
+};
+
+/**
+ * Get count of processed documents from the processed_documents collection
+ */
+export const getProcessedDocumentsCount = async (req: Request, res: Response) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const query: any = {};
+
+    // Add date range to query if provided
+    if (startDate && endDate) {
+      query.createdAt = {
+        $gte: new Date(startDate as string),
+        $lte: new Date(endDate as string)
+      };
+    }
+
+    const count = await ProcessedDocument.countDocuments(query);
+
+    res.json({
+      count,
+      success: true
+    });
+  } catch (error) {
+    console.error('Error fetching processed documents count:', error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    res.status(500).json({
+      message: 'Error fetching processed documents count',
+      error: errorMsg
+    });
+  }
+};
+
+/**
+ * Get count of pending document requests
+ */
+export const getPendingRequestsCount = async (req: Request, res: Response) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const query: any = { status: 'pending' };
+
+    // Add date range to query if provided
+    if (startDate && endDate) {
+      query.createdAt = {
+        $gte: new Date(startDate as string),
+        $lte: new Date(endDate as string)
+      };
+    }
+
+    const count = await DocumentRequest.countDocuments(query);
+
+    res.json({
+      count,
+      success: true
+    });
+  } catch (error) {
+    console.error('Error fetching pending requests count:', error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    res.status(500).json({
+      message: 'Error fetching pending requests count',
+      error: errorMsg
     });
   }
 };

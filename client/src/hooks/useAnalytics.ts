@@ -33,6 +33,19 @@ import {
 } from '../utils/analyticsFetching';
 
 // ============================================================================
+// Shared Query Configuration
+// ============================================================================
+
+// Default query options for all analytics queries
+const analyticsQueryOptions = {
+  retry: 2,
+  retryDelay: (attemptIndex: number) => Math.min(1000 * Math.pow(2, attemptIndex), 30000),
+  staleTime: 5 * 60 * 1000,
+  gcTime: 10 * 60 * 1000,
+  throwOnError: false, // Don't throw errors, let UI handle them
+};
+
+// ============================================================================
 // Hooks for Individual Data Fetches
 // ============================================================================
 
@@ -43,8 +56,7 @@ export const usePersonalInfoRecords = (options: FetchOptions = {}) => {
   return useQuery({
     queryKey: ['personal-info-records', JSON.stringify(options)],
     queryFn: () => fetchPersonalInfoRecords(options),
-    staleTime: (options.cacheTTL || 5) * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
+    ...analyticsQueryOptions,
   });
 };
 
@@ -71,8 +83,7 @@ export const useGenderAnalytics = (options: FetchOptions = {}) => {
   return useQuery({
     queryKey: ['analytics-gender', JSON.stringify(options)],
     queryFn: () => computeGenderAnalytics(options),
-    staleTime: (options.cacheTTL || 5) * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
+    ...analyticsQueryOptions,
   });
 };
 
@@ -83,8 +94,7 @@ export const useAgeAnalytics = (options: FetchOptions = {}) => {
   return useQuery({
     queryKey: ['analytics-age', JSON.stringify(options)],
     queryFn: () => computeAgeAnalytics(options),
-    staleTime: (options.cacheTTL || 5) * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
+    ...analyticsQueryOptions,
   });
 };
 
@@ -95,8 +105,7 @@ export const useOccupationAnalytics = (options: FetchOptions = {}) => {
   return useQuery({
     queryKey: ['analytics-occupation', JSON.stringify(options)],
     queryFn: () => computeOccupationAnalytics(options),
-    staleTime: (options.cacheTTL || 5) * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
+    ...analyticsQueryOptions,
   });
 };
 
