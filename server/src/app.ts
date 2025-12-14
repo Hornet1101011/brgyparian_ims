@@ -2,6 +2,7 @@ import inboxRoutes from './routes/inboxRoutes';
 import templatesRoutes from './routes/templates';
 import residentsRoutes from './routes/residents';
 import documentsRoutes from './routes/documents';
+import documentRequestRoutes from './routes/documentRequestRoutes';
 import authRoutes from './routes/authRoutes';
 import notificationRoutes from './routes/notificationRoutes';
 import inquiryMessageRoutes from './routes/inquiryMessageRoutes';
@@ -112,9 +113,11 @@ app.get('/', (req, res) => {
 app.use('/api/templates', templatesRoutes);
 app.use('/api/resident', residentsRoutes);
 app.use('/api/document', documentsRoutes);
+app.use('/api/document-requests', documentRequestRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/analytics', analyticsRoutes);
 console.log('Mounted documentsRoutes on /api/document');
+console.log('Mounted documentRequestRoutes on /api/document-requests');
 
 // Provide direct `/api/document/request` handlers to support legacy tests
 // These use the DocumentRequest mongoose model so behavior matches production.
