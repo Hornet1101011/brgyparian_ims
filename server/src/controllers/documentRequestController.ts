@@ -307,7 +307,15 @@ import { handleSaveError } from '../utils/handleSaveError';
 
 export const createDocumentRequest = async (req: any, res: Response) => {
   try {
-  const { type, purpose, fieldValues } = req.body;
+    console.log('[createDocumentRequest] Received request body:', req.body);
+    const { type, purpose, fieldValues } = req.body;
+    
+    // Validate required fields
+    if (!type || !purpose) {
+      console.log('[createDocumentRequest] Missing required fields:', { type, purpose });
+      return res.status(400).json({ message: 'Missing required fields: type and purpose' });
+    }
+    
     const user = (req as any).user;
     // Resolve requester information from authenticated user or by lookup
     let username = 'Unknown';
@@ -352,6 +360,7 @@ export const createDocumentRequest = async (req: any, res: Response) => {
       paymentStatus: 'pending',
       fieldValues: fieldValues || {}
     };
+    console.log('[createDocumentRequest] Creating DocumentRequest with data:', docReqData);
     const documentRequest = new DocumentRequest(docReqData);
 
     // Generate and persist a patterned transactionCode immediately when the request is created
@@ -377,7 +386,9 @@ export const createDocumentRequest = async (req: any, res: Response) => {
     documentRequest.paymentAmount = paymentAmounts[type];
 
     try {
+      console.log('[createDocumentRequest] Saving document request...');
       await documentRequest.save();
+      console.log('[createDocumentRequest] Document request saved successfully:', documentRequest._id);
     } catch (err: any) {
       if (handleSaveError(err, res)) return; // handled as 409
       console.error('Error saving documentRequest during creation:', {
@@ -400,6 +411,7 @@ export const createDocumentRequest = async (req: any, res: Response) => {
       documentRequest
     });
   } catch (error) {
+    console.error('[createDocumentRequest] Unexpected error:', error);
     res.status(500).json({
       message: 'Error creating document request',
       error: (error as Error).message
