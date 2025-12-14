@@ -318,8 +318,8 @@ export const createDocumentRequest = async (req: any, res: Response) => {
     
     const user = (req as any).user;
     // Resolve requester information from authenticated user or by lookup
-    let username = 'Unknown';
-    let barangayID = 'Unknown';
+    let username = req.body.username || 'Unknown';
+    let barangayID: string | undefined = req.body.barangayID || undefined;
     let requesterId: any = null;
     let requesterFullName: string | undefined = undefined;
     try {
@@ -353,13 +353,23 @@ export const createDocumentRequest = async (req: any, res: Response) => {
       type,
       purpose,
       username,
-      barangayID,
-      requesterId: requesterId || undefined,
-      requesterFullName: requesterFullName || undefined,
       status: 'pending',
       paymentStatus: 'pending',
       fieldValues: fieldValues || {}
     };
+    
+    // Only include barangayID if it has a valid value (not 'Unknown')
+    if (barangayID) {
+      docReqData.barangayID = barangayID;
+    }
+    
+    if (requesterId) {
+      docReqData.requesterId = requesterId;
+    }
+    
+    if (requesterFullName) {
+      docReqData.requesterFullName = requesterFullName;
+    }
     console.log('[createDocumentRequest] Creating DocumentRequest with data:', docReqData);
     const documentRequest = new DocumentRequest(docReqData);
 
