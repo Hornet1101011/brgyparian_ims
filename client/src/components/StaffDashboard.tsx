@@ -121,6 +121,8 @@ const StaffDashboard: React.FC = () => {
   const [stats, setStats] = useState({
     pendingRequests: 0,
     totalDocuments: 0,
+    templatesCount: 0,
+    processedDocuments: 0,
     completedRequests: 0,
   });
 
@@ -294,10 +296,14 @@ const StaffDashboard: React.FC = () => {
       
       // Get total documents count from both 'documents' and 'processed_documents' buckets
       let totalDocuments = 0;
+      let templatesCount = 0;
+      let processedDocuments = 0;
       try {
         const resp = await axiosInstance.get('/analytics/total-documents-count');
-        if (resp && resp.data && typeof resp.data.totalCount === 'number') {
-          totalDocuments = resp.data.totalCount;
+        if (resp && resp.data) {
+          totalDocuments = resp.data.totalCount || 0;
+          templatesCount = resp.data.documentsCount || 0;  // Templates in 'documents' bucket
+          processedDocuments = resp.data.processedCount || 0;  // Processed documents
         }
       } catch (e) {
         console.warn('Failed to fetch total documents count:', e);
@@ -306,6 +312,8 @@ const StaffDashboard: React.FC = () => {
       setStats({
         pendingRequests: docRecords.filter((d: any) => d.status === 'pending').length,
         totalDocuments: totalDocuments,
+        templatesCount: templatesCount,
+        processedDocuments: processedDocuments,
         completedRequests: docRecords.filter((d: any) => d.status === 'approved').length,
       });
     } catch (error) {
@@ -538,7 +546,9 @@ const StaffDashboard: React.FC = () => {
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
                 <div>
                   <div style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Documents</div>
-                  <div style={{ fontSize: 32, fontWeight: 700, color: '#0891b2', marginBottom: 12, lineHeight: 1 }}>{stats.totalDocuments}</div>
+                  <div style={{ fontSize: 32, fontWeight: 700, color: '#0891b2', marginBottom: 16, lineHeight: 1 }}>{stats.totalDocuments}</div>
+                  <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 6 }}>Templates: <span style={{ fontWeight: 600, color: '#0891b2' }}>{stats.templatesCount}</span></div>
+                  <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 12 }}>Processed: <span style={{ fontWeight: 600, color: '#0891b2' }}>{stats.processedDocuments}</span></div>
                   <Typography.Link style={{ fontSize: 12, color: '#0891b2', fontWeight: 500 }}>
                     Browse all <RightOutlined style={{ fontSize: 10, marginLeft: 4 }} />
                   </Typography.Link>
