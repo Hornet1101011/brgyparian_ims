@@ -86,6 +86,7 @@ const RegisterForm = () => {
       firstName: '',
       middleName: '',
       lastName: '',
+      nameExtension: '',
       username: '',
       email: '',
       password: '',
@@ -99,6 +100,7 @@ const RegisterForm = () => {
       firstName: Yup.string().matches(NAME_REGEX, 'First name may only contain letters, spaces, hyphens, and apostrophes').required('First name is required'),
       middleName: Yup.string().matches(NAME_REGEX, 'Middle name may only contain letters, spaces, hyphens, and apostrophes').notRequired(),
       lastName: Yup.string().matches(NAME_REGEX, 'Last name may only contain letters, spaces, hyphens, and apostrophes').required('Last name is required'),
+      nameExtension: Yup.string().matches(/^[A-Za-z0-9.\s'-]*$/, 'Extension may only contain letters, numbers, dots, spaces, hyphens, and apostrophes').notRequired(),
       role: Yup.string().oneOf(['resident']).required('Role is required'),
     }),
     // enable realtime validation on change and blur
@@ -157,7 +159,7 @@ const RegisterForm = () => {
 
       // role is constrained to 'resident' on the client; admin/staff registration is not exposed here
       try {
-        const fullName = [values.firstName, values.middleName, values.lastName].filter(Boolean).join(' ');
+        const fullName = [values.firstName, values.middleName, values.lastName, values.nameExtension].filter(Boolean).join(' ');
 
         setProcessPercent(40);
         setProcessMessage('Saving account...');
@@ -166,6 +168,7 @@ const RegisterForm = () => {
           firstName: values.firstName,
           middleName: values.middleName,
           lastName: values.lastName,
+          nameExtension: values.nameExtension,
           username: values.username,
           email: values.email,
           password: values.password,
@@ -447,9 +450,17 @@ const RegisterForm = () => {
   );
 
   // Input sanitizers to prevent invalid characters
-  const sanitizeName = (v: string) => v.replace(/[^A-Za-z\s'-]/g, '');
+  const capitalizeFirst = (v: string) => {
+    if (!v) return v;
+    return v.charAt(0).toUpperCase() + v.slice(1);
+  };
+  const sanitizeName = (v: string) => {
+    const cleaned = v.replace(/[^A-Za-z\s'-]/g, '');
+    return capitalizeFirst(cleaned);
+  };
   // keep digits only and limit to 11 characters
   const sanitizeContact = (v: string) => v.replace(/\D/g, '').slice(0, 11);
+  const sanitizeAddress = (v: string) => capitalizeFirst(v);
 
   // Ensure all three verification files are selected before allowing registration
   const allFilesSelected = Boolean(proofFile && govIdFile && selfieFile);
@@ -461,92 +472,143 @@ const RegisterForm = () => {
   return (
     <Box sx={{
       minHeight: '100vh',
-      background: 'linear-gradient(135deg, #40c9ff 0%, #e81cff 100%)',
+      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       py: 6,
     }}>
       <Container maxWidth="sm">
-        <Paper elevation={6} sx={{
-          borderRadius: 5,
-          p: 4,
-          background: 'rgba(255,255,255,0.95)',
-          boxShadow: '0 8px 32px 0 rgba(64,201,255,0.15)',
+        <Paper elevation={8} sx={{
+          borderRadius: 4,
+          p: 5,
+          background: '#ffffff',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.12)',
+          border: '1px solid rgba(102,126,234,0.1)',
         }}>
-          <Box sx={{ textAlign: 'center', mb: 3 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, flexDirection: 'column' }}>
-              <AntTypography.Title level={3} style={{ margin: 0, fontWeight: 800, background: 'linear-gradient(90deg, #e81cff 0%, #40c9ff 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', display: 'inline-block' }}>
-                Barangay Parian Resident Registration
-              </AntTypography.Title>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <Typography variant="body2" color="textSecondary">This service is for residents of Barangay Parian only.</Typography>
-                <Tooltip title="This service is only available to residents of Barangay Parian.">
-                  <InfoCircleOutlined style={{ color: '#888' }} />
-                </Tooltip>
-              </div>
-            </Box>
+          {/* Header Section */}
+          <Box sx={{ textAlign: 'center', mb: 4, pb: 3, borderBottom: '2px solid #f0f2f5' }}>
+            <AntTypography.Title level={2} style={{ 
+              margin: '0 0 8px 0', 
+              fontWeight: 800, 
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
+              WebkitBackgroundClip: 'text', 
+              WebkitTextFillColor: 'transparent',
+            }}>
+              Resident Registration
+            </AntTypography.Title>
+            <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500 }}>
+              Barangay Parian Information System
+            </Typography>
           </Box>
-          {/* Progress tracker and steps (Ant Design) */}
-          <Box sx={{ maxWidth: 560, mx: 'auto', mb: 3 }}>
-            <Steps current={currentStep} size="small">
+
+          {/* Progress Indicator */}
+          <Box sx={{ mb: 4, p: 3, background: '#f8fafc', borderRadius: 3, border: '1px solid #e2e8f0' }}>
+            <Steps current={currentStep} size="small" style={{ marginBottom: 12 }}>
               <Steps.Step title="Account" />
               <Steps.Step title="Personal" />
               <Steps.Step title="Verification" />
             </Steps>
-            <div style={{ marginTop: 8 }}>
-              <AntProgress percent={percentComplete} showInfo strokeColor={{ '0%': '#e81cff', '100%': '#40c9ff' }} />
-            </div>
+            <Box sx={{ mt: 2 }}>
+              <AntProgress 
+                percent={percentComplete} 
+                showInfo={false}
+                strokeColor={{ '0%': '#667eea', '100%': '#764ba2' }} 
+                status={percentComplete === 100 ? 'success' : 'active'}
+              />
+            </Box>
+            <Typography variant="caption" sx={{ display: 'block', mt: 1, color: '#64748b', textAlign: 'center', fontWeight: 600 }}>
+              {percentComplete}% complete
+            </Typography>
           </Box>
           <form onSubmit={formik.handleSubmit}>
             {/* Processing overlay shown while submission steps run */}
             {processActive && (
-              <div style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, zIndex: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.35)' }}>
-                <div style={{ width: 460, padding: 20, borderRadius: 8, background: '#fff', boxShadow: '0 6px 24px rgba(0,0,0,0.2)' }}>
-                  <Typography variant="h6" sx={{ mb: 1, fontWeight: 700 }}>Processing</Typography>
-                  <Typography variant="body2" sx={{ mb: 2 }}>{processMessage}</Typography>
-                  <AntProgress percent={processPercent} status={processPercent < 100 ? 'active' : 'success'} />
+              <div style={{ position: 'fixed', left: 0, top: 0, right: 0, bottom: 0, zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }}>
+                <div style={{ width: 400, padding: 28, borderRadius: 12, background: '#fff', boxShadow: '0 10px 40px rgba(0,0,0,0.3)' }}>
+                  <Typography variant="h6" sx={{ mb: 2, fontWeight: 700, color: '#0f172a' }}>Processing Your Registration</Typography>
+                  <Typography variant="body2" sx={{ mb: 3, color: '#64748b' }}>{processMessage}</Typography>
+                  <AntProgress percent={processPercent} status={processPercent < 100 ? 'active' : 'success'} strokeColor={{ '0%': '#667eea', '100%': '#764ba2' }} />
                 </div>
               </div>
             )}
-            {/* ...existing fields... */}
+
+            {/* Account Information Section */}
+            <Box sx={{ mb: 4, p: 3, background: '#f8fafc', borderRadius: 3, border: '1px solid #e2e8f0', borderTop: '4px solid #667eea' }}>
+              <Typography variant="h6" sx={{ mb: 3, fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 1 }}>
+                <span style={{ width: 24, height: 24, background: '#667eea', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 14 }}>1</span>
+                Account Information
+              </Typography>
+              
             <TextField
               fullWidth
               margin="normal"
-              label={renderLabelWithTooltip('First Name', 'Enter your given/first name. Use letters, spaces, hyphens and apostrophes only.')}
+              label="First Name"
               name="firstName"
               value={formik.values.firstName}
               onChange={(e) => { formik.setFieldValue('firstName', sanitizeName(e.target.value)); }}
               error={formik.touched.firstName && Boolean(formik.errors.firstName)}
               helperText={formik.touched.firstName && formik.errors.firstName}
-              sx={{ borderRadius: 3, background: '#f4f6fa', mb: 2 }}
+              variant="outlined"
+              sx={{ 
+                '& .MuiOutlinedInput-root': { borderRadius: 2, background: '#ffffff', fontSize: 14 },
+                '& .MuiInputBase-input': { padding: '12px 14px' },
+                mb: 2
+              }}
             />
             <TextField
               fullWidth
               margin="normal"
-              label={renderLabelWithTooltip('Middle Name (optional)', 'Middle name is optional. Use letters, spaces, hyphens and apostrophes only.')}
+              label="Middle Name (Optional)"
               name="middleName"
               value={formik.values.middleName}
               onChange={(e) => { formik.setFieldValue('middleName', sanitizeName(e.target.value)); }}
               error={formik.touched.middleName && Boolean(formik.errors.middleName)}
               helperText={formik.touched.middleName && formik.errors.middleName}
-              sx={{ borderRadius: 3, background: '#f4f6fa', mb: 2 }}
+              variant="outlined"
+              sx={{ 
+                '& .MuiOutlinedInput-root': { borderRadius: 2, background: '#ffffff', fontSize: 14 },
+                '& .MuiInputBase-input': { padding: '12px 14px' },
+                mb: 2
+              }}
             />
             <TextField
               fullWidth
               margin="normal"
-              label={renderLabelWithTooltip('Last Name', 'Enter your family/last name.')}
+              label="Last Name"
               name="lastName"
               value={formik.values.lastName}
               onChange={(e) => { formik.setFieldValue('lastName', sanitizeName(e.target.value)); }}
               error={formik.touched.lastName && Boolean(formik.errors.lastName)}
               helperText={formik.touched.lastName && formik.errors.lastName}
-              sx={{ borderRadius: 3, background: '#f4f6fa', mb: 2 }}
+              variant="outlined"
+              sx={{ 
+                '& .MuiOutlinedInput-root': { borderRadius: 2, background: '#ffffff', fontSize: 14 },
+                '& .MuiInputBase-input': { padding: '12px 14px' },
+                mb: 2
+              }}
             />
             <TextField
               fullWidth
               margin="normal"
-              label={renderLabelWithTooltip('Username', 'Choose a unique username (4-20 letters or numbers).')}
+              label="Name Extension (Optional)"
+              placeholder="e.g., Jr., Sr., III, II"
+              name="nameExtension"
+              value={formik.values.nameExtension}
+              onChange={(e) => { formik.setFieldValue('nameExtension', e.target.value.slice(0, 20)); }}
+              error={formik.touched.nameExtension && Boolean(formik.errors.nameExtension)}
+              helperText={formik.touched.nameExtension && formik.errors.nameExtension}
+              variant="outlined"
+              sx={{ 
+                '& .MuiOutlinedInput-root': { borderRadius: 2, background: '#ffffff', fontSize: 14 },
+                '& .MuiInputBase-input': { padding: '12px 14px' },
+                mb: 2
+              }}
+            />
+            <TextField
+              fullWidth
+              margin="normal"
+              label="Username"
               name="username"
               value={formik.values.username}
               onChange={formik.handleChange}
@@ -558,21 +620,19 @@ const RegisterForm = () => {
               helperText={
                 (formik.touched.username && formik.errors.username) ||
                 fieldErrors.username ||
-                (checkingUsername ? 'Checking availability...' : usernameAvailable === false ? 'Username already taken' : usernameAvailable === true ? 'Username available' : 'Username must be at least 4 characters long and contain only letters and numbers.')
+                (checkingUsername ? 'Checking availability...' : usernameAvailable === false ? 'Username already taken' : usernameAvailable === true ? '✓ Available' : '')
               }
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <Person color="primary" />
-                  </InputAdornment>
-                ),
+              variant="outlined"
+              sx={{ 
+                '& .MuiOutlinedInput-root': { borderRadius: 2, background: '#ffffff', fontSize: 14 },
+                '& .MuiInputBase-input': { padding: '12px 14px' },
+                mb: 2
               }}
-              sx={{ borderRadius: 3, background: '#f4f6fa', mb: 2 }}
             />
             <TextField
               fullWidth
               margin="normal"
-              label={renderLabelWithTooltip('Email', 'Enter a valid email address used for account recovery and notifications.')}
+              label="Email Address"
               name="email"
               value={formik.values.email}
               onChange={formik.handleChange}
@@ -584,38 +644,27 @@ const RegisterForm = () => {
               helperText={
                 (formik.touched.email && formik.errors.email) ||
                 fieldErrors.email ||
-                (checkingEmail ? 'Checking email...' : emailAvailable === false ? 'Email already registered' : emailAvailable === true ? 'Email looks available' : '')
+                (checkingEmail ? 'Checking email...' : emailAvailable === false ? 'Email already registered' : emailAvailable === true ? '✓ Available' : '')
               }
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <Email color="primary" />
-                  </InputAdornment>
-                ),
+              variant="outlined"
+              sx={{ 
+                '& .MuiOutlinedInput-root': { borderRadius: 2, background: '#ffffff', fontSize: 14 },
+                '& .MuiInputBase-input': { padding: '12px 14px' },
+                mb: 2
               }}
-              sx={{ borderRadius: 3, background: '#f4f6fa', mb: 2 }}
             />
-            {/* Password Field with Show/Hide */}
             <TextField
               fullWidth
               margin="normal"
-              label={renderLabelWithTooltip('Password', 'At least 6 characters, include uppercase, number and special character.')}
+              label="Password"
               name="password"
               type={showPassword ? "text" : "password"}
               value={formik.values.password}
               onChange={formik.handleChange}
               error={formik.touched.password && Boolean(formik.errors.password)}
-              helperText={
-                (formik.touched.password && formik.errors.password) ||
-                fieldErrors.password ||
-                'Password must be at least 6 characters long and contain at least one number, one uppercase letter, and one special character.'
-              }
+              helperText={formik.touched.password && formik.errors.password}
+              variant="outlined"
               InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <Lock color="primary" />
-                  </InputAdornment>
-                ),
                 endAdornment: (
                   <InputAdornment position="end">
                     <Button
@@ -628,37 +677,37 @@ const RegisterForm = () => {
                   </InputAdornment>
                 ),
               }}
-              sx={{ borderRadius: 3, background: '#f4f6fa', mb: 2 }}
+              sx={{ 
+                '& .MuiOutlinedInput-root': { borderRadius: 2, background: '#ffffff', fontSize: 14 },
+                '& .MuiInputBase-input': { padding: '12px 14px' },
+                mb: 2
+              }}
             />
-            {/* Password strength indicator (client-side heuristic) */}
-            <div style={{ marginTop: -8, marginBottom: 12 }}>
-              {(() => {
-                const { percent, label } = getPasswordStrength(String(formik.values.password || ''));
-                return (
-                  <div>
-                    <AntProgress percent={percent} showInfo={false} strokeColor={percent < 34 ? '#ff4d4f' : percent < 67 ? '#faad14' : '#52c41a'} />
-                    <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>{label}</Typography>
-                  </div>
-                );
-              })()}
-            </div>
-            {/* Confirm Password Field with Show/Hide */}
+            {(() => {
+              const { percent, label } = getPasswordStrength(String(formik.values.password || ''));
+              return (
+                <Box sx={{ mb: 2 }}>
+                  <AntProgress 
+                    percent={percent} 
+                    showInfo={false} 
+                    strokeColor={percent < 34 ? '#ff4d4f' : percent < 67 ? '#faad14' : '#52c41a'} 
+                  />
+                  <Typography variant="caption" sx={{ display: 'block', mt: 1, color: '#64748b', fontWeight: 600 }}>{label}</Typography>
+                </Box>
+              );
+            })()}
             <TextField
               fullWidth
               margin="normal"
-              label={renderLabelWithTooltip('Confirm Password', 'Re-enter your password to confirm.')}
+              label="Confirm Password"
               name="confirmPassword"
               type={showConfirmPassword ? "text" : "password"}
               value={formik.values.confirmPassword}
               onChange={formik.handleChange}
               error={formik.touched.confirmPassword && Boolean(formik.errors.confirmPassword)}
               helperText={formik.touched.confirmPassword && formik.errors.confirmPassword}
+              variant="outlined"
               InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <Lock color="primary" />
-                  </InputAdornment>
-                ),
                 endAdornment: (
                   <InputAdornment position="end">
                     <Button
@@ -671,41 +720,45 @@ const RegisterForm = () => {
                   </InputAdornment>
                 ),
               }}
-              sx={{ borderRadius: 3, background: '#f4f6fa', mb: 2 }}
+              sx={{ 
+                '& .MuiOutlinedInput-root': { borderRadius: 2, background: '#ffffff', fontSize: 14 },
+                '& .MuiInputBase-input': { padding: '12px 14px' },
+              }}
             />
+            </Box>
+
+            {/* Personal Information Section */}
+            <Box sx={{ mb: 4, p: 3, background: '#f8fafc', borderRadius: 3, border: '1px solid #e2e8f0', borderTop: '4px solid #764ba2' }}>
+              <Typography variant="h6" sx={{ mb: 3, fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 1 }}>
+                <span style={{ width: 24, height: 24, background: '#764ba2', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 14 }}>2</span>
+                Personal Information
+              </Typography>
+              
             <TextField
               fullWidth
               margin="normal"
-              label={renderLabelWithTooltip('Permanent Address', 'Street, barangay, city — used for official correspondence and verification.')}
+              label="Permanent Address"
               name="address"
               value={formik.values.address}
-              onChange={formik.handleChange}
+              onChange={(e) => { formik.setFieldValue('address', sanitizeAddress(e.target.value)); }}
               error={formik.touched.address && Boolean(formik.errors.address)}
               helperText={formik.touched.address && formik.errors.address}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <Home color="primary" />
-                  </InputAdornment>
-                ),
+              variant="outlined"
+              multiline
+              rows={2}
+              sx={{ 
+                '& .MuiOutlinedInput-root': { borderRadius: 2, background: '#ffffff', fontSize: 14 },
+                '& .MuiInputBase-input': { padding: '12px 14px' },
+                mb: 2
               }}
-              sx={{ borderRadius: 3, background: '#f4f6fa', mb: 2 }}
             />
             <TextField
               fullWidth
               margin="normal"
-              label={renderLabelWithTooltip('Contact Number', 'Enter digits only. Include area code if applicable.')}
+              label="Contact Number"
               name="contactNumber"
               value={formik.values.contactNumber}
               onChange={(e) => { formik.setFieldValue('contactNumber', sanitizeContact(e.target.value)); }}
-              onPaste={(e: React.ClipboardEvent<HTMLInputElement>) => {
-                // Prevent pasting non-digits and limit to 11 characters
-                const pasted = (e.clipboardData || (window as any).clipboardData).getData('text') || '';
-                const digits = String(pasted).replace(/\D/g, '').slice(0, 11);
-                e.preventDefault();
-                formik.setFieldValue('contactNumber', digits);
-              }}
-              inputProps={{ inputMode: 'numeric', maxLength: 11 }}
               error={
                 (formik.touched.contactNumber && Boolean(formik.errors.contactNumber)) ||
                 Boolean(fieldErrors.contactNumber) ||
@@ -714,135 +767,119 @@ const RegisterForm = () => {
               helperText={
                 (formik.touched.contactNumber && formik.errors.contactNumber) ||
                 fieldErrors.contactNumber ||
-                (checkingContact ? 'Checking contact...' : contactAvailable === false ? 'Contact number already registered' : contactAvailable === true ? 'Contact number looks available' : '')
+                (checkingContact ? 'Checking contact...' : contactAvailable === false ? 'Already registered' : contactAvailable === true ? '✓ Available' : '')
               }
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <Phone color="primary" />
-                  </InputAdornment>
-                ),
-                // keep InputProps.inputProps as well for MUI internals
-                inputProps: { inputMode: 'numeric', maxLength: 11 },
+              inputProps={{ inputMode: 'numeric', maxLength: 11 }}
+              variant="outlined"
+              sx={{ 
+                '& .MuiOutlinedInput-root': { borderRadius: 2, background: '#ffffff', fontSize: 14 },
+                '& .MuiInputBase-input': { padding: '12px 14px' },
               }}
-              sx={{ borderRadius: 3, background: '#f4f6fa', mb: 2 }}
             />
-            {/* File uploads for verification during registration */}
-            <Box sx={{ mb: 2 }}>
-              <AntTypography.Title level={4} style={{ marginBottom: 8, fontWeight: 700, background: 'linear-gradient(90deg, #e81cff 0%, #40c9ff 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', display: 'inline-block' }}>Barangay Parian Residency Verification</AntTypography.Title>
-              <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>Please upload the following documents to verify your residency.</Typography>
-            </Box>
-            <Box sx={{ mb: 2 }}>
-              <Typography component="label" sx={{ display: 'block', fontWeight: 600, mb: 1 }}>
-                {renderLabelWithTooltip('Proof of Residency', 'Upload a document showing your address (e.g., utility bill, lease, or bank statement).')}
-              </Typography>
-              <AntUpload
-                accept="image/*,application/pdf"
-                fileList={proofList}
-                beforeUpload={(file) => {
-                  // prevent auto upload
-                  return false;
-                }}
-                onChange={({ fileList }) => {
-                  // revoke any existing preview for this slot
-                  proofList.forEach((pf: UploadFile) => {
-                    if (pf && (pf as any).thumbUrl) {
-                      try { URL.revokeObjectURL(String((pf as any).thumbUrl)); } catch (e) {}
-                      previewUrlsRef.current.delete(String((pf as any).thumbUrl));
-                    }
-                  });
-                  // create preview for images
-                  const list = (fileList || []).slice(-1);
-                  list.forEach((f: UploadFile) => {
-                    if (f.originFileObj && !f.thumbUrl && f.type && f.type.startsWith('image/')) {
-                      const url = URL.createObjectURL(f.originFileObj as Blob);
-                      f.thumbUrl = url;
-                      previewUrlsRef.current.add(url);
-                    }
-                  });
-                  setProofList(list as UploadFile[]);
-                  setProofFile((list[0] && (list[0].originFileObj as File)) || null);
-                }}
-                listType="picture-card"
-                showUploadList={{ showPreviewIcon: true, showRemoveIcon: true }}
-                maxCount={1}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <UploadOutlined /> <span style={{ fontWeight: 600 }}>Select Proof</span>
-                </div>
-              </AntUpload>
-            </Box>
-            
-            <Box sx={{ mb: 2 }}>
-              <Typography component="label" sx={{ display: 'block', fontWeight: 600, mb: 1 }}>
-                {renderLabelWithTooltip('Government-issued ID', 'Upload a government-issued ID such as passport, driver\'s license, or national ID.')}
-              </Typography>
-              <AntUpload
-                accept="image/*,application/pdf"
-                fileList={govIdList}
-                beforeUpload={(file) => false}
-                onChange={({ fileList }) => {
-                  govIdList.forEach((gf: UploadFile) => {
-                    if (gf && (gf as any).thumbUrl) {
-                      try { URL.revokeObjectURL(String((gf as any).thumbUrl)); } catch (e) {}
-                      previewUrlsRef.current.delete(String((gf as any).thumbUrl));
-                    }
-                  });
-                  const list = (fileList || []).slice(-1);
-                  list.forEach((f: UploadFile) => {
-                    if (f.originFileObj && !f.thumbUrl && f.type && f.type.startsWith('image/')) {
-                      const url = URL.createObjectURL(f.originFileObj as Blob);
-                      f.thumbUrl = url;
-                      previewUrlsRef.current.add(url);
-                    }
-                  });
-                  setGovIdList(list as UploadFile[]);
-                  setGovIdFile((list[0] && (list[0].originFileObj as File)) || null);
-                }}
-                listType="picture-card"
-                showUploadList={{ showPreviewIcon: true, showRemoveIcon: true }}
-                maxCount={1}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <UploadOutlined /> <span style={{ fontWeight: 600 }}>Select ID</span>
-                </div>
-              </AntUpload>
             </Box>
 
-            <Box sx={{ mb: 2 }}>
-              <Typography component="label" sx={{ display: 'block', fontWeight: 600, mb: 1 }}>
-                {renderLabelWithTooltip('Selfie with Government-issued ID', 'Take a clear photo of yourself holding your government ID next to your face.')}
+            {/* Verification Section */}
+            <Box sx={{ mb: 4, p: 3, background: '#f8fafc', borderRadius: 3, border: '1px solid #e2e8f0', borderTop: '4px solid #f59e0b' }}>
+              <Typography variant="h6" sx={{ mb: 3, fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 1 }}>
+                <span style={{ width: 24, height: 24, background: '#f59e0b', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 14 }}>3</span>
+                Verification Documents
               </Typography>
-              <AntUpload
-                accept="image/*"
-                fileList={selfieList}
-                beforeUpload={(file) => false}
-                onChange={({ fileList }) => {
-                  selfieList.forEach((sf: UploadFile) => {
-                    if (sf && (sf as any).thumbUrl) {
-                      try { URL.revokeObjectURL(String((sf as any).thumbUrl)); } catch (e) {}
-                      previewUrlsRef.current.delete(String((sf as any).thumbUrl));
-                    }
-                  });
-                  const list = (fileList || []).slice(-1);
-                  list.forEach((f: UploadFile) => {
-                    if (f.originFileObj && !f.thumbUrl && f.type && f.type.startsWith('image/')) {
-                      const url = URL.createObjectURL(f.originFileObj as Blob);
-                      f.thumbUrl = url;
-                      previewUrlsRef.current.add(url);
-                    }
-                  });
-                  setSelfieList(list as UploadFile[]);
-                  setSelfieFile((list[0] && (list[0].originFileObj as File)) || null);
-                }}
-                listType="picture-card"
-                showUploadList={{ showPreviewIcon: true, showRemoveIcon: true }}
-                maxCount={1}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <UploadOutlined /> <span style={{ fontWeight: 600 }}>Select Selfie with ID</span>
-                </div>
-              </AntUpload>
+              <Typography variant="body2" sx={{ mb: 2, color: '#64748b' }}>
+                Upload required documents to verify your residency
+              </Typography>
+
+              <Box sx={{ mb: 3 }}>
+                <Typography sx={{ fontWeight: 600, mb: 1, color: '#0f172a', fontSize: 14 }}>Proof of Residency</Typography>
+                <AntUpload
+                  accept="image/*,application/pdf"
+                  fileList={proofList}
+                  beforeUpload={() => false}
+                  onChange={({ fileList }) => {
+                    proofList.forEach((pf: UploadFile) => {
+                      if (pf && (pf as any).thumbUrl) {
+                        try { URL.revokeObjectURL(String((pf as any).thumbUrl)); } catch (e) {}
+                      }
+                    });
+                    const list = (fileList || []).slice(-1);
+                    list.forEach((f: UploadFile) => {
+                      if (f.originFileObj && !f.thumbUrl && f.type && f.type.startsWith('image/')) {
+                        const url = URL.createObjectURL(f.originFileObj as Blob);
+                        f.thumbUrl = url;
+                      }
+                    });
+                    setProofList(list as UploadFile[]);
+                    setProofFile((list[0] && (list[0].originFileObj as File)) || null);
+                  }}
+                  listType="picture-card"
+                  maxCount={1}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <UploadOutlined /> <span style={{ fontWeight: 600 }}>Select File</span>
+                  </div>
+                </AntUpload>
+              </Box>
+
+              <Box sx={{ mb: 3 }}>
+                <Typography sx={{ fontWeight: 600, mb: 1, color: '#0f172a', fontSize: 14 }}>Government-issued ID</Typography>
+                <AntUpload
+                  accept="image/*,application/pdf"
+                  fileList={govIdList}
+                  beforeUpload={() => false}
+                  onChange={({ fileList }) => {
+                    govIdList.forEach((gf: UploadFile) => {
+                      if (gf && (gf as any).thumbUrl) {
+                        try { URL.revokeObjectURL(String((gf as any).thumbUrl)); } catch (e) {}
+                      }
+                    });
+                    const list = (fileList || []).slice(-1);
+                    list.forEach((f: UploadFile) => {
+                      if (f.originFileObj && !f.thumbUrl && f.type && f.type.startsWith('image/')) {
+                        const url = URL.createObjectURL(f.originFileObj as Blob);
+                        f.thumbUrl = url;
+                      }
+                    });
+                    setGovIdList(list as UploadFile[]);
+                    setGovIdFile((list[0] && (list[0].originFileObj as File)) || null);
+                  }}
+                  listType="picture-card"
+                  maxCount={1}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <UploadOutlined /> <span style={{ fontWeight: 600 }}>Select File</span>
+                  </div>
+                </AntUpload>
+              </Box>
+
+              <Box sx={{ mb: 3 }}>
+                <Typography sx={{ fontWeight: 600, mb: 1, color: '#0f172a', fontSize: 14 }}>Selfie with Government ID</Typography>
+                <AntUpload
+                  accept="image/*"
+                  fileList={selfieList}
+                  beforeUpload={() => false}
+                  onChange={({ fileList }) => {
+                    selfieList.forEach((sf: UploadFile) => {
+                      if (sf && (sf as any).thumbUrl) {
+                        try { URL.revokeObjectURL(String((sf as any).thumbUrl)); } catch (e) {}
+                      }
+                    });
+                    const list = (fileList || []).slice(-1);
+                    list.forEach((f: UploadFile) => {
+                      if (f.originFileObj && !f.thumbUrl && f.type && f.type.startsWith('image/')) {
+                        const url = URL.createObjectURL(f.originFileObj as Blob);
+                        f.thumbUrl = url;
+                      }
+                    });
+                    setSelfieList(list as UploadFile[]);
+                    setSelfieFile((list[0] && (list[0].originFileObj as File)) || null);
+                  }}
+                  listType="picture-card"
+                  maxCount={1}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <UploadOutlined /> <span style={{ fontWeight: 600 }}>Select File</span>
+                  </div>
+                </AntUpload>
+              </Box>
             </Box>
 
             {/* Terms & Policy checkbox and modal trigger (moved below Selfie upload) */}
@@ -1012,59 +1049,55 @@ const RegisterForm = () => {
             </Modal>
             {uploading && (
               <Box sx={{ mb: 2 }}>
-                <Typography sx={{ fontSize: 14, mb: 1 }}>Uploading verification documents</Typography>
-                <AntProgress percent={uploadProgress} />
-                <Typography variant="caption" sx={{ display: 'block', mt: 1 }}>{uploadStatus}</Typography>
+                <AntProgress percent={uploadProgress} strokeColor={{ '0%': '#667eea', '100%': '#764ba2' }} />
+                <Typography variant="caption" sx={{ display: 'block', mt: 1, color: '#64748b', fontWeight: 600 }}>{uploadStatus}</Typography>
               </Box>
             )}
-            {/* Keep Barangay ID out of the visible form but include it as a hidden field so it's submitted */}
-            <input type="hidden" name="barangayID" value={formik.values.barangayID} />
 
-            {/* Role is fixed to resident during public registration (hidden) */}
+            {error && <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>{error}</Alert>}
+
+            {/* Hidden fields */}
+            <input type="hidden" name="barangayID" value={formik.values.barangayID} />
             <input type="hidden" name="role" value="resident" />
-            {/* admin/staff registration is not available through this public form */}
-            {!allFilesSelected && (
-              <Alert severity="warning" sx={{ mt: 2 }}>
-                Please upload <strong>Proof of Residency</strong>, a <strong>Government-issued ID</strong>, and a <strong>Selfie with your ID</strong> before registering.
-              </Alert>
-            )}
+
+            {/* Register Button */}
             <Button
               type="submit"
               fullWidth
               variant="contained"
               sx={{
-                mt: 3, mb: 2, borderRadius: 3, fontWeight: 700, fontSize: '1.1rem',
-                background: 'linear-gradient(90deg, #e81cff 0%, #40c9ff 100%)',
+                mt: 3,
+                mb: 2,
+                borderRadius: 2,
+                fontWeight: 700,
+                fontSize: '1rem',
+                padding: '12px 24px',
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                 color: '#fff',
-                boxShadow: '0 2px 8px #e81cff44',
-                transition: 'background 0.3s',
+                boxShadow: '0 4px 15px rgba(102,126,234,0.3)',
+                transition: 'all 0.3s',
                 '&:hover': {
-                  background: 'linear-gradient(90deg, #40c9ff 0%, #e81cff 100%)',
+                  boxShadow: '0 6px 20px rgba(102,126,234,0.4)',
+                  transform: 'translateY(-2px)',
+                },
+                '&:disabled': {
+                  background: '#cbd5e0',
+                  boxShadow: 'none',
                 },
               }}
               disabled={formik.isSubmitting || !canRegister}
             >
-              Register
+              {formik.isSubmitting ? 'Registering...' : 'Create Account'}
             </Button>
-            {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
-            {/* Show field-specific errors in a list if present and not already shown in helperText */}
-            {Object.keys(fieldErrors).length > 0 && !error && (
-              <Alert severity="error" sx={{ mt: 2 }}>
-                {Object.entries(fieldErrors).map(([field, msg]) => (
-                  <div key={field}>{msg}</div>
-                ))}
-              </Alert>
-            )}
-            {/* Optionally, show a message or unlock admin features if adminUnlocked is true */}
-            {adminUnlocked && (
-              <Alert severity="info" sx={{ mt: 2 }}>
-                Admin access is now unlocked! Redirecting to admin dashboard...
-              </Alert>
-            )}
-            <Box sx={{ textAlign: 'center', mt: 2 }}>
-              <Link component={RouterLink} to="/login" variant="body2" sx={{ color: '#e81cff', fontWeight: 600 }}>
-                Already have an account? <span style={{ textDecoration: 'underline' }}>Sign In</span>
-              </Link>
+
+            {/* Sign In Link */}
+            <Box sx={{ textAlign: 'center' }}>
+              <Typography variant="body2" sx={{ color: '#64748b' }}>
+                Already have an account?{' '}
+                <Link component={RouterLink} to="/login" sx={{ color: '#667eea', fontWeight: 700, textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}>
+                  Sign In
+                </Link>
+              </Typography>
             </Box>
           </form>
         </Paper>

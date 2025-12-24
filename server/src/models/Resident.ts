@@ -7,6 +7,7 @@ export interface IResident extends MongooseDocument {
   firstName: string;
   middleName?: string;
   lastName: string;
+  nameExtension?: string;
   age?: number;
   birthDate?: string;
   placeOfBirth?: string;
@@ -86,6 +87,7 @@ const ResidentSchema = new Schema<IResident>({
   firstName: { type: String, required: true },
   middleName: { type: String },
   lastName: { type: String, required: true },
+  nameExtension: { type: String },
   age: { type: Number },
   birthDate: { type: String },
   placeOfBirth: { type: String },

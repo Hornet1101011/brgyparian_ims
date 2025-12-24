@@ -144,107 +144,294 @@ const LoginForm: React.FC = () => {
 
   return (
     <>
-    <div className="login-page">
-      <div className="login-container two-pane">
-        <Row gutter={24} align="stretch" justify="center" className="two-pane-row">
+    <div className="login-page" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', minHeight: '100vh', padding: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div className="login-container two-pane" style={{ width: '100%', maxWidth: '1200px' }}>
+        <Row gutter={[32, 32]} align="middle" justify="center" className="two-pane-row">
           {/* Left combined pane - stats + officials */}
           <Col xs={24} md={12} className="pane left-pane combined-pane">
-            <div className="pane-inner left-inner">
-              <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 18 }}>
-                <StatsPanel />
-                <Card className="glass-card preview-card invisible" variant="outlined">
-                  <Typography.Title level={4} style={{ marginBottom: 8 }}>Barangay Officials</Typography.Title>
-                  <div style={{ height: 6, background: 'linear-gradient(90deg, rgba(22,119,255,0.12), rgba(146,84,222,0.12))', borderRadius: 4, marginBottom: 12 }} />
+            <div className="pane-inner left-inner" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+              <StatsPanel />
+              <Card 
+                className="glass-card preview-card" 
+                variant="outlined"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.95)',
+                  border: '1px solid rgba(255, 255, 255, 0.3)',
+                  borderRadius: 16,
+                  backdropFilter: 'blur(10px)',
+                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+                  padding: 24
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                  <div style={{ width: 4, height: 24, background: 'linear-gradient(180deg, #667eea 0%, #764ba2 100%)', borderRadius: 2 }} />
+                  <Typography.Title level={4} style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#0f172a' }}>
+                    Barangay Officials
+                  </Typography.Title>
+                </div>
 
-                  <div className="carousel-wrap">
-                    <Button className="carousel-arrow left" icon={<LeftOutlined />} onClick={() => {
+                <div className="carousel-wrap" style={{ position: 'relative' }}>
+                  <Button 
+                    className="carousel-arrow left" 
+                    icon={<LeftOutlined />} 
+                    onClick={() => {
                       if (!carouselRef.current) return; carouselRef.current.scrollBy({ left: -240, behavior: 'smooth' });
-                    }} />
-                    <div ref={carouselRef} className="carousel-scroll">
-                      {officials.length === 0 ? (
-                        <Typography.Text type="secondary">No officials to preview</Typography.Text>
-                      ) : (
-                        officials.map(off => (
-                          <div key={off._id} className="official-card">
-                            <div className="official-avatar">
-                              <img
-                                alt={off.name}
-                                src={getOfficialPhotoSrc(off as any)}
-                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                onError={(e) => {
-                                  try {
-                                    const t = e.currentTarget as HTMLImageElement;
-                                    t.onerror = null;
-                                    // Fallback to ui-avatars.com like AvatarImage does
-                                    const name = (off.name || 'Official').toString().trim();
-                                    t.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1677ff&color=fff&size=140`;
-                                  } catch (err) {}
-                                }}
-                              />
-                            </div>
-                            <div style={{ fontWeight: 700 }}>{off.name}</div>
-                            <div style={{ color: '#666', fontSize: 13 }}>{off.title}</div>
-                            <div style={{ color: '#999', fontSize: 12 }}>{off.term}</div>
+                    }}
+                    style={{
+                      position: 'absolute',
+                      left: -20,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      zIndex: 10,
+                      background: 'rgba(102, 126, 234, 0.1)',
+                      border: '1px solid rgba(102, 126, 234, 0.3)',
+                      borderRadius: '50%',
+                      width: 40,
+                      height: 40,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  />
+                  <div ref={carouselRef} className="carousel-scroll" style={{ overflowX: 'auto', display: 'flex', gap: 16, paddingBottom: 8, scrollBehavior: 'smooth' }}>
+                    {officials.length === 0 ? (
+                      <Typography.Text type="secondary" style={{ padding: '20px 0' }}>No officials to preview</Typography.Text>
+                    ) : (
+                      officials.map(off => (
+                        <div 
+                          key={off._id} 
+                          className="official-card"
+                          style={{
+                            flex: '0 0 180px',
+                            background: '#ffffff',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: 12,
+                            padding: 16,
+                            textAlign: 'center',
+                            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)',
+                            transition: 'all 0.3s ease'
+                          }}
+                        >
+                          <div 
+                            className="official-avatar"
+                            style={{
+                              width: 100,
+                              height: 100,
+                              borderRadius: 12,
+                              overflow: 'hidden',
+                              margin: '0 auto 12px',
+                              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}
+                          >
+                            <img
+                              alt={off.name}
+                              src={getOfficialPhotoSrc(off as any)}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              onError={(e) => {
+                                try {
+                                  const t = e.currentTarget as HTMLImageElement;
+                                  t.onerror = null;
+                                  const name = (off.name || 'Official').toString().trim();
+                                  t.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=667eea&color=fff&size=100`;
+                                } catch (err) {}
+                              }}
+                            />
                           </div>
-                        ))
-                      )}
-                    </div>
-                    <Button className="carousel-arrow right" icon={<RightOutlined />} onClick={() => {
-                      if (!carouselRef.current) return; carouselRef.current.scrollBy({ left: 240, behavior: 'smooth' });
-                    }} />
+                          <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 4 }}>{off.name}</div>
+                          <div style={{ color: '#64748b', fontSize: 12, marginBottom: 2 }}>{off.title}</div>
+                          <div style={{ color: '#94a3b8', fontSize: 11 }}>{off.term}</div>
+                        </div>
+                      ))
+                    )}
                   </div>
-
-                  
-                </Card>
-              </div>
+                  <Button 
+                    className="carousel-arrow right" 
+                    icon={<RightOutlined />} 
+                    onClick={() => {
+                      if (!carouselRef.current) return; carouselRef.current.scrollBy({ left: 240, behavior: 'smooth' });
+                    }}
+                    style={{
+                      position: 'absolute',
+                      right: -20,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      zIndex: 10,
+                      background: 'rgba(102, 126, 234, 0.1)',
+                      border: '1px solid rgba(102, 126, 234, 0.3)',
+                      borderRadius: '50%',
+                      width: 40,
+                      height: 40,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  />
+                </div>
+              </Card>
             </div>
           </Col>
-
 
           {/* Right pane - login */}
           <Col xs={24} md={12} className="pane center-pane login-pane">
             <div className="pane-inner center-inner">
-              <Card className="glass-card login-card" variant="outlined">
-               <Typography.Title level={2} className="title-blue" style={{ textAlign: 'center', marginBottom: 6 }}>
-                Barangay Information System
-              </Typography.Title>
-              <Typography.Text style={{ display: 'block', textAlign: 'center', color: '#9254de', fontWeight: 500, marginBottom: 18 }}>
-                Sign In
-              </Typography.Text>
-
-              <Form name="login" layout="vertical" onFinish={onFinish} autoComplete="off" requiredMark={false}>
-                <Form.Item label="Email or Username" name="username" rules={[{ required: true, message: 'Please input your email or username!' }]}>
-                  <Input prefix={<UserOutlined style={{ color: '#40a9ff' }} />} placeholder="Enter your email or username" size="large" />
-                </Form.Item>
-
-                <Form.Item label="Password" name="password" rules={[{ required: true, message: 'Please input your password!' }, { min: 6, message: 'Password must be at least 6 characters' }]}>
-                  <Input.Password autoComplete="current-password" prefix={<LockOutlined style={{ color: '#40a9ff' }} />} placeholder="Enter your password" size="large" />
-                </Form.Item>
-
-                <Form.Item>
-                  <Button htmlType="submit" size="large" loading={loading} className="signin-btn">
-                    {loading ? 'Signing In...' : 'Sign In'}
-                  </Button>
-                </Form.Item>
-
-                <Form.Item>
-                  <Button onClick={() => setGuestModalVisible(true)} size="large" className="guest-warm-btn" block>
-                    Continue as Guest
-                  </Button>
-                </Form.Item>
-
-                <div className="links-row">
-                  <Button type="link" onClick={() => { setForgotPasswordModalVisible(true); setForgotPasswordSent(false); forgotPasswordForm.resetFields(); }}>
-                    <Typography.Text type="secondary">Forgot Password?</Typography.Text>
-                  </Button>
-                  <RouterLink to="/register"><Typography.Text type="secondary">Sign Up</Typography.Text></RouterLink>
+              <Card 
+                className="glass-card login-card" 
+                variant="outlined"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.98)',
+                  border: '1px solid rgba(255, 255, 255, 0.4)',
+                  borderRadius: 20,
+                  backdropFilter: 'blur(10px)',
+                  boxShadow: '0 20px 50px rgba(0, 0, 0, 0.2)',
+                  padding: 40
+                }}
+              >
+                <div style={{ textAlign: 'center', marginBottom: 32 }}>
+                  <Typography.Title 
+                    level={2} 
+                    className="title-blue" 
+                    style={{ 
+                      textAlign: 'center', 
+                      marginBottom: 8,
+                      fontSize: 28,
+                      fontWeight: 800,
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                      backgroundClip: 'text',
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                      color: 'transparent'
+                    }}
+                  >
+                    Barangay Information System
+                  </Typography.Title>
+                  <Typography.Text 
+                    style={{ 
+                      display: 'block', 
+                      color: '#64748b', 
+                      fontWeight: 600, 
+                      fontSize: 14,
+                      letterSpacing: '0.5px',
+                      textTransform: 'uppercase'
+                    }}
+                  >
+                    Sign In to Your Account
+                  </Typography.Text>
                 </div>
-                <div style={{ marginTop: 8, textAlign: 'center' }}>
-                  <Button type="link" onClick={() => setEmergencyModalVisible(true)}>
-                    <Typography.Text type="danger">Emergency Hotline</Typography.Text>
-                  </Button>
-                </div>
-              </Form>
+
+                <Form 
+                  name="login" 
+                  layout="vertical" 
+                  onFinish={onFinish} 
+                  autoComplete="off" 
+                  requiredMark={false}
+                  style={{ marginBottom: 24 }}
+                >
+                  <Form.Item 
+                    label={<span style={{ fontWeight: 600, color: '#0f172a', fontSize: 14 }}>Email or Username</span>}
+                    name="username" 
+                    rules={[{ required: true, message: 'Please input your email or username!' }]}
+                    style={{ marginBottom: 20 }}
+                  >
+                    <Input 
+                      prefix={<UserOutlined style={{ color: '#667eea' }} />} 
+                      placeholder="Enter your email or username" 
+                      size="large"
+                      style={{
+                        borderRadius: 10,
+                        border: '1px solid #e2e8f0',
+                        fontSize: 14,
+                        padding: '10px 16px'
+                      }}
+                    />
+                  </Form.Item>
+
+                  <Form.Item 
+                    label={<span style={{ fontWeight: 600, color: '#0f172a', fontSize: 14 }}>Password</span>}
+                    name="password" 
+                    rules={[{ required: true, message: 'Please input your password!' }, { min: 6, message: 'Password must be at least 6 characters' }]}
+                    style={{ marginBottom: 24 }}
+                  >
+                    <Input.Password 
+                      autoComplete="current-password" 
+                      prefix={<LockOutlined style={{ color: '#667eea' }} />} 
+                      placeholder="Enter your password" 
+                      size="large"
+                      style={{
+                        borderRadius: 10,
+                        border: '1px solid #e2e8f0',
+                        fontSize: 14,
+                        padding: '10px 16px'
+                      }}
+                    />
+                  </Form.Item>
+
+                  <Form.Item style={{ marginBottom: 12 }}>
+                    <Button 
+                      htmlType="submit" 
+                      size="large" 
+                      loading={loading} 
+                      className="signin-btn"
+                      style={{
+                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                        border: 'none',
+                        fontWeight: 600,
+                        fontSize: 15,
+                        borderRadius: 10,
+                        height: 44,
+                        color: '#ffffff'
+                      }}
+                      block
+                    >
+                      {loading ? 'Signing In...' : 'Sign In'}
+                    </Button>
+                  </Form.Item>
+
+                  <Form.Item style={{ marginBottom: 16 }}>
+                    <Button 
+                      onClick={() => setGuestModalVisible(true)} 
+                      size="large" 
+                      className="guest-warm-btn"
+                      style={{
+                        background: 'rgba(102, 126, 234, 0.1)',
+                        border: '2px solid #667eea',
+                        color: '#667eea',
+                        fontWeight: 600,
+                        fontSize: 15,
+                        borderRadius: 10,
+                        height: 44
+                      }}
+                      block
+                    >
+                      Continue as Guest
+                    </Button>
+                  </Form.Item>
+
+                  <div className="links-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
+                    <Button 
+                      type="link" 
+                      onClick={() => { setForgotPasswordModalVisible(true); setForgotPasswordSent(false); forgotPasswordForm.resetFields(); }}
+                      style={{ padding: 0, color: '#667eea', fontWeight: 500 }}
+                    >
+                      Forgot Password?
+                    </Button>
+                    <RouterLink to="/register" style={{ color: '#667eea', fontWeight: 500, textDecoration: 'none' }}>
+                      Sign Up
+                    </RouterLink>
+                  </div>
+
+                  <div style={{ textAlign: 'center' }}>
+                    <Button 
+                      type="link" 
+                      onClick={() => setEmergencyModalVisible(true)}
+                      style={{ padding: 0, color: '#f5222d', fontWeight: 500 }}
+                    >
+                      Emergency Hotline
+                    </Button>
+                  </div>
+                </Form>
               </Card>
             </div>
           </Col>

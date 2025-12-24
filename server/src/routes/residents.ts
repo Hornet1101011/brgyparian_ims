@@ -147,7 +147,7 @@ router.put('/personal-info', auth, async (req: any, res) => {
 	try {
 		// Only allow expected fields to be updated/created
 		const allowedFields = [
-			'firstName', 'lastName', 'barangayID', 'email', 'contactNumber', 'address', 'department'
+			'firstName', 'lastName', 'nameExtension', 'barangayID', 'email', 'contactNumber', 'address', 'department'
 		];
 		const residentData: any = { userId: user._id };
 		for (const field of allowedFields) {

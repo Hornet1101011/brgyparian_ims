@@ -13,6 +13,7 @@ import { Notification } from '../types/notification';
 import { localDB } from './localDatabase';
 import { syncService } from './syncService';
 import type { ScheduledAppointment, ConflictItem } from '../types/appointments';
+import { getFileExtension, getFileTypeLabel } from '../utils/fileTypeDetector';
 // Fetch template text for a document type
 export const getTemplateText = (type: string) =>
   axiosInstance.get(`/templates/${type}`).then(res => res.data.text);
@@ -212,19 +213,40 @@ export const verificationAPI = {
   getFileUrl: (fileId: string) => `${API_URL.replace(/\/$/, '')}/verification/file/${fileId}`,
   // Extract filename from Content-Disposition header
   getFilenameFromHeader: (contentDisposition: string): string => {
-    if (!contentDisposition) return 'verification-file';
-    const matches = contentDisposition.match(/filename="([^"]+)"/);
-    return matches ? matches[1] : 'verification-file';
+    if (!contentDisposition) return 'file';
+    const matches = contentDisposition.match(/filename="([^"]+)"|filename=([^;]+)/);
+    return matches ? (matches[1] || matches[2]).trim() : 'file';
   },
   // Download file with proper auth headers and correct filename
-  downloadFile: async (fileId: string) => {
+  downloadFile: async (fileId: string, originalFilename?: string) => {
     try {
       const response = await axiosInstance.get(`/verification/file/${fileId}`, {
         responseType: 'blob'
       });
-      // Extract filename from Content-Disposition header
+      // Extract filename from Content-Disposition header or use provided filename
       const contentDisposition = response.headers['content-disposition'] || '';
-      const filename = verificationAPI.getFilenameFromHeader(contentDisposition);
+      let filename = verificationAPI.getFilenameFromHeader(contentDisposition);
+      if (!filename || filename === 'file') {
+        filename = originalFilename || 'file';
+      }
+      
+      // Ensure filename has proper extension based on content type
+      const contentType = response.headers['content-type'] || '';
+      if (filename && !filename.includes('.')) {
+        const ext = getFileExtension(filename);
+        if (ext === 'unknown' && contentType) {
+          // Try to infer extension from MIME type
+          const mimeToExt: Record<string, string> = {
+            'image/jpeg': 'jpg',
+            'image/png': 'png',
+            'image/gif': 'gif',
+            'application/pdf': 'pdf',
+            'application/zip': 'zip'
+          };
+          const inferredExt = mimeToExt[contentType];
+          if (inferredExt) filename += '.' + inferredExt;
+        }
+      }
       
       // Create blob URL and download
       const url = URL.createObjectURL(response.data);
@@ -243,7 +265,7 @@ export const verificationAPI = {
     }
   },
   // View file with proper auth headers - opens in new tab for viewing
-  viewFile: async (fileId: string) => {
+  viewFile: async (fileId: string, originalFilename?: string) => {
     try {
       const response = await axiosInstance.get(`/verification/file/${fileId}`, {
         responseType: 'blob'
@@ -251,16 +273,16 @@ export const verificationAPI = {
       // Extract content type and filename
       const contentType = response.headers['content-type'] || 'application/octet-stream';
       const contentDisposition = response.headers['content-disposition'] || '';
-      const filename = verificationAPI.getFilenameFromHeader(contentDisposition);
+      let filename = verificationAPI.getFilenameFromHeader(contentDisposition);
+      if (!filename || filename === 'file') {
+        filename = originalFilename || 'file';
+      }
       
       // Create blob URL for viewing
       const url = URL.createObjectURL(response.data);
       
-      // For images, open directly; for other files, open with viewer or as blob URL
-      if (contentType.startsWith('image/')) {
-        window.open(url, '_blank');
-      } else if (contentType === 'application/pdf') {
-        // PDF viewer
+      // For images and PDFs, open in new tab for viewing; for other files, download
+      if (contentType.startsWith('image/') || contentType === 'application/pdf') {
         window.open(url, '_blank');
       } else {
         // For other file types, trigger download instead of view
@@ -275,6 +297,18 @@ export const verificationAPI = {
       return { url, filename };
     } catch (error) {
       console.error('Failed to view file:', error);
+      throw error;
+    }
+  },
+  // Get file as blob for preview loading
+  getFileBlob: async (fileId: string): Promise<Blob> => {
+    try {
+      const response = await axiosInstance.get(`/verification/file/${fileId}`, {
+        responseType: 'blob'
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Failed to get file blob:', error);
       throw error;
     }
   },

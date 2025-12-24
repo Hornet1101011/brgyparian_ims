@@ -26,6 +26,39 @@ import AppAvatar from '../AppAvatar';
 import defaultSystemSettings from '../../config/defaultSystemSettings';
 import getOfficialPhotoSrc from '../../utils/officials';
 
+// Custom TextField wrapper with proper label spacing
+const StyledTextField: React.FC<React.ComponentProps<typeof TextField>> = (props) => (
+  <TextField
+    {...props}
+    variant="outlined"
+    size="small"
+    InputLabelProps={{
+      shrink: true,
+      sx: { 
+        fontSize: 13,
+        fontWeight: 600,
+        color: '#64748b',
+        transform: 'translate(12px, -10px) scale(0.75)',
+        '&.MuiInputBase-input': {
+          padding: '12px 14px'
+        }
+      }
+    }}
+    sx={{
+      '& .MuiOutlinedInput-root': {
+        borderRadius: 1,
+        minHeight: 44
+      },
+      '& .MuiOutlinedInput-input': {
+        padding: '12px 14px',
+        fontSize: 14,
+        color: '#0f172a'
+      },
+      ...props.sx
+    }}
+  />
+);
+
 interface SystemSettingsData {
   siteName: string;
   barangayName: string;
@@ -340,495 +373,545 @@ const SystemSettings: React.FC = () => {
 
   return (
     <Box sx={{
-      // ensure content is pushed below the app header which writes its height to --app-header-height
       pt: 'calc(var(--app-header-height, 64px) + 24px)',
-      px: 3,
-      pb: 3,
+      px: { xs: 2, sm: 3, md: 4 },
+      pb: 8,
+      background: 'linear-gradient(135deg, #f5f7fa 0%, #f0f4f8 100%)',
+      minHeight: '100vh'
     }}>
-      <Paper sx={{ p: 3 }}>
-        {/* Barangay Information */}
-        <Typography variant="subtitle1" gutterBottom>
-          Barangay Information
+      {/* Header */}
+      <Box sx={{ mb: 4 }}>
+        <Typography variant="h4" sx={{ fontWeight: 700, color: '#0f172a', mb: 1 }}>
+          System Settings
         </Typography>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mb: 3 }}>
-          <TextField
-            label="Site Name"
-            value={settings.siteName}
-            onChange={(e) => setSettings({ ...settings, siteName: e.target.value })}
-            variant="outlined"
-            InputLabelProps={{ shrink: true }}
-            fullWidth
-          />
-          <TextField
-            label="Barangay Name"
-            value={settings.barangayName}
-            onChange={(e) => setSettings({ ...settings, barangayName: e.target.value })}
-            variant="outlined"
-            InputLabelProps={{ shrink: true }}
-            fullWidth
-          />
-          <TextField
-            label="Barangay Address"
-            value={settings.barangayAddress}
-            onChange={(e) => setSettings({ ...settings, barangayAddress: e.target.value })}
-            variant="outlined"
-            InputLabelProps={{ shrink: true }}
-            fullWidth
-            multiline
-            rows={2}
-          />
-        </Box>
-
-        <Divider sx={{ my: 3 }} />
-        {/* SMTP / Email Settings */}
-        <Typography variant="subtitle1" gutterBottom>
-          SMTP / Email Settings
+        <Typography variant="body2" sx={{ color: '#64748b' }}>
+          Manage barangay information, officials, and system configuration
         </Typography>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mb: 3 }}>
-          <TextField
-            label="SMTP Host"
-            value={(settings as any).smtp?.host || ''}
-            onChange={(e) => setSettings((prev) => ({ ...(prev as any), smtp: { ...(prev as any).smtp, host: e.target.value } }) as SystemSettingsData)}
-            variant="outlined"
-            InputLabelProps={{ shrink: true }}
-            fullWidth
-          />
-          <TextField
-            label="SMTP Port"
-            type="number"
-            value={(settings as any).smtp?.port || ''}
-            onChange={(e) => setSettings((prev) => ({ ...(prev as any), smtp: { ...(prev as any).smtp, port: parseInt(e.target.value || '0') } }) as SystemSettingsData)}
-            variant="outlined"
-            InputLabelProps={{ shrink: true }}
-            fullWidth
-          />
-          <TextField
-            label="SMTP User"
-            value={(settings as any).smtp?.user || ''}
-            onChange={(e) => setSettings((prev) => ({ ...(prev as any), smtp: { ...(prev as any).smtp, user: e.target.value } }) as SystemSettingsData)}
-            variant="outlined"
-            InputLabelProps={{ shrink: true }}
-            fullWidth
-          />
-          <Box sx={{ display: 'flex', gap: 2 }}>
-            <Button variant="outlined" onClick={() => setTestModalOpen(true)}>Send Test Email</Button>
-            <Button variant="text" onClick={() => setSettings((prev) => ({ ...(prev as any), smtp: { ...(prev as any).smtp, password: '' } }) as SystemSettingsData)}>Clear SMTP Password</Button>
-          </Box>
-        </Box>
+      </Box>
 
-        <TestEmailModal open={testModalOpen} onClose={() => setTestModalOpen(false)} contactEmail={settings.contactEmail} />
+      {/* Settings Grid */}
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '2fr 1fr' }, gap: 3, mb: 6 }}>
+        {/* Left Column - Main Settings */}
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
 
-          <Divider sx={{ my: 3 }} />
-          {/* Verification Settings */}
-          <Typography variant="subtitle1" gutterBottom>
-            Resident Verifications
-          </Typography>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={Boolean((settings as any).enableVerifications ?? false)}
-                  onChange={(e) => setSettings((prev) => ({ ...(prev as any), enableVerifications: e.target.checked } as any))}
+          {/* Barangay Information Card */}
+          <Paper sx={{
+            p: 3,
+            borderRadius: 2,
+            boxShadow: '0 2px 12px rgba(15,23,42,0.08)',
+            border: '1px solid #e2e8f0',
+            background: '#ffffff',
+            borderTop: '4px solid #0891b2'
+          }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+              <Box sx={{ width: 4, height: 28, background: '#0891b2', borderRadius: 1 }} />
+              <Typography variant="h6" sx={{ fontWeight: 600, color: '#0f172a', m: 0 }}>
+                Barangay Information
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <StyledTextField
+                label="Site Name"
+                value={settings.siteName}
+                onChange={(e) => setSettings({ ...settings, siteName: e.target.value })}
+                fullWidth
+              />
+              <StyledTextField
+                label="Barangay Name"
+                value={settings.barangayName}
+                onChange={(e) => setSettings({ ...settings, barangayName: e.target.value })}
+                fullWidth
+              />
+              <StyledTextField
+                label="Barangay Address"
+                value={settings.barangayAddress}
+                onChange={(e) => setSettings({ ...settings, barangayAddress: e.target.value })}
+                fullWidth
+                multiline
+                rows={2}
+              />
+            </Box>
+          </Paper>
+
+          {/* Contact Information Card */}
+          <Paper sx={{
+            p: 3,
+            borderRadius: 2,
+            boxShadow: '0 2px 12px rgba(15,23,42,0.08)',
+            border: '1px solid #e2e8f0',
+            background: '#ffffff',
+            borderTop: '4px solid #06b6d4'
+          }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+              <Box sx={{ width: 4, height: 28, background: '#06b6d4', borderRadius: 1 }} />
+              <Typography variant="h6" sx={{ fontWeight: 600, color: '#0f172a', m: 0 }}>
+                Contact Information
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <StyledTextField
+                label="Contact Email"
+                type="email"
+                value={settings.contactEmail}
+                onChange={(e) => setSettings({ ...settings, contactEmail: e.target.value })}
+                fullWidth
+              />
+              <StyledTextField
+                label="Contact Phone"
+                value={settings.contactPhone}
+                onChange={(e) => setSettings({ ...settings, contactPhone: e.target.value })}
+                fullWidth
+              />
+            </Box>
+          </Paper>
+
+          {/* SMTP Settings Card */}
+          <Paper sx={{
+            p: 3,
+            borderRadius: 2,
+            boxShadow: '0 2px 12px rgba(15,23,42,0.08)',
+            border: '1px solid #e2e8f0',
+            background: '#ffffff',
+            borderTop: '4px solid #8b5cf6'
+          }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+              <Box sx={{ width: 4, height: 28, background: '#8b5cf6', borderRadius: 1 }} />
+              <Typography variant="h6" sx={{ fontWeight: 600, color: '#0f172a', m: 0 }}>
+                Email Settings
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <StyledTextField
+                label="SMTP Host"
+                value={(settings as any).smtp?.host || ''}
+                onChange={(e) => setSettings((prev) => ({ ...(prev as any), smtp: { ...(prev as any).smtp, host: e.target.value } }) as SystemSettingsData)}
+                fullWidth
+              />
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+                <StyledTextField
+                  label="SMTP Port"
+                  type="number"
+                  value={(settings as any).smtp?.port || ''}
+                  onChange={(e) => setSettings((prev) => ({ ...(prev as any), smtp: { ...(prev as any).smtp, port: parseInt(e.target.value || '0') } }) as SystemSettingsData)}
                 />
-              }
-              label="Enable Resident Verifications"
-            />
-            <Button variant="text" onClick={() => antdMessage.info('When disabled, all pending verification requests will be deleted on the server.')}>More info</Button>
-          </Box>
-          {(settings as any).enableVerifications === false && (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}> 
-              <Alert severity="warning">Disabling verifications will permanently delete pending verification requests and uploaded files when you save changes.</Alert>
-              {/* If settings haven't been loaded from server yet, indicate the default state */}
-              {!loading && !originalSettingsRef.current && (
-                <Alert severity="info">Resident verifications are currently disabled by default. Enable them to allow residents to submit verification requests.</Alert>
+              </Box>
+              <StyledTextField
+                label="SMTP User"
+                value={(settings as any).smtp?.user || ''}
+                onChange={(e) => setSettings((prev) => ({ ...(prev as any), smtp: { ...(prev as any).smtp, user: e.target.value } }) as SystemSettingsData)}
+                fullWidth
+              />
+              <Box sx={{ display: 'flex', gap: 2 }}>
+                <Button variant="contained" size="small" onClick={() => setTestModalOpen(true)} sx={{ textTransform: 'none', fontWeight: 500 }}>
+                  Send Test Email
+                </Button>
+                <Button variant="outlined" size="small" onClick={() => setSettings((prev) => ({ ...(prev as any), smtp: { ...(prev as any).smtp, password: '' } }) as SystemSettingsData)} sx={{ textTransform: 'none' }}>
+                  Clear Password
+                </Button>
+              </Box>
+            </Box>
+          </Paper>
+
+          {/* System Configuration Card */}
+          <Paper sx={{
+            p: 3,
+            borderRadius: 2,
+            boxShadow: '0 2px 12px rgba(15,23,42,0.08)',
+            border: '1px solid #e2e8f0',
+            background: '#ffffff',
+            borderTop: '4px solid #f59e0b'
+          }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+              <Box sx={{ width: 4, height: 28, background: '#f59e0b', borderRadius: 1 }} />
+              <Typography variant="h6" sx={{ fontWeight: 600, color: '#0f172a', m: 0 }}>
+                System Configuration
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={settings.maintainanceMode ?? false}
+                    onChange={(e) => setSettings({ ...settings, maintainanceMode: e.target.checked })}
+                  />
+                }
+                label={<Typography sx={{ fontWeight: 500, color: '#0f172a' }}>Maintenance Mode</Typography>}
+              />
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={settings.allowNewRegistrations ?? false}
+                    onChange={(e) => setSettings({ ...settings, allowNewRegistrations: e.target.checked })}
+                  />
+                }
+                label={<Typography sx={{ fontWeight: 500, color: '#0f172a' }}>Allow New Registrations</Typography>}
+              />
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={settings.requireEmailVerification ?? false}
+                    onChange={(e) => setSettings({ ...settings, requireEmailVerification: e.target.checked })}
+                  />
+                }
+                label={<Typography sx={{ fontWeight: 500, color: '#0f172a' }}>Require Email Verification</Typography>}
+              />
+              <Divider sx={{ my: 1 }} />
+              <Box>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={(settings as any).allowMultipleAccountsPerIP ?? false}
+                      onChange={(e) => setSettings({ ...settings, allowMultipleAccountsPerIP: e.target.checked } as SystemSettingsData)}
+                    />
+                  }
+                  label={<Typography sx={{ fontWeight: 500, color: '#0f172a' }}>Allow Multiple Accounts per IP</Typography>}
+                />
+                {(settings as any).allowMultipleAccountsPerIP && (
+                  <Box sx={{ ml: 4, mt: 1 }}>
+                    <StyledTextField
+                      label="Max Accounts per IP"
+                      type="number"
+                      value={(settings as any).maxAccountsPerIP ?? 1}
+                      onChange={(e) => setSettings({ ...settings, maxAccountsPerIP: parseInt(e.target.value || '1') } as SystemSettingsData)}
+                      inputProps={{ min: 1, max: 100 }}
+                      sx={{ width: 140 }}
+                    />
+                  </Box>
+                )}
+              </Box>
+              <Divider sx={{ my: 1 }} />
+              <StyledTextField
+                label="Max Document Requests per User"
+                type="number"
+                value={settings.maxDocumentRequests}
+                onChange={(e) => setSettings({ ...settings, maxDocumentRequests: parseInt(e.target.value) })}
+                inputProps={{ min: 1, max: 20 }}
+              />
+              <StyledTextField
+                label="Document Processing Days"
+                type="number"
+                value={settings.documentProcessingDays}
+                onChange={(e) => setSettings({ ...settings, documentProcessingDays: parseInt(e.target.value) })}
+                inputProps={{ min: 1, max: 30 }}
+                helperText="Standard processing time for document requests"
+              />
+            </Box>
+          </Paper>
+
+          {/* Verification Settings Card */}
+          <Paper sx={{
+            p: 3,
+            borderRadius: 2,
+            boxShadow: '0 2px 12px rgba(15,23,42,0.08)',
+            border: '1px solid #e2e8f0',
+            background: '#ffffff',
+            borderTop: '4px solid #ef4444'
+          }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+              <Box sx={{ width: 4, height: 28, background: '#ef4444', borderRadius: 1 }} />
+              <Typography variant="h6" sx={{ fontWeight: 600, color: '#0f172a', m: 0 }}>
+                Resident Verifications
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={Boolean((settings as any).enableVerifications ?? false)}
+                    onChange={(e) => setSettings((prev) => ({ ...(prev as any), enableVerifications: e.target.checked } as any))}
+                  />
+                }
+                label={<Typography sx={{ fontWeight: 500, color: '#0f172a' }}>Enable Resident Verifications</Typography>}
+              />
+              {(settings as any).enableVerifications === false && (
+                <Alert severity="warning" sx={{ borderRadius: 1 }}>
+                  Disabling verifications will permanently delete pending requests and files.
+                </Alert>
               )}
             </Box>
-          )}
+          </Paper>
 
-          <Divider sx={{ my: 3 }} />
-          {/* Barangay Officials Section */}
-          <Typography variant="subtitle1" gutterBottom>
-            Barangay Officials
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 3, alignItems: 'flex-start', mb: 3, flexDirection: { xs: 'column', md: 'row' } }}>
-            {/* Left column: header + scrollable list */}
-            <Box sx={{ flex: 1, width: '100%' }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-                <Typography variant="body1">Manage officials (auto-saves changes)</Typography>
-                <Button onClick={() => {
-                  // add new (append to end so preview shows on the right)
+          {/* System Notice Card */}
+          <Paper sx={{
+            p: 3,
+            borderRadius: 2,
+            boxShadow: '0 2px 12px rgba(15,23,42,0.08)',
+            border: '1px solid #e2e8f0',
+            background: '#ffffff',
+            borderTop: '4px solid #3b82f6'
+          }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+              <Box sx={{ width: 4, height: 28, background: '#3b82f6', borderRadius: 1 }} />
+              <Typography variant="h6" sx={{ fontWeight: 600, color: '#0f172a', m: 0 }}>
+                System Notice
+              </Typography>
+            </Box>
+            <StyledTextField
+              label="System-wide Notice"
+              value={settings.systemNotice}
+              onChange={(e) => setSettings({ ...settings, systemNotice: e.target.value })}
+              fullWidth
+              multiline
+              rows={3}
+              helperText="Displayed to all users on the dashboard"
+            />
+          </Paper>
+        </Box>
+
+        {/* Right Column - Officials Management */}
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <Paper sx={{
+            p: 3,
+            borderRadius: 2,
+            boxShadow: '0 2px 12px rgba(15,23,42,0.08)',
+            border: '1px solid #e2e8f0',
+            background: '#ffffff',
+            borderTop: '4px solid #10b981'
+          }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, mb: 3 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Box sx={{ width: 4, height: 28, background: '#10b981', borderRadius: 1 }} />
+                <Typography variant="h6" sx={{ fontWeight: 600, color: '#0f172a', m: 0 }}>
+                  Barangay Officials
+                </Typography>
+              </Box>
+              <Button
+                onClick={() => {
                   const temp: Official = { _id: `new-${Date.now()}`, name: '', title: '', term: '' };
                   setOfficials(prev => [...prev, temp]);
-                }} startIcon={<UsergroupAddOutlined />}>Add Official</Button>
-              </Box>
+                }}
+                startIcon={<UsergroupAddOutlined />}
+                size="small"
+                variant="contained"
+                sx={{ textTransform: 'none', fontWeight: 500 }}
+              >
+                Add
+              </Button>
+            </Box>
 
-              {/* Scrollable list area */}
-              <Box sx={{ maxHeight: 420, overflowY: 'auto', pr: 1, border: '1px solid rgba(0,0,0,0.04)', borderRadius: 1, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.6)' }}>
-                {officialsLoading ? <CircularProgress size={24} /> : (
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    {officials.map((off, idx) => (
-                      <Paper key={off._id || idx} sx={{ p: 2, display: 'flex', gap: 2, alignItems: 'center' }}>
-                      <Box sx={{ width: 72, height: 72, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, border: '3px solid rgba(0,0,0,0.04)', boxShadow: '0 1px 6px rgba(0,0,0,0.06)' }}>
+            <Box sx={{ maxHeight: 500, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {officialsLoading ? (
+                <CircularProgress size={24} />
+              ) : officials.length === 0 ? (
+                <Typography variant="body2" sx={{ color: '#94a3b8', textAlign: 'center', py: 4 }}>
+                  No officials added yet
+                </Typography>
+              ) : (
+                officials.map((off, idx) => (
+                  <Paper key={off._id || idx} sx={{ p: 2, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 1 }}>
+                    <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', mb: 2 }}>
+                      <Box sx={{ width: 56, height: 56, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, border: '2px solid #e2e8f0', boxShadow: '0 2px 6px rgba(0,0,0,0.06)' }}>
                         <img
                           src={getOfficialPhotoSrc(off as any)}
                           alt={off.name || 'photo'}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform .2s', display: 'block' }}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                         />
                       </Box>
                       <Box sx={{ flex: 1 }}>
-                        <TextField label="Full name" value={off.name} onChange={(e) => {
-                          const v = e.target.value;
-                          setOfficials(prev => prev.map(o => o._id === off._id ? { ...o, name: v } : o));
-                          // schedule autosave
-                          if (autoSaveTimers.current[off._id || '']) clearTimeout(autoSaveTimers.current[off._id || '']);
-                          autoSaveTimers.current[off._id || ''] = window.setTimeout(async () => {
-                            try {
-                              setSavingOfficials(true);
-                              if (off._id && !off._id.toString().startsWith('new-')) {
-                                await adminAPI.updateOfficial(off._id, { ...off, name: v });
-                              } else {
-                                const created = await adminAPI.createOfficial({ ...off, name: v });
-                                setOfficials(prev => prev.map(p => p._id === off._id ? created : p));
-                              }
-                              setManualSaveError(null);
-                            } catch (err) {
-                              console.error('auto-save failed', err);
-                              setManualSaveError('Auto-save failed');
-                            } finally {
-                              setSavingOfficials(false);
-                            }
-                          }, 900);
-                        }} fullWidth size="small" sx={{ mb: 1 }} variant="outlined" InputLabelProps={{ shrink: true }} />
-                        <TextField label="Title/Position" value={off.title} onChange={(e) => {
-                          const v = e.target.value;
-                          setOfficials(prev => prev.map(o => o._id === off._id ? { ...o, title: v } : o));
-                          if (autoSaveTimers.current[off._id || '']) clearTimeout(autoSaveTimers.current[off._id || '']);
-                          autoSaveTimers.current[off._id || ''] = window.setTimeout(async () => {
-                            try {
-                              setSavingOfficials(true);
-                              if (off._id && !off._id.toString().startsWith('new-')) {
-                                await adminAPI.updateOfficial(off._id, { ...off, title: v });
-                              } else {
-                                const created = await adminAPI.createOfficial({ ...off, title: v });
-                                setOfficials(prev => prev.map(p => p._id === off._id ? created : p));
-                              }
-                              setManualSaveError(null);
-                            } catch (err) {
-                              console.error('auto-save failed', err);
-                              setManualSaveError('Auto-save failed');
-                            } finally {
-                              setSavingOfficials(false);
-                            }
-                          }, 900);
-                        }} fullWidth size="small" sx={{ mb: 1 }} variant="outlined" InputLabelProps={{ shrink: true }} />
-                        <TextField label="Term" value={off.term} onChange={(e) => {
-                          const v = e.target.value;
-                          setOfficials(prev => prev.map(o => o._id === off._id ? { ...o, term: v } : o));
-                          if (autoSaveTimers.current[off._id || '']) clearTimeout(autoSaveTimers.current[off._id || '']);
-                          autoSaveTimers.current[off._id || ''] = window.setTimeout(async () => {
-                            try {
-                              setSavingOfficials(true);
-                              if (off._id && !off._id.toString().startsWith('new-')) {
-                                await adminAPI.updateOfficial(off._id, { ...off, term: v });
-                              } else {
-                                const created = await adminAPI.createOfficial({ ...off, term: v });
-                                setOfficials(prev => prev.map(p => p._id === off._id ? created : p));
-                              }
-                              setManualSaveError(null);
-                            } catch (err) {
-                              console.error('auto-save failed', err);
-                              setManualSaveError('Auto-save failed');
-                            } finally {
-                              setSavingOfficials(false);
-                            }
-                          }, 900);
-                        }} fullWidth size="small" variant="outlined" InputLabelProps={{ shrink: true }} />
-                        <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
-                          <AntdUpload showUploadList={false} beforeUpload={(file) => {
-                            // Client-side file size limit: 2MB (match server multer limit)
-                            const MAX_BYTES = 2 * 1024 * 1024;
-                            if (file.size > MAX_BYTES) {
-                              antdMessage.warning('File is too large. Maximum allowed size is 2 MB.');
-                              return false;
-                            }
-                            // create local preview immediately
-                            try {
-                              const url = URL.createObjectURL(file);
-                              previewUrlsRef.current[off._id || `temp-${Date.now()}`] = url;
-                              setOfficials(prev => prev.map(o => o._id === off._id ? { ...o, previewUrl: url } : o));
-                            } catch (e) {}
-
-                            // upload file
-                            (async () => {
+                        <StyledTextField
+                          label="Full Name"
+                          value={off.name}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setOfficials(prev => prev.map(o => o._id === off._id ? { ...o, name: v } : o));
+                            if (autoSaveTimers.current[off._id || '']) clearTimeout(autoSaveTimers.current[off._id || '']);
+                            autoSaveTimers.current[off._id || ''] = window.setTimeout(async () => {
                               try {
-                                if (!off._id || off._id.toString().startsWith('new-')) {
-                                  antdMessage.warning('Please save official first by entering name/title/term');
-                                  return;
+                                setSavingOfficials(true);
+                                if (off._id && !off._id.toString().startsWith('new-')) {
+                                  await adminAPI.updateOfficial(off._id, { ...off, name: v });
+                                } else {
+                                  const created = await adminAPI.createOfficial({ ...off, name: v });
+                                  setOfficials(prev => prev.map(p => p._id === off._id ? created : p));
                                 }
-                                await adminAPI.uploadOfficialPhoto(off._id, file as File);
-                                // refresh list
-                                const refreshed = await adminAPI.getOfficials();
-                                setOfficials(Array.isArray(refreshed) ? refreshed : officials);
-                                antdMessage.success('Photo uploaded');
-                                // revoke preview for this official if any
-                                try {
-                                  const key = off._id || '';
-                                  const u = previewUrlsRef.current[key];
-                                  if (u) { URL.revokeObjectURL(u); delete previewUrlsRef.current[key]; }
-                                } catch (e) {}
+                                setManualSaveError(null);
                               } catch (err) {
-                                console.error('upload failed', err);
-                                antdMessage.error('Upload failed');
+                                console.error('auto-save failed', err);
+                                setManualSaveError('Auto-save failed');
+                              } finally {
+                                setSavingOfficials(false);
                               }
-                            })();
-                            return false; }}>
-
-                            <Button startIcon={<UploadOutlined />}>Upload Photo</Button>
-                          </AntdUpload>
-                          <Button color="error" startIcon={<DeleteOutlined />} onClick={() => {
-                            if (off._id && !off._id.toString().startsWith('new-')) {
-                              handleDeleteOfficial(off._id);
-                            } else {
-                              setOfficials(prev => prev.filter(p => p._id !== off._id));
-                            }
-                          }}>Delete</Button>
-                        </Box>
+                            }, 900);
+                          }}
+                          fullWidth
+                          sx={{ mb: 1 }}
+                        />
+                        <StyledTextField
+                          label="Position"
+                          value={off.title}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setOfficials(prev => prev.map(o => o._id === off._id ? { ...o, title: v } : o));
+                            if (autoSaveTimers.current[off._id || '']) clearTimeout(autoSaveTimers.current[off._id || '']);
+                            autoSaveTimers.current[off._id || ''] = window.setTimeout(async () => {
+                              try {
+                                setSavingOfficials(true);
+                                if (off._id && !off._id.toString().startsWith('new-')) {
+                                  await adminAPI.updateOfficial(off._id, { ...off, title: v });
+                                } else {
+                                  const created = await adminAPI.createOfficial({ ...off, title: v });
+                                  setOfficials(prev => prev.map(p => p._id === off._id ? created : p));
+                                }
+                                setManualSaveError(null);
+                              } catch (err) {
+                                console.error('auto-save failed', err);
+                                setManualSaveError('Auto-save failed');
+                              } finally {
+                                setSavingOfficials(false);
+                              }
+                            }, 900);
+                          }}
+                          fullWidth
+                          sx={{ mb: 1 }}
+                        />
+                        <StyledTextField
+                          label="Term"
+                          value={off.term}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setOfficials(prev => prev.map(o => o._id === off._id ? { ...o, term: v } : o));
+                            if (autoSaveTimers.current[off._id || '']) clearTimeout(autoSaveTimers.current[off._id || '']);
+                            autoSaveTimers.current[off._id || ''] = window.setTimeout(async () => {
+                              try {
+                                setSavingOfficials(true);
+                                if (off._id && !off._id.toString().startsWith('new-')) {
+                                  await adminAPI.updateOfficial(off._id, { ...off, term: v });
+                                } else {
+                                  const created = await adminAPI.createOfficial({ ...off, term: v });
+                                  setOfficials(prev => prev.map(p => p._id === off._id ? created : p));
+                                }
+                                setManualSaveError(null);
+                              } catch (err) {
+                                console.error('auto-save failed', err);
+                                setManualSaveError('Auto-save failed');
+                              } finally {
+                                setSavingOfficials(false);
+                              }
+                            }, 900);
+                          }}
+                          fullWidth
+                        />
                       </Box>
-                    </Paper>
-                  ))}
-                </Box>
+                      <Button
+                        size="small"
+                        color="error"
+                        startIcon={<DeleteOutlined />}
+                        onClick={() => {
+                          if (off._id && !off._id.toString().startsWith('new-')) {
+                            handleDeleteOfficial(off._id);
+                          } else {
+                            setOfficials(prev => prev.filter(p => p._id !== off._id));
+                          }
+                        }}
+                        sx={{ textTransform: 'none' }}
+                      >
+                        Delete
+                      </Button>
+                    </Box>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <AntdUpload
+                        showUploadList={false}
+                        beforeUpload={(file) => {
+                          const MAX_BYTES = 2 * 1024 * 1024;
+                          if (file.size > MAX_BYTES) {
+                            antdMessage.warning('File is too large. Maximum 2 MB.');
+                            return false;
+                          }
+                          try {
+                            const url = URL.createObjectURL(file);
+                            previewUrlsRef.current[off._id || `temp-${Date.now()}`] = url;
+                            setOfficials(prev => prev.map(o => o._id === off._id ? { ...o, previewUrl: url } : o));
+                          } catch (e) {}
+                          (async () => {
+                            try {
+                              if (!off._id || off._id.toString().startsWith('new-')) {
+                                antdMessage.warning('Please save official first');
+                                return;
+                              }
+                              await adminAPI.uploadOfficialPhoto(off._id, file as File);
+                              const refreshed = await adminAPI.getOfficials();
+                              setOfficials(Array.isArray(refreshed) ? refreshed : officials);
+                              antdMessage.success('Photo uploaded');
+                              try {
+                                const key = off._id || '';
+                                const u = previewUrlsRef.current[key];
+                                if (u) { URL.revokeObjectURL(u); delete previewUrlsRef.current[key]; }
+                              } catch (e) {}
+                            } catch (err) {
+                              console.error('upload failed', err);
+                              antdMessage.error('Upload failed');
+                            }
+                          })();
+                          return false;
+                        }}
+                      >
+                        <Button size="small" variant="outlined" startIcon={<UploadOutlined />} sx={{ textTransform: 'none' }}>
+                          Upload Photo
+                        </Button>
+                      </AntdUpload>
+                    </Box>
+                  </Paper>
+                ))
               )}
             </Box>
-          </Box>
-
-            <Box sx={{ width: { xs: '100%', md: 360 }, position: { xs: 'relative', md: 'sticky' }, top: { md: 24 }, alignSelf: 'flex-start', mt: { xs: 2, md: 0 } }}>
-              <Typography variant="body2" sx={{ mb: 1 }}>Officials Preview</Typography>
-              <Box sx={{ background: 'white', borderRadius: 2, p: 2 }}>
-                {officials.length === 0 ? (
-                  <Typography variant="body2" color="text.secondary">No officials to preview</Typography>
-                ) : (
-                  (() => {
-                    const stable = officials.filter(o => !(o._id && o._id.toString().startsWith('new-')));
-                    const newly = officials.filter(o => o._id && o._id.toString().startsWith('new-'));
-                    const previewOrder = [...stable, ...newly];
-                    return (
-                      <div
-                        ref={previewContainerRef}
-                        style={{ display: 'flex', gap: 12, overflowX: 'auto', padding: '6px 4px', scrollSnapType: 'x mandatory' }}
-                        aria-label="Officials preview"
-                      >
-                        {previewOrder.map(off => {
-                          const id = off._id || '';
-                          const isHighlighted = highlightedIds.includes(id);
-                          return (
-                            <div
-                              key={id || Math.random()}
-                              style={{
-                                minWidth: 140,
-                                textAlign: 'center',
-                                padding: 8,
-                                scrollSnapAlign: 'center' as const,
-                                transition: 'box-shadow .25s, transform .18s',
-                                boxShadow: isHighlighted ? '0 10px 30px rgba(25,118,210,0.18)' : undefined,
-                                transform: isHighlighted ? 'translateY(-4px)' : undefined,
-                                borderRadius: 8,
-                                background: isHighlighted ? 'linear-gradient(180deg, rgba(255,255,255,0.98), rgba(250,250,255,0.98))' : undefined,
-                                flex: '0 0 auto'
-                              }}
-                            >
-                              <AppAvatar size={80} src={getOfficialPhotoSrc(off as any)} style={{ margin: '0 auto', boxShadow: '0 6px 18px rgba(0,0,0,0.06)' }} />
-                              <div style={{ marginTop: 8 }}>
-                                <div style={{ fontWeight: 600, fontSize: 14 }}>{off.name || '—'}</div>
-                                <div style={{ color: '#888', fontSize: 12 }}>{off.title}</div>
-                                <div style={{ color: '#888', fontSize: 12 }}>{off.term}</div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })()
-                )}
-              </Box>
-            </Box>
-          </Box>
-
-          {/* Manual Save handled via floating action button — errors still shown inline */}
-          {manualSaveError && <Typography color="error" sx={{ mt: 1 }}>{manualSaveError}</Typography>}
-
-        {/* Contact Information */}
-        <Typography variant="subtitle1" gutterBottom>
-          Contact Information
-        </Typography>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mb: 3 }}>
-          <TextField
-            label="Contact Email"
-            type="email"
-            value={settings.contactEmail}
-            onChange={(e) => setSettings({ ...settings, contactEmail: e.target.value })}
-            variant="outlined"
-            InputLabelProps={{ shrink: true }}
-            fullWidth
-          />
-          <TextField
-            label="Contact Phone"
-            value={settings.contactPhone}
-            onChange={(e) => setSettings({ ...settings, contactPhone: e.target.value })}
-            variant="outlined"
-            InputLabelProps={{ shrink: true }}
-            fullWidth
-          />
+            {manualSaveError && <Typography color="error" sx={{ mt: 2, fontSize: 12 }}>{manualSaveError}</Typography>}
+          </Paper>
         </Box>
+      </Box>
 
-        <Divider sx={{ my: 3 }} />
+      <TestEmailModal open={testModalOpen} onClose={() => setTestModalOpen(false)} contactEmail={settings.contactEmail} />
 
-        {/* System Configuration */}
-        <Typography variant="subtitle1" gutterBottom>
-          System Configuration
-        </Typography>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mb: 3 }}>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={settings.maintainanceMode ?? false}
-                onChange={(e) => setSettings({ ...settings, maintainanceMode: e.target.checked })}
-              />
-            }
-            label="Maintenance Mode"
-          />
-          <FormControlLabel
-            control={
-              <Switch
-                checked={settings.allowNewRegistrations ?? false}
-                onChange={(e) => setSettings({ ...settings, allowNewRegistrations: e.target.checked })}
-              />
-            }
-            label="Allow New Registrations"
-          />
-          {/* Allow multiple accounts per IP toggle and limit */}
-          <Box>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={(settings as any).allowMultipleAccountsPerIP ?? false}
-                  onChange={(e) => setSettings({ ...settings, allowMultipleAccountsPerIP: e.target.checked } as SystemSettingsData)}
-                />
-              }
-              label="Allow multiple accounts per IP"
-            />
-            <Box sx={{ mt: 1, ml: 4, display: 'flex', alignItems: 'center', gap: 2 }}>
-              <TextField
-                label="Max accounts per IP"
-                type="number"
-                size="small"
-                value={(settings as any).maxAccountsPerIP ?? 1}
-                onChange={(e) => setSettings({ ...settings, maxAccountsPerIP: parseInt(e.target.value || '1') } as SystemSettingsData)}
-                variant="outlined"
-                InputLabelProps={{ shrink: true }}
-                inputProps={{ min: 1, max: 100 }}
-                sx={{ width: 140 }}
-              />
-              <Typography variant="caption" color="text.secondary">
-                Current limit: {(settings as any).maxAccountsPerIP ?? 1}
-              </Typography>
-            </Box>
-          </Box>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={settings.requireEmailVerification ?? false}
-                onChange={(e) => setSettings({ ...settings, requireEmailVerification: e.target.checked })}
-              />
-            }
-            label="Require Email Verification"
-          />
-          <TextField
-            label="Maximum Document Requests per User"
-            type="number"
-            value={settings.maxDocumentRequests}
-            onChange={(e) => setSettings({ ...settings, maxDocumentRequests: parseInt(e.target.value) })}
-            variant="outlined"
-            InputLabelProps={{ shrink: true }}
-            inputProps={{ min: 1, max: 20 }}
-          />
-          <TextField
-            label="Document Processing Days"
-            type="number"
-            value={settings.documentProcessingDays}
-            onChange={(e) => setSettings({ ...settings, documentProcessingDays: parseInt(e.target.value) })}
-            variant="outlined"
-            InputLabelProps={{ shrink: true }}
-            inputProps={{ min: 1, max: 30 }}
-            helperText="Standard number of days to process document requests"
-          />
-        </Box>
+      {/* Floating Save Button */}
+      <Box sx={{
+        position: 'fixed',
+        right: 24,
+        bottom: 24,
+        zIndex: 1300,
+      }}>
+        <Button
+          variant="contained"
+          onClick={() => saveAll()}
+          disabled={saving || savingOfficials}
+          sx={{
+            width: 64,
+            height: 64,
+            borderRadius: '50%',
+            minWidth: 64,
+            boxShadow: '0 8px 24px rgba(25,118,210,0.24)',
+            background: 'linear-gradient(135deg, #0891b2 0%, #0ea5e9 100%)',
+            color: '#fff',
+            '&:hover': {
+              boxShadow: '0 12px 32px rgba(25,118,210,0.32)',
+            },
+            '&:disabled': {
+              background: '#cbd5e1',
+            },
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontWeight: 700,
+            fontSize: 18,
+            transition: 'all 0.3s ease'
+          }}
+          aria-label="Save Settings and Officials"
+        >
+          {(saving || savingOfficials) ? '...' : '✓'}
+        </Button>
+      </Box>
 
-        <Divider sx={{ my: 3 }} />
-
-        {/* System Notice */}
-        <Typography variant="subtitle1" gutterBottom>
-          System Notice
-        </Typography>
-        <Box sx={{ mb: 3 }}>
-          <TextField
-            label="System-wide Notice"
-            value={settings.systemNotice}
-            onChange={(e) => setSettings({ ...settings, systemNotice: e.target.value })}
-            variant="outlined"
-            InputLabelProps={{ shrink: true }}
-            fullWidth
-            multiline
-            rows={3}
-            helperText="This notice will be displayed to all users"
-          />
-        </Box>
-
-        {/* Save button relocated to floating action button */}
-
-        {/* Floating Manual Save button (bottom-right) */}
-        <Box sx={{
-          position: 'fixed',
-          right: 24,
-          bottom: 24,
-          zIndex: 1300,
-        }}>
-          <Button
-            variant="contained"
-            onClick={() => saveAll()}
-            disabled={saving || savingOfficials}
-            sx={{
-              width: 64,
-              height: 64,
-              borderRadius: '50%',
-              minWidth: 64,
-              boxShadow: '0 8px 24px rgba(25,118,210,0.24)',
-              backgroundColor: '#1976d2',
-              color: '#fff',
-              '&:hover': {
-                boxShadow: '0 12px 32px rgba(25,118,210,0.32)',
-                backgroundColor: '#1565c0',
-              },
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontWeight: 600,
-            }}
-            aria-label="Save Settings and Officials"
-          >
-            {(saving || savingOfficials) ? '...' : 'Save'}
-          </Button>
-        </Box>
-      </Paper>
-      <Dialog open={confirmDisableOpen} onClose={() => setConfirmDisableOpen(false)}>
-        <DialogTitle>Disable Resident Verifications?</DialogTitle>
+      {/* Confirmation Dialog */}
+      <Dialog open={confirmDisableOpen} onClose={() => setConfirmDisableOpen(false)} PaperProps={{ sx: { borderRadius: 2 } }}>
+        <DialogTitle sx={{ fontWeight: 600, color: '#0f172a' }}>Disable Resident Verifications?</DialogTitle>
         <DialogContent>
-          <Typography>
-            Disabling resident verifications will permanently delete all pending verification requests and their uploaded files on the server. This action cannot be undone. Are you sure you want to proceed?
+          <Typography sx={{ color: '#475569', mt: 2 }}>
+            Disabling resident verifications will permanently delete all pending verification requests and their uploaded files on the server. This action cannot be undone. Are you sure?
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setConfirmDisableOpen(false)} disabled={saving}>Cancel</Button>
-          <Button onClick={() => confirmAndSave()} color="error" disabled={saving}>Yes, disable and save</Button>
+          <Button onClick={() => setConfirmDisableOpen(false)} disabled={saving} sx={{ textTransform: 'none' }}>Cancel</Button>
+          <Button onClick={() => confirmAndSave()} color="error" variant="contained" disabled={saving} sx={{ textTransform: 'none' }}>
+            Yes, disable and save
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

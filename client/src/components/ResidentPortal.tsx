@@ -88,6 +88,7 @@ interface PersonalInfo {
 	fatherBirthDate?: string;
 	fatherOccupation?: string;
 	fatherStatus?: string;
+	nameExtension?: string;
 	// Add more as needed
 }
 
@@ -246,6 +247,7 @@ export default function ResidentPortal() {
 					setPersonalForm({
             firstName: '',
             lastName: '',
+            nameExtension: '',
             age: undefined,
             birthDate: '',
             dateOfResidency: '',
@@ -971,9 +973,10 @@ useEffect(() => {
 																<Col xs={24} sm={12} md={6}><Form.Item label="First Name"><Input name="firstName" value={personalForm?.firstName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
 																<Col xs={24} sm={12} md={6}><Form.Item label="Middle Name"><Input name="middleName" value={personalForm?.middleName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
 																<Col xs={24} sm={12} md={6}><Form.Item label="Last Name"><Input name="lastName" value={personalForm?.lastName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																<Col xs={24} sm={12} md={6}><Form.Item label="Age"><Input name="age" type="number" value={personalForm?.age || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
+																<Col xs={24} sm={12} md={6}><Form.Item label="Name Extension"><Input name="nameExtension" placeholder="e.g., Jr., Sr., III" value={personalForm?.nameExtension || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
 															</Row>
-															<Row gutter={16}>
+															<Row gutter={24}>
+																<Col xs={24} sm={12} md={6}><Form.Item label="Age"><Input name="age" type="number" value={personalForm?.age || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
 																<Col xs={24} sm={12} md={6}><Form.Item label="Birth Date"><Input name="birthDate" type="date" value={personalForm.birthDate || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
 																<Col xs={24} sm={12} md={6}><Form.Item label="Place of Birth"><Input name="placeOfBirth" value={personalForm.placeOfBirth || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
 																<Col xs={24} sm={12} md={6}><Form.Item label="Nationality"><Input name="nationality" value={personalForm.nationality || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
