@@ -602,3 +602,51 @@ export const getTotalDocumentsCount = async (req: Request, res: Response) => {
     });
   }
 };
+
+/**
+ * Get pending requests breakdown by type
+ * Returns counts for DocumentRequests, Inquiries, VerificationRequests, and generic Requests
+ */
+export const getPendingRequestsBreakdown = async (req: Request, res: Response) => {
+  try {
+    const DocumentRequest = require('../models/DocumentRequest').default;
+    const Inquiry = require('../models/Inquiry').Inquiry;
+    const VerificationRequest = require('../models/VerificationRequest').VerificationRequest;
+    const Request = require('../models/Request').default;
+
+    // Count pending document requests
+    const documentRequestsCount = await DocumentRequest.countDocuments({ status: 'pending' });
+
+    // Count pending inquiries
+    const inquiriesCount = await Inquiry.countDocuments({ status: { $in: ['open', 'pending', 'in-progress'] } });
+
+    // Count pending verification requests
+    const verificationRequestsCount = await VerificationRequest.countDocuments({ status: 'pending' });
+
+    // Count pending staff requests
+    const staffRequestsCount = await Request.countDocuments({ status: 'pending' });
+
+    const totalCount = documentRequestsCount + inquiriesCount + verificationRequestsCount + staffRequestsCount;
+
+    res.json({
+      totalCount,
+      documentRequestsCount,
+      inquiriesCount,
+      verificationRequestsCount,
+      staffRequestsCount,
+      success: true
+    });
+  } catch (error) {
+    console.error('Error fetching pending requests breakdown:', error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    res.status(500).json({
+      message: 'Error fetching pending requests breakdown',
+      error: errorMsg,
+      totalCount: 0,
+      documentRequestsCount: 0,
+      inquiriesCount: 0,
+      verificationRequestsCount: 0,
+      staffRequestsCount: 0
+    });
+  }
+};

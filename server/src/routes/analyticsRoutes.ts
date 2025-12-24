@@ -16,7 +16,8 @@ import {
 	getDocumentRequests,
 	getProcessedDocumentsCount,
 	getPendingRequestsCount,
-	getTotalDocumentsCount
+	getTotalDocumentsCount,
+	getPendingRequestsBreakdown
 } from '../controllers/analyticsController';
 
 const router = express.Router();
@@ -27,6 +28,7 @@ router.get('/document-requests', (req: any, res: Response) => getDocumentRequest
 router.get('/processed-documents-count', (req: any, res: Response) => getProcessedDocumentsCount(req, res));
 router.get('/total-documents-count', (req: any, res: Response) => getTotalDocumentsCount(req, res));
 router.get('/pending-requests-count', (req: any, res: Response) => getPendingRequestsCount(req, res));
+router.get('/pending-requests-breakdown', (req: any, res: Response) => getPendingRequestsBreakdown(req, res));
 router.get('/gender', (req: any, res: Response) => getGenderDistribution(req, res));
 router.get('/field', (req: any, res: Response) => getFieldDistribution(req, res));
 router.get('/age', (req: any, res: Response) => getAgeBuckets(req, res));

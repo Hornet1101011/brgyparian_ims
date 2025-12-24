@@ -631,6 +631,10 @@ export const fetchDashboardSummary = async (
   templatesCount: number;
   processedDocuments: number;
   pendingRequests: number;
+  documentRequestsCount: number;
+  inquiriesCount: number;
+  verificationRequestsCount: number;
+  staffRequestsCount: number;
   maleCount: number;
   femaleCount: number;
   avgAge: number;
@@ -638,7 +642,6 @@ export const fetchDashboardSummary = async (
   dataQuality: number;
 }> => {
   const records = await fetchPersonalInfoRecords(options);
-  const pendingRequests = await fetchPendingRequestsCount();
   
   // Fetch document counts from the total-documents-count endpoint
   let totalDocuments = 0;
@@ -653,6 +656,24 @@ export const fetchDashboardSummary = async (
     console.error('Failed to fetch document counts:', error);
     totalDocuments = await fetchProcessedDocumentsCount();
   }
+
+  // Fetch pending requests breakdown
+  let pendingRequests = 0;
+  let documentRequestsCount = 0;
+  let inquiriesCount = 0;
+  let verificationRequestsCount = 0;
+  let staffRequestsCount = 0;
+  try {
+    const response = await axiosInstance.get('/analytics/pending-requests-breakdown');
+    pendingRequests = response.data?.totalCount || 0;
+    documentRequestsCount = response.data?.documentRequestsCount || 0;
+    inquiriesCount = response.data?.inquiriesCount || 0;
+    verificationRequestsCount = response.data?.verificationRequestsCount || 0;
+    staffRequestsCount = response.data?.staffRequestsCount || 0;
+  } catch (error) {
+    console.error('Failed to fetch pending requests breakdown:', error);
+    pendingRequests = await fetchPendingRequestsCount();
+  }
   
   if (records.length === 0) {
     return {
@@ -661,6 +682,10 @@ export const fetchDashboardSummary = async (
       templatesCount,
       processedDocuments,
       pendingRequests,
+      documentRequestsCount,
+      inquiriesCount,
+      verificationRequestsCount,
+      staffRequestsCount,
       maleCount: 0,
       femaleCount: 0,
       avgAge: 0,
@@ -692,6 +717,10 @@ export const fetchDashboardSummary = async (
     templatesCount,
     processedDocuments,
     pendingRequests,
+    documentRequestsCount,
+    inquiriesCount,
+    verificationRequestsCount,
+    staffRequestsCount,
     maleCount,
     femaleCount,
     avgAge,

@@ -169,6 +169,10 @@ const StatisticsInner: React.FC = () => {
   const templatesCount = useMemo(() => summaryQuery.data?.templatesCount ?? 0, [summaryQuery.data]);
   const processedDocuments = useMemo(() => summaryQuery.data?.processedDocuments ?? 0, [summaryQuery.data]);
   const pendingRequests = useMemo(() => summaryQuery.data?.pendingRequests ?? 0, [summaryQuery.data]);
+  const documentRequestsCount = useMemo(() => summaryQuery.data?.documentRequestsCount ?? 0, [summaryQuery.data]);
+  const inquiriesCount = useMemo(() => summaryQuery.data?.inquiriesCount ?? 0, [summaryQuery.data]);
+  const verificationRequestsCount = useMemo(() => summaryQuery.data?.verificationRequestsCount ?? 0, [summaryQuery.data]);
+  const staffRequestsCount = useMemo(() => summaryQuery.data?.staffRequestsCount ?? 0, [summaryQuery.data]);
   
   const ageBarData = useMemo(() => {
     const ageData = chartData['age'];
@@ -378,8 +382,9 @@ const StatisticsInner: React.FC = () => {
             </Card>
           </Col>
 
-          <Col xs={24} sm={24} md={8}>
+          <Col xs={24} sm={12} md={8}>
             <Card 
+              variant="borderless" 
               style={{ 
                 borderRadius: 12, 
                 boxShadow: '0 2px 12px rgba(245, 158, 11, 0.08)',
@@ -396,9 +401,13 @@ const StatisticsInner: React.FC = () => {
                   <Typography.Text type="secondary" style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b', marginBottom: 8 }}>
                     Pending Requests
                   </Typography.Text>
-                  <Typography.Title level={2} style={{ margin: 0, color: '#f59e0b', fontWeight: 700 }}>
+                  <Typography.Title level={2} style={{ margin: 0, marginBottom: 12, color: '#f59e0b', fontWeight: 700 }}>
                     {pendingRequests.toLocaleString()}
                   </Typography.Title>
+                  <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 6 }}>Documents: <span style={{ fontWeight: 600, color: '#f59e0b' }}>{documentRequestsCount}</span></div>
+                  <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 6 }}>Inquiries: <span style={{ fontWeight: 600, color: '#f59e0b' }}>{inquiriesCount}</span></div>
+                  <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 6 }}>Verification: <span style={{ fontWeight: 600, color: '#f59e0b' }}>{verificationRequestsCount}</span></div>
+                  <div style={{ fontSize: 11, color: '#6b7280' }}>Staff: <span style={{ fontWeight: 600, color: '#f59e0b' }}>{staffRequestsCount}</span></div>
                 </div>
               )}
             </Card>
