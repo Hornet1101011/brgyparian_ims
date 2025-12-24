@@ -1,3 +1,4 @@
 {
-  "API_BASE": "https://alphaversion.onrender.com/api"
+  "API_BASE": "https://alphaversion.onrender.com/api",
+  "ENABLE_PUBLIC_VIEWS": true
 }

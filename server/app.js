@@ -348,6 +348,164 @@ try {
   console.error('Failed to mount public settings endpoint', e);
 }
 
+// GET /api/settings/public/barangay-info - Returns barangay information as carousel items
+// Fetches from publicviews collection or falls back to SystemSetting
+try {
+  const SystemSetting = require('./models/SystemSetting');
+  const PublicView = require('./models/PublicView');
+  
+  app.get('/api/settings/public/barangay-info', async (req, res) => {
+    try {
+      console.log('[Barangay Info] GET /api/settings/public/barangay-info called');
+      
+      // Try to fetch from PublicView collection first (cached data)
+      let publicView = await PublicView.findOne({ isActive: true }).lean();
+      
+      // Fallback to SystemSetting if PublicView not found
+      if (!publicView) {
+        publicView = await SystemSetting.findOne().lean();
+      }
+      
+      if (!publicView) {
+        console.log('[Barangay Info] No barangay data found, returning empty array');
+        return res.json([]);
+      }
+      
+      // Format as carousel items
+      const barangayInfoItems = [];
+      
+      if (publicView.siteName) {
+        barangayInfoItems.push({
+          _id: 'site-name',
+          label: 'System Name',
+          value: publicView.siteName,
+          icon: 'home',
+          type: 'barangay-info'
+        });
+      }
+      
+      if (publicView.barangayName) {
+        barangayInfoItems.push({
+          _id: 'barangay-name',
+          label: 'Barangay Name',
+          value: publicView.barangayName,
+          icon: 'environment',
+          type: 'barangay-info'
+        });
+      }
+      
+      if (publicView.barangayAddress) {
+        barangayInfoItems.push({
+          _id: 'barangay-address',
+          label: 'Address',
+          value: publicView.barangayAddress,
+          icon: 'map',
+          type: 'barangay-info'
+        });
+      }
+      
+      // If no info available, return array with placeholder
+      if (barangayInfoItems.length === 0) {
+        return res.json([{
+          _id: 'placeholder',
+          label: 'Barangay Information',
+          value: 'No barangay information configured',
+          icon: 'info',
+          type: 'barangay-info',
+          isPlaceholder: true
+        }]);
+      }
+      
+      console.log(`[Barangay Info] Returning ${barangayInfoItems.length} items`);
+      return res.json(barangayInfoItems);
+    } catch (err) {
+      console.error('GET /api/settings/public/barangay-info error', err);
+      return res.status(500).json({ message: 'Failed to load barangay info' });
+    }
+  });
+  console.log('Public barangay-info endpoint enabled at GET /api/settings/public/barangay-info');
+} catch (e) {
+  console.error('Failed to mount public barangay-info endpoint', e);
+}
+
+// GET /api/settings/public/contact-info - Returns contact information as carousel items
+// Fetches from publicviews collection or falls back to SystemSetting
+try {
+  const SystemSetting = require('./models/SystemSetting');
+  const PublicView = require('./models/PublicView');
+  
+  app.get('/api/settings/public/contact-info', async (req, res) => {
+    try {
+      console.log('[Contact Info] GET /api/settings/public/contact-info called');
+      
+      // Try to fetch from PublicView collection first (cached data)
+      let publicView = await PublicView.findOne({ isActive: true }).lean();
+      
+      // Fallback to SystemSetting if PublicView not found
+      if (!publicView) {
+        publicView = await SystemSetting.findOne().lean();
+      }
+      
+      if (!publicView) {
+        console.log('[Contact Info] No contact data found, returning empty array');
+        return res.json([]);
+      }
+      
+      // Validation helpers
+      const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+      const isValidPhone = (phone) => /^[\d\s\-\+\(\)]+$/.test(phone) && phone.replace(/\D/g, '').length >= 7;
+      
+      // Format as carousel items
+      const contactInfoItems = [];
+      
+      if (publicView.contactEmail && isValidEmail(publicView.contactEmail)) {
+        contactInfoItems.push({
+          _id: 'contact-email',
+          label: 'Email Address',
+          value: publicView.contactEmail,
+          icon: 'mail',
+          type: 'contact-info',
+          contactType: 'email',
+          link: `mailto:${publicView.contactEmail}`
+        });
+      }
+      
+      if (publicView.contactPhone && isValidPhone(publicView.contactPhone)) {
+        contactInfoItems.push({
+          _id: 'contact-phone',
+          label: 'Phone Number',
+          value: publicView.contactPhone,
+          icon: 'phone',
+          type: 'contact-info',
+          contactType: 'phone',
+          link: `tel:${publicView.contactPhone}`
+        });
+      }
+      
+      // If no contact info available, return array with placeholder
+      if (contactInfoItems.length === 0) {
+        return res.json([{
+          _id: 'placeholder',
+          label: 'Contact Information',
+          value: 'No contact information configured',
+          icon: 'info',
+          type: 'contact-info',
+          isPlaceholder: true
+        }]);
+      }
+      
+      console.log(`[Contact Info] Returning ${contactInfoItems.length} items`);
+      return res.json(contactInfoItems);
+    } catch (err) {
+      console.error('GET /api/settings/public/contact-info error', err);
+      return res.status(500).json({ message: 'Failed to load contact info' });
+    }
+  });
+  console.log('Public contact-info endpoint enabled at GET /api/settings/public/contact-info');
+} catch (e) {
+  console.error('Failed to mount public contact-info endpoint', e);
+}
+
 // Optional public settings endpoint for quick local debugging.
 // Enable by setting DEBUG_PUBLIC_SETTINGS=true in the server environment.
 if (process.env.DEBUG_PUBLIC_SETTINGS === 'true') {
