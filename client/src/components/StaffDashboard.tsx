@@ -291,19 +291,21 @@ const StaffDashboard: React.FC = () => {
         (inq.assignedTo && Array.isArray(inq.assignedTo) && user && inq.assignedTo.includes(user._id)))
       );
       setInboxInquiries(filtered);
-      // Attempt to get count of processed documents from server-side processed_documents metadata
-      let processedCount = docRecords.length;
+      
+      // Get total documents count from both 'documents' and 'processed_documents' buckets
+      let totalDocuments = 0;
       try {
-        const resp = await axiosInstance.get('/processed-documents', { params: { page: 1, limit: 1 } });
-        const j = resp && resp.data ? resp.data : null;
-        if (j && typeof j.total === 'number') processedCount = j.total;
+        const resp = await axiosInstance.get('/analytics/total-documents-count');
+        if (resp && resp.data && typeof resp.data.totalCount === 'number') {
+          totalDocuments = resp.data.totalCount;
+        }
       } catch (e) {
-        // ignore and fall back to docRecords.length
+        console.warn('Failed to fetch total documents count:', e);
       }
 
       setStats({
         pendingRequests: docRecords.filter((d: any) => d.status === 'pending').length,
-        totalDocuments: processedCount,
+        totalDocuments: totalDocuments,
         completedRequests: docRecords.filter((d: any) => d.status === 'approved').length,
       });
     } catch (error) {

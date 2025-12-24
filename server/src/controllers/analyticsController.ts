@@ -554,3 +554,51 @@ export const getPendingRequestsCount = async (req: Request, res: Response) => {
     });
   }
 };
+
+/**
+ * Get total count of all available documents from both 'documents' and 'processed_documents' buckets
+ */
+export const getTotalDocumentsCount = async (req: Request, res: Response) => {
+  try {
+    const db = (require('mongoose').connection.db as any);
+    if (!db) {
+      return res.status(500).json({ message: 'Database connection not available', totalCount: 0 });
+    }
+
+    let documentsCount = 0;
+    let processedCount = 0;
+
+    // Count files in 'documents' GridFS bucket
+    try {
+      const filesCollection = db.collection('documents.files');
+      documentsCount = await filesCollection.countDocuments();
+    } catch (err) {
+      console.warn('Error counting documents in documents bucket:', err);
+    }
+
+    // Count files in 'processed_documents' GridFS bucket
+    try {
+      const processedFilesCollection = db.collection('processed_documents.files');
+      processedCount = await processedFilesCollection.countDocuments();
+    } catch (err) {
+      console.warn('Error counting documents in processed_documents bucket:', err);
+    }
+
+    const totalCount = documentsCount + processedCount;
+
+    res.json({
+      totalCount,
+      documentsCount,
+      processedCount,
+      success: true
+    });
+  } catch (error) {
+    console.error('Error fetching total documents count:', error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    res.status(500).json({
+      message: 'Error fetching total documents count',
+      error: errorMsg,
+      totalCount: 0
+    });
+  }
+};

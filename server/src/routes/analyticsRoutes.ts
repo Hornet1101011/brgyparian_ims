@@ -15,7 +15,8 @@ import {
 	getPersonalInfoRecords,
 	getDocumentRequests,
 	getProcessedDocumentsCount,
-	getPendingRequestsCount
+	getPendingRequestsCount,
+	getTotalDocumentsCount
 } from '../controllers/analyticsController';
 
 const router = express.Router();
@@ -24,6 +25,7 @@ router.get('/', (req: any, res: Response, next?: NextFunction) => getMonthlyAnal
 router.get('/personal-info', (req: any, res: Response) => getPersonalInfoRecords(req, res));
 router.get('/document-requests', (req: any, res: Response) => getDocumentRequests(req, res));
 router.get('/processed-documents-count', (req: any, res: Response) => getProcessedDocumentsCount(req, res));
+router.get('/total-documents-count', (req: any, res: Response) => getTotalDocumentsCount(req, res));
 router.get('/pending-requests-count', (req: any, res: Response) => getPendingRequestsCount(req, res));
 router.get('/gender', (req: any, res: Response) => getGenderDistribution(req, res));
 router.get('/field', (req: any, res: Response) => getFieldDistribution(req, res));
