@@ -166,6 +166,8 @@ const StatisticsInner: React.FC = () => {
   // Summary data
   const totalResidents = useMemo(() => summaryQuery.data?.totalResidents ?? 0, [summaryQuery.data]);
   const totalDocuments = useMemo(() => summaryQuery.data?.totalDocuments ?? 0, [summaryQuery.data]);
+  const templatesCount = useMemo(() => summaryQuery.data?.templatesCount ?? 0, [summaryQuery.data]);
+  const processedDocuments = useMemo(() => summaryQuery.data?.processedDocuments ?? 0, [summaryQuery.data]);
   const pendingRequests = useMemo(() => summaryQuery.data?.pendingRequests ?? 0, [summaryQuery.data]);
   
   const ageBarData = useMemo(() => {
@@ -366,9 +368,11 @@ const StatisticsInner: React.FC = () => {
                   <Typography.Text type="secondary" style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b', marginBottom: 8 }}>
                     Total Documents
                   </Typography.Text>
-                  <Typography.Title level={2} style={{ margin: 0, color: '#52c41a', fontWeight: 700 }}>
+                  <Typography.Title level={2} style={{ margin: 0, marginBottom: 12, color: '#52c41a', fontWeight: 700 }}>
                     {totalDocuments.toLocaleString()}
                   </Typography.Title>
+                  <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 6 }}>Templates: <span style={{ fontWeight: 600, color: '#52c41a' }}>{templatesCount}</span></div>
+                  <div style={{ fontSize: 11, color: '#6b7280' }}>Processed: <span style={{ fontWeight: 600, color: '#52c41a' }}>{processedDocuments}</span></div>
                 </div>
               )}
             </Card>

@@ -628,6 +628,8 @@ export const fetchDashboardSummary = async (
 ): Promise<{
   totalResidents: number;
   totalDocuments: number;
+  templatesCount: number;
+  processedDocuments: number;
   pendingRequests: number;
   maleCount: number;
   femaleCount: number;
@@ -636,13 +638,28 @@ export const fetchDashboardSummary = async (
   dataQuality: number;
 }> => {
   const records = await fetchPersonalInfoRecords(options);
-  const totalDocuments = await fetchProcessedDocumentsCount();
   const pendingRequests = await fetchPendingRequestsCount();
+  
+  // Fetch document counts from the total-documents-count endpoint
+  let totalDocuments = 0;
+  let templatesCount = 0;
+  let processedDocuments = 0;
+  try {
+    const response = await axiosInstance.get('/analytics/total-documents-count');
+    totalDocuments = response.data?.totalCount || 0;
+    templatesCount = response.data?.documentsCount || 0;
+    processedDocuments = response.data?.processedCount || 0;
+  } catch (error) {
+    console.error('Failed to fetch document counts:', error);
+    totalDocuments = await fetchProcessedDocumentsCount();
+  }
   
   if (records.length === 0) {
     return {
       totalResidents: 0,
       totalDocuments,
+      templatesCount,
+      processedDocuments,
       pendingRequests,
       maleCount: 0,
       femaleCount: 0,
@@ -672,6 +689,8 @@ export const fetchDashboardSummary = async (
   return {
     totalResidents: records.length,
     totalDocuments,
+    templatesCount,
+    processedDocuments,
     pendingRequests,
     maleCount,
     femaleCount,
