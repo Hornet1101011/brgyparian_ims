@@ -320,9 +320,12 @@ router.post('/test-smtp', requireAuth, isAdmin, async (req, res) => {
 // Returns only public-facing system settings (no sensitive data)
 router.get('/public', async (req, res) => {
   try {
+    console.log('[DEBUG] GET /api/settings/public called - attempting to fetch settings');
     let settings = await SystemSetting.findOne().lean();
+    console.log('[DEBUG] Settings from DB:', settings ? 'Found' : 'Not found');
     if (!settings) {
       // Return minimal default shape
+      console.log('[DEBUG] No settings in DB, returning defaults');
       settings = {
         siteName: 'Barangay Information System',
         barangayName: '',
@@ -343,6 +346,7 @@ router.get('/public', async (req, res) => {
       systemNotice: settings.systemNotice || ''
     };
     
+    console.log('[DEBUG] Returning public settings:', publicSettings);
     return res.json(publicSettings);
   } catch (err) {
     console.error('GET /api/settings/public error', err);
