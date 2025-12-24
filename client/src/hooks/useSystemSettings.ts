@@ -40,7 +40,7 @@ export const useSystemSettings = (autoRefresh: boolean = true): UseSystemSetting
     contactPhone: defaultSystemSettings.contactPhone || '+63 912 345 6789',
     systemNotice: defaultSystemSettings.systemNotice || ''
   });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const mountedRef = useRef(true);
