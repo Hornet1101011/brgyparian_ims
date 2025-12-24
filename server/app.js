@@ -149,6 +149,34 @@ mongoose.connection.on('connected', async () => {
   } catch (err) {
     console.error('Error ensuring processed_documents bucket', err && err.message);
   }
+
+  // Initialize system settings if they don't exist
+  try {
+    const SystemSetting = require('./models/SystemSetting');
+    const existingSettings = await SystemSetting.findOne();
+    if (!existingSettings) {
+      console.log('[Init] No system settings found - creating default settings...');
+      const defaultSettings = {
+        siteName: 'Barangay Information Management System',
+        barangayName: 'Barangay Parian',
+        barangayAddress: 'Barangay Parian, Calamba, Laguna',
+        contactEmail: 'barangayparian@gmail.com',
+        contactPhone: '09614215746',
+        systemNotice: '',
+        maintenanceMode: false,
+        allowRegistrations: true,
+        requireEmailVerification: true,
+        maxDocumentRequestsPerUser: 5,
+        documentProcessingDays: 3,
+        allowMultipleAccountsPerIP: false,
+        maxAccountsPerIP: 1,
+      };
+      await SystemSetting.create(defaultSettings);
+      console.log('[Init] ✅ System settings initialized successfully');
+    }
+  } catch (err) {
+    console.warn('[Init] Warning: Failed to initialize system settings:', err && err.message);
+  }
 });
 
 

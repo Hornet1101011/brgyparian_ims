@@ -583,7 +583,11 @@ const admin = {
               // Return a minimal default settings object to keep UI functional
               const defaults: any = {
                 siteName: 'Barangay Information System',
+                barangayName: '',
+                barangayAddress: '',
                 contactEmail: '',
+                contactPhone: '',
+                systemNotice: '',
                 smtp: { passwordSet: false },
               };
               return defaults as SystemSettings;
