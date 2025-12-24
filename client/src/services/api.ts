@@ -208,29 +208,71 @@ export const getInbox = async () => {
 export const verificationAPI = {
   getRequests: async () => axiosInstance.get('/verification/admin/requests').then(res => res.data),
   verifyUser: async (userId: string, verified: boolean) => axiosInstance.post(`/verification/admin/verify-user/${userId}`, { verified }).then(res => res.data),
-  // Function to get file with proper authentication headers
+  // Function to get file URL with proper authentication headers (for img src)
   getFileUrl: (fileId: string) => `${API_URL.replace(/\/$/, '')}/verification/file/${fileId}`,
-  // Download file with proper auth headers
+  // Extract filename from Content-Disposition header
+  getFilenameFromHeader: (contentDisposition: string): string => {
+    if (!contentDisposition) return 'verification-file';
+    const matches = contentDisposition.match(/filename="([^"]+)"/);
+    return matches ? matches[1] : 'verification-file';
+  },
+  // Download file with proper auth headers and correct filename
   downloadFile: async (fileId: string) => {
     try {
       const response = await axiosInstance.get(`/verification/file/${fileId}`, {
         responseType: 'blob'
       });
-      return response.data;
+      // Extract filename from Content-Disposition header
+      const contentDisposition = response.headers['content-disposition'] || '';
+      const filename = verificationAPI.getFilenameFromHeader(contentDisposition);
+      
+      // Create blob URL and download
+      const url = URL.createObjectURL(response.data);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      return { blob: response.data, filename };
     } catch (error) {
       console.error('Failed to download file:', error);
       throw error;
     }
   },
-  // View file with proper auth headers
+  // View file with proper auth headers - opens in new tab for viewing
   viewFile: async (fileId: string) => {
     try {
       const response = await axiosInstance.get(`/verification/file/${fileId}`, {
         responseType: 'blob'
       });
+      // Extract content type and filename
+      const contentType = response.headers['content-type'] || 'application/octet-stream';
+      const contentDisposition = response.headers['content-disposition'] || '';
+      const filename = verificationAPI.getFilenameFromHeader(contentDisposition);
+      
+      // Create blob URL for viewing
       const url = URL.createObjectURL(response.data);
-      window.open(url, '_blank');
-      return url;
+      
+      // For images, open directly; for other files, open with viewer or as blob URL
+      if (contentType.startsWith('image/')) {
+        window.open(url, '_blank');
+      } else if (contentType === 'application/pdf') {
+        // PDF viewer
+        window.open(url, '_blank');
+      } else {
+        // For other file types, trigger download instead of view
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+      
+      return { url, filename };
     } catch (error) {
       console.error('Failed to view file:', error);
       throw error;

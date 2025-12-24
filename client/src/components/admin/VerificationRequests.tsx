@@ -20,6 +20,7 @@ const VerificationRequests: React.FC = () => {
   const [actionLoading, setActionLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedReq, setSelectedReq] = useState<any | null>(null);
+  const [fileActionLoading, setFileActionLoading] = useState(false);
 
   const loadRequests = async () => {
     setLoading(true);
@@ -91,22 +92,6 @@ const VerificationRequests: React.FC = () => {
   const closeFilesModal = () => {
     setSelectedReq(null);
     setModalVisible(false);
-  };
-
-  const downloadFile = async (fileId: string, filename: string) => {
-    try {
-      const url = verificationAPI.getFileUrl(fileId);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = filename || 'verification-file';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      message.success('Download started');
-    } catch (err) {
-      console.error('Download error:', err);
-      message.error('Failed to download file');
-    }
   };
 
   // Calculate stats
@@ -204,11 +189,17 @@ const VerificationRequests: React.FC = () => {
                     icon={<EyeOutlined />}
                     onClick={async () => {
                       try {
+                        setFileActionLoading(true);
                         await verificationAPI.viewFile(fileId);
+                        message.success('Opening file...');
                       } catch (err) {
+                        console.error('View error:', err);
                         message.error('Failed to view file');
+                      } finally {
+                        setFileActionLoading(false);
                       }
                     }}
+                    loading={fileActionLoading}
                     style={{ padding: '4px 8px', fontWeight: 500 }}
                   >
                     {label}
@@ -525,13 +516,20 @@ const VerificationRequests: React.FC = () => {
                           type="primary"
                           size="small"
                           block
+                          icon={<EyeOutlined />}
                           onClick={async () => {
                             try {
+                              setFileActionLoading(true);
                               await verificationAPI.viewFile(fileId);
+                              message.success('Opening file...');
                             } catch (err) {
+                              console.error('View error:', err);
                               message.error('Failed to view file');
+                            } finally {
+                              setFileActionLoading(false);
                             }
                           }}
+                          loading={fileActionLoading}
                         >
                           View
                         </Button>
@@ -541,20 +539,17 @@ const VerificationRequests: React.FC = () => {
                           icon={<DownloadOutlined />}
                           onClick={async () => {
                             try {
-                              const blob = await verificationAPI.downloadFile(fileId);
-                              const url = URL.createObjectURL(blob);
-                              const link = document.createElement('a');
-                              link.href = url;
-                              link.download = label || 'verification-file';
-                              document.body.appendChild(link);
-                              link.click();
-                              document.body.removeChild(link);
-                              URL.revokeObjectURL(url);
+                              setFileActionLoading(true);
+                              await verificationAPI.downloadFile(fileId);
                               message.success('File downloaded successfully');
                             } catch (err) {
+                              console.error('Download error:', err);
                               message.error('Failed to download file');
+                            } finally {
+                              setFileActionLoading(false);
                             }
                           }}
+                          loading={fileActionLoading}
                         >
                           Download
                         </Button>
