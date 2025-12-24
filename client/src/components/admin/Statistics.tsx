@@ -331,9 +331,10 @@ const StatisticsInner: React.FC = () => {
               variant="borderless" 
               style={{ 
                 borderRadius: 12, 
-                boxShadow: '0 2px 12px rgba(24, 144, 255, 0.08)',
-                border: '1px solid #e0f2fe',
-                background: 'linear-gradient(135deg, #f0f9ff 0%, #ffffff 100%)',
+                boxShadow: '0 2px 12px rgba(0, 0, 0, 0.08)',
+                border: 'none',
+                borderLeft: '4px solid #1890ff',
+                background: '#ffffff',
                 textAlign: 'left' 
               }} 
               styles={{ body: { padding: 20 } }}
@@ -358,9 +359,10 @@ const StatisticsInner: React.FC = () => {
               variant="borderless" 
               style={{ 
                 borderRadius: 12, 
-                boxShadow: '0 2px 12px rgba(82, 196, 26, 0.08)',
-                border: '1px solid #d4edda',
-                background: 'linear-gradient(135deg, #f6ffed 0%, #ffffff 100%)',
+                boxShadow: '0 2px 12px rgba(0, 0, 0, 0.08)',
+                border: 'none',
+                borderLeft: '4px solid #52c41a',
+                background: '#ffffff',
                 textAlign: 'left' 
               }} 
               styles={{ body: { padding: 20 } }}
@@ -387,9 +389,10 @@ const StatisticsInner: React.FC = () => {
               variant="borderless" 
               style={{ 
                 borderRadius: 12, 
-                boxShadow: '0 2px 12px rgba(245, 158, 11, 0.08)',
-                border: '1px solid #fce3bf',
-                background: 'linear-gradient(135deg, #fffbeb 0%, #ffffff 100%)',
+                boxShadow: '0 2px 12px rgba(0, 0, 0, 0.08)',
+                border: 'none',
+                borderLeft: '4px solid #f59e0b',
+                background: '#ffffff',
                 textAlign: 'left' 
               }} 
               styles={{ body: { padding: 20 } }}
