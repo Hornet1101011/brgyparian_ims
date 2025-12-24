@@ -46,24 +46,36 @@ export const useContactInfo = (autoRefresh: boolean = true): UseContactInfoResul
         }
       } catch (fetchErr: any) {
         if (fetchErr?.response?.status === 404) {
-          console.warn('[useContactInfo] Endpoint not found (404), using defaults');
+          console.warn('[useContactInfo] Endpoint not found (404), using default carousel items');
         } else {
           const errorMsg = fetchErr instanceof Error ? fetchErr.message : 'Failed to fetch contact info';
           console.error('[useContactInfo] Error fetching items:', errorMsg, fetchErr);
         }
       }
 
-      // Fallback to default empty state
+      // Fallback to default carousel items from config
       if (mountedRef.current) {
-        console.log('[useContactInfo] Using empty state');
-        setItems([{
-          _id: 'placeholder',
-          label: 'Contact Information',
-          value: 'No contact information configured',
-          icon: 'info',
-          type: 'contact-info',
-          isPlaceholder: true
-        }]);
+        console.log('[useContactInfo] Using default carousel items');
+        setItems([
+          {
+            _id: 'contact-email',
+            label: 'Email Address',
+            value: 'info@barangayuno.local',
+            icon: 'mail',
+            type: 'contact-info',
+            contactType: 'email',
+            link: 'mailto:info@barangayuno.local'
+          },
+          {
+            _id: 'contact-phone',
+            label: 'Phone Number',
+            value: '+63 912 345 6789',
+            icon: 'phone',
+            type: 'contact-info',
+            contactType: 'phone',
+            link: 'tel:+639123456789'
+          }
+        ]);
       }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to fetch contact info';
@@ -71,15 +83,27 @@ export const useContactInfo = (autoRefresh: boolean = true): UseContactInfoResul
 
       if (mountedRef.current) {
         setError(err instanceof Error ? err : new Error('Failed to fetch contact info'));
-        // Use empty state as fallback
-        setItems([{
-          _id: 'placeholder',
-          label: 'Contact Information',
-          value: 'Unable to load contact information',
-          icon: 'info',
-          type: 'contact-info',
-          isPlaceholder: true
-        }]);
+        // Use default carousel items as fallback
+        setItems([
+          {
+            _id: 'contact-email',
+            label: 'Email Address',
+            value: 'info@barangayuno.local',
+            icon: 'mail',
+            type: 'contact-info',
+            contactType: 'email',
+            link: 'mailto:info@barangayuno.local'
+          },
+          {
+            _id: 'contact-phone',
+            label: 'Phone Number',
+            value: '+63 912 345 6789',
+            icon: 'phone',
+            type: 'contact-info',
+            contactType: 'phone',
+            link: 'tel:+639123456789'
+          }
+        ]);
       }
     } finally {
       if (mountedRef.current) {

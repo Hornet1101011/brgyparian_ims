@@ -44,24 +44,39 @@ export const useBarangayInfo = (autoRefresh: boolean = true): UseBarangayInfoRes
         }
       } catch (fetchErr: any) {
         if (fetchErr?.response?.status === 404) {
-          console.warn('[useBarangayInfo] Endpoint not found (404), using defaults');
+          console.warn('[useBarangayInfo] Endpoint not found (404), using default carousel items');
         } else {
           const errorMsg = fetchErr instanceof Error ? fetchErr.message : 'Failed to fetch barangay info';
           console.error('[useBarangayInfo] Error fetching items:', errorMsg, fetchErr);
         }
       }
 
-      // Fallback to default empty state
+      // Fallback to default carousel items from config
       if (mountedRef.current) {
-        console.log('[useBarangayInfo] Using empty state');
-        setItems([{
-          _id: 'placeholder',
-          label: 'Barangay Information',
-          value: 'No barangay information configured',
-          icon: 'info',
-          type: 'barangay-info',
-          isPlaceholder: true
-        }]);
+        console.log('[useBarangayInfo] Using default carousel items');
+        setItems([
+          {
+            _id: 'site-name',
+            label: 'System Name',
+            value: 'Barangay Portal',
+            icon: 'home',
+            type: 'barangay-info'
+          },
+          {
+            _id: 'barangay-name',
+            label: 'Barangay Name',
+            value: 'Barangay Uno',
+            icon: 'environment',
+            type: 'barangay-info'
+          },
+          {
+            _id: 'barangay-address',
+            label: 'Address',
+            value: '123 Main St, City, Province',
+            icon: 'map',
+            type: 'barangay-info'
+          }
+        ]);
       }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to fetch barangay info';
@@ -69,15 +84,30 @@ export const useBarangayInfo = (autoRefresh: boolean = true): UseBarangayInfoRes
 
       if (mountedRef.current) {
         setError(err instanceof Error ? err : new Error('Failed to fetch barangay info'));
-        // Use empty state as fallback
-        setItems([{
-          _id: 'placeholder',
-          label: 'Barangay Information',
-          value: 'Unable to load barangay information',
-          icon: 'info',
-          type: 'barangay-info',
-          isPlaceholder: true
-        }]);
+        // Use default carousel items as fallback
+        setItems([
+          {
+            _id: 'site-name',
+            label: 'System Name',
+            value: 'Barangay Portal',
+            icon: 'home',
+            type: 'barangay-info'
+          },
+          {
+            _id: 'barangay-name',
+            label: 'Barangay Name',
+            value: 'Barangay Uno',
+            icon: 'environment',
+            type: 'barangay-info'
+          },
+          {
+            _id: 'barangay-address',
+            label: 'Address',
+            value: '123 Main St, City, Province',
+            icon: 'map',
+            type: 'barangay-info'
+          }
+        ]);
       }
     } finally {
       if (mountedRef.current) {
