@@ -2,12 +2,12 @@ import React from 'react';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import { TextField, Button, Box, Link, Paper, Container, InputAdornment, Alert, Typography, Checkbox, FormControlLabel } from '@mui/material';
-import { Upload as AntUpload, Progress as AntProgress, message as antdMessage, Button as AntButton, Tooltip, Steps, Tabs } from 'antd';
+import { Upload as AntUpload, Progress as AntProgress, message as antdMessage, Button as AntButton, Tooltip, Steps, Tabs, Input } from 'antd';
 import { Modal, Typography as AntTypography } from 'antd';
-import { UploadOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { UploadOutlined, InfoCircleOutlined, CloseOutlined } from '@ant-design/icons';
 import type { UploadFile } from 'antd/es/upload/interface';
 import type { AxiosProgressEvent } from 'axios';
-import { Email, Lock, Home, Phone, Person, Visibility, VisibilityOff } from '@mui/icons-material';
+import { Email, Lock, Home, Phone, Person, Visibility, VisibilityOff, LocationOn, Close } from '@mui/icons-material';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { axiosInstance } from '../services/api';
 
@@ -16,6 +16,9 @@ const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{6,}$/;
 
 // Name regex: letters, spaces, apostrophe, hyphen only
 const NAME_REGEX = /^[A-Za-z\s'-]+$/;
+
+// Philippine cellphone format: must start with 09, exactly 11 digits
+const PHILIPPINE_CONTACT_REGEX = /^09\d{9}$/;
 
 const validationSchema = Yup.object({
   username: Yup.string()
@@ -29,7 +32,9 @@ const validationSchema = Yup.object({
     .oneOf([Yup.ref('password'), undefined], 'Passwords must match')
     .required('Confirm Password is required'),
   address: Yup.string().required('Address is required'),
-  contactNumber: Yup.string().matches(/^\d{11}$/, 'Contact number must be exactly 11 digits').required('Contact Number is required'),
+  contactNumber: Yup.string()
+    .matches(PHILIPPINE_CONTACT_REGEX, 'Contact number must be Philippine format: 09XXXXXXXXX (starts with 09, 11 digits total)')
+    .required('Contact Number is required'),
   barangayID: Yup.string().required('Barangay ID is required'),
 });
 
@@ -80,6 +85,106 @@ const RegisterForm = () => {
     for (let i = 0; i < 6; i++) rand += chars.charAt(Math.floor(Math.random() * chars.length));
     return `brgyparian-${year}-${rand}`;
   }
+
+  // Google Maps modal state
+  const [showMapsModal, setShowMapsModal] = React.useState(false);
+  const [mapsSearchAddress, setMapsSearchAddress] = React.useState('Barangay Parian, Cebu, Philippines');
+  const [userLocation, setUserLocation] = React.useState<{ lat: number; lng: number } | null>(null);
+  const [pinnedLocation, setPinnedLocation] = React.useState<{ lat: number; lng: number } | null>(null);
+  const [addressSuggestions, setAddressSuggestions] = React.useState<Array<{ address: string; lat: number; lng: number }>>([]);
+  const [showSuggestions, setShowSuggestions] = React.useState(false);
+  const [loadingSuggestions, setLoadingSuggestions] = React.useState(false);
+  const suggestionsTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  // Get user's current location when maps modal opens
+  React.useEffect(() => {
+    if (showMapsModal && !userLocation && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          setUserLocation({ lat: latitude, lng: longitude });
+          setPinnedLocation({ lat: latitude, lng: longitude });
+        },
+        (error) => {
+          console.warn('Geolocation error:', error);
+          // Default to Barangay Parian if geolocation fails
+        }
+      );
+    }
+  }, [showMapsModal, userLocation]);
+
+  // Handle map pin placement - reverse geocode coordinates to address
+  const handleMapPin = React.useCallback(async (lat: number, lng: number) => {
+    setPinnedLocation({ lat, lng });
+    // Use reverse geocoding to get address from coordinates
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
+      );
+      const data = await response.json();
+      if (data.address) {
+        const addressParts = [
+          data.address.house_number,
+          data.address.road,
+          data.address.village || data.address.town,
+          data.address.city,
+          data.address.province,
+          data.address.postcode,
+        ].filter(Boolean);
+        const fullAddress = addressParts.join(', ');
+        setMapsSearchAddress(fullAddress || `${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+      }
+    } catch (error) {
+      console.warn('Reverse geocoding failed:', error);
+      // Fallback to coordinates if reverse geocoding fails
+      setMapsSearchAddress(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+    }
+  }, []);
+
+  // Fetch address suggestions based on search input
+  const fetchAddressSuggestions = React.useCallback(async (query: string) => {
+    if (!query || query.trim().length < 2) {
+      setAddressSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+    setLoadingSuggestions(true);
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query.toLowerCase())}&limit=8`
+      );
+      const data = await response.json();
+      const suggestions = data.map((item: any) => ({
+        address: item.display_name,
+        lat: parseFloat(item.lat),
+        lng: parseFloat(item.lon),
+      }));
+      setAddressSuggestions(suggestions);
+      setShowSuggestions(true);
+    } catch (error) {
+      console.warn('Address suggestions fetch failed:', error);
+      setAddressSuggestions([]);
+    } finally {
+      setLoadingSuggestions(false);
+    }
+  }, []);
+
+  // Handle address input change with debounced suggestions
+  const handleAddressInputChange = React.useCallback((value: string) => {
+    setMapsSearchAddress(value);
+    if (suggestionsTimerRef.current) clearTimeout(suggestionsTimerRef.current);
+    suggestionsTimerRef.current = setTimeout(() => {
+      fetchAddressSuggestions(value);
+    }, 500);
+  }, [fetchAddressSuggestions]);
+
+  // Handle selecting a suggestion
+  const handleSelectSuggestion = React.useCallback((suggestion: { address: string; lat: number; lng: number }) => {
+    setMapsSearchAddress(suggestion.address);
+    setPinnedLocation({ lat: suggestion.lat, lng: suggestion.lng });
+    setShowSuggestions(false);
+    setAddressSuggestions([]);
+  }, []);
 
   const formik = useFormik({
     initialValues: {
@@ -305,6 +410,7 @@ const RegisterForm = () => {
   // Real-time availability/status states for username/email
   const [usernameAvailable, setUsernameAvailable] = React.useState<boolean | null>(null);
   const [emailAvailable, setEmailAvailable] = React.useState<boolean | null>(null);
+  const [emailFormatValid, setEmailFormatValid] = React.useState<boolean | null>(null);
   const [checkingUsername, setCheckingUsername] = React.useState(false);
   const [checkingEmail, setCheckingEmail] = React.useState(false);
   const [checkingContact, setCheckingContact] = React.useState(false);
@@ -348,7 +454,13 @@ const RegisterForm = () => {
     if (emailTimerRef.current) {
       clearTimeout(emailTimerRef.current);
     }
-    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    
+    // Check email format first
+    const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+    const isValidFormat = emailRegex.test(email);
+    setEmailFormatValid(email ? isValidFormat : null);
+    
+    if (!email || !isValidFormat) {
       setCheckingEmail(false);
       return;
     }
@@ -458,9 +570,39 @@ const RegisterForm = () => {
     const cleaned = v.replace(/[^A-Za-z\s'-]/g, '');
     return capitalizeFirst(cleaned);
   };
-  // keep digits only and limit to 11 characters
-  const sanitizeContact = (v: string) => v.replace(/\D/g, '').slice(0, 11);
+  // keep digits only, enforce Philippine format (must start with 09), limit to 11 characters
+  const sanitizeContact = (v: string) => {
+    const digitsOnly = v.replace(/\D/g, '');
+    // If empty or starts with 9, prepend 0 (user likely omitted leading 0)
+    if (!digitsOnly) return '';
+    if (digitsOnly.length > 0 && digitsOnly[0] === '9' && digitsOnly.length <= 10) {
+      return ('0' + digitsOnly).slice(0, 11);
+    }
+    // Otherwise just take first 11 digits
+    return digitsOnly.slice(0, 11);
+  };
+  
+  // Format contact number for display (09XX-XXXX-XXX)
+  const formatContactDisplay = (num: string): string => {
+    if (!num) return '';
+    const digits = num.replace(/\D/g, '');
+    if (digits.length === 11) {
+      return `${digits.slice(0, 4)}-${digits.slice(4, 8)}-${digits.slice(8)}`;
+    }
+    return num;
+  };
   const sanitizeAddress = (v: string) => capitalizeFirst(v);
+  // Open Google Maps modal to let user find their address
+  const handleOpenGoogleMaps = () => {
+    setShowMapsModal(true);
+  };
+
+  // Handle address selection from Google Maps modal
+  const handleSelectAddressFromMaps = (address: string) => {
+    formik.setFieldValue('address', sanitizeAddress(address));
+    setShowMapsModal(false);
+    antdMessage.success('Address added to Permanent Address field');
+  };
 
   // Ensure all three verification files are selected before allowing registration
   const allFilesSelected = Boolean(proofFile && govIdFile && selfieFile);
@@ -486,6 +628,191 @@ const RegisterForm = () => {
           boxShadow: '0 20px 60px rgba(0,0,0,0.12)',
           border: '1px solid rgba(102,126,234,0.1)',
         }}>
+          {/* Google Maps Location Picker Modal */}
+          <Modal
+            title="📍 Find Your Address"
+            centered
+            visible={showMapsModal}
+            onCancel={() => setShowMapsModal(false)}
+            width={Math.min(900, window.innerWidth - 32)}
+            bodyStyle={{ padding: '16px', height: 'auto', maxHeight: '80vh', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}
+            footer={(
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                <AntButton onClick={() => setShowMapsModal(false)}>Cancel</AntButton>
+                <AntButton 
+                  type="primary" 
+                  onClick={() => handleSelectAddressFromMaps(mapsSearchAddress)}
+                  disabled={!mapsSearchAddress}
+                >
+                  Use This Address
+                </AntButton>
+              </div>
+            )}
+          >
+            <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 1.5 }}>
+              {/* Search/Address Input with Autocomplete */}
+              <Box sx={{ position: 'relative', zIndex: 5 }}>
+                <Typography variant="body2" sx={{ mb: 0.5, fontWeight: 600, color: '#0f172a', fontSize: { xs: 12, sm: 14 } }}>
+                  Selected Address:
+                </Typography>
+                <Input
+                  placeholder="Type address or click on map to place a pin"
+                  value={mapsSearchAddress}
+                  onChange={(e) => handleAddressInputChange(e.target.value)}
+                  onFocus={() => addressSuggestions.length > 0 && setShowSuggestions(true)}
+                  size="large"
+                  prefix={<LocationOn style={{ color: '#764ba2' }} />}
+                  style={{ fontSize: 14 }}
+                />
+                
+                {/* Address Suggestions Dropdown */}
+                {showSuggestions && addressSuggestions.length > 0 && (
+                  <Box sx={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    background: '#fff',
+                    border: '1px solid #e2e8f0',
+                    borderTop: 'none',
+                    borderRadius: '0 0 8px 8px',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                    zIndex: 10,
+                    maxHeight: 250,
+                    overflowY: 'auto',
+                  }}>
+                    {addressSuggestions.map((suggestion, idx) => (
+                      <Box
+                        key={idx}
+                        onClick={() => handleSelectSuggestion(suggestion)}
+                        sx={{
+                          padding: '10px 12px',
+                          borderBottom: idx < addressSuggestions.length - 1 ? '1px solid #f0f2f5' : 'none',
+                          cursor: 'pointer',
+                          transition: 'background-color 0.2s',
+                          '&:hover': {
+                            background: '#f8fafc',
+                          },
+                        }}
+                      >
+                        <Typography variant="body2" sx={{ color: '#0f172a', fontWeight: 500, fontSize: 13 }}>
+                          {suggestion.address.split(',').slice(0, 3).join(',').trim()}
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: 11 }}>
+                          {suggestion.address.split(',').slice(3).join(',').trim()}
+                        </Typography>
+                      </Box>
+                    ))}
+                  </Box>
+                )}
+                
+                {loadingSuggestions && (
+                  <Box sx={{ mt: 1, padding: '8px 12px', color: '#64748b', fontSize: 12 }}>
+                    Loading suggestions...
+                  </Box>
+                )}
+              </Box>
+
+              {/* Pin My Location Button */}
+              <Box sx={{ display: 'flex', gap: 1, zIndex: 4 }}>
+                <AntButton 
+                  type="primary" 
+                  onClick={() => {
+                    if (userLocation) {
+                      handleMapPin(userLocation.lat, userLocation.lng);
+                    } else {
+                      antdMessage.warning('Please enable geolocation or manually enter an address');
+                    }
+                  }}
+                  style={{ flex: 1 }}
+                  icon={<LocationOn style={{ fontSize: 16 }} />}
+                >
+                  Pin My Location
+                </AntButton>
+              </Box>
+
+              {/* Google Maps Embed (Desktop) or Redirect Button (Mobile) */}
+              <Box sx={{ flex: 1, minHeight: { xs: 300, md: 400 }, overflow: 'hidden', borderRadius: 2, border: '1px solid #e2e8f0', position: 'relative', display: { xs: 'none', md: 'block' }, zIndex: 1 }}>
+                <iframe
+                  key={pinnedLocation ? `${pinnedLocation.lat}-${pinnedLocation.lng}` : 'default'}
+                  width="100%"
+                  height="100%"
+                  frameBorder="0"
+                  style={{ border: 0, borderRadius: 8 }}
+                  src={
+                    userLocation
+                      ? `https://maps.google.com/maps?q=${userLocation.lat},${userLocation.lng}&output=embed&z=15`
+                      : `https://maps.google.com/maps?q=${encodeURIComponent(mapsSearchAddress)}&output=embed`
+                  }
+                  allowFullScreen={true}
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                />
+                {/* Overlay hint */}
+                <Box sx={{
+                  position: 'absolute',
+                  top: 10,
+                  left: 10,
+                  background: 'rgba(0,0,0,0.7)',
+                  color: '#fff',
+                  padding: '8px 12px',
+                  borderRadius: 1,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  pointerEvents: 'none',
+                  zIndex: 10,
+                }}>
+                  📌 Search location or edit address manually
+                </Box>
+              </Box>
+
+              {/* Google Maps Redirect Button (Mobile) */}
+              <Box sx={{ flex: 1, display: { xs: 'flex', md: 'none' }, flexDirection: 'column', gap: 1.5, justifyContent: 'center', alignItems: 'center', p: 2, background: '#f8fafc', borderRadius: 2, border: '1px solid #e2e8f0', minHeight: 250, zIndex: 1 }}>
+                <Typography variant="body2" sx={{ color: '#64748b', textAlign: 'center', fontWeight: 500, fontSize: { xs: 13, sm: 14 } }}>
+                  Open Google Maps to find and verify your location
+                </Typography>
+                <AntButton 
+                  type="primary" 
+                  size="large"
+                  onClick={() => {
+                    const mapsUrl = mapsSearchAddress
+                      ? `https://www.google.com/maps/search/${encodeURIComponent(mapsSearchAddress)}`
+                      : userLocation
+                      ? `https://www.google.com/maps?q=${userLocation.lat},${userLocation.lng}&z=15`
+                      : 'https://www.google.com/maps';
+                    window.open(mapsUrl, '_blank');
+                  }}
+                  style={{ width: '100%' }}
+                  icon={<LocationOn style={{ fontSize: 18 }} />}
+                >
+                  Open Google Maps
+                </AntButton>
+                <Typography variant="caption" sx={{ color: '#94a3b8', textAlign: 'center', fontSize: { xs: 11, sm: 12 } }}>
+                  Find your location on Google Maps, then copy the address and paste it above
+                </Typography>
+              </Box>
+
+              {/* Instructions */}
+              <Box sx={{ p: 1.5, background: '#f8fafc', borderRadius: 2, border: '1px solid #e2e8f0', zIndex: 1 }}>
+                <Typography variant="caption" sx={{ color: '#64748b', display: 'block', mb: 0.5, fontWeight: 600, fontSize: { xs: 11, sm: 12 } }}>
+                  💡 <strong>How to use:</strong>
+                </Typography>
+                <Typography variant="caption" sx={{ color: '#64748b', display: 'block', ml: 1.5, fontSize: { xs: 10, sm: 12 } }}>
+                  1. Type an address to see suggestions or select one from the list
+                </Typography>
+                <Typography variant="caption" sx={{ color: '#64748b', display: 'block', ml: 1.5, fontSize: { xs: 10, sm: 12 } }}>
+                  2. Click "Pin My Location" to automatically pin your current location
+                </Typography>
+                <Typography variant="caption" sx={{ color: '#64748b', display: 'block', ml: 1.5, fontSize: { xs: 10, sm: 12 } }}>
+                  3. Edit the address text field to refine or search again
+                </Typography>
+                <Typography variant="caption" sx={{ color: '#64748b', display: 'block', ml: 1.5, fontSize: { xs: 10, sm: 12 } }}>
+                  4. Click "Use This Address" to save the selected location to your profile
+                </Typography>
+              </Box>
+            </Box>
+          </Modal>
+
           {/* Header Section */}
           <Box sx={{ textAlign: 'center', mb: 4, pb: 3, borderBottom: '2px solid #f0f2f5' }}>
             <AntTypography.Title level={2} style={{ 
@@ -540,138 +867,160 @@ const RegisterForm = () => {
                 Account Information
               </Typography>
               
-            <TextField
-              fullWidth
-              margin="normal"
-              label="First Name"
-              name="firstName"
-              value={formik.values.firstName}
-              onChange={(e) => { formik.setFieldValue('firstName', sanitizeName(e.target.value)); }}
-              error={formik.touched.firstName && Boolean(formik.errors.firstName)}
-              helperText={formik.touched.firstName && formik.errors.firstName}
-              variant="outlined"
-              sx={{ 
-                '& .MuiOutlinedInput-root': { borderRadius: 2, background: '#ffffff', fontSize: 14 },
+            <Tooltip title="Your given name (e.g., John, Maria). Will auto-capitalize." placement="top">
+              <TextField
+                fullWidth
+                margin="normal"
+                label="First Name"
+                name="firstName"
+                value={formik.values.firstName}
+                onChange={(e) => { formik.setFieldValue('firstName', sanitizeName(e.target.value)); }}
+                error={formik.touched.firstName && Boolean(formik.errors.firstName)}
+                helperText={formik.touched.firstName && formik.errors.firstName}
+                variant="outlined"
+                sx={{ 
+                  '& .MuiOutlinedInput-root': { borderRadius: 2, background: '#ffffff', fontSize: 14 },
+                  '& .MuiInputBase-input': { padding: '12px 14px' },
+                  mb: 2
+                }}
+              />
+            </Tooltip>
+            <Tooltip title="Your mother's maiden name or middle name (e.g., Santos, Cruz). Optional." placement="top">
+              <TextField
+                fullWidth
+                margin="normal"
+                label="Middle Name (Optional)"
+                name="middleName"
+                value={formik.values.middleName}
+                onChange={(e) => { formik.setFieldValue('middleName', sanitizeName(e.target.value)); }}
+                error={formik.touched.middleName && Boolean(formik.errors.middleName)}
+                helperText={formik.touched.middleName && formik.errors.middleName}
+                variant="outlined"
+                sx={{ 
+                  '& .MuiOutlinedInput-root': { borderRadius: 2, background: '#ffffff', fontSize: 14 },
+                  '& .MuiInputBase-input': { padding: '12px 14px' },
+                  mb: 2
+                }}
+              />
+            </Tooltip>
+            <Tooltip title="Your family name (e.g., Habacon, Perez). Will auto-capitalize." placement="top">
+              <TextField
+                fullWidth
+                margin="normal"
+                label="Last Name"
+                name="lastName"
+                value={formik.values.lastName}
+                onChange={(e) => { formik.setFieldValue('lastName', sanitizeName(e.target.value)); }}
+                error={formik.touched.lastName && Boolean(formik.errors.lastName)}
+                helperText={formik.touched.lastName && formik.errors.lastName}
+                required
+                variant="outlined"
+                sx={{ 
+                  '& .MuiOutlinedInput-root': { borderRadius: 2, background: '#ffffff', fontSize: 14 },
+                  '& .MuiInputBase-input': { padding: '12px 14px' },
+                  mb: 2
+                }}
+              />
+            </Tooltip>
+            <Tooltip title="Name suffix if applicable (e.g., Jr., Sr., III, II). Optional." placement="top">
+              <TextField
+                fullWidth
+                margin="normal"
+                label="Name Extension (Optional)"
+                placeholder="e.g., Jr., Sr., III, II"
+                name="nameExtension"
+                value={formik.values.nameExtension}
+                onChange={(e) => { formik.setFieldValue('nameExtension', e.target.value.slice(0, 20)); }}
+                error={formik.touched.nameExtension && Boolean(formik.errors.nameExtension)}
+                helperText={formik.touched.nameExtension && formik.errors.nameExtension}
+                variant="outlined"
+                sx={{ 
+                  '& .MuiOutlinedInput-root': { borderRadius: 2, background: '#ffffff', fontSize: 14 },
+                  '& .MuiInputBase-input': { padding: '12px 14px' },
+                  mb: 2
+                }}
+              />
+            </Tooltip>
+            <Tooltip title="4-20 characters, letters & numbers only (e.g., john2025). Must be unique." placement="top">
+              <TextField
+                fullWidth
+                margin="normal"
+                label="Username"
+                name="username"
+                value={formik.values.username}
+                onChange={formik.handleChange}
+                error={
+                  (formik.touched.username && Boolean(formik.errors.username)) ||
+                  Boolean(fieldErrors.username) ||
+                  usernameAvailable === false
+                }
+                helperText={
+                  (formik.touched.username && formik.errors.username) ||
+                  fieldErrors.username ||
+                  (checkingUsername ? 'Checking availability...' : usernameAvailable === false ? 'Username already taken' : usernameAvailable === true ? '✓ Available' : '')
+                }
+                required
+                variant="outlined"
+                sx={{ 
+                  '& .MuiOutlinedInput-root': { borderRadius: 2, background: '#ffffff', fontSize: 14 },
+                  '& .MuiInputBase-input': { padding: '12px 14px' },
+                  mb: 2
+                }}
+              />
+            </Tooltip>
+            <Tooltip title="Valid email format: user@domain.com (e.g., john@example.com). Must be unique." placement="top">
+              <TextField
+                fullWidth
+                margin="normal"
+                label="Email Address"
+                name="email"
+                value={formik.values.email}
+                onChange={formik.handleChange}
+                error={
+                  (formik.touched.email && Boolean(formik.errors.email)) ||
+                  Boolean(fieldErrors.email) ||
+                  emailFormatValid === false ||
+                  emailAvailable === false
+                }
+                helperText={
+                  (formik.touched.email && formik.errors.email) ||
+                  fieldErrors.email ||
+                  (emailFormatValid === false ? '❌ Invalid email format' : 
+                   checkingEmail ? 'Checking email...' : 
+                   emailAvailable === false ? 'Email already registered' : 
+                   emailAvailable === true ? '✓ Email available' : 
+                   emailFormatValid === true ? '✓ Valid email format' : '')
+                }
+                required
+                variant="outlined"
+                sx={{ 
+                  '& .MuiOutlinedInput-root': { borderRadius: 2, background: '#ffffff', fontSize: 14 },
                 '& .MuiInputBase-input': { padding: '12px 14px' },
                 mb: 2
               }}
             />
-            <TextField
-              fullWidth
-              margin="normal"
-              label="Middle Name (Optional)"
-              name="middleName"
-              value={formik.values.middleName}
-              onChange={(e) => { formik.setFieldValue('middleName', sanitizeName(e.target.value)); }}
-              error={formik.touched.middleName && Boolean(formik.errors.middleName)}
-              helperText={formik.touched.middleName && formik.errors.middleName}
-              variant="outlined"
-              sx={{ 
-                '& .MuiOutlinedInput-root': { borderRadius: 2, background: '#ffffff', fontSize: 14 },
-                '& .MuiInputBase-input': { padding: '12px 14px' },
-                mb: 2
-              }}
-            />
-            <TextField
-              fullWidth
-              margin="normal"
-              label="Last Name"
-              name="lastName"
-              value={formik.values.lastName}
-              onChange={(e) => { formik.setFieldValue('lastName', sanitizeName(e.target.value)); }}
-              error={formik.touched.lastName && Boolean(formik.errors.lastName)}
-              helperText={formik.touched.lastName && formik.errors.lastName}
-              variant="outlined"
-              sx={{ 
-                '& .MuiOutlinedInput-root': { borderRadius: 2, background: '#ffffff', fontSize: 14 },
-                '& .MuiInputBase-input': { padding: '12px 14px' },
-                mb: 2
-              }}
-            />
-            <TextField
-              fullWidth
-              margin="normal"
-              label="Name Extension (Optional)"
-              placeholder="e.g., Jr., Sr., III, II"
-              name="nameExtension"
-              value={formik.values.nameExtension}
-              onChange={(e) => { formik.setFieldValue('nameExtension', e.target.value.slice(0, 20)); }}
-              error={formik.touched.nameExtension && Boolean(formik.errors.nameExtension)}
-              helperText={formik.touched.nameExtension && formik.errors.nameExtension}
-              variant="outlined"
-              sx={{ 
-                '& .MuiOutlinedInput-root': { borderRadius: 2, background: '#ffffff', fontSize: 14 },
-                '& .MuiInputBase-input': { padding: '12px 14px' },
-                mb: 2
-              }}
-            />
-            <TextField
-              fullWidth
-              margin="normal"
-              label="Username"
-              name="username"
-              value={formik.values.username}
-              onChange={formik.handleChange}
-              error={
-                (formik.touched.username && Boolean(formik.errors.username)) ||
-                Boolean(fieldErrors.username) ||
-                usernameAvailable === false
-              }
-              helperText={
-                (formik.touched.username && formik.errors.username) ||
-                fieldErrors.username ||
-                (checkingUsername ? 'Checking availability...' : usernameAvailable === false ? 'Username already taken' : usernameAvailable === true ? '✓ Available' : '')
-              }
-              variant="outlined"
-              sx={{ 
-                '& .MuiOutlinedInput-root': { borderRadius: 2, background: '#ffffff', fontSize: 14 },
-                '& .MuiInputBase-input': { padding: '12px 14px' },
-                mb: 2
-              }}
-            />
-            <TextField
-              fullWidth
-              margin="normal"
-              label="Email Address"
-              name="email"
-              value={formik.values.email}
-              onChange={formik.handleChange}
-              error={
-                (formik.touched.email && Boolean(formik.errors.email)) ||
-                Boolean(fieldErrors.email) ||
-                emailAvailable === false
-              }
-              helperText={
-                (formik.touched.email && formik.errors.email) ||
-                fieldErrors.email ||
-                (checkingEmail ? 'Checking email...' : emailAvailable === false ? 'Email already registered' : emailAvailable === true ? '✓ Available' : '')
-              }
-              variant="outlined"
-              sx={{ 
-                '& .MuiOutlinedInput-root': { borderRadius: 2, background: '#ffffff', fontSize: 14 },
-                '& .MuiInputBase-input': { padding: '12px 14px' },
-                mb: 2
-              }}
-            />
-            <TextField
-              fullWidth
-              margin="normal"
-              label="Password"
-              name="password"
-              type={showPassword ? "text" : "password"}
-              value={formik.values.password}
-              onChange={formik.handleChange}
-              error={formik.touched.password && Boolean(formik.errors.password)}
-              helperText={formik.touched.password && formik.errors.password}
-              variant="outlined"
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <Button
-                      onClick={() => setShowPassword((prev) => !prev)}
-                      tabIndex={-1}
-                      sx={{ minWidth: 0, p: 0, color: 'inherit' }}
-                    >
+            </Tooltip>
+            <Tooltip title="Min 6 characters: 1 uppercase, 1 number, 1 special char (!@#$%^&*)." placement="top">
+              <TextField
+                fullWidth
+                margin="normal"
+                label="Password"
+                name="password"
+                type={showPassword ? "text" : "password"}
+                value={formik.values.password}
+                onChange={formik.handleChange}
+                error={formik.touched.password && Boolean(formik.errors.password)}
+                helperText={formik.touched.password && formik.errors.password}
+                required
+                variant="outlined"
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <Button
+                        onClick={() => setShowPassword((prev) => !prev)}
+                        tabIndex={-1}
+                        sx={{ minWidth: 0, p: 0, color: 'inherit' }}
+                      >
                       {showPassword ? <VisibilityOff /> : <Visibility />}
                     </Button>
                   </InputAdornment>
@@ -696,9 +1045,11 @@ const RegisterForm = () => {
                 </Box>
               );
             })()}
-            <TextField
-              fullWidth
-              margin="normal"
+            </Tooltip>
+            <Tooltip title="Re-enter password to confirm match." placement="top">
+              <TextField
+                fullWidth
+                margin="normal"
               label="Confirm Password"
               name="confirmPassword"
               type={showConfirmPassword ? "text" : "password"}
@@ -725,6 +1076,7 @@ const RegisterForm = () => {
                 '& .MuiInputBase-input': { padding: '12px 14px' },
               }}
             />
+            </Tooltip>
             </Box>
 
             {/* Personal Information Section */}
@@ -734,48 +1086,94 @@ const RegisterForm = () => {
                 Personal Information
               </Typography>
               
-            <TextField
-              fullWidth
-              margin="normal"
-              label="Permanent Address"
-              name="address"
-              value={formik.values.address}
-              onChange={(e) => { formik.setFieldValue('address', sanitizeAddress(e.target.value)); }}
-              error={formik.touched.address && Boolean(formik.errors.address)}
-              helperText={formik.touched.address && formik.errors.address}
-              variant="outlined"
-              multiline
-              rows={2}
-              sx={{ 
-                '& .MuiOutlinedInput-root': { borderRadius: 2, background: '#ffffff', fontSize: 14 },
-                '& .MuiInputBase-input': { padding: '12px 14px' },
-                mb: 2
-              }}
-            />
-            <TextField
-              fullWidth
-              margin="normal"
-              label="Contact Number"
-              name="contactNumber"
-              value={formik.values.contactNumber}
-              onChange={(e) => { formik.setFieldValue('contactNumber', sanitizeContact(e.target.value)); }}
-              error={
-                (formik.touched.contactNumber && Boolean(formik.errors.contactNumber)) ||
-                Boolean(fieldErrors.contactNumber) ||
-                (formik.touched.contactNumber && contactAvailable === false)
-              }
-              helperText={
-                (formik.touched.contactNumber && formik.errors.contactNumber) ||
-                fieldErrors.contactNumber ||
-                (checkingContact ? 'Checking contact...' : contactAvailable === false ? 'Already registered' : contactAvailable === true ? '✓ Available' : '')
-              }
-              inputProps={{ inputMode: 'numeric', maxLength: 11 }}
-              variant="outlined"
-              sx={{ 
-                '& .MuiOutlinedInput-root': { borderRadius: 2, background: '#ffffff', fontSize: 14 },
-                '& .MuiInputBase-input': { padding: '12px 14px' },
-              }}
-            />
+            <Tooltip title="Your residential address (e.g., 123 Main St, Barangay Parian). Will auto-capitalize." placement="top">
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                <TextField
+                  fullWidth
+                  margin="normal"
+                  label="Permanent Address"
+                  name="address"
+                  value={formik.values.address}
+                  onChange={(e) => { formik.setFieldValue('address', sanitizeAddress(e.target.value)); }}
+                  error={formik.touched.address && Boolean(formik.errors.address)}
+                  helperText={formik.touched.address && formik.errors.address}
+                  variant="outlined"
+                  multiline
+                  rows={2}
+                  sx={{ 
+                    '& .MuiOutlinedInput-root': { borderRadius: 2, background: '#ffffff', fontSize: 14 },
+                    '& .MuiInputBase-input': { padding: '12px 14px' },
+                  }}
+                />
+                <Tooltip title="Open Google Maps to find your location" placement="top">
+                  <Button
+                    variant="outlined"
+                    onClick={handleOpenGoogleMaps}
+                    sx={{
+                      flexShrink: 0,
+                      minWidth: 56,
+                      width: 56,
+                      height: 56,
+                      p: 0,
+                      borderRadius: 2,
+                      borderColor: '#764ba2',
+                      color: '#764ba2',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      '&:hover': {
+                        borderColor: '#667eea',
+                        color: '#667eea',
+                        background: 'rgba(102,126,234,0.05)',
+                      },
+                    }}
+                  >
+                    <LocationOn sx={{ fontSize: 24 }} />
+                  </Button>
+                </Tooltip>
+              </Box>
+            </Tooltip>
+            <Box sx={{ mb: 2 }} />
+            <Box sx={{ mb: 2 }}>
+              <Tooltip title="Philippine cellphone format: 09XX-XXXX-XXX (starts with 09, 11 digits total). Examples: Globe 0917, Smart 0910, Sun 0922. Must be unique." placement="top">
+                <TextField
+                  fullWidth
+                  margin="normal"
+                  label="Contact Number"
+                  name="contactNumber"
+                  placeholder="e.g., 09171234567"
+                  value={formik.values.contactNumber}
+                  onChange={(e) => { formik.setFieldValue('contactNumber', sanitizeContact(e.target.value)); }}
+                  error={
+                    (formik.touched.contactNumber && Boolean(formik.errors.contactNumber)) ||
+                    Boolean(fieldErrors.contactNumber) ||
+                    (formik.touched.contactNumber && contactAvailable === false)
+                  }
+                  helperText={
+                    (formik.touched.contactNumber && formik.errors.contactNumber) ||
+                    fieldErrors.contactNumber ||
+                    (checkingContact ? 'Checking contact...' : contactAvailable === false ? 'Already registered' : contactAvailable === true ? '✓ Available' : '')
+                  }
+                  inputProps={{ inputMode: 'numeric', maxLength: 11 }}
+                  required
+                  variant="outlined"
+                  sx={{ 
+                    '& .MuiOutlinedInput-root': { borderRadius: 2, background: '#ffffff', fontSize: 14 },
+                    '& .MuiInputBase-input': { padding: '12px 14px' },
+                  }}
+                />
+              </Tooltip>
+              {formik.values.contactNumber && formik.values.contactNumber.length === 11 && (
+                <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: '#667eea', fontWeight: 600, fontSize: 12 }}>
+                  ✓ Format: {formatContactDisplay(formik.values.contactNumber)}
+                </Typography>
+              )}
+              {!formik.values.contactNumber && !checkingContact && (
+                <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: '#94a3b8', fontSize: 12 }}>
+                  Format: 09XXXXXXXXX (11 digits)
+                </Typography>
+              )}
+            </Box>
             </Box>
 
             {/* Verification Section */}

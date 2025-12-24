@@ -3,108 +3,239 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #40a9ff 0%, #9254de 50%, #ff85c0 100%);
-  padding: 28px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 20px;
+}
+
+.login-page.three-column {
+  padding: 20px 16px;
+  align-items: stretch;
 }
 
 .login-container {
   width: 100%;
-  max-width: 1400px; /* increased container width */
+  max-width: 1400px;
 }
 
-/* Three-pane layout wrapper */
-.two-pane { width: 100%; }
-.two-pane-row { min-height: 80vh; display: flex; }
-.pane { display: flex; align-items: center; justify-content: center; }
-.pane-inner { width: 100%; display: flex; align-items: center; justify-content: center; }
-.left-pane { padding: 12px; }
-.center-pane .pane-inner { padding: 12px; }
-.right-pane .pane-inner { padding: 12px; }
-
-/* Partition widths for medium+ screens: 50% / 50% */
-@media (min-width: 768px) {
-  .left-pane { flex: 0 0 50%; max-width: 50%; }
-  .center-pane { flex: 0 0 50%; max-width: 50%; }
+.three-column-container {
+  width: 100%;
+  max-width: 1600px;
 }
 
+/* Three-column layout */
+.three-column-row {
+  min-height: 70vh;
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+}
+
+.pane {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+}
+
+.pane-inner {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.left-pane {
+  padding: 12px;
+}
+
+.center-pane {
+  padding: 12px;
+}
+
+.right-pane {
+  padding: 12px;
+}
+
+.center-pane .pane-inner {
+  justify-content: center;
+}
+
+.stats-pane {
+  padding: 12px;
+}
+
+.login-pane {
+  padding: 12px;
+}
+
+.officials-pane {
+  padding: 12px;
+}
+
+/* Responsive breakpoints */
+@media (max-width: 1200px) {
+  .three-column-row {
+    min-height: auto;
+    flex-direction: column;
+  }
+  
+  .stats-pane,
+  .login-pane,
+  .officials-pane {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .login-page.three-column {
+    padding: 16px 12px;
+  }
+  
+  .three-column-row {
+    flex-direction: column;
+    min-height: auto;
+    gap: 16px;
+  }
+  
+  .pane {
+    width: 100%;
+  }
+  
+  .stats-pane,
+  .login-pane,
+  .officials-pane {
+    width: 100%;
+    max-width: 100%;
+  }
+}
+
+/* Glass card base styles - removes default padding conflicts */
 .glass-card {
-  /* 50% white so panels are semi-opaque */
   background: rgba(255,255,255,0.5);
   backdrop-filter: blur(10px) saturate(120%);
   border-radius: 16px;
   box-shadow: 0 8px 24px rgba(2,6,23,0.10);
   border: 1px solid rgba(255,255,255,0.6);
+  display: flex;
+  flex-direction: column;
+  height: auto;
+}
+
+.glass-card .ant-card-body {
+  padding: 0;
+  flex: 1;
+}
+
+.glass-card.officials-card .ant-card-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding: 0;
 }
 
 .login-card {
+  padding: 0;
+  background: rgba(255,255,255,0.98);
+  border: 1px solid rgba(255,255,255,0.4);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+}
+
+.login-card .ant-card-body {
   padding: 36px;
+  flex: 1;
 }
 
-/* Make the login card slightly more opaque and add a subtle inner highlight/border */
-.login-card.glass-card, .glass-card.login-card {
-  /* bump opacity to ~60% for stronger contrast */
-  background: rgba(255,255,255,0.6);
-  /* subtle inner highlight using inset shadow for focus */
-  box-shadow: 0 10px 30px rgba(2,6,23,0.10), inset 0 1px 0 rgba(255,255,255,0.65);
-  border: 1px solid rgba(255,255,255,0.72);
+.info-card,
+.contact-card {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
 }
 
-/* Make cards stretch to equal height in the Row */
-.login-container .ant-row {
-  align-items: stretch;
+.info-card .ant-card-body,
+.contact-card .ant-card-body {
+  padding: 20px;
 }
-.glass-card {
+
+.officials-card {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.officials-card .ant-card-body {
+  padding: 20px;
   display: flex;
   flex-direction: column;
-  height: 100%;
-}
-.login-card, .preview-card {
-  height: 100%;
-  /* ensure cards don't stretch edge-to-edge when centered */
-  max-width: 540px; /* allow larger cards within wider container */
-  width: 100%;
+  flex: 1;
+  min-height: 0;
 }
 
-@media (min-width: 1200px) {
-  .login-card, .preview-card { max-width: 720px; }
+/* Carousel styles for vertical scrolling */
+.carousel-wrap.vertical {
+  flex-direction: column;
+  overflow: hidden;
+  flex: 1;
 }
 
-.carousel-wrap {
+.carousel-scroll.vertical {
   display: flex;
-  align-items: stretch;
-}
-.carousel-scroll {
-  display:flex;
-  gap: 18px;
-  overflow-x: auto;
-  padding: 12px 6px;
-  scroll-behavior: smooth;
-  align-items: center;
-  /* allow scroll area to grow and push status to bottom */
-  flex: 1 1 auto;
+  flex-direction: column;
+  overflow-y: auto;
+  padding-right: 8px;
+  gap: 12px;
 }
 
-/* Hide horizontal scrollbar visuals while preserving scroll functionality */
-.carousel-scroll::-webkit-scrollbar { display: none; height: 0; }
-.carousel-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+/* Hide vertical scrollbar while preserving scroll functionality */
+.carousel-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.carousel-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.carousel-scroll::-webkit-scrollbar-thumb {
+  background: rgba(102, 126, 234, 0.3);
+  border-radius: 3px;
+}
+
+.carousel-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(102, 126, 234, 0.5);
+}
+
+.carousel-scroll {
+  -ms-overflow-style: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(102, 126, 234, 0.3) transparent;
+}
 
 .official-card {
   width: 150px;
   flex: 0 0 150px;
-  text-align:center;
+  text-align: center;
   padding: 8px;
   border-radius: 12px;
-  /* semi-opaque card to match container */
-  background: rgba(255,255,255,0.56);
+  background: rgba(255, 255, 255, 0.56);
   transition: transform 220ms ease, box-shadow 220ms ease;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
 }
 
-.preview-card > .ant-typography, .preview-card > .ant-typography + div { flex: 0 0 auto; }
-.preview-card .carousel-wrap { flex: 1 1 auto; display: flex; flex-direction: row; }
-.preview-card .ant-card-body { display:flex; flex-direction:column; height:100%; }
+.official-card-vertical {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px;
+  text-align: left;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+  transition: all 0.3s ease;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
 
 
 .title-blue {
@@ -212,3 +343,130 @@
   .center-pane { order: 1; width: 100% !important; max-width: 100% !important; }
   .two-pane-row { min-height: auto; flex-direction: column; }
 }
+
+/* Carousel slide animations */
+@keyframes slide-left {
+  0% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-40px);
+  }
+}
+
+@keyframes slide-right {
+  0% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(40px);
+  }
+}
+
+.carousel-scroll.slide-left {
+  animation: slide-left 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.carousel-scroll.slide-right {
+  animation: slide-right 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* Barangay and Contact Information Cards */
+.info-card,
+.contact-card {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(10px) saturate(120%);
+}
+
+.info-card:hover,
+.contact-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px rgba(102, 126, 234, 0.15) !important;
+}
+
+.contact-card a {
+  transition: all 0.2s ease;
+  border-radius: 8px;
+  margin: 0 -8px;
+  padding: 8px;
+}
+
+.contact-card a:hover {
+  background: rgba(102, 126, 234, 0.05);
+}
+
+.contact-card a:hover .anticon {
+  color: #764ba2 !important;
+  transform: scale(1.1);
+}
+
+/* System Notice Alert */
+.ant-alert {
+  border-radius: 10px;
+  transition: all 0.2s ease;
+}
+
+.ant-alert-warning {
+  background: linear-gradient(135deg, rgba(255, 215, 5, 0.08) 0%, rgba(255, 215, 5, 0.04) 100%) !important;
+  border: 1px solid rgba(255, 215, 5, 0.2) !important;
+}
+
+.ant-alert-warning .ant-alert-icon {
+  color: #faad14 !important;
+}
+
+.ant-alert-warning .ant-alert-close-icon {
+  color: #faad14 !important;
+}
+
+/* Responsive adjustments for small screens */
+@media (max-width: 768px) {
+  .info-card,
+  .contact-card {
+    padding: 16px !important;
+  }
+
+  .info-card .ant-typography,
+  .contact-card .ant-typography {
+    font-size: 12px;
+  }
+}
+
+/* Animation for info cards on mount */
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.info-card,
+.contact-card,
+.preview-card {
+  animation: slideInUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) backwards;
+}
+
+.preview-card {
+  animation-delay: 0.1s;
+}
+
+/* Loading spinner styling */
+.ant-spin {
+  color: #667eea;
+}
+
+/* Ensure proper spacing in Space component */
+.ant-space {
+  width: 100%;
+}
+

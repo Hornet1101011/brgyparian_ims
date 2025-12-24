@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Row, Col, Form, Input, Button, Card, Typography, message, Modal, Radio, notification } from 'antd';
-import { UserOutlined, LockOutlined } from '@ant-design/icons';
+import { Row, Col, Form, Input, Button, Card, Typography, message, Modal, Radio, notification, Divider, Space, Tag, Alert, Spin } from 'antd';
+import { UserOutlined, LockOutlined, PhoneOutlined, MailOutlined, EnvironmentOutlined, BellOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { adminAPI, axiosPublic, axiosInstance } from '../services/api';
@@ -26,6 +26,11 @@ const LoginForm: React.FC = () => {
   const [officials, setOfficials] = useState<PublicOfficial[]>([]);
   const [, setOfficialsStatus] = useState<string>('loading');
   const carouselRef = useRef<HTMLDivElement | null>(null);
+  const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
+  
+  // System settings state
+  const [systemSettings, setSystemSettings] = useState<any>(null);
+  const [settingsLoading, setSettingsLoading] = useState(true);
 
   useEffect(() => {
     if (isAuthenticated && user) {
@@ -76,6 +81,45 @@ const LoginForm: React.FC = () => {
     })();
     return () => { mounted = false; };
   }, [isAuthenticated]);
+
+  // Fetch system settings
+  useEffect(() => {
+    let mounted = true;
+    const fetchSystemSettings = async () => {
+      setSettingsLoading(true);
+      try {
+        // Try the public settings endpoint first (for unauthenticated login page)
+        try {
+          const response = await axiosPublic.get('/settings/public');
+          console.log('Fetched system settings from /settings/public:', response.data);
+          if (mounted && response.data) {
+            console.log('Setting systemSettings state with:', response.data);
+            setSystemSettings(response.data);
+            return;
+          }
+        } catch (publicErr) {
+          console.warn('Public settings endpoint failed, trying admin endpoint:', publicErr);
+        }
+        
+        // Fallback to admin endpoint
+        const settings = await adminAPI.getSystemSettings();
+        console.log('Fetched system settings from adminAPI:', settings);
+        if (mounted && settings) {
+          console.log('Setting systemSettings state with:', settings);
+          setSystemSettings(settings);
+        } else {
+          console.warn('No settings received or component unmounted');
+        }
+      } catch (err) {
+        console.warn('Failed to fetch system settings for login display', err);
+        // Gracefully handle error - UI will show minimal info
+      } finally {
+        if (mounted) setSettingsLoading(false);
+      }
+    };
+    fetchSystemSettings();
+    return () => { mounted = false; };
+  }, []);
 
   const onFinish = async (values: { username: string; password: string }) => {
     setLoading(true);
@@ -142,17 +186,346 @@ const LoginForm: React.FC = () => {
     }
   };
 
+  const handleCarouselScroll = (direction: 'left' | 'right') => {
+    if (!carouselRef.current) return;
+    
+    // Trigger animation
+    setSlideDirection(direction);
+    
+    // Perform scroll
+    const scrollAmount = direction === 'left' ? -240 : 240;
+    carouselRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+    
+    // Reset animation state after scroll completes
+    setTimeout(() => setSlideDirection(null), 600);
+  };
+
+  // Component to display barangay information card
+  const BarangayInfoCard = () => {
+    console.log('BarangayInfoCard rendering with systemSettings:', systemSettings);
+    const hasData = systemSettings?.barangayName || systemSettings?.barangayAddress;
+    
+    return (
+      <Card
+        className="glass-card info-card"
+        variant="outlined"
+        style={{
+          background: 'rgba(255, 255, 255, 0.95)',
+          border: '1px solid rgba(255, 255, 255, 0.3)',
+          borderRadius: 16,
+          backdropFilter: 'blur(10px)',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+          padding: 20,
+          minHeight: hasData ? 'auto' : 120
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+          <div style={{ width: 4, height: 24, background: 'linear-gradient(180deg, #667eea 0%, #764ba2 100%)', borderRadius: 2 }} />
+          <Typography.Title level={5} style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#0f172a' }}>
+            <EnvironmentOutlined style={{ marginRight: 8, color: '#667eea' }} />
+            Barangay Information
+          </Typography.Title>
+        </div>
+
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+            <Typography.Text strong style={{ color: '#0f172a', minWidth: 80 }}>Barangay:</Typography.Text>
+            <Typography.Text style={{ color: '#475569', flex: 1 }}>{systemSettings?.barangayName || 'N/A'}</Typography.Text>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+            <Typography.Text strong style={{ color: '#0f172a', minWidth: 80 }}>Address:</Typography.Text>
+            <Typography.Text style={{ color: '#475569', flex: 1 }}>{systemSettings?.barangayAddress || 'N/A'}</Typography.Text>
+          </div>
+        </Space>
+      </Card>
+    );
+  };
+
+  // Component to display contact information card
+  const ContactInfoCard = () => {
+    console.log('ContactInfoCard rendering with systemSettings:', systemSettings);
+    const hasEmail = systemSettings?.contactEmail;
+    const hasPhone = systemSettings?.contactPhone;
+    const hasData = hasEmail || hasPhone;
+
+    return (
+      <Card
+        className="glass-card contact-card"
+        variant="outlined"
+        style={{
+          background: 'rgba(255, 255, 255, 0.95)',
+          border: '1px solid rgba(255, 255, 255, 0.3)',
+          borderRadius: 16,
+          backdropFilter: 'blur(10px)',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+          padding: 20,
+          minHeight: hasData ? 'auto' : 120
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+          <div style={{ width: 4, height: 24, background: 'linear-gradient(180deg, #667eea 0%, #764ba2 100%)', borderRadius: 2 }} />
+          <Typography.Title level={5} style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#0f172a' }}>
+            <PhoneOutlined style={{ marginRight: 8, color: '#667eea' }} />
+            Contact Information
+          </Typography.Title>
+        </div>
+
+        <Space direction="vertical" style={{ width: '100%' }}>
+          {hasEmail ? (
+            <a href={`mailto:${systemSettings.contactEmail}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', cursor: 'pointer', transition: 'all 0.2s', borderRadius: 4, marginLeft: -12, marginRight: -12 }}>
+                <MailOutlined style={{ color: '#667eea', fontSize: 16, minWidth: 16 }} />
+                <div style={{ flex: 1 }}>
+                  <Typography.Text style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: 2 }}>Email</Typography.Text>
+                  <Typography.Text style={{ color: '#0f172a', fontWeight: 500, wordBreak: 'break-all' }}>{systemSettings.contactEmail}</Typography.Text>
+                </div>
+              </div>
+            </a>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', opacity: 0.6 }}>
+              <MailOutlined style={{ color: '#cbd5e1', fontSize: 16, minWidth: 16 }} />
+              <div>
+                <Typography.Text style={{ display: 'block', fontSize: 12, color: '#cbd5e1' }}>Email not configured</Typography.Text>
+              </div>
+            </div>
+          )}
+          {hasPhone ? (
+            <a href={`tel:${systemSettings.contactPhone}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', cursor: 'pointer', transition: 'all 0.2s', borderRadius: 4, marginLeft: -12, marginRight: -12 }}>
+                <PhoneOutlined style={{ color: '#667eea', fontSize: 16, minWidth: 16 }} />
+                <div style={{ flex: 1 }}>
+                  <Typography.Text style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: 2 }}>Phone</Typography.Text>
+                  <Typography.Text style={{ color: '#0f172a', fontWeight: 500 }}>{systemSettings.contactPhone}</Typography.Text>
+                </div>
+              </div>
+            </a>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', opacity: 0.6 }}>
+              <PhoneOutlined style={{ color: '#cbd5e1', fontSize: 16, minWidth: 16 }} />
+              <div>
+                <Typography.Text style={{ display: 'block', fontSize: 12, color: '#cbd5e1' }}>Phone not configured</Typography.Text>
+              </div>
+            </div>
+          )}
+        </Space>
+      </Card>
+    );
+  };
+
+  // Component to display system notice alert
+  const SystemNoticeAlert = () => {
+    if (!systemSettings?.systemNotice) return null;
+    
+    return (
+      <Alert
+        message={<Typography.Text strong>System Notice</Typography.Text>}
+        description={
+          <Typography.Paragraph style={{ margin: 0, color: 'inherit' }}>
+            {systemSettings.systemNotice}
+          </Typography.Paragraph>
+        }
+        type="warning"
+        icon={<BellOutlined />}
+        showIcon
+        style={{
+          marginBottom: 20,
+          background: 'rgba(255, 215, 5, 0.1)',
+          border: '1px solid rgba(255, 215, 5, 0.3)',
+          borderRadius: 10,
+          padding: '12px 16px'
+        }}
+        closeIcon={true}
+      />
+    );
+  };
+
   return (
     <>
-    <div className="login-page" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', minHeight: '100vh', padding: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div className="login-container two-pane" style={{ width: '100%', maxWidth: '1200px' }}>
-        <Row gutter={[32, 32]} align="middle" justify="center" className="two-pane-row">
-          {/* Left combined pane - stats + officials */}
-          <Col xs={24} md={12} className="pane left-pane combined-pane">
-            <div className="pane-inner left-inner" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+    <div className="login-page three-column" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', minHeight: '100vh', padding: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div className="login-container three-column-container" style={{ width: '100%', maxWidth: '1600px' }}>
+        <Row gutter={[24, 24]} align="stretch" justify="center" className="three-column-row" style={{ height: '100%' }}>
+          
+          {/* LEFT COLUMN - Quick Stats & Barangay Info */}
+          <Col xs={24} sm={24} md={8} lg={8} className="pane left-pane stats-pane" style={{ display: 'flex', height: '100%' }}>
+            <div className="pane-inner left-inner" style={{ display: 'flex', flexDirection: 'column', gap: 20, height: '100%', width: '100%' }}>
+              {/* Quick Stats */}
               <StatsPanel />
+              
+              {/* System Notice Alert */}
+              {!settingsLoading && <SystemNoticeAlert />}
+
+              {/* Barangay Information */}
+              <BarangayInfoCard />
+            </div>
+          </Col>
+
+          {/* CENTER COLUMN - Login Form */}
+          <Col xs={24} sm={24} md={8} lg={8} className="pane center-pane login-pane" style={{ display: 'flex', height: '100%' }}>
+            <div className="pane-inner center-inner" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', height: '100%', width: '100%' }}>
               <Card 
-                className="glass-card preview-card" 
+                className="glass-card login-card" 
+                variant="outlined"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.98)',
+                  border: '1px solid rgba(255, 255, 255, 0.4)',
+                  borderRadius: 20,
+                  backdropFilter: 'blur(10px)',
+                  boxShadow: '0 20px 50px rgba(0, 0, 0, 0.2)',
+                  padding: 36
+                }}
+              >
+                <div style={{ textAlign: 'center', marginBottom: 28 }}>
+                  <Typography.Title 
+                    level={3} 
+                    className="title-blue" 
+                    style={{ 
+                      textAlign: 'center', 
+                      marginBottom: 8,
+                      fontSize: 24,
+                      fontWeight: 800,
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                      backgroundClip: 'text',
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                      color: 'transparent'
+                    }}
+                  >
+                    Barangay Information Management System Parian
+                  </Typography.Title>
+                  <Typography.Text 
+                    style={{ 
+                      display: 'block', 
+                      color: '#64748b', 
+                      fontWeight: 500, 
+                      fontSize: 13
+                    }}
+                  >
+                    Sign in to your account
+                  </Typography.Text>
+                </div>
+
+                <Form 
+                  name="login" 
+                  layout="vertical" 
+                  onFinish={onFinish} 
+                  autoComplete="off" 
+                  requiredMark={false}
+                  style={{ marginBottom: 0 }}
+                >
+                  <Form.Item 
+                    label={<span style={{ fontWeight: 600, color: '#0f172a', fontSize: 13 }}>Email or Username</span>}
+                    name="username" 
+                    rules={[{ required: true, message: 'Please input your email or username!' }]}
+                    style={{ marginBottom: 16 }}
+                  >
+                    <Input 
+                      prefix={<UserOutlined style={{ color: '#667eea' }} />} 
+                      placeholder="Enter your email or username" 
+                      size="large"
+                      style={{
+                        borderRadius: 8,
+                        border: '1px solid #e2e8f0',
+                        fontSize: 14,
+                        padding: '10px 14px'
+                      }}
+                    />
+                  </Form.Item>
+
+                  <Form.Item 
+                    label={<span style={{ fontWeight: 600, color: '#0f172a', fontSize: 13 }}>Password</span>}
+                    name="password" 
+                    rules={[{ required: true, message: 'Please input your password!' }, { min: 6, message: 'Password must be at least 6 characters' }]}
+                    style={{ marginBottom: 20 }}
+                  >
+                    <Input.Password 
+                      autoComplete="current-password" 
+                      prefix={<LockOutlined style={{ color: '#667eea' }} />} 
+                      placeholder="Enter your password" 
+                      size="large"
+                      style={{
+                        borderRadius: 8,
+                        border: '1px solid #e2e8f0',
+                        fontSize: 14,
+                        padding: '10px 14px'
+                      }}
+                    />
+                  </Form.Item>
+
+                  <Form.Item style={{ marginBottom: 10 }}>
+                    <Button 
+                      htmlType="submit" 
+                      size="large" 
+                      loading={loading} 
+                      className="signin-btn"
+                      style={{
+                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                        border: 'none',
+                        fontWeight: 600,
+                        fontSize: 14,
+                        borderRadius: 8,
+                        height: 42,
+                        color: '#ffffff'
+                      }}
+                      block
+                    >
+                      {loading ? 'Signing In...' : 'Sign In'}
+                    </Button>
+                  </Form.Item>
+
+                  <Form.Item style={{ marginBottom: 14 }}>
+                    <Button 
+                      onClick={() => setGuestModalVisible(true)} 
+                      size="large" 
+                      className="guest-warm-btn"
+                      style={{
+                        background: 'rgba(102, 126, 234, 0.08)',
+                        border: '1.5px solid #667eea',
+                        color: '#667eea',
+                        fontWeight: 500,
+                        fontSize: 14,
+                        borderRadius: 8,
+                        height: 42
+                      }}
+                      block
+                    >
+                      Continue as Guest
+                    </Button>
+                  </Form.Item>
+
+                  <div className="links-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14, gap: 8 }}>
+                    <Button 
+                      type="link" 
+                      onClick={() => { setForgotPasswordModalVisible(true); setForgotPasswordSent(false); forgotPasswordForm.resetFields(); }}
+                      style={{ padding: 0, color: '#667eea', fontWeight: 500, fontSize: 13 }}
+                    >
+                      Forgot Password?
+                    </Button>
+                    <RouterLink to="/register" style={{ color: '#667eea', fontWeight: 500, textDecoration: 'none', fontSize: 13 }}>
+                      Sign Up
+                    </RouterLink>
+                  </div>
+
+                  <div style={{ textAlign: 'center' }}>
+                    <Button 
+                      type="link" 
+                      onClick={() => setEmergencyModalVisible(true)}
+                      style={{ padding: 0, color: '#f5222d', fontWeight: 500, fontSize: 13 }}
+                    >
+                      Emergency Hotline
+                    </Button>
+                  </div>
+                </Form>
+              </Card>
+            </div>
+          </Col>
+
+          {/* RIGHT COLUMN - Barangay Officials & Contact Info */}
+          <Col xs={24} sm={24} md={8} lg={8} className="pane right-pane officials-pane" style={{ display: 'flex', height: '100%' }}>
+            <div className="pane-inner right-inner" style={{ display: 'flex', flexDirection: 'column', gap: 20, height: '100%', width: '100%', minHeight: 0 }}>
+              
+              {/* Officials Card */}
+              <Card 
+                className="glass-card officials-card" 
                 variant="outlined"
                 style={{
                   background: 'rgba(255, 255, 255, 0.95)',
@@ -160,66 +533,62 @@ const LoginForm: React.FC = () => {
                   borderRadius: 16,
                   backdropFilter: 'blur(10px)',
                   boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
-                  padding: 24
+                  padding: 20,
+                  flex: 1,
+                  minHeight: 0,
+                  display: 'flex',
+                  flexDirection: 'column'
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
                   <div style={{ width: 4, height: 24, background: 'linear-gradient(180deg, #667eea 0%, #764ba2 100%)', borderRadius: 2 }} />
-                  <Typography.Title level={4} style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#0f172a' }}>
+                  <Typography.Title level={5} style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#0f172a' }}>
                     Barangay Officials
                   </Typography.Title>
                 </div>
 
-                <div className="carousel-wrap" style={{ position: 'relative' }}>
-                  <Button 
-                    className="carousel-arrow left" 
-                    icon={<LeftOutlined />} 
-                    onClick={() => {
-                      if (!carouselRef.current) return; carouselRef.current.scrollBy({ left: -240, behavior: 'smooth' });
-                    }}
-                    style={{
-                      position: 'absolute',
-                      left: -20,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      zIndex: 10,
-                      background: 'rgba(102, 126, 234, 0.1)',
-                      border: '1px solid rgba(102, 126, 234, 0.3)',
-                      borderRadius: '50%',
-                      width: 40,
-                      height: 40,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center'
-                    }}
-                  />
-                  <div ref={carouselRef} className="carousel-scroll" style={{ overflowX: 'auto', display: 'flex', gap: 16, paddingBottom: 8, scrollBehavior: 'smooth' }}>
+                <div className="carousel-wrap vertical" style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'stretch', justifyContent: 'flex-start', flex: 1, minHeight: 0 }}>
+                  <div 
+                    ref={carouselRef} 
+                    className={`carousel-scroll vertical ${slideDirection ? `slide-${slideDirection}` : ''}`}
+                    style={{ 
+                      overflowY: 'auto', 
+                      display: 'flex', 
+                      flexDirection: 'column',
+                      gap: 12, 
+                      paddingRight: 8,
+                      scrollBehavior: 'smooth',
+                      minHeight: 0,
+                      flex: 1
+                    }}>
                     {officials.length === 0 ? (
-                      <Typography.Text type="secondary" style={{ padding: '20px 0' }}>No officials to preview</Typography.Text>
+                      <Typography.Text type="secondary" style={{ padding: '20px 0', textAlign: 'center' }}>No officials available</Typography.Text>
                     ) : (
                       officials.map(off => (
                         <div 
                           key={off._id} 
-                          className="official-card"
+                          className="official-card-vertical"
                           style={{
-                            flex: '0 0 180px',
                             background: '#ffffff',
                             border: '1px solid #e2e8f0',
-                            borderRadius: 12,
-                            padding: 16,
-                            textAlign: 'center',
-                            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)',
-                            transition: 'all 0.3s ease'
+                            borderRadius: 10,
+                            padding: 12,
+                            textAlign: 'left',
+                            boxShadow: '0 2px 6px rgba(0, 0, 0, 0.04)',
+                            transition: 'all 0.3s ease',
+                            display: 'flex',
+                            gap: 10,
+                            alignItems: 'flex-start'
                           }}
                         >
                           <div 
                             className="official-avatar"
                             style={{
-                              width: 100,
-                              height: 100,
-                              borderRadius: 12,
+                              width: 50,
+                              height: 50,
+                              borderRadius: 8,
                               overflow: 'hidden',
-                              margin: '0 auto 12px',
+                              flexShrink: 0,
                               background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                               display: 'flex',
                               alignItems: 'center',
@@ -235,206 +604,28 @@ const LoginForm: React.FC = () => {
                                   const t = e.currentTarget as HTMLImageElement;
                                   t.onerror = null;
                                   const name = (off.name || 'Official').toString().trim();
-                                  t.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=667eea&color=fff&size=100`;
+                                  t.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=667eea&color=fff&size=50`;
                                 } catch (err) {}
                               }}
                             />
                           </div>
-                          <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 4 }}>{off.name}</div>
-                          <div style={{ color: '#64748b', fontSize: 12, marginBottom: 2 }}>{off.title}</div>
-                          <div style={{ color: '#94a3b8', fontSize: 11 }}>{off.term}</div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a', marginBottom: 2 }}>{off.name}</div>
+                            <div style={{ color: '#64748b', fontSize: 11, marginBottom: 1 }}>{off.title}</div>
+                            <div style={{ color: '#94a3b8', fontSize: 10 }}>{off.term}</div>
+                          </div>
                         </div>
                       ))
                     )}
                   </div>
-                  <Button 
-                    className="carousel-arrow right" 
-                    icon={<RightOutlined />} 
-                    onClick={() => {
-                      if (!carouselRef.current) return; carouselRef.current.scrollBy({ left: 240, behavior: 'smooth' });
-                    }}
-                    style={{
-                      position: 'absolute',
-                      right: -20,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      zIndex: 10,
-                      background: 'rgba(102, 126, 234, 0.1)',
-                      border: '1px solid rgba(102, 126, 234, 0.3)',
-                      borderRadius: '50%',
-                      width: 40,
-                      height: 40,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center'
-                    }}
-                  />
                 </div>
               </Card>
+
+              {/* Contact Info Card */}
+              <div style={{ flexShrink: 0 }}><ContactInfoCard /></div>
             </div>
           </Col>
 
-          {/* Right pane - login */}
-          <Col xs={24} md={12} className="pane center-pane login-pane">
-            <div className="pane-inner center-inner">
-              <Card 
-                className="glass-card login-card" 
-                variant="outlined"
-                style={{
-                  background: 'rgba(255, 255, 255, 0.98)',
-                  border: '1px solid rgba(255, 255, 255, 0.4)',
-                  borderRadius: 20,
-                  backdropFilter: 'blur(10px)',
-                  boxShadow: '0 20px 50px rgba(0, 0, 0, 0.2)',
-                  padding: 40
-                }}
-              >
-                <div style={{ textAlign: 'center', marginBottom: 32 }}>
-                  <Typography.Title 
-                    level={2} 
-                    className="title-blue" 
-                    style={{ 
-                      textAlign: 'center', 
-                      marginBottom: 8,
-                      fontSize: 28,
-                      fontWeight: 800,
-                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                      backgroundClip: 'text',
-                      WebkitBackgroundClip: 'text',
-                      WebkitTextFillColor: 'transparent',
-                      color: 'transparent'
-                    }}
-                  >
-                    Barangay Information System
-                  </Typography.Title>
-                  <Typography.Text 
-                    style={{ 
-                      display: 'block', 
-                      color: '#64748b', 
-                      fontWeight: 600, 
-                      fontSize: 14,
-                      letterSpacing: '0.5px',
-                      textTransform: 'uppercase'
-                    }}
-                  >
-                    Sign In to Your Account
-                  </Typography.Text>
-                </div>
-
-                <Form 
-                  name="login" 
-                  layout="vertical" 
-                  onFinish={onFinish} 
-                  autoComplete="off" 
-                  requiredMark={false}
-                  style={{ marginBottom: 24 }}
-                >
-                  <Form.Item 
-                    label={<span style={{ fontWeight: 600, color: '#0f172a', fontSize: 14 }}>Email or Username</span>}
-                    name="username" 
-                    rules={[{ required: true, message: 'Please input your email or username!' }]}
-                    style={{ marginBottom: 20 }}
-                  >
-                    <Input 
-                      prefix={<UserOutlined style={{ color: '#667eea' }} />} 
-                      placeholder="Enter your email or username" 
-                      size="large"
-                      style={{
-                        borderRadius: 10,
-                        border: '1px solid #e2e8f0',
-                        fontSize: 14,
-                        padding: '10px 16px'
-                      }}
-                    />
-                  </Form.Item>
-
-                  <Form.Item 
-                    label={<span style={{ fontWeight: 600, color: '#0f172a', fontSize: 14 }}>Password</span>}
-                    name="password" 
-                    rules={[{ required: true, message: 'Please input your password!' }, { min: 6, message: 'Password must be at least 6 characters' }]}
-                    style={{ marginBottom: 24 }}
-                  >
-                    <Input.Password 
-                      autoComplete="current-password" 
-                      prefix={<LockOutlined style={{ color: '#667eea' }} />} 
-                      placeholder="Enter your password" 
-                      size="large"
-                      style={{
-                        borderRadius: 10,
-                        border: '1px solid #e2e8f0',
-                        fontSize: 14,
-                        padding: '10px 16px'
-                      }}
-                    />
-                  </Form.Item>
-
-                  <Form.Item style={{ marginBottom: 12 }}>
-                    <Button 
-                      htmlType="submit" 
-                      size="large" 
-                      loading={loading} 
-                      className="signin-btn"
-                      style={{
-                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                        border: 'none',
-                        fontWeight: 600,
-                        fontSize: 15,
-                        borderRadius: 10,
-                        height: 44,
-                        color: '#ffffff'
-                      }}
-                      block
-                    >
-                      {loading ? 'Signing In...' : 'Sign In'}
-                    </Button>
-                  </Form.Item>
-
-                  <Form.Item style={{ marginBottom: 16 }}>
-                    <Button 
-                      onClick={() => setGuestModalVisible(true)} 
-                      size="large" 
-                      className="guest-warm-btn"
-                      style={{
-                        background: 'rgba(102, 126, 234, 0.1)',
-                        border: '2px solid #667eea',
-                        color: '#667eea',
-                        fontWeight: 600,
-                        fontSize: 15,
-                        borderRadius: 10,
-                        height: 44
-                      }}
-                      block
-                    >
-                      Continue as Guest
-                    </Button>
-                  </Form.Item>
-
-                  <div className="links-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-                    <Button 
-                      type="link" 
-                      onClick={() => { setForgotPasswordModalVisible(true); setForgotPasswordSent(false); forgotPasswordForm.resetFields(); }}
-                      style={{ padding: 0, color: '#667eea', fontWeight: 500 }}
-                    >
-                      Forgot Password?
-                    </Button>
-                    <RouterLink to="/register" style={{ color: '#667eea', fontWeight: 500, textDecoration: 'none' }}>
-                      Sign Up
-                    </RouterLink>
-                  </div>
-
-                  <div style={{ textAlign: 'center' }}>
-                    <Button 
-                      type="link" 
-                      onClick={() => setEmergencyModalVisible(true)}
-                      style={{ padding: 0, color: '#f5222d', fontWeight: 500 }}
-                    >
-                      Emergency Hotline
-                    </Button>
-                  </div>
-                </Form>
-              </Card>
-            </div>
-          </Col>
         </Row>
       </div>
   </div>

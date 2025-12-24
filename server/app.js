@@ -206,9 +206,14 @@ try {
 try {
   const requireAuth = require('./middleware/requireAuth');
   const settingsRoutes = require('./routes/settingsRoutes');
-  app.use('/api/settings', requireAuth, settingsRoutes);
+  
+  // Mount settings routes without auth middleware - let individual routes handle their own auth
+  // This allows the public endpoint to be accessible while other routes can require auth
+  app.use('/api/settings', settingsRoutes);
+  
   // Also mount under admin namespace so client-side calls to /api/admin/settings resolve
   app.use('/api/admin/settings', requireAuth, settingsRoutes);
+  
   // Mount officials admin routes
   try {
     const officialsRoutes = require('./routes/officials');

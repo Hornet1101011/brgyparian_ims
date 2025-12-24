@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const requireAuth = require('../middleware/requireAuth');
 const isAdmin = require('../middleware/isAdmin');
 const { encryptText, decryptText } = require('../utils/cryptoHelper');
 const SystemSetting = require('../models/SystemSetting');
@@ -36,8 +37,8 @@ function sanitizeForClient(setting) {
   return s;
 }
 
-// GET /api/settings
-router.get('/', isAdmin, async (req, res) => {
+// GET /api/settings - Protected endpoint, requires authentication
+router.get('/', requireAuth, isAdmin, async (req, res) => {
   try {
     let settings = await SystemSetting.findOne().lean();
     if (!settings) {
@@ -53,7 +54,7 @@ router.get('/', isAdmin, async (req, res) => {
 
 // Admin-only debug: return sanitized SMTP config (do NOT include encryptedPassword)
 // Use this to verify what SMTP fields are stored in the DB without exposing secrets.
-router.get('/smtp-debug', isAdmin, async (req, res) => {
+router.get('/smtp-debug', requireAuth, isAdmin, async (req, res) => {
   try {
     const settings = await SystemSetting.findOne().lean();
     if (!settings || !settings.smtp) return res.json({ smtp: null });
@@ -91,8 +92,8 @@ async function recordAudit(userId, action, details, ip) {
   }
 }
 
-// PUT /api/settings (full upsert)
-router.put('/', isAdmin, async (req, res) => {
+// PUT /api/settings (full upsert) - Protected endpoint, requires authentication
+router.put('/', requireAuth, isAdmin, async (req, res) => {
   try {
     const payload = req.body || {};
     const errors = validateSettingsPayload(payload);
@@ -171,8 +172,8 @@ router.put('/', isAdmin, async (req, res) => {
   }
 });
 
-// PATCH /api/settings (partial update)
-router.patch('/', isAdmin, async (req, res) => {
+// PATCH /api/settings (partial update) - Protected endpoint, requires authentication
+router.patch('/', requireAuth, isAdmin, async (req, res) => {
   try {
     const payload = req.body || {};
     const errors = validateSettingsPayload(payload);
@@ -244,12 +245,11 @@ router.patch('/', isAdmin, async (req, res) => {
   }
 });
 
-// POST /api/settings/test-smtp
+// POST /api/settings/test-smtp - Protected endpoint, requires authentication and admin
 // Protect test-smtp endpoint with rate limiter: 5 requests per hour per IP
 // Allow a higher limit for SMTP tests to avoid quick lockouts during debugging
-// POST /api/settings/test-smtp
 // This endpoint is admin-only; do not apply the per-IP rate limiter to admins so admins can freely debug SMTP settings.
-router.post('/test-smtp', isAdmin, async (req, res) => {
+router.post('/test-smtp', requireAuth, isAdmin, async (req, res) => {
   try {
     const to = req.body?.to;
     const settings = await SystemSetting.findOne().lean();
@@ -313,6 +313,40 @@ router.post('/test-smtp', isAdmin, async (req, res) => {
   } catch (err) {
     console.error('POST /api/settings/test-smtp error', err);
     return res.status(500).json({ message: 'Failed to run SMTP test' });
+  }
+});
+
+// GET /api/settings/public - Public endpoint for login page and unauthenticated access
+// Returns only public-facing system settings (no sensitive data)
+router.get('/public', async (req, res) => {
+  try {
+    let settings = await SystemSetting.findOne().lean();
+    if (!settings) {
+      // Return minimal default shape
+      settings = {
+        siteName: 'Barangay Information System',
+        barangayName: '',
+        barangayAddress: '',
+        contactEmail: '',
+        contactPhone: '',
+        systemNotice: ''
+      };
+    }
+    
+    // Return only public-facing fields (sanitize sensitive data)
+    const publicSettings = {
+      siteName: settings.siteName || '',
+      barangayName: settings.barangayName || '',
+      barangayAddress: settings.barangayAddress || '',
+      contactEmail: settings.contactEmail || '',
+      contactPhone: settings.contactPhone || '',
+      systemNotice: settings.systemNotice || ''
+    };
+    
+    return res.json(publicSettings);
+  } catch (err) {
+    console.error('GET /api/settings/public error', err);
+    return res.status(500).json({ message: 'Failed to load public settings' });
   }
 });
 
