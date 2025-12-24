@@ -421,4 +421,145 @@ router.get('/public', async (req, res) => {
   }
 });
 
+// GET /api/settings/public/barangay-info - Returns barangay information as carousel items
+router.get('/public/barangay-info', async (req, res) => {
+  try {
+    console.log('[DEBUG] GET /api/settings/public/barangay-info called');
+    
+    // Fetch from PublicView collection
+    let publicView = await PublicView.findOne({ isActive: true }).lean();
+    
+    if (!publicView) {
+      // Fallback to SystemSetting
+      publicView = await SystemSetting.findOne().lean();
+    }
+    
+    if (!publicView) {
+      console.log('[DEBUG] No barangay info found, returning empty array');
+      return res.json([]);
+    }
+    
+    // Format as carousel items - one card per information type
+    const barangayInfoItems = [];
+    
+    if (publicView.siteName) {
+      barangayInfoItems.push({
+        _id: 'site-name',
+        label: 'System Name',
+        value: publicView.siteName,
+        icon: 'home',
+        type: 'barangay-info'
+      });
+    }
+    
+    if (publicView.barangayName) {
+      barangayInfoItems.push({
+        _id: 'barangay-name',
+        label: 'Barangay Name',
+        value: publicView.barangayName,
+        icon: 'environment',
+        type: 'barangay-info'
+      });
+    }
+    
+    if (publicView.barangayAddress) {
+      barangayInfoItems.push({
+        _id: 'barangay-address',
+        label: 'Address',
+        value: publicView.barangayAddress,
+        icon: 'map',
+        type: 'barangay-info'
+      });
+    }
+    
+    // If no info available, return array with placeholder
+    if (barangayInfoItems.length === 0) {
+      return res.json([{
+        _id: 'placeholder',
+        label: 'Barangay Information',
+        value: 'No barangay information configured',
+        icon: 'info',
+        type: 'barangay-info',
+        isPlaceholder: true
+      }]);
+    }
+    
+    console.log(`[DEBUG] Returning ${barangayInfoItems.length} barangay info items`);
+    return res.json(barangayInfoItems);
+  } catch (err) {
+    console.error('GET /api/settings/public/barangay-info error', err);
+    return res.status(500).json({ message: 'Failed to load barangay info' });
+  }
+});
+
+// GET /api/settings/public/contact-info - Returns contact information as carousel items
+router.get('/public/contact-info', async (req, res) => {
+  try {
+    console.log('[DEBUG] GET /api/settings/public/contact-info called');
+    
+    // Fetch from PublicView collection
+    let publicView = await PublicView.findOne({ isActive: true }).lean();
+    
+    if (!publicView) {
+      // Fallback to SystemSetting
+      publicView = await SystemSetting.findOne().lean();
+    }
+    
+    if (!publicView) {
+      console.log('[DEBUG] No contact info found, returning empty array');
+      return res.json([]);
+    }
+    
+    // Format as carousel items - one card per contact method
+    const contactInfoItems = [];
+    
+    // Validate email format
+    const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    // Validate phone format (7+ digits)
+    const isValidPhone = (phone) => /^[\d\s\-\+\(\)]+$/.test(phone) && phone.replace(/\D/g, '').length >= 7;
+    
+    if (publicView.contactEmail && isValidEmail(publicView.contactEmail)) {
+      contactInfoItems.push({
+        _id: 'contact-email',
+        label: 'Email Address',
+        value: publicView.contactEmail,
+        icon: 'mail',
+        type: 'contact-info',
+        contactType: 'email',
+        link: `mailto:${publicView.contactEmail}`
+      });
+    }
+    
+    if (publicView.contactPhone && isValidPhone(publicView.contactPhone)) {
+      contactInfoItems.push({
+        _id: 'contact-phone',
+        label: 'Phone Number',
+        value: publicView.contactPhone,
+        icon: 'phone',
+        type: 'contact-info',
+        contactType: 'phone',
+        link: `tel:${publicView.contactPhone}`
+      });
+    }
+    
+    // If no contact info available, return array with placeholder
+    if (contactInfoItems.length === 0) {
+      return res.json([{
+        _id: 'placeholder',
+        label: 'Contact Information',
+        value: 'No contact information configured',
+        icon: 'info',
+        type: 'contact-info',
+        isPlaceholder: true
+      }]);
+    }
+    
+    console.log(`[DEBUG] Returning ${contactInfoItems.length} contact info items`);
+    return res.json(contactInfoItems);
+  } catch (err) {
+    console.error('GET /api/settings/public/contact-info error', err);
+    return res.status(500).json({ message: 'Failed to load contact info' });
+  }
+});
+
 module.exports = router;

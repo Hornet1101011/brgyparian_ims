@@ -9,6 +9,8 @@ import StatsPanel from './StatsPanel';
 import './LoginForm.css';
 import { LeftOutlined, RightOutlined } from '@ant-design/icons';
 import { useSystemSettings, SystemSettingsPublic } from '../hooks/useSystemSettings';
+import { useBarangayInfo, BarangayInfoItem } from '../hooks/useBarangayInfo';
+import { useContactInfo, ContactInfoItem } from '../hooks/useContactInfo';
 
 const LoginForm: React.FC = () => {
     
@@ -26,11 +28,19 @@ const LoginForm: React.FC = () => {
   const [forgotPasswordSubmittedEmail, setForgotPasswordSubmittedEmail] = useState<string | null>(null);
   const [officials, setOfficials] = useState<PublicOfficial[]>([]);
   const [, setOfficialsStatus] = useState<string>('loading');
-  const carouselRef = useRef<HTMLDivElement | null>(null);
+  const officialsCarouselRef = useRef<HTMLDivElement | null>(null);
+  const barangayInfoCarouselRef = useRef<HTMLDivElement | null>(null);
+  const contactInfoCarouselRef = useRef<HTMLDivElement | null>(null);
   const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
   
   // Use system settings hook - automatically fetches and refreshes every 30 seconds
   const { settings: systemSettings, loading: settingsLoading } = useSystemSettings(true);
+  
+  // Use barangay info hook - fetches from publicviews collection
+  const { items: barangayItems, loading: barangayLoading } = useBarangayInfo(true);
+  
+  // Use contact info hook - fetches from publicviews collection
+  const { items: contactItems, loading: contactLoading } = useContactInfo(true);
 
   useEffect(() => {
     if (isAuthenticated && user) {
@@ -151,26 +161,26 @@ const LoginForm: React.FC = () => {
     }
   };
 
-  const handleCarouselScroll = (direction: 'left' | 'right') => {
-    if (!carouselRef.current) return;
+  const handleCarouselScroll = (direction: 'left' | 'right', ref: React.RefObject<HTMLDivElement>) => {
+    if (!ref.current) return;
     
     // Trigger animation
     setSlideDirection(direction);
     
     // Perform scroll
     const scrollAmount = direction === 'left' ? -240 : 240;
-    carouselRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+    ref.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
     
     // Reset animation state after scroll completes
     setTimeout(() => setSlideDirection(null), 600);
   };
 
-  // Component to display barangay information card
-  // This card is fully controlled by System Settings configured in the admin panel
+  // Component to display barangay information in card carousel format
+  // Fetches from publicviews collection via useBarangayInfo hook
   const BarangayInfoCard = () => {
     return (
-      <Card
-        className="glass-card info-card"
+      <Card 
+        className="glass-card info-card" 
         variant="outlined"
         style={{
           background: 'rgba(255, 255, 255, 0.95)',
@@ -183,59 +193,96 @@ const LoginForm: React.FC = () => {
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
           <div style={{ width: 4, height: 24, background: 'linear-gradient(180deg, #667eea 0%, #764ba2 100%)', borderRadius: 2 }} />
-          <Typography.Title level={5} style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#0f172a' }}>
+          <Typography.Title level={5} style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#0f172a' }}>
             <EnvironmentOutlined style={{ marginRight: 8, color: '#667eea' }} />
-            {systemSettings?.siteName ? `${systemSettings.siteName}` : 'Barangay Information'}
+            Barangay Information
           </Typography.Title>
         </div>
 
-        {settingsLoading ? (
+        {barangayLoading ? (
           <Spin size="small" />
         ) : (
-          <Space direction="vertical" style={{ width: '100%' }}>
-            {systemSettings?.barangayName && (
-              <>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                  <Typography.Text strong style={{ color: '#0f172a', minWidth: 80 }}>Barangay:</Typography.Text>
-                  <Typography.Text style={{ color: '#475569', flex: 1 }}>
-                    {systemSettings.barangayName}
-                  </Typography.Text>
-                </div>
-                <Divider style={{ margin: '8px 0', borderColor: 'rgba(0, 0, 0, 0.06)' }} />
-              </>
-            )}
-            {systemSettings?.barangayAddress && (
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                <Typography.Text strong style={{ color: '#0f172a', minWidth: 80 }}>Address:</Typography.Text>
-                <Typography.Text style={{ color: '#475569', flex: 1 }}>
-                  {systemSettings.barangayAddress}
-                </Typography.Text>
-              </div>
-            )}
-            {!systemSettings?.barangayName && !systemSettings?.barangayAddress && (
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                Barangay information will be displayed once configured
-              </Typography.Text>
-            )}
-          </Space>
+          <div className="carousel-wrap horizontal" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <Button
+              type="text"
+              size="small"
+              icon={<LeftOutlined />}
+              onClick={() => handleCarouselScroll('left', barangayInfoCarouselRef)}
+              style={{ color: '#667eea', minWidth: 32, height: 32, padding: 0 }}
+            />
+            
+            <div 
+              ref={barangayInfoCarouselRef} 
+              className="carousel-scroll horizontal"
+              style={{ 
+                overflowX: 'auto', 
+                display: 'flex',
+                gap: 12, 
+                paddingBottom: 8,
+                scrollBehavior: 'smooth',
+                flex: 1
+              }}>
+              {barangayItems.length === 0 ? (
+                <Typography.Text type="secondary" style={{ padding: '20px' }}>No barangay information available</Typography.Text>
+              ) : (
+                barangayItems.map(item => (
+                  <div 
+                    key={item._id} 
+                    className="info-card-item"
+                    style={{
+                      background: '#ffffff',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: 10,
+                      padding: 16,
+                      minWidth: 220,
+                      textAlign: 'center',
+                      boxShadow: '0 2px 6px rgba(0, 0, 0, 0.04)',
+                      transition: 'all 0.3s ease',
+                      cursor: 'pointer',
+                      opacity: item.isPlaceholder ? 0.6 : 1
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!item.isPlaceholder) {
+                        (e.currentTarget as HTMLDivElement).style.boxShadow = '0 8px 16px rgba(102, 126, 234, 0.15)';
+                        (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.04)';
+                      (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)';
+                    }}
+                  >
+                    <div style={{ fontSize: 24, marginBottom: 8 }}>
+                      {item.icon === 'home' && '🏛️'}
+                      {item.icon === 'environment' && '📍'}
+                      {item.icon === 'map' && '📬'}
+                      {item.icon === 'info' && 'ℹ️'}
+                    </div>
+                    <div style={{ color: '#94a3b8', fontSize: 11, marginBottom: 8, fontWeight: 500 }}>{item.label}</div>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a', lineHeight: 1.4 }}>
+                      {item.value}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <Button
+              type="text"
+              size="small"
+              icon={<RightOutlined />}
+              onClick={() => handleCarouselScroll('right', barangayInfoCarouselRef)}
+              style={{ color: '#667eea', minWidth: 32, height: 32, padding: 0 }}
+            />
+          </div>
         )}
       </Card>
     );
   };
 
-  // Component to display contact information card
-  // This card is fully controlled by System Settings configured in the admin panel
+  // Component to display contact information in card carousel format
+  // Similar to barangay info and officials - scrollable cards with email/phone validation
   const ContactInfoCard = () => {
-    // Validate email format
-    const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-    
-    // Validate phone format (basic check for digits and special chars)
-    const isValidPhone = (phone: string) => /^[\d\s\-\+\(\)]+$/.test(phone) && phone.replace(/\D/g, '').length >= 7;
-
-    const hasValidEmail = systemSettings?.contactEmail && isValidEmail(systemSettings.contactEmail);
-    const hasValidPhone = systemSettings?.contactPhone && isValidPhone(systemSettings.contactPhone);
-    const hasAnyContact = hasValidEmail || hasValidPhone;
-
     return (
       <Card
         className="glass-card contact-card"
@@ -251,66 +298,90 @@ const LoginForm: React.FC = () => {
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
           <div style={{ width: 4, height: 24, background: 'linear-gradient(180deg, #667eea 0%, #764ba2 100%)', borderRadius: 2 }} />
-          <Typography.Title level={5} style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#0f172a' }}>
+          <Typography.Title level={5} style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#0f172a' }}>
             <PhoneOutlined style={{ marginRight: 8, color: '#667eea' }} />
             Contact Information
           </Typography.Title>
         </div>
 
-        {settingsLoading ? (
+        {contactLoading ? (
           <Spin size="small" />
-        ) : hasAnyContact ? (
-          <Space direction="vertical" style={{ width: '100%' }}>
-            {/* Email Contact */}
-            {hasValidEmail ? (
-              <a 
-                href={`mailto:${systemSettings.contactEmail}`} 
-                style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: 12,
-                  color: '#667eea', 
-                  textDecoration: 'none',
-                  transition: 'opacity 0.3s ease',
-                  opacity: 1
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.8')}
-                onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
-              >
-                <MailOutlined style={{ color: '#667eea', fontSize: 16, minWidth: 16 }} />
-                <span>{systemSettings.contactEmail}</span>
-              </a>
-            ) : null}
-            
-            {hasValidEmail && hasValidPhone && (
-              <Divider style={{ margin: '8px 0', borderColor: 'rgba(0, 0, 0, 0.06)' }} />
-            )}
-
-            {/* Phone Contact */}
-            {hasValidPhone ? (
-              <a 
-                href={`tel:${systemSettings.contactPhone}`} 
-                style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: 12,
-                  color: '#667eea', 
-                  textDecoration: 'none',
-                  transition: 'opacity 0.3s ease',
-                  opacity: 1
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.8')}
-                onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
-              >
-                <PhoneOutlined style={{ color: '#667eea', fontSize: 16, minWidth: 16 }} />
-                <span>{systemSettings.contactPhone}</span>
-              </a>
-            ) : null}
-          </Space>
         ) : (
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            Contact information will be displayed once configured
-          </Typography.Text>
+          <div className="carousel-wrap horizontal" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <Button
+              type="text"
+              size="small"
+              icon={<LeftOutlined />}
+              onClick={() => handleCarouselScroll('left', contactInfoCarouselRef)}
+              style={{ color: '#667eea', minWidth: 32, height: 32, padding: 0 }}
+            />
+            
+            <div 
+              ref={contactInfoCarouselRef} 
+              className="carousel-scroll horizontal"
+              style={{ 
+                overflowX: 'auto', 
+                display: 'flex',
+                gap: 12, 
+                paddingBottom: 8,
+                scrollBehavior: 'smooth',
+                flex: 1
+              }}>
+              {contactItems.length === 0 ? (
+                <Typography.Text type="secondary" style={{ padding: '20px' }}>No contact information available</Typography.Text>
+              ) : (
+                contactItems.map(item => (
+                  <a 
+                    key={item._id}
+                    href={item.link || '#'}
+                    className="contact-card-item"
+                    style={{
+                      background: '#ffffff',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: 10,
+                      padding: 16,
+                      minWidth: 220,
+                      textAlign: 'center',
+                      boxShadow: '0 2px 6px rgba(0, 0, 0, 0.04)',
+                      transition: 'all 0.3s ease',
+                      cursor: item.isPlaceholder ? 'default' : 'pointer',
+                      textDecoration: 'none',
+                      color: 'inherit',
+                      opacity: item.isPlaceholder ? 0.6 : 1
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!item.isPlaceholder) {
+                        (e.currentTarget as HTMLAnchorElement).style.boxShadow = '0 8px 16px rgba(102, 126, 234, 0.15)';
+                        (e.currentTarget as HTMLAnchorElement).style.transform = 'translateY(-2px)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLAnchorElement).style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.04)';
+                      (e.currentTarget as HTMLAnchorElement).style.transform = 'translateY(0)';
+                    }}
+                  >
+                    <div style={{ fontSize: 24, marginBottom: 8 }}>
+                      {item.icon === 'mail' && '📧'}
+                      {item.icon === 'phone' && '📱'}
+                      {item.icon === 'info' && 'ℹ️'}
+                    </div>
+                    <div style={{ color: '#94a3b8', fontSize: 11, marginBottom: 8, fontWeight: 500 }}>{item.label}</div>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: '#667eea', lineHeight: 1.4, wordBreak: 'break-word' }}>
+                      {item.value}
+                    </div>
+                  </a>
+                ))
+              )}
+            </div>
+
+            <Button
+              type="text"
+              size="small"
+              icon={<RightOutlined />}
+              onClick={() => handleCarouselScroll('right', contactInfoCarouselRef)}
+              style={{ color: '#667eea', minWidth: 32, height: 32, padding: 0 }}
+            />
+          </div>
         )}
       </Card>
     );
@@ -553,7 +624,7 @@ const LoginForm: React.FC = () => {
 
                 <div className="carousel-wrap vertical" style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'stretch', justifyContent: 'flex-start', flex: 1, minHeight: 0 }}>
                   <div 
-                    ref={carouselRef} 
+                    ref={officialsCarouselRef} 
                     className={`carousel-scroll vertical ${slideDirection ? `slide-${slideDirection}` : ''}`}
                     style={{ 
                       overflowY: 'auto', 
