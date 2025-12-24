@@ -253,12 +253,53 @@ try {
   console.error('Failed to mount /api/settings routes', e);
 }
 
+// PERMANENT public settings endpoint for login page and unauthenticated access
+// This endpoint is always available and does not require authentication
+// Returns only public-facing system settings (barangayName, barangayAddress, contactEmail, contactPhone, systemNotice, siteName)
+try {
+  const SystemSetting = require('./models/SystemSetting');
+  app.get('/api/settings/public', async (req, res) => {
+    try {
+      let settings = await SystemSetting.findOne().lean();
+      if (!settings) {
+        // Return default shape if no settings exist
+        settings = {
+          siteName: 'Barangay Information System',
+          barangayName: '',
+          barangayAddress: '',
+          contactEmail: '',
+          contactPhone: '',
+          systemNotice: ''
+        };
+      }
+      
+      // Return only public-facing fields (sanitize all sensitive data)
+      const publicSettings = {
+        siteName: settings.siteName || '',
+        barangayName: settings.barangayName || '',
+        barangayAddress: settings.barangayAddress || '',
+        contactEmail: settings.contactEmail || '',
+        contactPhone: settings.contactPhone || '',
+        systemNotice: settings.systemNotice || ''
+      };
+      
+      return res.json(publicSettings);
+    } catch (err) {
+      console.error('GET /api/settings/public error', err);
+      return res.status(500).json({ message: 'Failed to load public settings' });
+    }
+  });
+  console.log('Public settings endpoint enabled at GET /api/settings/public');
+} catch (e) {
+  console.error('Failed to mount public settings endpoint', e);
+}
+
 // Optional public settings endpoint for quick local debugging.
 // Enable by setting DEBUG_PUBLIC_SETTINGS=true in the server environment.
 if (process.env.DEBUG_PUBLIC_SETTINGS === 'true') {
   try {
     const SystemSetting = require('./src/models/SystemSetting');
-    app.get('/api/settings/public', async (req, res) => {
+    app.get('/api/settings/public-debug', async (req, res) => {
       try {
         let settings = await SystemSetting.findOne().lean();
         if (!settings) settings = new SystemSetting();
@@ -270,13 +311,13 @@ if (process.env.DEBUG_PUBLIC_SETTINGS === 'true') {
         }
         return res.json(settings);
       } catch (err) {
-        console.error('Public settings endpoint error', err);
+        console.error('Public settings debug endpoint error', err);
         return res.status(500).json({ message: 'Failed to load settings' });
       }
     });
-    console.log('DEBUG_PUBLIC_SETTINGS endpoint enabled at GET /api/settings/public');
+    console.log('DEBUG_PUBLIC_SETTINGS endpoint enabled at GET /api/settings/public-debug');
   } catch (e) {
-    console.error('Failed to create public settings endpoint', e);
+    console.error('Failed to create public settings debug endpoint', e);
   }
 }
 
