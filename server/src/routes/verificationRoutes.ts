@@ -279,6 +279,18 @@ router.get('/requests/:id', auth, async (req, res) => {
   }
 });
 
+// Handle CORS preflight for file endpoint
+router.options('/file/:id', auth, authorize('admin'), (req, res) => {
+  const origin = req.headers.origin || req.headers.referer;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.status(200).end();
+});
+
 // Admin: stream/download a verification file from GridFS by id
 router.get('/file/:id', auth, authorize('admin'), async (req, res) => {
   try {
@@ -323,10 +335,14 @@ router.get('/file/:id', auth, authorize('admin'), async (req, res) => {
       res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
     }
     
-    // Add CORS headers for file access
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET');
-    res.setHeader('Cache-Control', 'public, max-age=3600');
+    // Add CORS headers for authenticated file access
+    const origin = req.headers.origin || req.headers.referer;
+    if (origin) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    }
+    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD');
+    res.setHeader('Cache-Control', 'private, max-age=3600');
     
     // Stream the file
     const stream = bucket.openDownloadStream(objectId);
