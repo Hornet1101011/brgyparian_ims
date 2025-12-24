@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { axiosPublic } from '../services/api';
+import defaultSystemSettings from '../config/defaultSystemSettings';
 
 export interface SystemSettingsPublic {
   siteName?: string;
@@ -52,47 +53,26 @@ export const useSystemSettings = (autoRefresh: boolean = true): UseSystemSetting
           return;
         }
       } catch (publicErr: any) {
-        // If /settings/public is not available (404), try fetching from /admin/settings as fallback
-        // This handles cases where the server hasn't deployed the public endpoint yet
+        // If /settings/public is not available (404), log and use defaults
+        // The endpoint may not exist if the server hasn't deployed the public settings feature yet
         if (publicErr?.response?.status === 404) {
-          console.warn('[useSystemSettings] Public endpoint not found (404), attempting fallback to admin endpoint');
-          try {
-            const fallbackResponse = await axiosPublic.get('/admin/settings');
-            console.log('[useSystemSettings] Fetched settings from admin endpoint:', fallbackResponse.data);
-            
-            if (mountedRef.current && fallbackResponse.data) {
-              // Sanitize to only public fields
-              const publicData = {
-                siteName: fallbackResponse.data.siteName || '',
-                barangayName: fallbackResponse.data.barangayName || '',
-                barangayAddress: fallbackResponse.data.barangayAddress || '',
-                contactEmail: fallbackResponse.data.contactEmail || '',
-                contactPhone: fallbackResponse.data.contactPhone || '',
-                systemNotice: fallbackResponse.data.systemNotice || ''
-              };
-              setSettings(publicData);
-              return;
-            }
-          } catch (fallbackErr) {
-            console.warn('[useSystemSettings] Fallback endpoint also failed', fallbackErr);
-          }
+          console.warn('[useSystemSettings] Public endpoint not found (404), using defaults');
         } else {
-          // For other errors, log and continue to use defaults
           const errorMsg = publicErr instanceof Error ? publicErr.message : 'Failed to fetch settings';
           console.error('[useSystemSettings] Error fetching settings:', errorMsg, publicErr);
         }
       }
       
-      // If both endpoints fail or data is missing, set defaults
+      // If endpoint fails or data is missing, use sensible defaults
       if (mountedRef.current) {
-        console.log('[useSystemSettings] Using default settings');
+        console.log('[useSystemSettings] Using default settings from config');
         setSettings({
-          siteName: 'Barangay Information System',
-          barangayName: '',
-          barangayAddress: '',
-          contactEmail: '',
-          contactPhone: '',
-          systemNotice: ''
+          siteName: defaultSystemSettings.siteName || 'Barangay Portal',
+          barangayName: defaultSystemSettings.barangayName || 'Barangay Uno',
+          barangayAddress: defaultSystemSettings.barangayAddress || '123 Main St, City, Province',
+          contactEmail: defaultSystemSettings.contactEmail || 'info@barangayuno.local',
+          contactPhone: defaultSystemSettings.contactPhone || '+63 912 345 6789',
+          systemNotice: defaultSystemSettings.systemNotice || ''
         });
       }
     } catch (err) {
@@ -101,13 +81,13 @@ export const useSystemSettings = (autoRefresh: boolean = true): UseSystemSetting
       
       if (mountedRef.current) {
         setError(err instanceof Error ? err : new Error('Failed to fetch settings'));
-        // On error, set a minimal default structure so UI doesn't break
+        // Use hardcoded defaults as fallback
         setSettings({
-          siteName: 'Barangay Information System',
-          barangayName: '',
-          barangayAddress: '',
-          contactEmail: '',
-          contactPhone: '',
+          siteName: 'Barangay Portal',
+          barangayName: 'Barangay Uno',
+          barangayAddress: '123 Main St, City, Province',
+          contactEmail: 'info@barangayuno.local',
+          contactPhone: '+63 912 345 6789',
           systemNotice: ''
         });
       }
