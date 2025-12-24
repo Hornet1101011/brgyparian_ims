@@ -171,11 +171,15 @@ mongoose.connection.on('connected', async () => {
         allowMultipleAccountsPerIP: false,
         maxAccountsPerIP: 1,
       };
-      await SystemSetting.create(defaultSettings);
+      const created = await SystemSetting.create(defaultSettings);
       console.log('[Init] ✅ System settings initialized successfully');
+      console.log('[Init] Settings:', created);
+    } else {
+      console.log('[Init] ✅ System settings already exist');
+      console.log('[Init] Current settings:', existingSettings);
     }
   } catch (err) {
-    console.warn('[Init] Warning: Failed to initialize system settings:', err && err.message);
+    console.error('[Init] ❌ Failed to initialize system settings:', err && err.message);
   }
 });
 
@@ -260,8 +264,12 @@ try {
   const SystemSetting = require('./models/SystemSetting');
   app.get('/api/settings/public', async (req, res) => {
     try {
+      console.log('[Public Settings] GET /api/settings/public - fetching from DB');
       let settings = await SystemSetting.findOne().lean();
+      console.log('[Public Settings] Found settings:', settings ? 'Yes' : 'No');
+      
       if (!settings) {
+        console.log('[Public Settings] No settings in DB, returning defaults');
         // Return default shape if no settings exist
         settings = {
           siteName: 'Barangay Information System',
@@ -283,6 +291,7 @@ try {
         systemNotice: settings.systemNotice || ''
       };
       
+      console.log('[Public Settings] Returning:', publicSettings);
       return res.json(publicSettings);
     } catch (err) {
       console.error('GET /api/settings/public error', err);

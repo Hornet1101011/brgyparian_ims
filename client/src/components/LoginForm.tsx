@@ -82,37 +82,22 @@ const LoginForm: React.FC = () => {
     return () => { mounted = false; };
   }, [isAuthenticated]);
 
-  // Fetch system settings
+  // Fetch system settings - simple one-time fetch
   useEffect(() => {
     let mounted = true;
     const fetchSystemSettings = async () => {
-      setSettingsLoading(true);
       try {
-        // Try the public settings endpoint first (for unauthenticated login page)
-        try {
-          const response = await axiosPublic.get('/settings/public');
-          console.log('Fetched system settings from /settings/public:', response.data);
-          if (mounted && response.data) {
-            console.log('Setting systemSettings state with:', response.data);
-            setSystemSettings(response.data);
-            return;
-          }
-        } catch (publicErr) {
-          console.warn('Public settings endpoint failed, trying admin endpoint:', publicErr);
-        }
-        
-        // Fallback to admin endpoint
-        const settings = await adminAPI.getSystemSettings();
-        console.log('Fetched system settings from adminAPI:', settings);
-        if (mounted && settings) {
-          console.log('Setting systemSettings state with:', settings);
-          setSystemSettings(settings);
-        } else {
-          console.warn('No settings received or component unmounted');
+        // Fetch from public endpoint (no auth required for login page)
+        console.log('[LoginForm] Fetching from /settings/public...');
+        const response = await axiosPublic.get('/settings/public');
+        console.log('[LoginForm] Response received:', response.data);
+        if (mounted && response.data) {
+          console.log('[LoginForm] Setting systemSettings with:', response.data);
+          setSystemSettings(response.data);
         }
       } catch (err) {
-        console.warn('Failed to fetch system settings for login display', err);
-        // Gracefully handle error - UI will show minimal info
+        // If public endpoint fails, that's ok - just show empty values
+        console.error('[LoginForm] Failed to fetch system settings:', err);
       } finally {
         if (mounted) setSettingsLoading(false);
       }
@@ -202,9 +187,6 @@ const LoginForm: React.FC = () => {
 
   // Component to display barangay information card
   const BarangayInfoCard = () => {
-    console.log('BarangayInfoCard rendering with systemSettings:', systemSettings);
-    const hasData = systemSettings?.barangayName || systemSettings?.barangayAddress;
-    
     return (
       <Card
         className="glass-card info-card"
@@ -215,8 +197,7 @@ const LoginForm: React.FC = () => {
           borderRadius: 16,
           backdropFilter: 'blur(10px)',
           boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
-          padding: 20,
-          minHeight: hasData ? 'auto' : 120
+          padding: 20
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
@@ -230,11 +211,11 @@ const LoginForm: React.FC = () => {
         <Space direction="vertical" style={{ width: '100%' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
             <Typography.Text strong style={{ color: '#0f172a', minWidth: 80 }}>Barangay:</Typography.Text>
-            <Typography.Text style={{ color: '#475569', flex: 1 }}>{systemSettings?.barangayName || 'N/A'}</Typography.Text>
+            <Typography.Text style={{ color: '#475569', flex: 1 }}>{systemSettings?.barangayName || '-'}</Typography.Text>
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
             <Typography.Text strong style={{ color: '#0f172a', minWidth: 80 }}>Address:</Typography.Text>
-            <Typography.Text style={{ color: '#475569', flex: 1 }}>{systemSettings?.barangayAddress || 'N/A'}</Typography.Text>
+            <Typography.Text style={{ color: '#475569', flex: 1 }}>{systemSettings?.barangayAddress || '-'}</Typography.Text>
           </div>
         </Space>
       </Card>
@@ -243,11 +224,6 @@ const LoginForm: React.FC = () => {
 
   // Component to display contact information card
   const ContactInfoCard = () => {
-    console.log('ContactInfoCard rendering with systemSettings:', systemSettings);
-    const hasEmail = systemSettings?.contactEmail;
-    const hasPhone = systemSettings?.contactPhone;
-    const hasData = hasEmail || hasPhone;
-
     return (
       <Card
         className="glass-card contact-card"
@@ -258,8 +234,7 @@ const LoginForm: React.FC = () => {
           borderRadius: 16,
           backdropFilter: 'blur(10px)',
           boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
-          padding: 20,
-          minHeight: hasData ? 'auto' : 120
+          padding: 20
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
@@ -271,41 +246,26 @@ const LoginForm: React.FC = () => {
         </div>
 
         <Space direction="vertical" style={{ width: '100%' }}>
-          {hasEmail ? (
-            <a href={`mailto:${systemSettings.contactEmail}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', cursor: 'pointer', transition: 'all 0.2s', borderRadius: 4, marginLeft: -12, marginRight: -12 }}>
-                <MailOutlined style={{ color: '#667eea', fontSize: 16, minWidth: 16 }} />
-                <div style={{ flex: 1 }}>
-                  <Typography.Text style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: 2 }}>Email</Typography.Text>
-                  <Typography.Text style={{ color: '#0f172a', fontWeight: 500, wordBreak: 'break-all' }}>{systemSettings.contactEmail}</Typography.Text>
-                </div>
-              </div>
-            </a>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', opacity: 0.6 }}>
-              <MailOutlined style={{ color: '#cbd5e1', fontSize: 16, minWidth: 16 }} />
-              <div>
-                <Typography.Text style={{ display: 'block', fontSize: 12, color: '#cbd5e1' }}>Email not configured</Typography.Text>
-              </div>
+          {systemSettings?.contactEmail ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <MailOutlined style={{ color: '#667eea', fontSize: 16, minWidth: 16 }} />
+              <a href={`mailto:${systemSettings.contactEmail}`} style={{ color: '#667eea', textDecoration: 'none' }}>
+                {systemSettings.contactEmail}
+              </a>
             </div>
+          ) : (
+            <Typography.Text style={{ color: '#cbd5e1' }}>Email not set</Typography.Text>
           )}
-          {hasPhone ? (
-            <a href={`tel:${systemSettings.contactPhone}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', cursor: 'pointer', transition: 'all 0.2s', borderRadius: 4, marginLeft: -12, marginRight: -12 }}>
-                <PhoneOutlined style={{ color: '#667eea', fontSize: 16, minWidth: 16 }} />
-                <div style={{ flex: 1 }}>
-                  <Typography.Text style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: 2 }}>Phone</Typography.Text>
-                  <Typography.Text style={{ color: '#0f172a', fontWeight: 500 }}>{systemSettings.contactPhone}</Typography.Text>
-                </div>
-              </div>
-            </a>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', opacity: 0.6 }}>
-              <PhoneOutlined style={{ color: '#cbd5e1', fontSize: 16, minWidth: 16 }} />
-              <div>
-                <Typography.Text style={{ display: 'block', fontSize: 12, color: '#cbd5e1' }}>Phone not configured</Typography.Text>
-              </div>
+          
+          {systemSettings?.contactPhone ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <PhoneOutlined style={{ color: '#667eea', fontSize: 16, minWidth: 16 }} />
+              <a href={`tel:${systemSettings.contactPhone}`} style={{ color: '#667eea', textDecoration: 'none' }}>
+                {systemSettings.contactPhone}
+              </a>
             </div>
+          ) : (
+            <Typography.Text style={{ color: '#cbd5e1' }}>Phone not set</Typography.Text>
           )}
         </Space>
       </Card>
