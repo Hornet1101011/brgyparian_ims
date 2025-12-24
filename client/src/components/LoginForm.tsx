@@ -94,14 +94,26 @@ const LoginForm: React.FC = () => {
         if (mounted && response.data) {
           console.log('[LoginForm] Setting systemSettings with:', response.data);
           setSystemSettings(response.data);
+          return;
         }
       } catch (err) {
-        // If public endpoint fails, that's ok - just show empty values
-        console.error('[LoginForm] Failed to fetch system settings:', err);
-      } finally {
-        if (mounted) setSettingsLoading(false);
+        console.error('[LoginForm] Failed to fetch from /settings/public:', err);
+      }
+
+      // Fallback to hardcoded endpoint if public endpoint fails or returns no data
+      try {
+        console.log('[LoginForm] Trying fallback /settings/fallback...');
+        const fallbackResponse = await axiosPublic.get('/settings/fallback');
+        console.log('[LoginForm] Fallback response received:', fallbackResponse.data);
+        if (mounted && fallbackResponse.data) {
+          console.log('[LoginForm] Setting systemSettings with fallback data:', fallbackResponse.data);
+          setSystemSettings(fallbackResponse.data);
+        }
+      } catch (fallbackErr) {
+        console.error('[LoginForm] Fallback also failed:', fallbackErr);
       }
     };
+
     fetchSystemSettings();
     return () => { mounted = false; };
   }, []);

@@ -179,8 +179,21 @@ mongoose.connection.on('connected', async () => {
       console.log('[Init] Current settings:', existingSettings);
     }
   } catch (err) {
-    console.error('[Init] ❌ Failed to initialize system settings:', err && err.message);
+    console.log('[Init] ❌ Failed to initialize system settings:', err && err.message);
   }
+});
+
+// Hardcoded fallback endpoint - returns static values if database is empty
+// This ensures login page always shows something even if DB is not initialized
+app.get('/api/settings/fallback', (req, res) => {
+  res.json({
+    siteName: 'Barangay Information Management System',
+    barangayName: 'Barangay Parian',
+    barangayAddress: 'Barangay Parian, Calamba, Laguna',
+    contactEmail: 'barangayparian@gmail.com',
+    contactPhone: '09614215746',
+    systemNotice: ''
+  });
 });
 
 
