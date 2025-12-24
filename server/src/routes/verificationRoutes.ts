@@ -288,27 +288,65 @@ router.get('/file/:id', auth, authorize('admin'), async (req, res) => {
         const settingsAny: any = settings as any;
         if (settingsAny && settingsAny.enableVerifications === false) return res.status(404).send('Not found');
     } catch (se) {}
+    
     const { id } = req.params;
     const db = (mongoose.connection.db as any);
     const mongodb = await import('mongodb');
     const GridFSBucket = mongodb.GridFSBucket;
     const ObjectId = mongodb.ObjectId;
+    
+    // Validate ID format
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid file ID' });
+    }
+    
     const bucket = new GridFSBucket(db, { bucketName: 'verificationRequests' });
     const objectId = new ObjectId(id);
+    
+    // Find the file metadata
     const files = await bucket.find({ _id: objectId }).toArray();
-    if (!files || files.length === 0) return res.status(404).send('File not found');
+    if (!files || files.length === 0) {
+      return res.status(404).json({ message: 'File not found' });
+    }
+    
     const file = files[0];
-    res.setHeader('Content-Type', file.contentType || 'application/octet-stream');
-    res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+    
+    // Set appropriate headers for viewing/downloading
+    const contentType = file.contentType || 'application/octet-stream';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Length', file.length);
+    
+    // For images, allow inline viewing; for other files, use attachment
+    if (contentType.startsWith('image/')) {
+      res.setHeader('Content-Disposition', `inline; filename="${file.filename}"`);
+    } else {
+      res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+    }
+    
+    // Add CORS headers for file access
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    
+    // Stream the file
     const stream = bucket.openDownloadStream(objectId);
     stream.on('error', (err) => {
       console.error('GridFS download error', err);
-      res.status(500).send('Error streaming file');
+      if (!res.headersSent) {
+        res.status(500).json({ message: 'Error streaming file' });
+      } else {
+        res.end();
+      }
     });
+    
     stream.pipe(res);
   } catch (err) {
     console.error('Error streaming verification file', err);
-    res.status(500).send('Error');
+    if (!res.headersSent) {
+      res.status(500).json({ message: 'Error fetching file', error: String(err) });
+    } else {
+      res.end();
+    }
   }
 });
 

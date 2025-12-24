@@ -208,8 +208,34 @@ export const getInbox = async () => {
 export const verificationAPI = {
   getRequests: async () => axiosInstance.get('/verification/admin/requests').then(res => res.data),
   verifyUser: async (userId: string, verified: boolean) => axiosInstance.post(`/verification/admin/verify-user/${userId}`, { verified }).then(res => res.data),
-  // URL to stream/download a verification file by GridFS id
+  // Function to get file with proper authentication headers
   getFileUrl: (fileId: string) => `${API_URL.replace(/\/$/, '')}/verification/file/${fileId}`,
+  // Download file with proper auth headers
+  downloadFile: async (fileId: string) => {
+    try {
+      const response = await axiosInstance.get(`/verification/file/${fileId}`, {
+        responseType: 'blob'
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Failed to download file:', error);
+      throw error;
+    }
+  },
+  // View file with proper auth headers
+  viewFile: async (fileId: string) => {
+    try {
+      const response = await axiosInstance.get(`/verification/file/${fileId}`, {
+        responseType: 'blob'
+      });
+      const url = URL.createObjectURL(response.data);
+      window.open(url, '_blank');
+      return url;
+    } catch (error) {
+      console.error('Failed to view file:', error);
+      throw error;
+    }
+  },
   // Approve a verification request by request id (admin)
   approveRequest: async (requestId: string) => axiosInstance.post(`/verification/admin/requests/${requestId}/approve`).then(res => res.data),
   // Unapprove (revert) a previously approved verification request (admin)

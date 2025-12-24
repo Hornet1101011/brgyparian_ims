@@ -307,25 +307,37 @@ const StatisticsInner: React.FC = () => {
     <Card
       title={
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <BarChartOutlined style={{ fontSize: 24, color: '#1890ff' }} />
-          <Typography.Title level={3} style={{ margin: 0, color: '#0f172a', fontWeight: 700 }}>
-            Statistics & Analytics
-          </Typography.Title>
+          <BarChartOutlined style={{ fontSize: 28, color: '#1890ff' }} />
+          <div>
+            <Typography.Title level={2} style={{ margin: 0, color: '#0f172a', fontWeight: 800, fontSize: '26px' }}>
+              Statistics & Analytics
+            </Typography.Title>
+            <Typography.Text type="secondary" style={{ fontSize: 12, marginTop: 4 }}>Real-time system analytics and insights</Typography.Text>
+          </div>
         </div>
       }
       style={{ 
         borderRadius: 16, 
-        boxShadow: '0 4px 20px rgba(15,23,42,0.08)',
-        border: '1px solid #e2e8f0'
+        boxShadow: '0 8px 24px rgba(15,23,42,0.12)',
+        border: '1px solid #e2e8f0',
+        background: '#f8fafc'
       }}
       styles={{ 
-        body: { padding: 28 },
-        header: { padding: '24px 28px', borderBottom: '1px solid #e2e8f0', backgroundColor: 'rgba(15, 23, 42, 0.01)' }
+        body: { padding: 32 },
+        header: { padding: '28px 32px', borderBottom: '1px solid #e2e8f0', backgroundColor: '#ffffff' }
       }}
     >
       <div ref={dashboardRef}>
+        {/* Metrics Section Header */}
+        <div style={{ marginBottom: 24 }}>
+          <Typography.Title level={4} style={{ margin: 0, color: '#0f172a', fontWeight: 700, fontSize: '16px' }}>
+            Key Metrics
+          </Typography.Title>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>Overview of system activity and resources</Typography.Text>
+        </div>
+
         {/* Top Metrics */}
-        <Row gutter={[24, 24]} style={{ marginBottom: 32 }}>
+        <Row gutter={[24, 24]} style={{ marginBottom: 40 }}>
           <Col xs={24} sm={12} md={8}>
             <Card 
               variant="borderless" 
@@ -333,22 +345,34 @@ const StatisticsInner: React.FC = () => {
                 borderRadius: 12, 
                 boxShadow: '0 2px 12px rgba(0, 0, 0, 0.08)',
                 border: 'none',
-                borderLeft: '4px solid #1890ff',
+                borderTop: '4px solid #1890ff',
                 background: '#ffffff',
-                textAlign: 'left' 
-              }} 
-              styles={{ body: { padding: 20 } }}
+                textAlign: 'left',
+                transition: 'all 0.3s ease',
+                cursor: 'pointer',
+                height: '100%'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(24, 144, 255, 0.15)';
+                e.currentTarget.style.transform = 'translateY(-2px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.boxShadow = '0 2px 12px rgba(0, 0, 0, 0.08)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+              styles={{ body: { padding: 24 } }}
             >
               {summaryQuery.isLoading ? (
                 <Skeleton active paragraph={false} />
               ) : (
                 <div>
-                  <Typography.Text type="secondary" style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b', marginBottom: 8 }}>
+                  <Typography.Text type="secondary" style={{ display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', color: '#94a3b8', marginBottom: 12 }}>
                     Total Residents
                   </Typography.Text>
-                  <Typography.Title level={2} style={{ margin: 0, color: '#1890ff', fontWeight: 700 }}>
+                  <Typography.Title level={1} style={{ margin: 0, marginBottom: 8, color: '#1890ff', fontWeight: 800, fontSize: '36px' }}>
                     {totalResidents.toLocaleString()}
                   </Typography.Title>
+                  <div style={{ fontSize: 12, color: '#64748b', fontWeight: 500 }}>Active profiles in the system</div>
                 </div>
               )}
             </Card>
@@ -361,24 +385,49 @@ const StatisticsInner: React.FC = () => {
                 borderRadius: 12, 
                 boxShadow: '0 2px 12px rgba(0, 0, 0, 0.08)',
                 border: 'none',
-                borderLeft: '4px solid #52c41a',
+                borderTop: '4px solid #52c41a',
                 background: '#ffffff',
-                textAlign: 'left' 
-              }} 
-              styles={{ body: { padding: 20 } }}
+                textAlign: 'left',
+                transition: 'all 0.3s ease',
+                cursor: 'pointer',
+                height: '100%'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(82, 196, 26, 0.15)';
+                e.currentTarget.style.transform = 'translateY(-2px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.boxShadow = '0 2px 12px rgba(0, 0, 0, 0.08)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+              styles={{ body: { padding: 24 } }}
             >
               {summaryQuery.isLoading ? (
                 <Skeleton active paragraph={false} />
               ) : (
                 <div>
-                  <Typography.Text type="secondary" style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b', marginBottom: 8 }}>
+                  <Typography.Text type="secondary" style={{ display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', color: '#94a3b8', marginBottom: 12 }}>
                     Total Documents
                   </Typography.Text>
-                  <Typography.Title level={2} style={{ margin: 0, marginBottom: 12, color: '#52c41a', fontWeight: 700 }}>
+                  <Typography.Title level={1} style={{ margin: 0, marginBottom: 12, color: '#52c41a', fontWeight: 800, fontSize: '36px' }}>
                     {totalDocuments.toLocaleString()}
                   </Typography.Title>
-                  <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 6 }}>Templates: <span style={{ fontWeight: 600, color: '#52c41a' }}>{templatesCount}</span></div>
-                  <div style={{ fontSize: 11, color: '#6b7280' }}>Processed: <span style={{ fontWeight: 600, color: '#52c41a' }}>{processedDocuments}</span></div>
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: '1fr 1fr', 
+                    gap: 8,
+                    padding: '12px 0',
+                    borderTop: '1px solid #f0f0f0'
+                  }}>
+                    <div>
+                      <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginBottom: 4 }}>Templates</div>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: '#52c41a' }}>{templatesCount}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginBottom: 4 }}>Processed</div>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: '#52c41a' }}>{processedDocuments}</div>
+                    </div>
+                  </div>
                 </div>
               )}
             </Card>
@@ -391,39 +440,77 @@ const StatisticsInner: React.FC = () => {
                 borderRadius: 12, 
                 boxShadow: '0 2px 12px rgba(0, 0, 0, 0.08)',
                 border: 'none',
-                borderLeft: '4px solid #f59e0b',
+                borderTop: '4px solid #f59e0b',
                 background: '#ffffff',
-                textAlign: 'left' 
-              }} 
-              styles={{ body: { padding: 20 } }}
+                textAlign: 'left',
+                transition: 'all 0.3s ease',
+                cursor: 'pointer',
+                height: '100%'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(245, 158, 11, 0.15)';
+                e.currentTarget.style.transform = 'translateY(-2px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.boxShadow = '0 2px 12px rgba(0, 0, 0, 0.08)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+              styles={{ body: { padding: 24 } }}
             >
               {summaryQuery.isLoading ? (
                 <Skeleton active paragraph={false} />
               ) : (
                 <div>
-                  <Typography.Text type="secondary" style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b', marginBottom: 8 }}>
+                  <Typography.Text type="secondary" style={{ display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', color: '#94a3b8', marginBottom: 12 }}>
                     Pending Requests
                   </Typography.Text>
-                  <Typography.Title level={2} style={{ margin: 0, marginBottom: 12, color: '#f59e0b', fontWeight: 700 }}>
+                  <Typography.Title level={1} style={{ margin: 0, marginBottom: 12, color: '#f59e0b', fontWeight: 800, fontSize: '36px' }}>
                     {pendingRequests.toLocaleString()}
                   </Typography.Title>
-                  <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 6 }}>Documents: <span style={{ fontWeight: 600, color: '#f59e0b' }}>{documentRequestsCount}</span></div>
-                  <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 6 }}>Inquiries: <span style={{ fontWeight: 600, color: '#f59e0b' }}>{inquiriesCount}</span></div>
-                  <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 6 }}>Verification: <span style={{ fontWeight: 600, color: '#f59e0b' }}>{verificationRequestsCount}</span></div>
-                  <div style={{ fontSize: 11, color: '#6b7280' }}>Staff: <span style={{ fontWeight: 600, color: '#f59e0b' }}>{staffRequestsCount}</span></div>
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: '1fr 1fr', 
+                    gap: 8,
+                    padding: '12px 0',
+                    borderTop: '1px solid #f0f0f0'
+                  }}>
+                    <div>
+                      <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginBottom: 4 }}>Documents</div>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: '#f59e0b' }}>{documentRequestsCount}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginBottom: 4 }}>Inquiries</div>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: '#f59e0b' }}>{inquiriesCount}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginBottom: 4 }}>Verification</div>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: '#f59e0b' }}>{verificationRequestsCount}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginBottom: 4 }}>Staff</div>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: '#f59e0b' }}>{staffRequestsCount}</div>
+                    </div>
+                  </div>
                 </div>
               )}
             </Card>
           </Col>
         </Row>
 
-        <Divider style={{ margin: '32px 0', borderColor: '#e2e8f0' }} />
+        <Divider style={{ margin: '40px 0', borderColor: '#e2e8f0' }} />
+
+        {/* Analytics Controls Section */}
+        <div style={{ marginBottom: 32 }}>
+          <Typography.Title level={4} style={{ margin: 0, marginBottom: 16, color: '#0f172a', fontWeight: 700, fontSize: '16px' }}>
+            Analytics Configuration
+          </Typography.Title>
+        </div>
 
         {/* Filters Section */}
         <Card 
           title={<Typography.Title level={5} style={{ margin: 0, fontWeight: 600, color: '#0f172a' }}>Filters & Controls</Typography.Title>}
-          style={{ marginBottom: 28, borderRadius: 12, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}
-          styles={{ body: { padding: 20 }, header: { padding: '16px 20px', borderBottom: '1px solid #e2e8f0' } }}
+          style={{ marginBottom: 32, borderRadius: 12, border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}
+          styles={{ body: { padding: 20 }, header: { padding: '16px 20px', borderBottom: '1px solid #e2e8f0', background: '#ffffff' } }}
         >
           <Form layout={isMobile ? "vertical" : "inline"} style={{ marginBottom: 0, width: '100%', boxSizing: 'border-box', display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-end' }}>
             <Form.Item label="Date Range" style={{ marginBottom: 0 }}>
@@ -589,8 +676,15 @@ const StatisticsInner: React.FC = () => {
         </Modal>
 
         {/* Charts Section */}
-        <div style={{ marginTop: 32 }}>
-          <Divider style={{ margin: '0 0 28px 0', borderColor: '#e2e8f0' }} />
+        <div style={{ marginTop: 40 }}>
+          <Divider style={{ margin: '0 0 32px 0', borderColor: '#e2e8f0' }} />
+          
+          <div style={{ marginBottom: 28 }}>
+            <Typography.Title level={4} style={{ margin: 0, marginBottom: 8, color: '#0f172a', fontWeight: 700, fontSize: '16px' }}>
+              Detailed Analytics
+            </Typography.Title>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>Comprehensive breakdown and trend analysis</Typography.Text>
+          </div>
           
           {/* Error Alerts */}
           {chartIds.map(id => {
