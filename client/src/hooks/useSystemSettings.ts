@@ -42,16 +42,62 @@ export const useSystemSettings = (autoRefresh: boolean = true): UseSystemSetting
       setError(null);
       
       // Fetch from publicviews collection for optimized cached data
-      const response = await axiosPublic.get('/settings/public');
+      try {
+        const response = await axiosPublic.get('/settings/public');
+        
+        console.log('[useSystemSettings] Fetched settings from public endpoint:', response.data);
+        
+        if (mountedRef.current && response.data) {
+          setSettings(response.data);
+          return;
+        }
+      } catch (publicErr: any) {
+        // If /settings/public is not available (404), try fetching from /admin/settings as fallback
+        // This handles cases where the server hasn't deployed the public endpoint yet
+        if (publicErr?.response?.status === 404) {
+          console.warn('[useSystemSettings] Public endpoint not found (404), attempting fallback to admin endpoint');
+          try {
+            const fallbackResponse = await axiosPublic.get('/admin/settings');
+            console.log('[useSystemSettings] Fetched settings from admin endpoint:', fallbackResponse.data);
+            
+            if (mountedRef.current && fallbackResponse.data) {
+              // Sanitize to only public fields
+              const publicData = {
+                siteName: fallbackResponse.data.siteName || '',
+                barangayName: fallbackResponse.data.barangayName || '',
+                barangayAddress: fallbackResponse.data.barangayAddress || '',
+                contactEmail: fallbackResponse.data.contactEmail || '',
+                contactPhone: fallbackResponse.data.contactPhone || '',
+                systemNotice: fallbackResponse.data.systemNotice || ''
+              };
+              setSettings(publicData);
+              return;
+            }
+          } catch (fallbackErr) {
+            console.warn('[useSystemSettings] Fallback endpoint also failed', fallbackErr);
+          }
+        } else {
+          // For other errors, log and continue to use defaults
+          const errorMsg = publicErr instanceof Error ? publicErr.message : 'Failed to fetch settings';
+          console.error('[useSystemSettings] Error fetching settings:', errorMsg, publicErr);
+        }
+      }
       
-      console.log('[useSystemSettings] Fetched settings:', response.data);
-      
-      if (mountedRef.current && response.data) {
-        setSettings(response.data);
+      // If both endpoints fail or data is missing, set defaults
+      if (mountedRef.current) {
+        console.log('[useSystemSettings] Using default settings');
+        setSettings({
+          siteName: 'Barangay Information System',
+          barangayName: '',
+          barangayAddress: '',
+          contactEmail: '',
+          contactPhone: '',
+          systemNotice: ''
+        });
       }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to fetch settings';
-      console.error('[useSystemSettings] Error fetching settings:', errorMsg, err);
+      console.error('[useSystemSettings] Unexpected error:', errorMsg, err);
       
       if (mountedRef.current) {
         setError(err instanceof Error ? err : new Error('Failed to fetch settings'));
