@@ -23,11 +23,34 @@ export interface UseBarangayInfoResult {
  * Automatically refetches every 30 seconds
  */
 export const useBarangayInfo = (autoRefresh: boolean = true): UseBarangayInfoResult => {
-  const [items, setItems] = useState<BarangayInfoItem[]>([]);
+  const [items, setItems] = useState<BarangayInfoItem[]>([
+    {
+      _id: 'site-name',
+      label: 'System Name',
+      value: 'Barangay Portal',
+      icon: 'home',
+      type: 'barangay-info'
+    },
+    {
+      _id: 'barangay-name',
+      label: 'Barangay Name',
+      value: 'Barangay Uno',
+      icon: 'environment',
+      type: 'barangay-info'
+    },
+    {
+      _id: 'barangay-address',
+      label: 'Address',
+      value: '123 Main St, City, Province',
+      icon: 'map',
+      type: 'barangay-info'
+    }
+  ]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const mountedRef = useRef(true);
+  const hasAttemptedFetchRef = useRef(false);
 
   const fetchItems = async () => {
     try {
@@ -117,16 +140,10 @@ export const useBarangayInfo = (autoRefresh: boolean = true): UseBarangayInfoRes
   };
 
   useEffect(() => {
-    // Initial fetch
-    fetchItems();
-
-    // Set up auto-refresh if enabled
-    if (autoRefresh) {
-      refreshIntervalRef.current = setInterval(() => {
-        if (mountedRef.current) {
-          fetchItems();
-        }
-      }, 30000); // Refresh every 30 seconds
+    // Only attempt fetch once, don't auto-refresh until endpoint is available
+    if (!hasAttemptedFetchRef.current) {
+      hasAttemptedFetchRef.current = true;
+      fetchItems();
     }
 
     // Cleanup
@@ -136,7 +153,7 @@ export const useBarangayInfo = (autoRefresh: boolean = true): UseBarangayInfoRes
         clearInterval(refreshIntervalRef.current);
       }
     };
-  }, [autoRefresh]);
+  }, []);
 
   return {
     items,

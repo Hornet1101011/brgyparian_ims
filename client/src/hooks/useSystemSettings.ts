@@ -44,6 +44,7 @@ export const useSystemSettings = (autoRefresh: boolean = true): UseSystemSetting
   const [error, setError] = useState<Error | null>(null);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const mountedRef = useRef(true);
+  const hasAttemptedFetchRef = useRef(false);
 
   const fetchSettings = async () => {
     try {
@@ -107,16 +108,10 @@ export const useSystemSettings = (autoRefresh: boolean = true): UseSystemSetting
   };
 
   useEffect(() => {
-    // Initial fetch
-    fetchSettings();
-
-    // Set up auto-refresh if enabled
-    if (autoRefresh) {
-      refreshIntervalRef.current = setInterval(() => {
-        if (mountedRef.current) {
-          fetchSettings();
-        }
-      }, 30000); // Refresh every 30 seconds
+    // Only attempt fetch once, don't auto-refresh since endpoint doesn't exist
+    if (!hasAttemptedFetchRef.current) {
+      hasAttemptedFetchRef.current = true;
+      fetchSettings();
     }
 
     // Cleanup
@@ -126,7 +121,7 @@ export const useSystemSettings = (autoRefresh: boolean = true): UseSystemSetting
         clearInterval(refreshIntervalRef.current);
       }
     };
-  }, [autoRefresh]);
+  }, []);
 
   return {
     settings,

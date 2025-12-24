@@ -25,11 +25,31 @@ export interface UseContactInfoResult {
  * Automatically refetches every 30 seconds
  */
 export const useContactInfo = (autoRefresh: boolean = true): UseContactInfoResult => {
-  const [items, setItems] = useState<ContactInfoItem[]>([]);
+  const [items, setItems] = useState<ContactInfoItem[]>([
+    {
+      _id: 'contact-email',
+      label: 'Email Address',
+      value: 'info@barangayuno.local',
+      icon: 'mail',
+      type: 'contact-info',
+      contactType: 'email',
+      link: 'mailto:info@barangayuno.local'
+    },
+    {
+      _id: 'contact-phone',
+      label: 'Phone Number',
+      value: '+63 912 345 6789',
+      icon: 'phone',
+      type: 'contact-info',
+      contactType: 'phone',
+      link: 'tel:+639123456789'
+    }
+  ]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const mountedRef = useRef(true);
+  const hasAttemptedFetchRef = useRef(false);
 
   const fetchItems = async () => {
     try {
@@ -113,16 +133,10 @@ export const useContactInfo = (autoRefresh: boolean = true): UseContactInfoResul
   };
 
   useEffect(() => {
-    // Initial fetch
-    fetchItems();
-
-    // Set up auto-refresh if enabled
-    if (autoRefresh) {
-      refreshIntervalRef.current = setInterval(() => {
-        if (mountedRef.current) {
-          fetchItems();
-        }
-      }, 30000); // Refresh every 30 seconds
+    // Only attempt fetch once, don't auto-refresh until endpoint is available
+    if (!hasAttemptedFetchRef.current) {
+      hasAttemptedFetchRef.current = true;
+      fetchItems();
     }
 
     // Cleanup
@@ -132,7 +146,7 @@ export const useContactInfo = (autoRefresh: boolean = true): UseContactInfoResul
         clearInterval(refreshIntervalRef.current);
       }
     };
-  }, [autoRefresh]);
+  }, []);
 
   return {
     items,
