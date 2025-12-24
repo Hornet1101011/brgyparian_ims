@@ -181,6 +181,38 @@ mongoose.connection.on('connected', async () => {
   } catch (err) {
     console.log('[Init] ❌ Failed to initialize system settings:', err && err.message);
   }
+
+  // Initialize PublicView collection if it doesn't exist
+  try {
+    const PublicView = require('./models/PublicView');
+    const SystemSetting = require('./models/SystemSetting');
+    
+    const existingPublicView = await PublicView.findOne({ isActive: true });
+    if (!existingPublicView) {
+      console.log('[Init] No PublicView cache found - creating from SystemSetting...');
+      const systemSetting = await SystemSetting.findOne();
+      if (systemSetting) {
+        const publicViewData = {
+          siteName: systemSetting.siteName || '',
+          barangayName: systemSetting.barangayName || '',
+          barangayAddress: systemSetting.barangayAddress || '',
+          contactEmail: systemSetting.contactEmail || '',
+          contactPhone: systemSetting.contactPhone || '',
+          systemNotice: systemSetting.systemNotice || '',
+          isActive: true,
+          lastSyncedAt: new Date()
+        };
+        const created = await PublicView.create(publicViewData);
+        console.log('[Init] ✅ PublicView cache initialized successfully');
+        console.log('[Init] PublicView:', created);
+      }
+    } else {
+      console.log('[Init] ✅ PublicView cache already exists');
+      console.log('[Init] Current PublicView:', existingPublicView);
+    }
+  } catch (err) {
+    console.log('[Init] ❌ Failed to initialize PublicView:', err && err.message);
+  }
 });
 
 // Hardcoded fallback endpoint - returns static values if database is empty

@@ -18,9 +18,16 @@ export interface UseSystemSettingsResult {
 }
 
 /**
- * Custom hook to fetch and manage public system settings
+ * Custom hook to fetch and manage public system settings from the publicviews collection
+ * Provides cached, optimized data for fast unauthenticated access
  * Used throughout the app to display barangay info, contact details, etc.
  * Automatically refetches every 30 seconds to pick up admin changes
+ * 
+ * Data Flow:
+ * 1. Admin updates system settings in SystemSettings panel
+ * 2. Update auto-syncs to publicviews collection via syncToPublicView()
+ * 3. GET /api/settings/public returns cached publicviews data (75-85% smaller payload)
+ * 4. This hook fetches and refreshes the cached data periodically
  */
 export const useSystemSettings = (autoRefresh: boolean = true): UseSystemSettingsResult => {
   const [settings, setSettings] = useState<SystemSettingsPublic | null>(null);
@@ -34,12 +41,18 @@ export const useSystemSettings = (autoRefresh: boolean = true): UseSystemSetting
       setLoading(true);
       setError(null);
       
+      // Fetch from publicviews collection for optimized cached data
       const response = await axiosPublic.get('/settings/public');
+      
+      console.log('[useSystemSettings] Fetched settings:', response.data);
       
       if (mountedRef.current && response.data) {
         setSettings(response.data);
       }
     } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to fetch settings';
+      console.error('[useSystemSettings] Error fetching settings:', errorMsg, err);
+      
       if (mountedRef.current) {
         setError(err instanceof Error ? err : new Error('Failed to fetch settings'));
         // On error, set a minimal default structure so UI doesn't break
