@@ -31,7 +31,15 @@ export interface UseSystemSettingsResult {
  * 4. This hook fetches and refreshes the cached data periodically
  */
 export const useSystemSettings = (autoRefresh: boolean = true): UseSystemSettingsResult => {
-  const [settings, setSettings] = useState<SystemSettingsPublic | null>(null);
+  // Initialize with defaults immediately so UI renders immediately
+  const [settings, setSettings] = useState<SystemSettingsPublic | null>({
+    siteName: defaultSystemSettings.siteName || 'Barangay Portal',
+    barangayName: defaultSystemSettings.barangayName || 'Barangay Uno',
+    barangayAddress: defaultSystemSettings.barangayAddress || '123 Main St, City, Province',
+    contactEmail: defaultSystemSettings.contactEmail || 'info@barangayuno.local',
+    contactPhone: defaultSystemSettings.contactPhone || '+63 912 345 6789',
+    systemNotice: defaultSystemSettings.systemNotice || ''
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
