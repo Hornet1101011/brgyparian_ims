@@ -503,6 +503,202 @@ try {
 } catch (e) {
   console.error('Failed to mount /api/admin/settings routes in src/index.ts', e);
 }
+
+// PUBLIC ENDPOINTS FOR LOGIN PAGE (unauthenticated access)
+// These endpoints fetch from publicviews collection or fall back to SystemSetting
+
+// GET /api/settings/public - Public system settings
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const SystemSetting = require('../models/SystemSetting');
+  app.get('/api/settings/public', async (req, res) => {
+    try {
+      console.log('[Public Settings] GET /api/settings/public - fetching from DB');
+      let settings = await SystemSetting.findOne().lean();
+      console.log('[Public Settings] Found settings:', settings ? 'Yes' : 'No');
+      
+      if (!settings) {
+        console.log('[Public Settings] No settings in DB, returning defaults');
+        settings = {
+          siteName: 'Barangay Information System',
+          barangayName: '',
+          barangayAddress: '',
+          contactEmail: '',
+          contactPhone: '',
+          systemNotice: ''
+        };
+      }
+      
+      const publicSettings = {
+        siteName: settings.siteName || '',
+        barangayName: settings.barangayName || '',
+        barangayAddress: settings.barangayAddress || '',
+        contactEmail: settings.contactEmail || '',
+        contactPhone: settings.contactPhone || '',
+        systemNotice: settings.systemNotice || ''
+      };
+      
+      console.log('[Public Settings] Returning:', publicSettings);
+      return res.json(publicSettings);
+    } catch (err) {
+      console.error('GET /api/settings/public error', err);
+      return res.status(500).json({ message: 'Failed to load public settings' });
+    }
+  });
+  console.log('Public settings endpoint enabled at GET /api/settings/public');
+} catch (e) {
+  console.error('Failed to mount public settings endpoint', e);
+}
+
+// GET /api/settings/public/barangay-info - Barangay information carousel items
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const SystemSetting = require('../models/SystemSetting');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const PublicView = require('../models/PublicView');
+  
+  app.get('/api/settings/public/barangay-info', async (req, res) => {
+    try {
+      console.log('[Barangay Info] GET /api/settings/public/barangay-info called');
+      
+      let publicView = await PublicView.findOne({ isActive: true }).lean();
+      if (!publicView) {
+        publicView = await SystemSetting.findOne().lean();
+      }
+      
+      if (!publicView) {
+        console.log('[Barangay Info] No barangay data found, returning empty array');
+        return res.json([]);
+      }
+      
+      const barangayInfoItems: any[] = [];
+      
+      if (publicView.siteName) {
+        barangayInfoItems.push({
+          _id: 'site-name',
+          label: 'System Name',
+          value: publicView.siteName,
+          icon: 'home',
+          type: 'barangay-info'
+        });
+      }
+      
+      if (publicView.barangayName) {
+        barangayInfoItems.push({
+          _id: 'barangay-name',
+          label: 'Barangay Name',
+          value: publicView.barangayName,
+          icon: 'environment',
+          type: 'barangay-info'
+        });
+      }
+      
+      if (publicView.barangayAddress) {
+        barangayInfoItems.push({
+          _id: 'barangay-address',
+          label: 'Address',
+          value: publicView.barangayAddress,
+          icon: 'map',
+          type: 'barangay-info'
+        });
+      }
+      
+      if (barangayInfoItems.length === 0) {
+        return res.json([{
+          _id: 'placeholder',
+          label: 'Barangay Information',
+          value: 'No barangay information configured',
+          icon: 'info',
+          type: 'barangay-info',
+          isPlaceholder: true
+        }]);
+      }
+      
+      console.log(`[Barangay Info] Returning ${barangayInfoItems.length} items`);
+      return res.json(barangayInfoItems);
+    } catch (err) {
+      console.error('GET /api/settings/public/barangay-info error', err);
+      return res.status(500).json({ message: 'Failed to load barangay info' });
+    }
+  });
+  console.log('Public barangay-info endpoint enabled at GET /api/settings/public/barangay-info');
+} catch (e) {
+  console.error('Failed to mount public barangay-info endpoint', e);
+}
+
+// GET /api/settings/public/contact-info - Contact information carousel items
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const SystemSetting = require('../models/SystemSetting');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const PublicView = require('../models/PublicView');
+  
+  app.get('/api/settings/public/contact-info', async (req, res) => {
+    try {
+      console.log('[Contact Info] GET /api/settings/public/contact-info called');
+      
+      let publicView = await PublicView.findOne({ isActive: true }).lean();
+      if (!publicView) {
+        publicView = await SystemSetting.findOne().lean();
+      }
+      
+      if (!publicView) {
+        console.log('[Contact Info] No contact data found, returning empty array');
+        return res.json([]);
+      }
+      
+      const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+      const isValidPhone = (phone: string) => /^[\d\s\-\+\(\)]+$/.test(phone) && phone.replace(/\D/g, '').length >= 7;
+      
+      const contactInfoItems: any[] = [];
+      
+      if (publicView.contactEmail && isValidEmail(publicView.contactEmail)) {
+        contactInfoItems.push({
+          _id: 'contact-email',
+          label: 'Email Address',
+          value: publicView.contactEmail,
+          icon: 'mail',
+          type: 'contact-info',
+          contactType: 'email',
+          link: `mailto:${publicView.contactEmail}`
+        });
+      }
+      
+      if (publicView.contactPhone && isValidPhone(publicView.contactPhone)) {
+        contactInfoItems.push({
+          _id: 'contact-phone',
+          label: 'Phone Number',
+          value: publicView.contactPhone,
+          icon: 'phone',
+          type: 'contact-info',
+          contactType: 'phone',
+          link: `tel:${publicView.contactPhone}`
+        });
+      }
+      
+      if (contactInfoItems.length === 0) {
+        return res.json([{
+          _id: 'placeholder',
+          label: 'Contact Information',
+          value: 'No contact information configured',
+          icon: 'info',
+          type: 'contact-info',
+          isPlaceholder: true
+        }]);
+      }
+      
+      console.log(`[Contact Info] Returning ${contactInfoItems.length} items`);
+      return res.json(contactInfoItems);
+    } catch (err) {
+      console.error('GET /api/settings/public/contact-info error', err);
+      return res.status(500).json({ message: 'Failed to load contact info' });
+    }
+  });
+  console.log('Public contact-info endpoint enabled at GET /api/settings/public/contact-info');
+} catch (e) {
+  console.error('Failed to mount public contact-info endpoint', e);
+}
+
 // Serve Templates static (so client refs like /Templates/default-avatar.png resolve)
 app.use('/Templates', expressStatic.static(path.join(process.cwd(), 'client', 'public', 'Templates')));
 // Public announcements listing
