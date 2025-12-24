@@ -9,6 +9,10 @@ import { validateEmail, validatePassword } from '../utils/validation';
 // Types for request bodies
 interface RegisterRequest {
   fullName: string;
+  firstName?: string;
+  middleName?: string;
+  lastName?: string;
+  nameExtension?: string;
   name?: string;
   username: string;
   email: string;
@@ -38,6 +42,10 @@ export const register = async (req: Request, res: Response, next: unknown) => {
   try {
     const {
       fullName,
+      firstName,
+      middleName,
+      lastName,
+      nameExtension,
       name,
       username,
       email,
@@ -137,8 +145,10 @@ export const register = async (req: Request, res: Response, next: unknown) => {
   if (actualRole === 'resident') {
       await Resident.create({
         userId: user._id,
-        firstName: (finalFullName.split(' ')[0] || ''),
-        lastName: (finalFullName.split(' ').slice(-1)[0] || ''),
+        firstName: firstName || (finalFullName.split(' ')[0] || ''),
+        middleName: middleName || '',
+        lastName: lastName || (finalFullName.split(' ').slice(-1)[0] || ''),
+        nameExtension: nameExtension || '',
         barangayID: finalBarangayID,
         email,
         contactNumber,
