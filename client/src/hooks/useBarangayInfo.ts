@@ -51,27 +51,32 @@ export const useBarangayInfo = (autoRefresh: boolean = true): UseBarangayInfoRes
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const mountedRef = useRef(true);
   const hasAttemptedFetchRef = useRef(false);
+  const enablePublicViews = Boolean((globalThis as any).__APP_CONFIG__?.ENABLE_PUBLIC_VIEWS || process.env.REACT_APP_ENABLE_PUBLIC_VIEWS === 'true');
 
   const fetchItems = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      try {
-        const response = await axiosPublic.get('/settings/public/barangay-info');
-        console.log('[useBarangayInfo] Fetched items:', response.data);
+      if (enablePublicViews) {
+        try {
+          const response = await axiosPublic.get('/settings/public/barangay-info');
+          console.log('[useBarangayInfo] Fetched items:', response.data);
 
-        if (mountedRef.current && Array.isArray(response.data)) {
-          setItems(response.data);
-          return;
+          if (mountedRef.current && Array.isArray(response.data)) {
+            setItems(response.data);
+            return;
+          }
+        } catch (fetchErr: any) {
+          if (fetchErr?.response?.status === 404) {
+            console.warn('[useBarangayInfo] Endpoint not found (404), using default carousel items');
+          } else {
+            const errorMsg = fetchErr instanceof Error ? fetchErr.message : 'Failed to fetch barangay info';
+            console.error('[useBarangayInfo] Error fetching items:', errorMsg, fetchErr);
+          }
         }
-      } catch (fetchErr: any) {
-        if (fetchErr?.response?.status === 404) {
-          console.warn('[useBarangayInfo] Endpoint not found (404), using default carousel items');
-        } else {
-          const errorMsg = fetchErr instanceof Error ? fetchErr.message : 'Failed to fetch barangay info';
-          console.error('[useBarangayInfo] Error fetching items:', errorMsg, fetchErr);
-        }
+      } else {
+        console.log('[useBarangayInfo] Skipping public barangay-info fetch (ENABLE_PUBLIC_VIEWS is false)');
       }
 
       // Fallback to default carousel items from config

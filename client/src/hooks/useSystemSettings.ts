@@ -45,31 +45,34 @@ export const useSystemSettings = (autoRefresh: boolean = true): UseSystemSetting
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const mountedRef = useRef(true);
   const hasAttemptedFetchRef = useRef(false);
+  const enablePublicViews = Boolean((globalThis as any).__APP_CONFIG__?.ENABLE_PUBLIC_VIEWS || process.env.REACT_APP_ENABLE_PUBLIC_VIEWS === 'true');
 
   const fetchSettings = async () => {
     try {
       setLoading(true);
       setError(null);
       
-      // Fetch from publicviews collection for optimized cached data
-      try {
-        const response = await axiosPublic.get('/settings/public');
-        
-        console.log('[useSystemSettings] Fetched settings from public endpoint:', response.data);
-        
-        if (mountedRef.current && response.data) {
-          setSettings(response.data);
-          return;
+      // Fetch from publicviews collection for optimized cached data (if enabled)
+      if (enablePublicViews) {
+        try {
+          const response = await axiosPublic.get('/settings/public');
+          console.log('[useSystemSettings] Fetched settings from public endpoint:', response.data);
+          if (mountedRef.current && response.data) {
+            setSettings(response.data);
+            return;
+          }
+        } catch (publicErr: any) {
+          // If /settings/public is not available (404), log and use defaults
+          if (publicErr?.response?.status === 404) {
+            console.warn('[useSystemSettings] Public endpoint not found (404), using defaults');
+          } else {
+            const errorMsg = publicErr instanceof Error ? publicErr.message : 'Failed to fetch settings';
+            console.error('[useSystemSettings] Error fetching settings:', errorMsg, publicErr);
+          }
         }
-      } catch (publicErr: any) {
-        // If /settings/public is not available (404), log and use defaults
-        // The endpoint may not exist if the server hasn't deployed the public settings feature yet
-        if (publicErr?.response?.status === 404) {
-          console.warn('[useSystemSettings] Public endpoint not found (404), using defaults');
-        } else {
-          const errorMsg = publicErr instanceof Error ? publicErr.message : 'Failed to fetch settings';
-          console.error('[useSystemSettings] Error fetching settings:', errorMsg, publicErr);
-        }
+      } else {
+        // Public views disabled by runtime config; skip network attempt
+        console.log('[useSystemSettings] Skipping public endpoint fetch (ENABLE_PUBLIC_VIEWS is false)');
       }
       
       // If endpoint fails or data is missing, use sensible defaults

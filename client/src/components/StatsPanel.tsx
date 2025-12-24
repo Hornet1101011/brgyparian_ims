@@ -1,11 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Card, Typography, Row, Col, Spin } from 'antd';
 import { UserOutlined, CrownOutlined, TeamOutlined, HomeOutlined, FileTextOutlined, NotificationOutlined } from '@ant-design/icons';
 import { adminAPI, documentsAPI, contactAPI } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 
 const StatsPanel: React.FC = () => {
   const [stats, setStats] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const { isAuthenticated } = useAuth() as any;
 
   useEffect(() => {
     let mounted = true;
@@ -14,7 +16,7 @@ const StatsPanel: React.FC = () => {
         // Fetch supporting public resources in parallel (files, documents, announcements)
         const [filesRes, docRequestsRes, announcementsRes] = await Promise.all([
           documentsAPI.listFiles().catch(() => ([])),
-          documentsAPI.getAllDocuments().catch(() => ([])),
+          (isAuthenticated ? documentsAPI.getAllDocuments().catch(() => ([])) : Promise.resolve([])),
           contactAPI.getAnnouncements().catch(() => ([]))
         ]);
 
