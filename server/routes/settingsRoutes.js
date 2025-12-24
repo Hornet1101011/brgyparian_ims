@@ -4,6 +4,7 @@ const requireAuth = require('../middleware/requireAuth');
 const isAdmin = require('../middleware/isAdmin');
 const { encryptText, decryptText } = require('../utils/cryptoHelper');
 const SystemSetting = require('../models/SystemSetting');
+const PublicView = require('../models/PublicView');
 const AuditLog = require('../models/AuditLog');
 const nodemailer = require('nodemailer');
 const { createRateLimiter } = require('../middleware/rateLimiter');
@@ -92,6 +93,38 @@ async function recordAudit(userId, action, details, ip) {
   }
 }
 
+// Helper to sync public information to PublicView collection
+// This caches barangay and contact info for fast unauthenticated access
+async function syncToPublicView(systemSettings) {
+  try {
+    if (!systemSettings) return;
+    
+    const publicData = {
+      siteName: systemSettings.siteName || '',
+      barangayName: systemSettings.barangayName || '',
+      barangayAddress: systemSettings.barangayAddress || '',
+      contactEmail: systemSettings.contactEmail || '',
+      contactPhone: systemSettings.contactPhone || '',
+      systemNotice: systemSettings.systemNotice || '',
+      lastSyncedAt: new Date(),
+      isActive: true
+    };
+    
+    // Upsert: update existing active record, or create new one
+    const updated = await PublicView.findOneAndUpdate(
+      { isActive: true },
+      publicData,
+      { new: true, upsert: true }
+    );
+    
+    console.log('[PublicView] Synced public settings successfully');
+    return updated;
+  } catch (err) {
+    console.error('[PublicView] Failed to sync public settings:', err);
+    // Don't throw - allow settings to be saved even if PublicView sync fails
+  }
+}
+
 // PUT /api/settings (full upsert) - Protected endpoint, requires authentication
 router.put('/', requireAuth, isAdmin, async (req, res) => {
   try {
@@ -120,6 +153,9 @@ router.put('/', requireAuth, isAdmin, async (req, res) => {
     // compute a simple diff for audit
     const diff = { before, after: updated.toObject ? updated.toObject() : updated };
     await recordAudit(req.user?._id, 'update_settings', diff, req.ip || req.headers['x-forwarded-for']);
+
+    // Sync public information to PublicView collection for fast unauthenticated access
+    await syncToPublicView(updated);
 
     // If enableVerifications was turned OFF by this update, perform cleanup of pending verification requests
     try {
@@ -197,6 +233,10 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
     const updated = await SystemSetting.findOneAndUpdate({}, { $set: payload }, { new: true, upsert: true, setDefaultsOnInsert: true });
     const diff = { before, after: updated.toObject ? updated.toObject() : updated };
     await recordAudit(req.user?._id, 'patch_settings', diff, req.ip || req.headers['x-forwarded-for']);
+    
+    // Sync public information to PublicView collection for fast unauthenticated access
+    await syncToPublicView(updated);
+    
     // If enableVerifications was turned OFF by this patch, perform cleanup of pending verification requests
     try {
       const beforeEnabled = before && typeof before.enableVerifications !== 'undefined' ? !!before.enableVerifications : true;
@@ -318,11 +358,30 @@ router.post('/test-smtp', requireAuth, isAdmin, async (req, res) => {
 
 // GET /api/settings/public - Public endpoint for login page and unauthenticated access
 // Returns only public-facing system settings (no sensitive data)
+// Fetches from PublicView collection for optimal performance (no auth required)
 router.get('/public', async (req, res) => {
   try {
-    console.log('[DEBUG] GET /api/settings/public called - attempting to fetch settings');
+    console.log('[DEBUG] GET /api/settings/public called');
+    
+    // Try to fetch from PublicView collection (cached public data)
+    let publicView = await PublicView.findOne({ isActive: true }).lean();
+    
+    if (publicView) {
+      console.log('[DEBUG] PublicView found in cache, returning cached data');
+      return res.json({
+        siteName: publicView.siteName || '',
+        barangayName: publicView.barangayName || '',
+        barangayAddress: publicView.barangayAddress || '',
+        contactEmail: publicView.contactEmail || '',
+        contactPhone: publicView.contactPhone || '',
+        systemNotice: publicView.systemNotice || ''
+      });
+    }
+    
+    // Fallback: if PublicView doesn't exist, fetch from SystemSetting and create PublicView
+    console.log('[DEBUG] PublicView not found, fetching from SystemSetting and creating cache');
     let settings = await SystemSetting.findOne().lean();
-    console.log('[DEBUG] Settings from DB:', settings ? 'Found' : 'Not found');
+    
     if (!settings) {
       // Return minimal default shape
       console.log('[DEBUG] No settings in DB, returning defaults');
@@ -336,6 +395,14 @@ router.get('/public', async (req, res) => {
       };
     }
     
+    // Create PublicView cache from current SystemSetting
+    try {
+      await syncToPublicView(settings);
+      console.log('[DEBUG] Created PublicView cache');
+    } catch (syncErr) {
+      console.warn('[DEBUG] Failed to create PublicView cache (not critical):', syncErr && syncErr.message);
+    }
+    
     // Return only public-facing fields (sanitize sensitive data)
     const publicSettings = {
       siteName: settings.siteName || '',
@@ -346,7 +413,7 @@ router.get('/public', async (req, res) => {
       systemNotice: settings.systemNotice || ''
     };
     
-    console.log('[DEBUG] Returning public settings:', publicSettings);
+    console.log('[DEBUG] Returning public settings');
     return res.json(publicSettings);
   } catch (err) {
     console.error('GET /api/settings/public error', err);

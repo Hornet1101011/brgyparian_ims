@@ -8,6 +8,7 @@ import getOfficialPhotoSrc, { fetchPublicOfficials, PublicOfficial } from '../ut
 import StatsPanel from './StatsPanel';
 import './LoginForm.css';
 import { LeftOutlined, RightOutlined } from '@ant-design/icons';
+import { useSystemSettings, SystemSettingsPublic } from '../hooks/useSystemSettings';
 
 const LoginForm: React.FC = () => {
     
@@ -28,9 +29,8 @@ const LoginForm: React.FC = () => {
   const carouselRef = useRef<HTMLDivElement | null>(null);
   const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
   
-  // System settings state
-  const [systemSettings, setSystemSettings] = useState<any>(null);
-  const [settingsLoading, setSettingsLoading] = useState(true);
+  // Use system settings hook - automatically fetches and refreshes every 30 seconds
+  const { settings: systemSettings, loading: settingsLoading } = useSystemSettings(true);
 
   useEffect(() => {
     if (isAuthenticated && user) {
@@ -82,41 +82,9 @@ const LoginForm: React.FC = () => {
     return () => { mounted = false; };
   }, [isAuthenticated]);
 
-  // Fetch system settings - simple one-time fetch
-  useEffect(() => {
-    let mounted = true;
-    const fetchSystemSettings = async () => {
-      try {
-        // Fetch from public endpoint (no auth required for login page)
-        console.log('[LoginForm] Fetching from /settings/public...');
-        const response = await axiosPublic.get('/settings/public');
-        console.log('[LoginForm] Response received:', response.data);
-        if (mounted && response.data) {
-          console.log('[LoginForm] Setting systemSettings with:', response.data);
-          setSystemSettings(response.data);
-          return;
-        }
-      } catch (err) {
-        console.error('[LoginForm] Failed to fetch from /settings/public:', err);
-      }
-
-      // Fallback to hardcoded endpoint if public endpoint fails or returns no data
-      try {
-        console.log('[LoginForm] Trying fallback /settings/fallback...');
-        const fallbackResponse = await axiosPublic.get('/settings/fallback');
-        console.log('[LoginForm] Fallback response received:', fallbackResponse.data);
-        if (mounted && fallbackResponse.data) {
-          console.log('[LoginForm] Setting systemSettings with fallback data:', fallbackResponse.data);
-          setSystemSettings(fallbackResponse.data);
-        }
-      } catch (fallbackErr) {
-        console.error('[LoginForm] Fallback also failed:', fallbackErr);
-      }
-    };
-
-    fetchSystemSettings();
-    return () => { mounted = false; };
-  }, []);
+  // Fetch system settings on mount and periodically refresh
+  // Fetch system settings on mount and periodically refresh
+  // (Now handled by useSystemSettings hook above)
 
   const onFinish = async (values: { username: string; password: string }) => {
     setLoading(true);
@@ -198,6 +166,7 @@ const LoginForm: React.FC = () => {
   };
 
   // Component to display barangay information card
+  // This card is fully controlled by System Settings configured in the admin panel
   const BarangayInfoCard = () => {
     return (
       <Card
@@ -216,26 +185,57 @@ const LoginForm: React.FC = () => {
           <div style={{ width: 4, height: 24, background: 'linear-gradient(180deg, #667eea 0%, #764ba2 100%)', borderRadius: 2 }} />
           <Typography.Title level={5} style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#0f172a' }}>
             <EnvironmentOutlined style={{ marginRight: 8, color: '#667eea' }} />
-            Barangay Information
+            {systemSettings?.siteName ? `${systemSettings.siteName}` : 'Barangay Information'}
           </Typography.Title>
         </div>
 
-        <Space direction="vertical" style={{ width: '100%' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-            <Typography.Text strong style={{ color: '#0f172a', minWidth: 80 }}>Barangay:</Typography.Text>
-            <Typography.Text style={{ color: '#475569', flex: 1 }}>{systemSettings?.barangayName || '-'}</Typography.Text>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-            <Typography.Text strong style={{ color: '#0f172a', minWidth: 80 }}>Address:</Typography.Text>
-            <Typography.Text style={{ color: '#475569', flex: 1 }}>{systemSettings?.barangayAddress || '-'}</Typography.Text>
-          </div>
-        </Space>
+        {settingsLoading ? (
+          <Spin size="small" />
+        ) : (
+          <Space direction="vertical" style={{ width: '100%' }}>
+            {systemSettings?.barangayName && (
+              <>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                  <Typography.Text strong style={{ color: '#0f172a', minWidth: 80 }}>Barangay:</Typography.Text>
+                  <Typography.Text style={{ color: '#475569', flex: 1 }}>
+                    {systemSettings.barangayName}
+                  </Typography.Text>
+                </div>
+                <Divider style={{ margin: '8px 0', borderColor: 'rgba(0, 0, 0, 0.06)' }} />
+              </>
+            )}
+            {systemSettings?.barangayAddress && (
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                <Typography.Text strong style={{ color: '#0f172a', minWidth: 80 }}>Address:</Typography.Text>
+                <Typography.Text style={{ color: '#475569', flex: 1 }}>
+                  {systemSettings.barangayAddress}
+                </Typography.Text>
+              </div>
+            )}
+            {!systemSettings?.barangayName && !systemSettings?.barangayAddress && (
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                Barangay information will be displayed once configured
+              </Typography.Text>
+            )}
+          </Space>
+        )}
       </Card>
     );
   };
 
   // Component to display contact information card
+  // This card is fully controlled by System Settings configured in the admin panel
   const ContactInfoCard = () => {
+    // Validate email format
+    const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    
+    // Validate phone format (basic check for digits and special chars)
+    const isValidPhone = (phone: string) => /^[\d\s\-\+\(\)]+$/.test(phone) && phone.replace(/\D/g, '').length >= 7;
+
+    const hasValidEmail = systemSettings?.contactEmail && isValidEmail(systemSettings.contactEmail);
+    const hasValidPhone = systemSettings?.contactPhone && isValidPhone(systemSettings.contactPhone);
+    const hasAnyContact = hasValidEmail || hasValidPhone;
+
     return (
       <Card
         className="glass-card contact-card"
@@ -257,29 +257,61 @@ const LoginForm: React.FC = () => {
           </Typography.Title>
         </div>
 
-        <Space direction="vertical" style={{ width: '100%' }}>
-          {systemSettings?.contactEmail ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <MailOutlined style={{ color: '#667eea', fontSize: 16, minWidth: 16 }} />
-              <a href={`mailto:${systemSettings.contactEmail}`} style={{ color: '#667eea', textDecoration: 'none' }}>
-                {systemSettings.contactEmail}
+        {settingsLoading ? (
+          <Spin size="small" />
+        ) : hasAnyContact ? (
+          <Space direction="vertical" style={{ width: '100%' }}>
+            {/* Email Contact */}
+            {hasValidEmail ? (
+              <a 
+                href={`mailto:${systemSettings.contactEmail}`} 
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 12,
+                  color: '#667eea', 
+                  textDecoration: 'none',
+                  transition: 'opacity 0.3s ease',
+                  opacity: 1
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.8')}
+                onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
+              >
+                <MailOutlined style={{ color: '#667eea', fontSize: 16, minWidth: 16 }} />
+                <span>{systemSettings.contactEmail}</span>
               </a>
-            </div>
-          ) : (
-            <Typography.Text style={{ color: '#cbd5e1' }}>Email not set</Typography.Text>
-          )}
-          
-          {systemSettings?.contactPhone ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <PhoneOutlined style={{ color: '#667eea', fontSize: 16, minWidth: 16 }} />
-              <a href={`tel:${systemSettings.contactPhone}`} style={{ color: '#667eea', textDecoration: 'none' }}>
-                {systemSettings.contactPhone}
+            ) : null}
+            
+            {hasValidEmail && hasValidPhone && (
+              <Divider style={{ margin: '8px 0', borderColor: 'rgba(0, 0, 0, 0.06)' }} />
+            )}
+
+            {/* Phone Contact */}
+            {hasValidPhone ? (
+              <a 
+                href={`tel:${systemSettings.contactPhone}`} 
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 12,
+                  color: '#667eea', 
+                  textDecoration: 'none',
+                  transition: 'opacity 0.3s ease',
+                  opacity: 1
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.8')}
+                onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
+              >
+                <PhoneOutlined style={{ color: '#667eea', fontSize: 16, minWidth: 16 }} />
+                <span>{systemSettings.contactPhone}</span>
               </a>
-            </div>
-          ) : (
-            <Typography.Text style={{ color: '#cbd5e1' }}>Phone not set</Typography.Text>
-          )}
-        </Space>
+            ) : null}
+          </Space>
+        ) : (
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            Contact information will be displayed once configured
+          </Typography.Text>
+        )}
       </Card>
     );
   };

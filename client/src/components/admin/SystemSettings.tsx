@@ -409,18 +409,23 @@ const SystemSettings: React.FC = () => {
                 Barangay Information
               </Typography>
             </Box>
+            <Typography variant="caption" sx={{ color: '#64748b', display: 'block', mb: 2 }}>
+              This information is displayed on the login page to visitors
+            </Typography>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <StyledTextField
                 label="Site Name"
                 value={settings.siteName}
                 onChange={(e) => setSettings({ ...settings, siteName: e.target.value })}
                 fullWidth
+                helperText="Name of your barangay information system"
               />
               <StyledTextField
                 label="Barangay Name"
                 value={settings.barangayName}
                 onChange={(e) => setSettings({ ...settings, barangayName: e.target.value })}
                 fullWidth
+                helperText="Official name of your barangay"
               />
               <StyledTextField
                 label="Barangay Address"
@@ -429,7 +434,13 @@ const SystemSettings: React.FC = () => {
                 fullWidth
                 multiline
                 rows={2}
+                helperText="Complete address of your barangay office"
               />
+              <Alert severity="info" sx={{ mt: 1, borderRadius: 1 }}>
+                <Typography variant="caption">
+                  These settings are displayed in the <strong>Barangay Information</strong> card on the login page and are updated in real-time.
+                </Typography>
+              </Alert>
             </Box>
           </Paper>
 
@@ -448,6 +459,9 @@ const SystemSettings: React.FC = () => {
                 Contact Information
               </Typography>
             </Box>
+            <Typography variant="caption" sx={{ color: '#64748b', display: 'block', mb: 2 }}>
+              This information is displayed on the login page and may be used in notifications
+            </Typography>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <StyledTextField
                 label="Contact Email"
@@ -455,13 +469,20 @@ const SystemSettings: React.FC = () => {
                 value={settings.contactEmail}
                 onChange={(e) => setSettings({ ...settings, contactEmail: e.target.value })}
                 fullWidth
+                helperText="Email address for public inquiries (must be valid for login page display)"
               />
               <StyledTextField
                 label="Contact Phone"
                 value={settings.contactPhone}
                 onChange={(e) => setSettings({ ...settings, contactPhone: e.target.value })}
                 fullWidth
+                helperText="Phone number for public inquiries (at least 7 digits required)"
               />
+              <Alert severity="info" sx={{ mt: 1, borderRadius: 1 }}>
+                <Typography variant="caption">
+                  Valid contact information is automatically displayed as clickable links on the <strong>Contact Information</strong> card on the login page. Invalid formats are hidden.
+                </Typography>
+              </Alert>
             </Box>
           </Paper>
 
