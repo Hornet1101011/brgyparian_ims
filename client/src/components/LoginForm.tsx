@@ -707,7 +707,8 @@ const LoginForm: React.FC = () => {
                             <img
                               alt={off.name}
                               src={getOfficialPhotoSrc(off as any)}
-                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              loading="eager"
+                              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                               onError={(e) => {
                                 try {
                                   const t = e.currentTarget as HTMLImageElement;

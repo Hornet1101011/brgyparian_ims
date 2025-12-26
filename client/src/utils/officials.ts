@@ -21,9 +21,9 @@ export interface PublicOfficial {
  * Return a URL string to display for an official's photo.
  * Priority:
  * 1. previewUrl (object URL for immediate client preview)
- * 2. photoFileId (GridFS stored photo)
- * 3. photo (legacy embedded buffer)
- * 4. photoUrl (legacy full URL)
+ * 2. photoUrl (public endpoint for login form display)
+ * 3. photoFileId (GridFS stored photo - admin)
+ * 4. photo (legacy embedded buffer - admin)
  * 5. photoPath (legacy disk path)
  * 6. hasPhoto flag (public endpoint check)
  * 7. default avatar
@@ -34,12 +34,12 @@ export function getOfficialPhotoSrc(off: OfficialLite) {
   const DEFAULT_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=';
   if (!off) return DEFAULT_PNG;
   if (off.previewUrl) return off.previewUrl;
-  // New GridFS storage method - preferred
+  // If available, use the public photoUrl (for login form display)
+  if (off.photoUrl) return off.photoUrl;
+  // New GridFS storage method - preferred for admin views
   if ((off as any).photoFileId && off._id) return getAbsoluteApiUrl(`/admin/officials/${off._id}/photo`);
   // Legacy embedded photo in document
   if ((off as any).photo && off._id) return getAbsoluteApiUrl(`/admin/officials/${off._id}/photo`);
-  // Legacy photoUrl
-  if (off.photoUrl) return off.photoUrl;
   // Legacy photoPath on disk
   if (off.photoPath) return getAbsoluteApiUrl(`/${off.photoPath.replace(/^\//, '')}`);
   // If we're dealing with a public official object that only exposes a flag, use the public photo route
