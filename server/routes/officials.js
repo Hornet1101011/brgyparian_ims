@@ -3,9 +3,17 @@ const router = express.Router();
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
+const mongoose = require('mongoose');
+const { GridFSBucket } = require('mongodb');
 const isAdmin = require('../middleware/isAdmin');
 const Official = require('../models/Official');
 const AuditLog = require('../models/AuditLog');
+
+// GridFS bucket for barangay officials photos
+let barangayOfficialsBucket;
+mongoose.connection.on('connected', () => {
+  barangayOfficialsBucket = new GridFSBucket(mongoose.connection.db, { bucketName: 'barangayOfficials' });
+});
 
 // Ensure upload dir exists
 const uploadDir = path.join(process.cwd(), 'uploads', 'officials');
@@ -79,7 +87,13 @@ router.delete('/:id', isAdmin, async (req, res) => {
     const id = req.params.id;
     const official = await Official.findById(id);
     if (!official) return res.status(404).json({ message: 'Official not found' });
-    // remove photo file if present
+    // remove photo from GridFS if present
+    if (official.photoFileId && barangayOfficialsBucket) {
+      try {
+        await barangayOfficialsBucket.delete(official.photoFileId);
+      } catch (e) { console.warn('Failed to delete GridFS photo', e); }
+    }
+    // remove legacy photo file if present
     if (official.photoPath) {
       try {
         const p = path.join(process.cwd(), official.photoPath);
@@ -95,28 +109,65 @@ router.delete('/:id', isAdmin, async (req, res) => {
   }
 });
 
-// POST /admin/officials/:id/photo - upload photo
+// POST /admin/officials/:id/photo - upload photo to GridFS
 router.post('/:id/photo', isAdmin, upload.single('photo'), async (req, res) => {
   try {
     const id = req.params.id;
     const official = await Official.findById(id);
     if (!official) return res.status(404).json({ message: 'Official not found' });
     if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
-    // Read file buffer and store directly in the document
+    
+    if (!barangayOfficialsBucket) {
+      return res.status(500).json({ message: 'GridFS bucket not initialized' });
+    }
+    
     try {
+      // Delete old photo from GridFS if exists
+      if (official.photoFileId) {
+        try {
+          await barangayOfficialsBucket.delete(official.photoFileId);
+        } catch (e) { console.warn('Failed to delete old GridFS photo', e); }
+      }
+      
+      // Read file buffer and upload to GridFS
       const buf = fs.readFileSync(req.file.path);
-      official.photo = buf;
-      official.photoContentType = req.file.mimetype;
-      // keep legacy path for compatibility
-      official.photoPath = path.join('uploads', 'officials', path.basename(req.file.path));
-      await official.save();
-      // remove the disk file now that we've stored the bytes
-      try { fs.unlinkSync(req.file.path); } catch (e) {}
-      await recordAudit(req.user && (req.user._id || req.user.id), 'upload_official_photo', { officialId: id }, req.ip || req.headers['x-forwarded-for']);
-      res.json({ message: 'Uploaded' });
+      const uploadStream = barangayOfficialsBucket.openUploadStream(
+        `official_${id}_${Date.now()}`,
+        { metadata: { officialId: id, originalName: req.file.originalname } }
+      );
+      
+      uploadStream.on('error', (err) => {
+        console.error('GridFS upload error', err);
+        try { fs.unlinkSync(req.file.path); } catch (e) {}
+        res.status(500).json({ message: 'Failed to upload to storage' });
+      });
+      
+      uploadStream.on('finish', async () => {
+        try {
+          // Update official with GridFS file ID
+          official.photoFileId = uploadStream.id;
+          official.photoContentType = req.file.mimetype;
+          // Clear old embedded photo if exists
+          official.photo = undefined;
+          await official.save();
+          
+          // Remove temporary disk file
+          try { fs.unlinkSync(req.file.path); } catch (e) {}
+          
+          await recordAudit(req.user && (req.user._id || req.user.id), 'upload_official_photo', { officialId: id }, req.ip || req.headers['x-forwarded-for']);
+          res.json({ message: 'Uploaded' });
+        } catch (e) {
+          console.error('Failed to update official with GridFS file ID', e);
+          res.status(500).json({ message: 'Failed to save photo metadata' });
+        }
+      });
+      
+      uploadStream.write(buf);
+      uploadStream.end();
     } catch (e) {
-      console.error('Failed to persist photo bytes', e);
-      return res.status(500).json({ message: 'Failed to save photo' });
+      console.error('Failed to upload photo to GridFS', e);
+      try { fs.unlinkSync(req.file.path); } catch (e) {}
+      return res.status(500).json({ message: 'Failed to upload photo' });
     }
   } catch (err) {
     console.error('Failed to upload official photo', err);
@@ -124,15 +175,30 @@ router.post('/:id/photo', isAdmin, upload.single('photo'), async (req, res) => {
   }
 });
 
-// GET /admin/officials/:id/photo - serve stored photo bytes
+// GET /admin/officials/:id/photo - serve photo from GridFS or fallback to embedded
 router.get('/:id/photo', async (req, res) => {
   try {
     const id = req.params.id;
-    const official = await Official.findById(id).select('photo photoContentType');
+    const official = await Official.findById(id).select('photoFileId photo photoContentType');
     if (!official) return res.status(404).send('Not found');
-    if (!official.photo || !official.photoContentType) return res.status(404).send('No photo');
-    res.setHeader('Content-Type', official.photoContentType);
-    return res.send(official.photo);
+    
+    // Try GridFS first (new storage)
+    if (official.photoFileId && barangayOfficialsBucket) {
+      try {
+        res.setHeader('Content-Type', official.photoContentType || 'image/jpeg');
+        return barangayOfficialsBucket.openDownloadStream(official.photoFileId).pipe(res);
+      } catch (err) {
+        console.warn('Failed to serve photo from GridFS, trying fallback', err);
+      }
+    }
+    
+    // Fallback to embedded photo (legacy)
+    if (official.photo && official.photoContentType) {
+      res.setHeader('Content-Type', official.photoContentType);
+      return res.send(official.photo);
+    }
+    
+    res.status(404).send('No photo');
   } catch (err) {
     console.error('Failed to serve official photo', err);
     return res.status(500).send('Error');

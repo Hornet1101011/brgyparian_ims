@@ -4,11 +4,13 @@ const officialSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   title: { type: String, trim: true },
   term: { type: String, trim: true },
-  // store photo data directly in the document
-  photo: { type: Buffer },
+  // GridFS file ID for photo stored in barangayOfficials bucket
+  photoFileId: { type: mongoose.Schema.Types.ObjectId },
   photoContentType: { type: String },
   // legacy/supporting field: url or disk path when applicable
   photoPath: { type: String },
+  // legacy embedded photo field (for backwards compatibility with existing docs)
+  photo: { type: Buffer },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });
 

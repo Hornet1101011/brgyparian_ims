@@ -3,6 +3,7 @@ import { getAbsoluteApiUrl, axiosPublic } from '../services/api';
 export interface OfficialLite {
   _id?: string;
   photo?: any;
+  photoFileId?: any;
   photoUrl?: string;
   photoPath?: string;
   previewUrl?: string;
