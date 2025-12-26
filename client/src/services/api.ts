@@ -791,6 +791,10 @@ const admin = {
     const response = await axiosInstance.delete(`/admin/officials/${id}`);
     return response.data;
   },
+  reorderOfficials: async (order: string[]) => {
+    const response = await axiosInstance.post('/admin/officials/reorder', { order });
+    return response.data;
+  },
   // Disable (optionally suspend until a date) a user
   disableUser: async (userId: string, data?: { suspendedUntil?: string }) => {
     const response = await axiosInstance.patch(`/admin/users/${userId}/disable`, data || {});

@@ -11,6 +11,8 @@ const officialSchema = new mongoose.Schema({
   photoPath: { type: String },
   // legacy embedded photo field (for backwards compatibility with existing docs)
   photo: { type: Buffer },
+  // Display order (for sorting on login form and other public views)
+  displayOrder: { type: Number, default: 0 },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });
 

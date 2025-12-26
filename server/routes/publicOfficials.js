@@ -17,7 +17,10 @@ mongoose.connection.on('connected', () => {
 router.get('/', async (req, res) => {
   try {
     console.log('[publicOfficials] GET / - fetching officials from database');
-    const list = await Official.find().select('name title term photo photoFileId photoPath photoContentType createdAt').sort({ createdAt: -1 });
+    // Sort by displayOrder first (for reordering), then by createdAt for fallback
+    const list = await Official.find()
+      .select('name title term photo photoFileId photoPath photoContentType createdAt displayOrder')
+      .sort({ displayOrder: 1, createdAt: -1 });
     console.log('[publicOfficials] Found', list.length, 'officials');
     // Build absolute base URL from request (respecting proxies)
     const proto = req.get('x-forwarded-proto') || req.protocol || 'http';
@@ -27,7 +30,7 @@ router.get('/', async (req, res) => {
     const mapped = list.map(o => {
       const hasPhoto = !!o.photoFileId || !!o.photo || !!o.photoPath;
       const photoUrl = hasPhoto && base ? `${base}/api/officials/${o._id}/photo` : undefined;
-      return { _id: o._id, name: o.name, title: o.title, term: o.term, hasPhoto, photoUrl };
+      return { _id: o._id, name: o.name, title: o.title, term: o.term, hasPhoto, photoUrl, displayOrder: o.displayOrder };
     });
     console.log('[publicOfficials] Returning', mapped.length, 'officials');
     res.json(mapped);

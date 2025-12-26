@@ -5,6 +5,7 @@ import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { adminAPI, axiosPublic, axiosInstance } from '../services/api';
 import getOfficialPhotoSrc, { fetchPublicOfficials, PublicOfficial } from '../utils/officials';
+import OfficialPhotoImage from './OfficialPhotoImage';
 import StatsPanel from './StatsPanel';
 import './LoginForm.css';
 import { LeftOutlined, RightOutlined } from '@ant-design/icons';
@@ -704,19 +705,9 @@ const LoginForm: React.FC = () => {
                               border: '2px solid rgba(102, 126, 234, 0.2)'
                             }}
                           >
-                            <img
-                              alt={off.name}
-                              src={getOfficialPhotoSrc(off as any)}
-                              loading="eager"
-                              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                              onError={(e) => {
-                                try {
-                                  const t = e.currentTarget as HTMLImageElement;
-                                  t.onerror = null;
-                                  const name = (off.name || 'Official').toString().trim();
-                                  t.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=667eea&color=fff&size=48`;
-                                } catch (err) {}
-                              }}
+                            <OfficialPhotoImage
+                              official={off as any}
+                              size={48}
                             />
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>

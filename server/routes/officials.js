@@ -33,10 +33,32 @@ async function recordAudit(userId, action, details, ip) {
   }
 }
 
+// POST /admin/officials/reorder - update display order
+router.post('/reorder', isAdmin, async (req, res) => {
+  try {
+    const { order } = req.body; // Array of official IDs in desired order
+    if (!Array.isArray(order)) {
+      return res.status(400).json({ message: 'order must be an array of official IDs' });
+    }
+    
+    // Update displayOrder for each official
+    for (let i = 0; i < order.length; i++) {
+      await Official.findByIdAndUpdate(order[i], { displayOrder: i });
+    }
+    
+    const updated = await Official.find().sort({ displayOrder: 1, createdAt: -1 });
+    await recordAudit(req.user && (req.user._id || req.user.id), 'reorder_officials', { order }, req.ip || req.headers['x-forwarded-for']);
+    res.json({ message: 'Reordered', officials: updated });
+  } catch (err) {
+    console.error('Failed to reorder officials', err);
+    res.status(500).json({ message: 'Failed to reorder officials' });
+  }
+});
+
 // GET /admin/officials - list
 router.get('/', isAdmin, async (req, res) => {
   try {
-    const list = await Official.find().sort({ createdAt: -1 });
+    const list = await Official.find().sort({ displayOrder: 1, createdAt: -1 });
     res.json(list);
   } catch (err) {
     console.error('Failed to list officials', err);

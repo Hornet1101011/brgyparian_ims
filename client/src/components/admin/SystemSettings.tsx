@@ -22,6 +22,8 @@ import { API_URL } from '../../services/api';
 import { UploadOutlined, UsergroupAddOutlined, DeleteOutlined } from '@ant-design/icons';
 import { Upload as AntdUpload, message as antdMessage } from 'antd';
 import AppAvatar from '../AppAvatar';
+import OfficialPhotoImage from '../OfficialPhotoImage';
+import OfficialsReorder from './OfficialsReorder';
 // framer-motion removed to avoid dependency conflicts; use CSS transitions for preview
 import defaultSystemSettings from '../../config/defaultSystemSettings';
 import getOfficialPhotoSrc from '../../utils/officials';
@@ -689,196 +691,36 @@ const SystemSettings: React.FC = () => {
             background: '#ffffff',
             borderTop: '4px solid #10b981'
           }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, mb: 3 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Box sx={{ width: 4, height: 28, background: '#10b981', borderRadius: 1 }} />
-                <Typography variant="h6" sx={{ fontWeight: 600, color: '#0f172a', m: 0 }}>
-                  Barangay Officials
-                </Typography>
-              </Box>
-              <Button
-                onClick={() => {
-                  const temp: Official = { _id: `new-${Date.now()}`, name: '', title: '', term: '' };
-                  setOfficials(prev => [...prev, temp]);
-                }}
-                startIcon={<UsergroupAddOutlined />}
-                size="small"
-                variant="contained"
-                sx={{ textTransform: 'none', fontWeight: 500 }}
-              >
-                Add
-              </Button>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+              <Box sx={{ width: 4, height: 28, background: '#10b981', borderRadius: 1 }} />
+              <Typography variant="h6" sx={{ fontWeight: 600, color: '#0f172a', m: 0 }}>
+                Barangay Officials
+              </Typography>
             </Box>
-
-            <Box sx={{ maxHeight: 500, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {officialsLoading ? (
-                <CircularProgress size={24} />
-              ) : officials.length === 0 ? (
-                <Typography variant="body2" sx={{ color: '#94a3b8', textAlign: 'center', py: 4 }}>
-                  No officials added yet
-                </Typography>
-              ) : (
-                officials.map((off, idx) => (
-                  <Paper key={off._id || idx} sx={{ p: 2, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 1 }}>
-                    <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', mb: 2 }}>
-                      <Box sx={{ width: 56, height: 56, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, border: '2px solid #e2e8f0', boxShadow: '0 2px 6px rgba(0,0,0,0.06)' }}>
-                        <img
-                          src={getOfficialPhotoSrc(off as any)}
-                          alt={off.name || 'photo'}
-                          loading="eager"
-                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                        />
-                      </Box>
-                      <Box sx={{ flex: 1 }}>
-                        <StyledTextField
-                          label="Full Name"
-                          value={off.name}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            setOfficials(prev => prev.map(o => o._id === off._id ? { ...o, name: v } : o));
-                            if (autoSaveTimers.current[off._id || '']) clearTimeout(autoSaveTimers.current[off._id || '']);
-                            autoSaveTimers.current[off._id || ''] = window.setTimeout(async () => {
-                              try {
-                                setSavingOfficials(true);
-                                if (off._id && !off._id.toString().startsWith('new-')) {
-                                  await adminAPI.updateOfficial(off._id, { ...off, name: v });
-                                } else {
-                                  const created = await adminAPI.createOfficial({ ...off, name: v });
-                                  setOfficials(prev => prev.map(p => p._id === off._id ? created : p));
-                                }
-                                setManualSaveError(null);
-                              } catch (err) {
-                                console.error('auto-save failed', err);
-                                setManualSaveError('Auto-save failed');
-                              } finally {
-                                setSavingOfficials(false);
-                              }
-                            }, 900);
-                          }}
-                          fullWidth
-                          sx={{ mb: 1 }}
-                        />
-                        <StyledTextField
-                          label="Position"
-                          value={off.title}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            setOfficials(prev => prev.map(o => o._id === off._id ? { ...o, title: v } : o));
-                            if (autoSaveTimers.current[off._id || '']) clearTimeout(autoSaveTimers.current[off._id || '']);
-                            autoSaveTimers.current[off._id || ''] = window.setTimeout(async () => {
-                              try {
-                                setSavingOfficials(true);
-                                if (off._id && !off._id.toString().startsWith('new-')) {
-                                  await adminAPI.updateOfficial(off._id, { ...off, title: v });
-                                } else {
-                                  const created = await adminAPI.createOfficial({ ...off, title: v });
-                                  setOfficials(prev => prev.map(p => p._id === off._id ? created : p));
-                                }
-                                setManualSaveError(null);
-                              } catch (err) {
-                                console.error('auto-save failed', err);
-                                setManualSaveError('Auto-save failed');
-                              } finally {
-                                setSavingOfficials(false);
-                              }
-                            }, 900);
-                          }}
-                          fullWidth
-                          sx={{ mb: 1 }}
-                        />
-                        <StyledTextField
-                          label="Term"
-                          value={off.term}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            setOfficials(prev => prev.map(o => o._id === off._id ? { ...o, term: v } : o));
-                            if (autoSaveTimers.current[off._id || '']) clearTimeout(autoSaveTimers.current[off._id || '']);
-                            autoSaveTimers.current[off._id || ''] = window.setTimeout(async () => {
-                              try {
-                                setSavingOfficials(true);
-                                if (off._id && !off._id.toString().startsWith('new-')) {
-                                  await adminAPI.updateOfficial(off._id, { ...off, term: v });
-                                } else {
-                                  const created = await adminAPI.createOfficial({ ...off, term: v });
-                                  setOfficials(prev => prev.map(p => p._id === off._id ? created : p));
-                                }
-                                setManualSaveError(null);
-                              } catch (err) {
-                                console.error('auto-save failed', err);
-                                setManualSaveError('Auto-save failed');
-                              } finally {
-                                setSavingOfficials(false);
-                              }
-                            }, 900);
-                          }}
-                          fullWidth
-                        />
-                      </Box>
-                      <Button
-                        size="small"
-                        color="error"
-                        startIcon={<DeleteOutlined />}
-                        onClick={() => {
-                          if (off._id && !off._id.toString().startsWith('new-')) {
-                            handleDeleteOfficial(off._id);
-                          } else {
-                            setOfficials(prev => prev.filter(p => p._id !== off._id));
-                          }
-                        }}
-                        sx={{ textTransform: 'none' }}
-                      >
-                        Delete
-                      </Button>
-                    </Box>
-                    <Box sx={{ display: 'flex', gap: 1 }}>
-                      <AntdUpload
-                        showUploadList={false}
-                        beforeUpload={(file) => {
-                          const MAX_BYTES = 2 * 1024 * 1024;
-                          if (file.size > MAX_BYTES) {
-                            antdMessage.warning('File is too large. Maximum 2 MB.');
-                            return false;
-                          }
-                          try {
-                            const url = URL.createObjectURL(file);
-                            previewUrlsRef.current[off._id || `temp-${Date.now()}`] = url;
-                            setOfficials(prev => prev.map(o => o._id === off._id ? { ...o, previewUrl: url } : o));
-                          } catch (e) {}
-                          (async () => {
-                            try {
-                              if (!off._id || off._id.toString().startsWith('new-')) {
-                                antdMessage.warning('Please save official first');
-                                return;
-                              }
-                              await adminAPI.uploadOfficialPhoto(off._id, file as File);
-                              // Refresh officials list to show new photo
-                              const refreshed = await adminAPI.getOfficials();
-                              setOfficials(Array.isArray(refreshed) ? refreshed : officials);
-                              antdMessage.success('Photo uploaded');
-                              // Clear preview URL after successful upload
-                              try {
-                                const key = off._id || '';
-                                const u = previewUrlsRef.current[key];
-                                if (u) { URL.revokeObjectURL(u); delete previewUrlsRef.current[key]; }
-                              } catch (e) {}
-                            } catch (err) {
-                              console.error('upload failed', err);
-                              antdMessage.error('Upload failed');
-                            }
-                          })();
-                          return false;
-                        }}
-                      >
-                        <Button size="small" variant="outlined" startIcon={<UploadOutlined />} sx={{ textTransform: 'none' }}>
-                          Upload Photo
-                        </Button>
-                      </AntdUpload>
-                    </Box>
-                  </Paper>
-                ))
-              )}
-            </Box>
-            {manualSaveError && <Typography color="error" sx={{ mt: 2, fontSize: 12 }}>{manualSaveError}</Typography>}
+            
+            <OfficialsReorder
+              officials={officials}
+              onOfficialUpdate={setOfficials}
+              onAddOfficial={() => {
+                const temp: Official = { _id: `new-${Date.now()}`, name: '', title: '', term: '' };
+                setOfficials(prev => [...prev, temp]);
+              }}
+              onDeleteOfficial={handleDeleteOfficial}
+              officialsLoading={officialsLoading}
+              savingOfficials={savingOfficials}
+              autoSaveTimers={autoSaveTimers}
+              onNameChange={(id, value) => {
+                setOfficials(prev => prev.map(o => o._id === id ? { ...o, name: value } : o));
+              }}
+              onTitleChange={(id, value) => {
+                setOfficials(prev => prev.map(o => o._id === id ? { ...o, title: value } : o));
+              }}
+              onTermChange={(id, value) => {
+                setOfficials(prev => prev.map(o => o._id === id ? { ...o, term: value } : o));
+              }}
+              previewUrlsRef={previewUrlsRef}
+              manualSaveError={manualSaveError}
+            />
           </Paper>
         </Box>
       </Box>
