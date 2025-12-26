@@ -71,8 +71,42 @@ router.put('/:id', isAdmin, async (req, res) => {
     const payload = req.body || {};
     const official = await Official.findById(id);
     if (!official) return res.status(404).json({ message: 'Official not found' });
-    ['name','title','term'].forEach(k => { if (payload[k] !== undefined) official[k] = payload[k]; });
+    
+    // Update basic fields
+    let changed = false;
+    ['name','title','term'].forEach(k => { 
+      if (payload[k] !== undefined && official[k] !== payload[k]) {
+        official[k] = payload[k];
+        changed = true;
+      }
+    });
+    
     await official.save();
+    
+    // Update GridFS metadata if photo exists and details changed
+    if (changed && official.photoFileId && barangayOfficialsBucket) {
+      try {
+        // Update the files.metadata in GridFS
+        const db = mongoose.connection.db;
+        if (db) {
+          await db.collection('barangayOfficials.files').updateOne(
+            { _id: official.photoFileId },
+            { 
+              $set: { 
+                'metadata.officialName': official.name,
+                'metadata.officialTitle': official.title,
+                'metadata.officialTerm': official.term,
+                'metadata.updatedAt': new Date().toISOString()
+              }
+            }
+          );
+        }
+      } catch (e) {
+        console.warn('Failed to update GridFS metadata', e);
+        // Don't fail the request if metadata update fails
+      }
+    }
+    
     await recordAudit(req.user && (req.user._id || req.user.id), 'update_official', { officialId: id, payload }, req.ip || req.headers['x-forwarded-for']);
     res.json(official);
   } catch (err) {
@@ -129,11 +163,21 @@ router.post('/:id/photo', isAdmin, upload.single('photo'), async (req, res) => {
         } catch (e) { console.warn('Failed to delete old GridFS photo', e); }
       }
       
-      // Read file buffer and upload to GridFS
+      // Read file buffer and upload to GridFS with full metadata
       const buf = fs.readFileSync(req.file.path);
       const uploadStream = barangayOfficialsBucket.openUploadStream(
         `official_${id}_${Date.now()}`,
-        { metadata: { officialId: id, originalName: req.file.originalname } }
+        { 
+          metadata: { 
+            officialId: id,
+            officialName: official.name,
+            officialTitle: official.title,
+            officialTerm: official.term,
+            originalName: req.file.originalname,
+            uploadedAt: new Date().toISOString(),
+            uploadedBy: req.user && (req.user._id || req.user.id)
+          } 
+        }
       );
       
       uploadStream.on('error', (err) => {
@@ -149,13 +193,14 @@ router.post('/:id/photo', isAdmin, upload.single('photo'), async (req, res) => {
           official.photoContentType = req.file.mimetype;
           // Clear old embedded photo if exists
           official.photo = undefined;
-          await official.save();
+          const saved = await official.save();
           
           // Remove temporary disk file
           try { fs.unlinkSync(req.file.path); } catch (e) {}
           
           await recordAudit(req.user && (req.user._id || req.user.id), 'upload_official_photo', { officialId: id }, req.ip || req.headers['x-forwarded-for']);
-          res.json({ message: 'Uploaded' });
+          // Return the updated official with photoFileId so client knows photo is available
+          res.json({ message: 'Uploaded', official: saved });
         } catch (e) {
           console.error('Failed to update official with GridFS file ID', e);
           res.status(500).json({ message: 'Failed to save photo metadata' });
@@ -182,11 +227,24 @@ router.get('/:id/photo', async (req, res) => {
     const official = await Official.findById(id).select('photoFileId photo photoContentType');
     if (!official) return res.status(404).send('Not found');
     
+    // Set cache headers to allow browser caching for performance
+    res.setHeader('Cache-Control', 'public, max-age=86400'); // 24 hours
+    
     // Try GridFS first (new storage)
     if (official.photoFileId && barangayOfficialsBucket) {
       try {
         res.setHeader('Content-Type', official.photoContentType || 'image/jpeg');
-        return barangayOfficialsBucket.openDownloadStream(official.photoFileId).pipe(res);
+        const stream = barangayOfficialsBucket.openDownloadStream(official.photoFileId);
+        stream.on('error', (err) => {
+          console.warn('GridFS stream error, trying fallback', err);
+          // Fallback to embedded photo on stream error
+          if (official.photo && official.photoContentType) {
+            res.setHeader('Content-Type', official.photoContentType);
+            return res.send(official.photo);
+          }
+          res.status(404).send('No photo');
+        });
+        return stream.pipe(res);
       } catch (err) {
         console.warn('Failed to serve photo from GridFS, trying fallback', err);
       }
@@ -202,6 +260,93 @@ router.get('/:id/photo', async (req, res) => {
   } catch (err) {
     console.error('Failed to serve official photo', err);
     return res.status(500).send('Error');
+  }
+});
+
+// GET /admin/officials/:id/metadata - get GridFS metadata for debugging
+router.get('/:id/metadata', isAdmin, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const official = await Official.findById(id).select('photoFileId name title term photoContentType');
+    if (!official) return res.status(404).json({ message: 'Official not found' });
+    
+    if (!official.photoFileId) return res.json({ message: 'No photo stored', official });
+    
+    // Retrieve GridFS file metadata
+    if (barangayOfficialsBucket) {
+      try {
+        const db = mongoose.connection.db;
+        const fileInfo = await db.collection('barangayOfficials.files').findOne({ _id: official.photoFileId });
+        return res.json({ 
+          message: 'GridFS metadata found',
+          officialData: {
+            _id: official._id,
+            name: official.name,
+            title: official.title,
+            term: official.term,
+            photoFileId: official.photoFileId,
+            photoContentType: official.photoContentType
+          },
+          gridfsMetadata: fileInfo ? {
+            _id: fileInfo._id,
+            filename: fileInfo.filename,
+            length: fileInfo.length,
+            uploadDate: fileInfo.uploadDate,
+            metadata: fileInfo.metadata
+          } : null
+        });
+      } catch (err) {
+        console.warn('Failed to retrieve GridFS metadata', err);
+        return res.status(500).json({ message: 'Failed to retrieve GridFS metadata', error: err.message });
+      }
+    }
+    
+    res.status(500).json({ message: 'GridFS bucket not initialized' });
+  } catch (err) {
+    console.error('Failed to get official metadata', err);
+    return res.status(500).json({ message: 'Error', error: err.message });
+  }
+});
+
+// GET /admin/officials/verify/all - verify all officials have GridFS metadata
+router.get('/verify/all', isAdmin, async (req, res) => {
+  try {
+    const officials = await Official.find({ photoFileId: { $exists: true, $ne: null } }).select('_id photoFileId name title term');
+    
+    if (officials.length === 0) {
+      return res.json({ message: 'No officials with photos found', count: 0 });
+    }
+    
+    const db = mongoose.connection.db;
+    const gridfsFiles = await db.collection('barangayOfficials.files').find({ _id: { $in: officials.map(o => o.photoFileId) } }).toArray();
+    
+    const results = officials.map(official => {
+      const gridfsFile = gridfsFiles.find(f => f._id.toString() === official.photoFileId.toString());
+      return {
+        officialId: official._id,
+        name: official.name,
+        title: official.title,
+        photoFileId: official.photoFileId,
+        inGridFS: !!gridfsFile,
+        gridfsMetadata: gridfsFile ? {
+          filename: gridfsFile.filename,
+          uploadDate: gridfsFile.uploadDate,
+          size: gridfsFile.length,
+          metadata: gridfsFile.metadata
+        } : null
+      };
+    });
+    
+    const allHaveMetadata = results.every(r => r.gridfsMetadata && r.gridfsMetadata.metadata);
+    res.json({ 
+      message: 'Verification complete',
+      totalOfficials: results.length,
+      allHaveMetadata,
+      results
+    });
+  } catch (err) {
+    console.error('Failed to verify officials', err);
+    return res.status(500).json({ message: 'Error', error: err.message });
   }
 });
 
