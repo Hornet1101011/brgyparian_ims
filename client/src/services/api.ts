@@ -738,7 +738,7 @@ const admin = {
     const form = new FormData();
     form.append('avatar', file);
     const response = await axiosInstance.post(`/admin/resident/${residentId}/avatar`, form, {
-      // Let the browser/axios set the Content-Type including the multipart boundary
+      headers: { 'Content-Type': undefined }
     });
     return response.data;
   },
@@ -806,7 +806,7 @@ const admin = {
     form.append('photo', file);
     // Try the axios instance first (should let browser set multipart boundary).
     try {
-      const response = await axiosInstance.post(`/admin/officials/${id}/photo`, form, { headers: {} });
+      const response = await axiosInstance.post(`/admin/officials/${id}/photo`, form, { headers: { 'Content-Type': undefined } });
       return response.data;
     } catch (err: any) {
       // If server returned a 400 possibly due to malformed multipart headers,
@@ -850,7 +850,7 @@ const admin = {
   // Announcements
   createAnnouncement: async (formData: FormData) => {
     const response = await axiosInstance.post('/admin/announcements', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+      headers: { 'Content-Type': undefined }
     });
     return response.data;
   },
@@ -864,7 +864,7 @@ const admin = {
   },
   updateAnnouncement: async (id: string, formData: FormData) => {
     const response = await axiosInstance.put(`/admin/announcements/${id}`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+      headers: { 'Content-Type': undefined }
     });
     return response.data;
   },

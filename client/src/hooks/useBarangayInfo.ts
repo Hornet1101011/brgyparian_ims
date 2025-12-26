@@ -54,9 +54,10 @@ export const useBarangayInfo = (autoRefresh: boolean = true): UseBarangayInfoRes
   const enablePublicViews = Boolean((globalThis as any).__APP_CONFIG__?.ENABLE_PUBLIC_VIEWS || process.env.REACT_APP_ENABLE_PUBLIC_VIEWS === 'true');
 
   const fetchItems = async () => {
+    setLoading(true);
+    setError(null);
+    
     try {
-      setLoading(true);
-      setError(null);
 
       if (enablePublicViews) {
         try {
@@ -138,13 +139,12 @@ export const useBarangayInfo = (autoRefresh: boolean = true): UseBarangayInfoRes
         ]);
       }
     } finally {
-      if (mountedRef.current) {
-        setLoading(false);
-      }
+      setLoading(false);
     }
   };
 
   useEffect(() => {
+    mountedRef.current = true;
     // Only attempt fetch once, don't auto-refresh until endpoint is available
     if (!hasAttemptedFetchRef.current) {
       hasAttemptedFetchRef.current = true;

@@ -12,6 +12,27 @@ import { useSystemSettings, SystemSettingsPublic } from '../hooks/useSystemSetti
 import { useBarangayInfo, BarangayInfoItem } from '../hooks/useBarangayInfo';
 import { useContactInfo, ContactInfoItem } from '../hooks/useContactInfo';
 
+/**
+ * DO NOT MODIFY:
+ * - authentication logic
+ * - API calls
+ * - form handlers
+ * - validation
+ * - routes or state
+ *
+ * ONLY improve:
+ * - layout
+ * - spacing
+ * - alignment
+ * - typography
+ * - visual hierarchy
+ *
+ * Preserve:
+ * - all colors
+ * - gradients
+ * - button styles
+ */
+
 const LoginForm: React.FC = () => {
     
   const { login, isAuthenticated, user, setUser } = useAuth() as any;
@@ -29,8 +50,6 @@ const LoginForm: React.FC = () => {
   const [officials, setOfficials] = useState<PublicOfficial[]>([]);
   const [, setOfficialsStatus] = useState<string>('loading');
   const officialsCarouselRef = useRef<HTMLDivElement | null>(null);
-  const barangayInfoCarouselRef = useRef<HTMLDivElement | null>(null);
-  const contactInfoCarouselRef = useRef<HTMLDivElement | null>(null);
   const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
   
   // Use system settings hook - automatically fetches and refreshes every 30 seconds
@@ -161,119 +180,86 @@ const LoginForm: React.FC = () => {
     }
   };
 
-  const handleCarouselScroll = (direction: 'left' | 'right', ref: React.RefObject<HTMLDivElement>) => {
-    if (!ref.current) return;
-    
-    // Trigger animation
-    setSlideDirection(direction);
-    
-    // Perform scroll
-    const scrollAmount = direction === 'left' ? -240 : 240;
-    ref.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
-    
-    // Reset animation state after scroll completes
-    setTimeout(() => setSlideDirection(null), 600);
-  };
+
 
   // Component to display barangay information in card carousel format
   // Fetches from publicviews collection via useBarangayInfo hook
   const BarangayInfoCard = () => {
     return (
       <Card 
-        className="glass-card info-card" 
+        className="glass-card info-card barangay-card" 
         variant="outlined"
         style={{
-          background: 'rgba(255, 255, 255, 0.95)',
-          border: '1px solid rgba(255, 255, 255, 0.3)',
+          background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 255, 0.96) 100%)',
+          border: '1.5px solid rgba(102, 126, 234, 0.2)',
           borderRadius: 16,
-          backdropFilter: 'blur(10px)',
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
-          padding: 20
+          backdropFilter: 'blur(20px)',
+          boxShadow: '0 20px 40px rgba(102, 126, 234, 0.15), 0 0 1px rgba(102, 126, 234, 0.3)',
+          padding: 19,
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-          <div style={{ width: 4, height: 24, background: 'linear-gradient(180deg, #667eea 0%, #764ba2 100%)', borderRadius: 2 }} />
-          <Typography.Title level={5} style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#0f172a' }}>
-            <EnvironmentOutlined style={{ marginRight: 8, color: '#667eea' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, paddingBottom: 13, borderBottom: '1.5px solid rgba(102, 126, 234, 0.1)' }}>
+          <div style={{ width: 3, height: 19, background: 'linear-gradient(180deg, #667eea 0%, #764ba2 100%)', borderRadius: 2 }} />
+          <Typography.Title level={5} style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#0f172a', letterSpacing: '-0.3px' }}>
+            <EnvironmentOutlined style={{ marginRight: 6, color: '#667eea', fontSize: 13 }} />
             Barangay Information
           </Typography.Title>
         </div>
 
         {barangayLoading ? (
-          <Spin size="small" />
+          <div style={{ padding: '40px 20px', textAlign: 'center' }}>
+            <Spin size="small" />
+            <Typography.Text type="secondary" style={{ display: 'block', marginTop: 12, fontSize: 12 }}>Loading information...</Typography.Text>
+          </div>
         ) : (
-          <div className="carousel-wrap horizontal" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-            <Button
-              type="text"
-              size="small"
-              icon={<LeftOutlined />}
-              onClick={() => handleCarouselScroll('left', barangayInfoCarouselRef)}
-              style={{ color: '#667eea', minWidth: 32, height: 32, padding: 0 }}
-            />
-            
-            <div 
-              ref={barangayInfoCarouselRef} 
-              className="carousel-scroll horizontal"
-              style={{ 
-                overflowX: 'auto', 
-                display: 'flex',
-                gap: 12, 
-                paddingBottom: 8,
-                scrollBehavior: 'smooth',
-                flex: 1
-              }}>
-              {barangayItems.length === 0 ? (
-                <Typography.Text type="secondary" style={{ padding: '20px' }}>No barangay information available</Typography.Text>
-              ) : (
-                barangayItems.map(item => (
-                  <div 
-                    key={item._id} 
-                    className="info-card-item"
-                    style={{
-                      background: '#ffffff',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: 10,
-                      padding: 16,
-                      minWidth: 220,
-                      textAlign: 'center',
-                      boxShadow: '0 2px 6px rgba(0, 0, 0, 0.04)',
-                      transition: 'all 0.3s ease',
-                      cursor: 'pointer',
-                      opacity: item.isPlaceholder ? 0.6 : 1
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!item.isPlaceholder) {
-                        (e.currentTarget as HTMLDivElement).style.boxShadow = '0 8px 16px rgba(102, 126, 234, 0.15)';
-                        (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.04)';
-                      (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)';
-                    }}
-                  >
-                    <div style={{ fontSize: 24, marginBottom: 8 }}>
-                      {item.icon === 'home' && '🏛️'}
-                      {item.icon === 'environment' && '📍'}
-                      {item.icon === 'map' && '📬'}
-                      {item.icon === 'info' && 'ℹ️'}
-                    </div>
-                    <div style={{ color: '#94a3b8', fontSize: 11, marginBottom: 8, fontWeight: 500 }}>{item.label}</div>
-                    <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a', lineHeight: 1.4 }}>
-                      {item.value}
-                    </div>
+          <div className="barangay-info-list" style={{ display: 'flex', flexDirection: 'column', gap: 11, flex: 1 }}>
+            {barangayItems.length === 0 ? (
+              <Typography.Text type="secondary" style={{ padding: '20px', textAlign: 'center' }}>No barangay information available</Typography.Text>
+            ) : (
+              barangayItems.map(item => (
+                <div 
+                  key={item._id} 
+                  className="info-list-item"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.6) 0%, rgba(248, 250, 255, 0.4) 100%)',
+                    border: '1.5px solid rgba(102, 126, 234, 0.2)',
+                    borderRadius: 10,
+                    padding: 13,
+                    textAlign: 'center',
+                    boxShadow: '0 6px 16px rgba(102, 126, 234, 0.08)',
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    cursor: 'pointer',
+                    opacity: item.isPlaceholder ? 0.6 : 1
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!item.isPlaceholder) {
+                      (e.currentTarget as HTMLDivElement).style.boxShadow = '0 12px 28px rgba(102, 126, 234, 0.25)';
+                      (e.currentTarget as HTMLDivElement).style.borderColor = '#667eea';
+                      (e.currentTarget as HTMLDivElement).style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 250, 255, 0.7) 100%)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLDivElement).style.boxShadow = '0 8px 20px rgba(102, 126, 234, 0.08)';
+                    (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(102, 126, 234, 0.2)';
+                    (e.currentTarget as HTMLDivElement).style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.6) 0%, rgba(248, 250, 255, 0.4) 100%)';
+                  }}
+                >
+                  <div style={{ fontSize: 22, marginBottom: 8, filter: item.isPlaceholder ? 'grayscale(1) opacity(0.5)' : 'none' }}>
+                    {item.icon === 'home' && '🏛️'}
+                    {item.icon === 'environment' && '📍'}
+                    {item.icon === 'map' && '🗺️'}
+                    {item.icon === 'info' && 'ℹ️'}
                   </div>
-                ))
-              )}
-            </div>
-
-            <Button
-              type="text"
-              size="small"
-              icon={<RightOutlined />}
-              onClick={() => handleCarouselScroll('right', barangayInfoCarouselRef)}
-              style={{ color: '#667eea', minWidth: 32, height: 32, padding: 0 }}
-            />
+                  <div style={{ color: '#667eea', fontSize: 9, marginBottom: 6, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.48px' }}>{item.label}</div>
+                  <div style={{ fontWeight: 700, fontSize: 11, color: '#0f172a', lineHeight: 1.5 }}>
+                    {item.value}
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         )}
       </Card>
@@ -281,106 +267,85 @@ const LoginForm: React.FC = () => {
   };
 
   // Component to display contact information in card carousel format
-  // Similar to barangay info and officials - scrollable cards with email/phone validation
   const ContactInfoCard = () => {
     return (
       <Card
         className="glass-card contact-card"
         variant="outlined"
         style={{
-          background: 'rgba(255, 255, 255, 0.95)',
-          border: '1px solid rgba(255, 255, 255, 0.3)',
+          background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 255, 0.96) 100%)',
+          border: '1.5px solid rgba(102, 126, 234, 0.2)',
           borderRadius: 16,
-          backdropFilter: 'blur(10px)',
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
-          padding: 20
+          backdropFilter: 'blur(20px)',
+          boxShadow: '0 20px 40px rgba(102, 126, 234, 0.15), 0 0 1px rgba(102, 126, 234, 0.3)',
+          padding: 19,
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-          <div style={{ width: 4, height: 24, background: 'linear-gradient(180deg, #667eea 0%, #764ba2 100%)', borderRadius: 2 }} />
-          <Typography.Title level={5} style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#0f172a' }}>
-            <PhoneOutlined style={{ marginRight: 8, color: '#667eea' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, paddingBottom: 13, borderBottom: '1.5px solid rgba(102, 126, 234, 0.1)' }}>
+          <div style={{ width: 3, height: 19, background: 'linear-gradient(180deg, #667eea 0%, #764ba2 100%)', borderRadius: 2 }} />
+          <Typography.Title level={5} style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#0f172a', letterSpacing: '-0.3px' }}>
+            <PhoneOutlined style={{ marginRight: 6, color: '#667eea', fontSize: 13 }} />
             Contact Information
           </Typography.Title>
         </div>
 
         {contactLoading ? (
-          <Spin size="small" />
+          <div style={{ padding: '40px 20px', textAlign: 'center' }}>
+            <Spin size="small" />
+            <Typography.Text type="secondary" style={{ display: 'block', marginTop: 12, fontSize: 12 }}>Loading contacts...</Typography.Text>
+          </div>
         ) : (
-          <div className="carousel-wrap horizontal" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-            <Button
-              type="text"
-              size="small"
-              icon={<LeftOutlined />}
-              onClick={() => handleCarouselScroll('left', contactInfoCarouselRef)}
-              style={{ color: '#667eea', minWidth: 32, height: 32, padding: 0 }}
-            />
-            
-            <div 
-              ref={contactInfoCarouselRef} 
-              className="carousel-scroll horizontal"
-              style={{ 
-                overflowX: 'auto', 
-                display: 'flex',
-                gap: 12, 
-                paddingBottom: 8,
-                scrollBehavior: 'smooth',
-                flex: 1
-              }}>
-              {contactItems.length === 0 ? (
-                <Typography.Text type="secondary" style={{ padding: '20px' }}>No contact information available</Typography.Text>
-              ) : (
-                contactItems.map(item => (
-                  <a 
-                    key={item._id}
-                    href={item.link || '#'}
-                    className="contact-card-item"
-                    style={{
-                      background: '#ffffff',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: 10,
-                      padding: 16,
-                      minWidth: 220,
-                      textAlign: 'center',
-                      boxShadow: '0 2px 6px rgba(0, 0, 0, 0.04)',
-                      transition: 'all 0.3s ease',
-                      cursor: item.isPlaceholder ? 'default' : 'pointer',
-                      textDecoration: 'none',
-                      color: 'inherit',
-                      opacity: item.isPlaceholder ? 0.6 : 1
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!item.isPlaceholder) {
-                        (e.currentTarget as HTMLAnchorElement).style.boxShadow = '0 8px 16px rgba(102, 126, 234, 0.15)';
-                        (e.currentTarget as HTMLAnchorElement).style.transform = 'translateY(-2px)';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLAnchorElement).style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.04)';
-                      (e.currentTarget as HTMLAnchorElement).style.transform = 'translateY(0)';
-                    }}
-                  >
-                    <div style={{ fontSize: 24, marginBottom: 8 }}>
-                      {item.icon === 'mail' && '📧'}
-                      {item.icon === 'phone' && '📱'}
-                      {item.icon === 'info' && 'ℹ️'}
-                    </div>
-                    <div style={{ color: '#94a3b8', fontSize: 11, marginBottom: 8, fontWeight: 500 }}>{item.label}</div>
-                    <div style={{ fontWeight: 700, fontSize: 13, color: '#667eea', lineHeight: 1.4, wordBreak: 'break-word' }}>
-                      {item.value}
-                    </div>
-                  </a>
-                ))
-              )}
-            </div>
-
-            <Button
-              type="text"
-              size="small"
-              icon={<RightOutlined />}
-              onClick={() => handleCarouselScroll('right', contactInfoCarouselRef)}
-              style={{ color: '#667eea', minWidth: 32, height: 32, padding: 0 }}
-            />
+          <div className="contact-info-list" style={{ display: 'flex', flexDirection: 'column', gap: 11, flex: 1 }}>
+            {contactItems.length === 0 ? (
+              <Typography.Text type="secondary" style={{ padding: '20px', textAlign: 'center' }}>No contact information available</Typography.Text>
+            ) : (
+              contactItems.map(item => (
+                <a 
+                  key={item._id}
+                  href={item.link || '#'}
+                  className="contact-list-item"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.6) 0%, rgba(248, 250, 255, 0.4) 100%)',
+                    border: '1.5px solid rgba(102, 126, 234, 0.2)',
+                    borderRadius: 10,
+                    padding: 13,
+                    textAlign: 'center',
+                    boxShadow: '0 6px 16px rgba(102, 126, 234, 0.08)',
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    cursor: item.isPlaceholder ? 'default' : 'pointer',
+                    textDecoration: 'none',
+                    color: 'inherit',
+                    opacity: item.isPlaceholder ? 0.6 : 1,
+                    display: 'block'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!item.isPlaceholder) {
+                      (e.currentTarget as HTMLAnchorElement).style.boxShadow = '0 12px 28px rgba(102, 126, 234, 0.25)';
+                      (e.currentTarget as HTMLAnchorElement).style.borderColor = '#667eea';
+                      (e.currentTarget as HTMLAnchorElement).style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 250, 255, 0.7) 100%)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLAnchorElement).style.boxShadow = '0 8px 20px rgba(102, 126, 234, 0.08)';
+                    (e.currentTarget as HTMLAnchorElement).style.borderColor = 'rgba(102, 126, 234, 0.2)';
+                    (e.currentTarget as HTMLAnchorElement).style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.6) 0%, rgba(248, 250, 255, 0.4) 100%)';
+                  }}
+                >
+                  <div style={{ fontSize: 22, marginBottom: 8, filter: item.isPlaceholder ? 'grayscale(1) opacity(0.5)' : 'none' }}>
+                    {item.icon === 'mail' && '📧'}
+                    {item.icon === 'phone' && '📱'}
+                    {item.icon === 'info' && 'ℹ️'}
+                  </div>
+                  <div style={{ color: '#667eea', fontSize: 9, marginBottom: 6, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.48px' }}>{item.label}</div>
+                  <div style={{ fontWeight: 700, fontSize: 11, color: '#0f172a', lineHeight: 1.5, wordBreak: 'break-word' }}>
+                    {item.value}
+                  </div>
+                </a>
+              ))
+            )}
           </div>
         )}
       </Card>
@@ -393,86 +358,77 @@ const LoginForm: React.FC = () => {
     
     return (
       <Alert
-        message={<Typography.Text strong>System Notice</Typography.Text>}
+        message={<Typography.Text strong style={{ color: '#0f172a', fontSize: 12, fontWeight: 700 }}>📢 System Notice</Typography.Text>}
         description={
-          <Typography.Paragraph style={{ margin: 0, color: 'inherit' }}>
+          <Typography.Paragraph style={{ margin: 0, color: '#475569', fontSize: 11, lineHeight: 1.5 }}>
             {systemSettings.systemNotice}
           </Typography.Paragraph>
         }
-        type="warning"
-        icon={<BellOutlined />}
+        type="info"
+        icon={<BellOutlined style={{ color: '#667eea', fontSize: 14 }} />}
         showIcon
         style={{
-          marginBottom: 20,
-          background: 'rgba(255, 215, 5, 0.1)',
-          border: '1px solid rgba(255, 215, 5, 0.3)',
-          borderRadius: 10,
-          padding: '12px 16px'
+          background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 255, 0.96) 100%)',
+          border: '1.5px solid rgba(102, 126, 234, 0.2)',
+          borderRadius: 11,
+          padding: '14px 16px',
+          boxShadow: '0 10px 22px rgba(102, 126, 234, 0.1)',
+          backdropFilter: 'blur(10px)'
         }}
-        closeIcon={true}
+        closable={true}
       />
     );
   };
 
   return (
     <>
-    <div className="login-page three-column" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', minHeight: '100vh', padding: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div className="login-container three-column-container" style={{ width: '100%', maxWidth: '1600px' }}>
-        <Row gutter={[24, 24]} align="stretch" justify="center" className="three-column-row" style={{ height: '100%' }}>
+    <div className="login-page three-column" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', minHeight: '100vh', width: '100%', padding: '40px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div className="login-container three-column-container" style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', gap: 20 }}>
+        {/* System Notice Alert - Full Width */}
+        {!settingsLoading && <SystemNoticeAlert />}
+        
+        <Row gutter={[22, 22]} align="stretch" justify="center" className="three-column-row" style={{ height: 'auto', display: 'flex', flex: 1, minHeight: 0, flexDirection: 'column' }}>
           
-          {/* LEFT COLUMN - Quick Stats & Barangay Info */}
-          <Col xs={24} sm={24} md={8} lg={8} className="pane left-pane stats-pane" style={{ display: 'flex', height: '100%' }}>
-            <div className="pane-inner left-inner" style={{ display: 'flex', flexDirection: 'column', gap: 20, height: '100%', width: '100%' }}>
-              {/* Quick Stats */}
-              <StatsPanel />
-              
-              {/* System Notice Alert */}
-              {!settingsLoading && <SystemNoticeAlert />}
-
-              {/* Barangay Information */}
-              <BarangayInfoCard />
-            </div>
-          </Col>
-
-          {/* CENTER COLUMN - Login Form */}
-          <Col xs={24} sm={24} md={8} lg={8} className="pane center-pane login-pane" style={{ display: 'flex', height: '100%' }}>
-            <div className="pane-inner center-inner" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', height: '100%', width: '100%' }}>
+          {/* LOGIN FORM - Top */}
+          <Col xs={24} sm={24} md={24} lg={24} className="pane right-pane" style={{ display: 'flex', minHeight: 0, alignSelf: 'stretch' }}>
+            <div className="pane-inner center-inner" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', height: 'auto', width: '100%', minHeight: 0, alignSelf: 'stretch' }}>
               <Card 
                 className="glass-card login-card" 
                 variant="outlined"
                 style={{
-                  background: 'rgba(255, 255, 255, 0.98)',
-                  border: '1px solid rgba(255, 255, 255, 0.4)',
-                  borderRadius: 20,
-                  backdropFilter: 'blur(10px)',
-                  boxShadow: '0 20px 50px rgba(0, 0, 0, 0.2)',
-                  padding: 36
+                  background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 255, 0.96) 100%)',
+                  border: '1.5px solid rgba(102, 126, 234, 0.2)',
+                  borderRadius: 14,
+                  backdropFilter: 'blur(20px)',
+                  boxShadow: '0 20px 40px rgba(102, 126, 234, 0.2), 0 0 1px rgba(102, 126, 234, 0.4)',
+                  padding: 35
                 }}
               >
-                <div style={{ textAlign: 'center', marginBottom: 28 }}>
+                <div style={{ textAlign: 'center', marginBottom: 29 }}>
                   <Typography.Title 
                     level={3} 
                     className="title-blue" 
                     style={{ 
                       textAlign: 'center', 
-                      marginBottom: 8,
-                      fontSize: 24,
+                      marginBottom: 11,
+                      fontSize: 21,
                       fontWeight: 800,
                       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                       backgroundClip: 'text',
                       WebkitBackgroundClip: 'text',
                       WebkitTextFillColor: 'transparent',
-                      color: 'transparent'
+                      color: 'transparent',
+                      letterSpacing: '-0.48px'
                     }}
                   >
-                    Barangay Information Management System Parian
+                    {systemSettings?.siteName || 'Barangay System'}
                   </Typography.Title>
                   <Typography.Text 
                     style={{ 
                       display: 'block', 
                       color: '#64748b', 
                       fontWeight: 500, 
-                      fontSize: 13
+                      fontSize: 10
                     }}
                   >
                     Sign in to your account
@@ -488,45 +444,69 @@ const LoginForm: React.FC = () => {
                   style={{ marginBottom: 0 }}
                 >
                   <Form.Item 
-                    label={<span style={{ fontWeight: 600, color: '#0f172a', fontSize: 13 }}>Email or Username</span>}
+                    label={<span style={{ fontWeight: 600, color: '#0f172a', fontSize: 11 }}>Email or Username</span>}
                     name="username" 
                     rules={[{ required: true, message: 'Please input your email or username!' }]}
-                    style={{ marginBottom: 16 }}
+                    style={{ marginBottom: 18 }}
                   >
                     <Input 
                       prefix={<UserOutlined style={{ color: '#667eea' }} />} 
-                      placeholder="Enter your email or username" 
+                      placeholder="raymond@example.com" 
                       size="large"
                       style={{
                         borderRadius: 8,
-                        border: '1px solid #e2e8f0',
-                        fontSize: 14,
-                        padding: '10px 14px'
+                        border: '1.5px solid #e2e8f0',
+                        fontSize: 12,
+                        padding: '9px 13px',
+                        transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                        background: 'rgba(248, 250, 255, 0.6)'
+                      }}
+                      onFocus={(e) => {
+                        (e.target as HTMLInputElement).style.borderColor = '#667eea';
+                        (e.target as HTMLInputElement).style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
+                        (e.target as HTMLInputElement).style.background = 'rgba(248, 250, 255, 1)';
+                      }}
+                      onBlur={(e) => {
+                        (e.target as HTMLInputElement).style.borderColor = '#e2e8f0';
+                        (e.target as HTMLInputElement).style.boxShadow = 'none';
+                        (e.target as HTMLInputElement).style.background = 'rgba(248, 250, 255, 0.6)';
                       }}
                     />
                   </Form.Item>
 
                   <Form.Item 
-                    label={<span style={{ fontWeight: 600, color: '#0f172a', fontSize: 13 }}>Password</span>}
+                    label={<span style={{ fontWeight: 600, color: '#0f172a', fontSize: 11 }}>Password</span>}
                     name="password" 
                     rules={[{ required: true, message: 'Please input your password!' }, { min: 6, message: 'Password must be at least 6 characters' }]}
-                    style={{ marginBottom: 20 }}
+                    style={{ marginBottom: 22 }}
                   >
                     <Input.Password 
                       autoComplete="current-password" 
                       prefix={<LockOutlined style={{ color: '#667eea' }} />} 
-                      placeholder="Enter your password" 
+                      placeholder="••••••••" 
                       size="large"
                       style={{
                         borderRadius: 8,
-                        border: '1px solid #e2e8f0',
-                        fontSize: 14,
-                        padding: '10px 14px'
+                        border: '1.5px solid #e2e8f0',
+                        fontSize: 12,
+                        padding: '9px 13px',
+                        transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                        background: 'rgba(248, 250, 255, 0.6)'
+                      }}
+                      onFocus={(e) => {
+                        (e.target as HTMLInputElement).style.borderColor = '#667eea';
+                        (e.target as HTMLInputElement).style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
+                        (e.target as HTMLInputElement).style.background = 'rgba(248, 250, 255, 1)';
+                      }}
+                      onBlur={(e) => {
+                        (e.target as HTMLInputElement).style.borderColor = '#e2e8f0';
+                        (e.target as HTMLInputElement).style.boxShadow = 'none';
+                        (e.target as HTMLInputElement).style.background = 'rgba(248, 250, 255, 0.6)';
                       }}
                     />
                   </Form.Item>
 
-                  <Form.Item style={{ marginBottom: 10 }}>
+                  <Form.Item style={{ marginBottom: 11 }}>
                     <Button 
                       htmlType="submit" 
                       size="large" 
@@ -535,11 +515,22 @@ const LoginForm: React.FC = () => {
                       style={{
                         background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                         border: 'none',
-                        fontWeight: 600,
-                        fontSize: 14,
+                        fontWeight: 700,
+                        fontSize: 12,
                         borderRadius: 8,
-                        height: 42,
-                        color: '#ffffff'
+                        height: 38,
+                        color: '#ffffff',
+                        boxShadow: '0 10px 19px rgba(102, 126, 234, 0.35)',
+                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                        letterSpacing: '-0.24px'
+                      }}
+                      onMouseEnter={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 16px 32px rgba(102, 126, 234, 0.45)';
+                        (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(-2px)';
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 12px 24px rgba(102, 126, 234, 0.35)';
+                        (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(0)';
                       }}
                       block
                     >
@@ -551,15 +542,27 @@ const LoginForm: React.FC = () => {
                     <Button 
                       onClick={() => setGuestModalVisible(true)} 
                       size="large" 
-                      className="guest-warm-btn"
+                      className="guest-btn"
                       style={{
-                        background: 'rgba(102, 126, 234, 0.08)',
-                        border: '1.5px solid #667eea',
+                        background: 'rgba(102, 126, 234, 0.1)',
+                        border: '2px solid #667eea',
                         color: '#667eea',
-                        fontWeight: 500,
-                        fontSize: 14,
+                        fontWeight: 700,
+                        fontSize: 12,
                         borderRadius: 8,
-                        height: 42
+                        height: 38,
+                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                        letterSpacing: '-0.24px'
+                      }}
+                      onMouseEnter={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.background = '#667eea';
+                        (e.currentTarget as HTMLButtonElement).style.color = '#ffffff';
+                        (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 8px 20px rgba(102, 126, 234, 0.3)';
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.background = 'rgba(102, 126, 234, 0.1)';
+                        (e.currentTarget as HTMLButtonElement).style.color = '#667eea';
+                        (e.currentTarget as HTMLButtonElement).style.boxShadow = 'none';
                       }}
                       block
                     >
@@ -567,62 +570,81 @@ const LoginForm: React.FC = () => {
                     </Button>
                   </Form.Item>
 
-                  <div className="links-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14, gap: 8 }}>
-                    <Button 
-                      type="link" 
-                      onClick={() => { setForgotPasswordModalVisible(true); setForgotPasswordSent(false); forgotPasswordForm.resetFields(); }}
-                      style={{ padding: 0, color: '#667eea', fontWeight: 500, fontSize: 13 }}
-                    >
-                      Forgot Password?
-                    </Button>
-                    <RouterLink to="/register" style={{ color: '#667eea', fontWeight: 500, textDecoration: 'none', fontSize: 13 }}>
-                      Sign Up
-                    </RouterLink>
-                  </div>
+                  <div className="links-section" style={{ marginBottom: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginBottom: 11, paddingBottom: 11, borderBottom: '1.5px solid rgba(102, 126, 234, 0.1)' }}>
+                      <Button 
+                        type="link" 
+                        onClick={() => { setForgotPasswordModalVisible(true); setForgotPasswordSent(false); forgotPasswordForm.resetFields(); }}
+                        style={{ padding: 0, color: '#667eea', fontWeight: 600, fontSize: 11, textDecoration: 'none', transition: 'all 0.2s' }}
+                        onMouseEnter={(e) => {
+                          (e.currentTarget as HTMLButtonElement).style.color = '#764ba2';
+                        }}
+                        onMouseLeave={(e) => {
+                          (e.currentTarget as HTMLButtonElement).style.color = '#667eea';
+                        }}
+                      >
+                        Forgot Password?
+                      </Button>
+                      <RouterLink to="/register" style={{ color: '#667eea', fontWeight: 600, textDecoration: 'none', fontSize: 11, transition: 'all 0.2s' }} onMouseEnter={(e) => (e.currentTarget as HTMLAnchorElement).style.color = '#764ba2'} onMouseLeave={(e) => (e.currentTarget as HTMLAnchorElement).style.color = '#667eea'}>
+                        Create Account
+                      </RouterLink>
+                    </div>
 
-                  <div style={{ textAlign: 'center' }}>
-                    <Button 
-                      type="link" 
-                      onClick={() => setEmergencyModalVisible(true)}
-                      style={{ padding: 0, color: '#f5222d', fontWeight: 500, fontSize: 13 }}
-                    >
-                      Emergency Hotline
-                    </Button>
+                    <div style={{ textAlign: 'center' }}>
+                      <Button 
+                        type="link" 
+                        onClick={() => setEmergencyModalVisible(true)}
+                        style={{ padding: 0, color: '#ef4444', fontWeight: 700, fontSize: 10, transition: 'all 0.2s', letterSpacing: '-0.16px' }}
+                        onMouseEnter={(e) => {
+                          (e.currentTarget as HTMLButtonElement).style.color = '#dc2626';
+                        }}
+                        onMouseLeave={(e) => {
+                          (e.currentTarget as HTMLButtonElement).style.color = '#ef4444';
+                        }}
+                      >
+                        🚨 Emergency Hotline
+                      </Button>
+                    </div>
                   </div>
                 </Form>
               </Card>
             </div>
           </Col>
 
-          {/* RIGHT COLUMN - Barangay Officials & Contact Info */}
-          <Col xs={24} sm={24} md={8} lg={8} className="pane right-pane officials-pane" style={{ display: 'flex', height: '100%' }}>
-            <div className="pane-inner right-inner" style={{ display: 'flex', flexDirection: 'column', gap: 20, height: '100%', width: '100%', minHeight: 0 }}>
-              
+          {/* QUICK STATS - After Login Form */}
+          <Col xs={24} sm={24} md={24} lg={24} style={{ display: 'flex', minHeight: 0 }}>
+            <StatsPanel />
+          </Col>
+
+          {/* BARANGAY OFFICIALS */}
+          <Col xs={24} sm={24} md={24} lg={24} className="pane left-pane stats-pane" style={{ display: 'flex', minHeight: 0 }}>
+            <div className="pane-inner left-inner" style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%', width: '100%', minHeight: 0 }}>
+
               {/* Officials Card */}
               <Card 
                 className="glass-card officials-card" 
                 variant="outlined"
                 style={{
-                  background: 'rgba(255, 255, 255, 0.95)',
-                  border: '1px solid rgba(255, 255, 255, 0.3)',
-                  borderRadius: 16,
-                  backdropFilter: 'blur(10px)',
-                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
-                  padding: 20,
+                  background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 255, 0.96) 100%)',
+                  border: '1.5px solid rgba(102, 126, 234, 0.2)',
+                  borderRadius: 13,
+                  backdropFilter: 'blur(20px)',
+                  boxShadow: '0 16px 32px rgba(102, 126, 234, 0.15), 0 0 1px rgba(102, 126, 234, 0.3)',
+                  padding: 19,
                   flex: 1,
                   minHeight: 0,
                   display: 'flex',
                   flexDirection: 'column'
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-                  <div style={{ width: 4, height: 24, background: 'linear-gradient(180deg, #667eea 0%, #764ba2 100%)', borderRadius: 2 }} />
-                  <Typography.Title level={5} style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#0f172a' }}>
-                    Barangay Officials
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, paddingBottom: 13, borderBottom: '1.5px solid rgba(102, 126, 234, 0.1)' }}>
+                  <div style={{ width: 3, height: 19, background: 'linear-gradient(180deg, #667eea 0%, #764ba2 100%)', borderRadius: 2 }} />
+                  <Typography.Title level={5} style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#0f172a', letterSpacing: '-0.3px' }}>
+                    🏛️ Barangay Officials
                   </Typography.Title>
                 </div>
 
-                <div className="carousel-wrap vertical" style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'stretch', justifyContent: 'flex-start', flex: 1, minHeight: 0 }}>
+                <div className="carousel-wrap vertical" style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'stretch', justifyContent: 'flex-start', flex: 1, minHeight: 0, gap: 10 }}>
                   <div 
                     ref={officialsCarouselRef} 
                     className={`carousel-scroll vertical ${slideDirection ? `slide-${slideDirection}` : ''}`}
@@ -630,44 +652,56 @@ const LoginForm: React.FC = () => {
                       overflowY: 'auto', 
                       display: 'flex', 
                       flexDirection: 'column',
-                      gap: 12, 
+                      gap: 10, 
                       paddingRight: 8,
                       scrollBehavior: 'smooth',
                       minHeight: 0,
                       flex: 1
                     }}>
                     {officials.length === 0 ? (
-                      <Typography.Text type="secondary" style={{ padding: '20px 0', textAlign: 'center' }}>No officials available</Typography.Text>
+                      <Typography.Text type="secondary" style={{ padding: '20px', textAlign: 'center' }}>No officials available</Typography.Text>
                     ) : (
                       officials.map(off => (
                         <div 
                           key={off._id} 
                           className="official-card-vertical"
                           style={{
-                            background: '#ffffff',
-                            border: '1px solid #e2e8f0',
-                            borderRadius: 10,
-                            padding: 12,
-                            textAlign: 'left',
-                            boxShadow: '0 2px 6px rgba(0, 0, 0, 0.04)',
-                            transition: 'all 0.3s ease',
-                            display: 'flex',
-                            gap: 10,
-                            alignItems: 'flex-start'
+                          background: '#ffffff',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: 8,
+                          padding: 10,
+                          textAlign: 'left',
+                          boxShadow: '0 3px 10px rgba(0, 0, 0, 0.05)',
+                          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                          display: 'flex',
+                          gap: 8,
+                            alignItems: 'flex-start',
+                            cursor: 'pointer'
+                          }}
+                          onMouseEnter={(e) => {
+                            (e.currentTarget as HTMLDivElement).style.boxShadow = '0 12px 24px rgba(102, 126, 234, 0.15)';
+                            (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)';
+                            (e.currentTarget as HTMLDivElement).style.borderColor = '#667eea';
+                          }}
+                          onMouseLeave={(e) => {
+                            (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.06)';
+                            (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)';
+                            (e.currentTarget as HTMLDivElement).style.borderColor = '#e2e8f0';
                           }}
                         >
                           <div 
                             className="official-avatar"
                             style={{
-                              width: 50,
-                              height: 50,
-                              borderRadius: 8,
+                            width: 38,
+                            height: 38,
+                            borderRadius: 6,
                               overflow: 'hidden',
                               flexShrink: 0,
                               background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                               display: 'flex',
                               alignItems: 'center',
-                              justifyContent: 'center'
+                              justifyContent: 'center',
+                              border: '2px solid rgba(102, 126, 234, 0.2)'
                             }}
                           >
                             <img
@@ -679,15 +713,15 @@ const LoginForm: React.FC = () => {
                                   const t = e.currentTarget as HTMLImageElement;
                                   t.onerror = null;
                                   const name = (off.name || 'Official').toString().trim();
-                                  t.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=667eea&color=fff&size=50`;
+                                  t.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=667eea&color=fff&size=48`;
                                 } catch (err) {}
                               }}
                             />
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a', marginBottom: 2 }}>{off.name}</div>
-                            <div style={{ color: '#64748b', fontSize: 11, marginBottom: 1 }}>{off.title}</div>
-                            <div style={{ color: '#94a3b8', fontSize: 10 }}>{off.term}</div>
+                            <div style={{ fontWeight: 700, fontSize: 11, color: '#0f172a', marginBottom: 3, lineHeight: 1.3 }}>{off.name}</div>
+                            <div style={{ color: '#64748b', fontSize: 9, marginBottom: 2, fontWeight: 500 }}>{off.title}</div>
+                            <div style={{ color: '#94a3b8', fontSize: 8 }}>{off.term}</div>
                           </div>
                         </div>
                       ))
@@ -695,15 +729,24 @@ const LoginForm: React.FC = () => {
                   </div>
                 </div>
               </Card>
+            </div>
+          </Col>
+
+          {/* CENTER COLUMN - Barangay Information & Contact Info */}
+          <Col xs={24} sm={24} md={24} lg={24} className="pane center-pane login-pane" style={{ display: 'flex', minHeight: 0 }}>
+            <div className="pane-inner right-inner" style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%', width: '100%', minHeight: 0 }}>
+              
+              {/* Barangay Information */}
+              <BarangayInfoCard />
 
               {/* Contact Info Card */}
-              <div style={{ flexShrink: 0 }}><ContactInfoCard /></div>
+              <div style={{ flexShrink: 0, minHeight: 0 }}><ContactInfoCard /></div>
             </div>
           </Col>
 
         </Row>
       </div>
-  </div>
+  </div>  
   <Modal
       title="Continue as Guest"
       open={guestModalVisible}

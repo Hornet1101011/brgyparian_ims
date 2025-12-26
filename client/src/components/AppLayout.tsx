@@ -34,20 +34,19 @@ const DateTimeDisplay: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
   const pad = (n: number) => n.toString().padStart(2, '0');
-  const date = `${now.getMonth() + 1}/${pad(now.getDate())}/${now.getFullYear()}`;
+  const date = `${pad(now.getMonth() + 1)}/${pad(now.getDate())}/${now.getFullYear()}`;
   const time = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
   return (
-    <span style={{ fontSize: 12, color: '#9ca3af', fontWeight: 500, letterSpacing: -0.2, display: 'flex', alignItems: 'center', gap: 6 }}>
-      <ClockCircleOutlined style={{ fontSize: 14, flexShrink: 0 }} />
-      <span>{date}</span>
-      <span>{time}</span>
+    <span style={{ fontSize: 13, color: '#888', fontWeight: 500, letterSpacing: 0.5, marginRight: 8 }}>
+      <ClockCircleOutlined style={{ marginRight: 4 }} />
+      {date} {time}
     </span>
   );
 };
 const { Header, Content, Sider } = Layout;
 
-const SIDEBAR_WIDTH = 240;
-const SIDEBAR_COLLAPSED_WIDTH = 64;
+const SIDEBAR_WIDTH = 280;
+const SIDEBAR_COLLAPSED_WIDTH = 80;
 const HEADER_HEIGHT = 64;
 
 const navConfig: {
@@ -217,7 +216,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   // Removed notification dropdown logic
 
   return (
-    <Layout style={{ minHeight: '100vh', background: '#f8f9fa' }}>
+    <Layout style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)' }}>
       {user && screenSize !== 'mobile' && (
         <Sider
           width={SIDEBAR_WIDTH}
@@ -228,14 +227,15 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             position: 'fixed',
             left: 0,
             top: 0,
-            background: 'linear-gradient(180deg, #0f172a 0%, #1e293b 100%)',
+            background: 'linear-gradient(135deg, rgba(139, 115, 234, 0.95) 0%, rgba(168, 120, 190, 0.95) 100%)',
             display: 'flex',
             flexDirection: 'column',
             padding: 0,
             zIndex: 100,
-            boxShadow: '8px 0 24px rgba(0, 0, 0, 0.12)',
+            boxShadow: '2px 0 24px rgba(139, 115, 234, 0.25)',
             borderRight: 'none',
             overflowX: 'hidden',
+            backdropFilter: 'blur(8px)',
           }}
         >
           <div
@@ -243,20 +243,21 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
               flex: 1,
               overflowY: 'auto',
               overflowX: 'hidden',
-              padding: '20px 0',
+              padding: '24px 0 0 0',
               display: 'flex',
               flexDirection: 'column',
             }}
           >
             <Menu
-              theme="dark"
+              theme="light"
               mode="inline"
               selectedKeys={[location.pathname]}
               style={{
                 background: 'transparent',
-                fontWeight: 500,
-                fontSize: 14,
+                fontWeight: 600,
+                fontSize: 16,
                 border: 'none',
+                color: '#fff',
               }}
               inlineCollapsed={collapsed}
               items={
@@ -268,7 +269,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                     : 'resident'
                 ].map(item => ({
                   ...item,
-                  className: location.pathname === item.key ? 'ant-menu-item-active-modern' : undefined
+                  className: location.pathname === item.key ? 'ant-menu-item-active-custom' : 'ant-menu-item-custom'
                 }))
               }
               onClick={({ key }) => {
@@ -291,7 +292,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                 alt="Logo" 
                 style={{ width: 28, height: 28 }} 
               />
-              <span style={{ fontSize: 14, fontWeight: 600 }}>Navigation</span>
+              <span style={{ fontSize: 16, fontWeight: 600 }}>Menu</span>
             </div>
           }
           placement="left"
@@ -299,7 +300,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           open={mobileMenuOpen}
           bodyStyle={{ padding: 0, background: '#f8f9fa' }}
           headerStyle={{
-            background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+            background: 'linear-gradient(135deg, rgba(139, 115, 234, 0.95) 0%, rgba(168, 120, 190, 0.95) 100%)',
             borderBottom: 'none',
             padding: '12px 16px',
           }}
@@ -314,7 +315,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
               style={{
                 background: 'transparent',
                 fontWeight: 500,
-                fontSize: 14,
+                fontSize: 15,
                 border: 'none',
                 padding: '8px 0',
               }}
@@ -338,44 +339,47 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
 
   <Layout style={{ marginLeft }}>
         <Header
-          className="app-header-modern"
+          className="app-header"
           style={{
             height: screenSize === 'mobile' ? 56 : HEADER_HEIGHT,
-            background: '#ffffff',
+            background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(250, 248, 255, 0.94) 100%)',
             display: 'flex',
             flexWrap: 'nowrap',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: screenSize === 'mobile' ? '0 12px' : '0 28px',
+            padding: screenSize === 'mobile' ? '0 12px' : '0 32px',
             position: 'fixed',
             left: marginLeft,
             right: 0,
             top: 0,
             zIndex: 101,
-            boxShadow: '0 2px 12px rgba(0, 0, 0, 0.08)',
-            borderBottom: '1px solid #f0f0f0',
+            boxShadow: '0 4px 12px rgba(139, 115, 234, 0.08)',
+            backdropFilter: 'blur(8px)',
+            borderBottom: '1px solid rgba(139, 115, 234, 0.06)',
           }}
         >
           {/* Mobile Menu Toggle Button */}
           {user && screenSize === 'mobile' && (
             <Button
-              type="text"
+              type="default"
               shape="circle"
               size="small"
-              icon={<MenuOutlined style={{ fontSize: 18 }} />}
+              icon={<MenuOutlined />}
               onClick={() => setMobileMenuOpen(true)}
-              style={{ marginRight: 8, color: '#1f2937' }}
+              style={{ marginRight: 8 }}
             />
           )}
 
           <div
-            className="responsive-system-title-modern"
+            className="responsive-system-title"
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: screenSize === 'mobile' ? 8 : 12,
               maxWidth: '100%',
               overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
               flex: 1,
               minWidth: 0,
             }}
@@ -385,68 +389,49 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
               src={`${process.env.PUBLIC_URL}/logo-parian2.png`} 
               alt="Logo" 
               style={{ 
-                width: screenSize === 'mobile' ? 28 : 32, 
-                height: screenSize === 'mobile' ? 28 : 32, 
+                width: screenSize === 'mobile' ? 28 : 36, 
+                height: screenSize === 'mobile' ? 28 : 36, 
                 marginRight: screenSize === 'mobile' ? 0 : 4,
                 flexShrink: 0,
               }} 
             />
-            {/* Title - show abbreviated on tablet, full on desktop, hidden on mobile */}
-            {screenSize === 'tablet' && (
+            {screenSize !== 'mobile' && (
               <span style={{
-                fontSize: 14,
-                fontWeight: 600,
-                color: '#0f172a',
-                letterSpacing: -0.3,
+                fontSize: screenSize === 'tablet' ? 18 : 26,
+                fontWeight: 400,
+                letterSpacing: 1,
+                background: 'linear-gradient(135deg, #8b73ea 0%, #a878be 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
                 display: 'inline-block',
                 maxWidth: '100%',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
               }}>
-                BMS
-              </span>
-            )}
-            {screenSize === 'desktop' && (
-              <span style={{
-                fontSize: 20,
-                fontWeight: 600,
-                color: '#0f172a',
-                letterSpacing: -0.3,
-                display: 'inline-block',
-                maxWidth: '100%',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}>
-                Barangay <span style={{ fontWeight: 700, color: '#0f766e' }}>Management System</span>
+                Barangay Information <span style={{ fontWeight: 800 }}>Management System</span>
               </span>
             )}
           </div>
-          <div className="header-controls-modern" style={{ display: 'flex', alignItems: 'center', gap: screenSize === 'mobile' ? 4 : screenSize === 'tablet' ? 12 : 24, position: 'relative', marginRight: screenSize === 'mobile' ? 0 : 0, flexShrink: 0 }}>
-            {/* Date/Time - desktop only */}
-            {screenSize === 'desktop' && (
-              <div style={{ display: 'flex', alignItems: 'center', paddingRight: 12, borderRight: '1px solid #e5e7eb' }}>
+          <div className="header-controls" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: screenSize === 'mobile' ? 8 : 16, position: 'relative', marginRight: screenSize === 'mobile' ? 0 : 48, flexShrink: 0 }}>
+            {screenSize !== 'mobile' && (
+              <span style={{ marginRight: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <DateTimeDisplay />
-              </div>
+              </span>
             )}
-            {/* Date/Time - tablet compact version */}
-            {screenSize === 'tablet' && (
-              <div style={{ display: 'flex', alignItems: 'center', fontSize: 11, color: '#9ca3af', flexShrink: 0 }}>
-                <ClockCircleOutlined style={{ fontSize: 12, marginRight: 4 }} />
-                {new Date().toLocaleTimeString().split(' ')[0]}
-              </div>
+            {/* Utility bar: quick actions */}
+            {screenSize !== 'mobile' && (
+              <Space size={12} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {displayUser && (
+                  // Route admins to admin management, others to public announcements
+                  <Button size="small" onClick={() => navigate(displayUser?.role === 'admin' ? '/admin/announcements' : '/announcements')}
+                    icon={<NotificationOutlined />}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  />
+                )}
+              </Space>
             )}
-            {/* Announcement notification button - show on all screens */}
-            {displayUser && (
-              <Button 
-                size="small" 
-                onClick={() => navigate(displayUser?.role === 'admin' ? '/admin/announcements' : '/announcements')}
-                icon={<BellOutlined style={{ fontSize: screenSize === 'mobile' ? 16 : 16 }} />}
-                type="text"
-                style={{ color: '#6b7280', height: 36, padding: screenSize === 'mobile' ? '0 4px' : '0 6px', flexShrink: 0 }}
-              />
-            )}
+            {/* Verification status indicator removed while feature is paused */}
             {/* profile/menu icons (uses icons instead of Avatar) */}
             {(() => {
               const items: any[] = [
@@ -465,7 +450,9 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                   placement="bottomRight"
                   trigger={["click"]}
                 >
-                  <Button type="text" shape="circle" size="small" icon={<UserOutlined style={{ fontSize: 18, color: '#1f2937' }} />} style={{ padding: 0 }} />
+                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 2 }}>
+                    <Button type="default" shape="circle" size={screenSize === 'mobile' ? 'small' : 'small'} icon={<UserOutlined />} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }} />
+                  </div>
                 </Dropdown>
               );
             })()}
@@ -473,12 +460,12 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           </div>
   </Header>
   {/* Divider line below header */}
-  <div style={{ height: 1, background: '#e5e7eb', width: '100%', margin: 0, boxShadow: 'none' }} />
+  <div style={{ height: 1, background: 'rgba(139, 115, 234, 0.06)', width: '100%', margin: 0, boxShadow: 'none' }} />
         <Content
           style={{
             marginTop: screenSize === 'mobile' ? 56 : HEADER_HEIGHT,
-            padding: screenSize === 'mobile' ? 12 : screenSize === 'tablet' ? 16 : 28,
-            background: '#f8f9fa',
+            padding: screenSize === 'mobile' ? 12 : screenSize === 'tablet' ? 16 : 32,
+            background: 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)',
             minHeight: `calc(100vh - ${screenSize === 'mobile' ? 56 : HEADER_HEIGHT}px)`,
           }}
         >

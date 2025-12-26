@@ -1,10 +1,113 @@
 /* Custom highlight for active sidebar menu item */
 .ant-menu-item-active-custom {
-  background: #e6f0ff !important;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.30) 0%, rgba(255, 255, 255, 0.18) 100%) !important;
   border-radius: 12px !important;
-  box-shadow: 0 2px 8px 0 rgba(64, 201, 255, 0.10);
-  color: #3b3b3b !important;
+  box-shadow: 
+    0 8px 18px rgba(139, 115, 234, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 0 2px rgba(255, 255, 255, 0.5) !important;
+  color: #fff !important;
   font-weight: 700;
+  margin: 8px 8px !important;
+  padding: 11px 16px !important;
+  height: auto !important;
+  min-height: 46px !important;
+  line-height: 1.6 !important;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  border-left: 4px solid #fff !important;
+  border-top: 1.5px solid rgba(255, 255, 255, 0.5) !important;
+  border-right: 1.5px solid rgba(255, 255, 255, 0.25) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  overflow: visible !important;
+  position: relative !important;
+}
+
+/* Right-pointing arrow indicator for active menu item - next to icon */
+.ant-menu-item-active-custom::before {
+  content: '' !important;
+  position: absolute !important;
+  right: 12px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  width: 0 !important;
+  height: 0 !important;
+  border-left: 7px solid #fff !important;
+  border-top: 5px solid transparent !important;
+  border-bottom: 5px solid transparent !important;
+  filter: drop-shadow(0 1px 3px rgba(139, 115, 234, 0.4)) !important;
+  z-index: 10 !important;
+  animation: arrowPulse 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards !important;
+}
+
+@keyframes arrowPulse {
+  0% {
+    opacity: 0;
+    transform: translateY(-50%) translateX(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
+  }
+}
+
+.ant-menu-item-active-custom:hover {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.38) 0%, rgba(255, 255, 255, 0.26) 100%) !important;
+  box-shadow: 
+    0 10px 22px rgba(139, 115, 234, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    0 0 2px rgba(255, 255, 255, 0.6) !important;
+  transform: translateX(1px) !important;
+}
+
+.ant-menu-item-active-custom .anticon {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 1em !important;
+  height: 1em !important;
+  margin-right: 8px !important;
+  flex-shrink: 0 !important;
+  font-size: 1em !important;
+}
+
+/* Inactive menu items */
+.ant-menu-item-custom {
+  background: transparent !important;
+  color: rgba(255, 255, 255, 0.90) !important;
+  font-weight: 500 !important;
+  font-size: 15px !important;
+  border-radius: 10px !important;
+  margin: 8px 8px !important;
+  padding: 11px 16px !important;
+  height: auto !important;
+  min-height: 46px !important;
+  line-height: 1.6 !important;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  border-left: 3px solid transparent !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  overflow: visible !important;
+  position: relative !important;
+}
+
+.ant-menu-item-custom:hover {
+  background: rgba(255, 255, 255, 0.15) !important;
+  color: #fff !important;
+  border-left-color: rgba(255, 255, 255, 0.5) !important;
+}
+
+.ant-menu-item-custom .anticon {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 1em !important;
+  height: 1em !important;
+  margin-right: 8px !important;
+  flex-shrink: 0 !important;
+  font-size: 1em !important;
 }
 
 /* Mobile Menu Item Styles */
@@ -22,30 +125,31 @@
 }
 
 .mobile-menu-item:hover {
-  background: #f0f0f0 !important;
+  background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%) !important;
   transform: translateX(4px);
+  color: #667eea !important;
 }
 
 .mobile-menu-item-active {
-  background: linear-gradient(135deg, #40c9ff15 0%, #e81cff15 100%) !important;
-  color: #40c9ff !important;
+  background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%) !important;
+  color: #667eea !important;
   font-weight: 600 !important;
-  border-left: 4px solid #40c9ff !important;
+  border-left: 4px solid #667eea !important;
   border-radius: 8px !important;
   margin: 4px 12px !important;
   padding: 12px 12px 12px 16px !important;
-  box-shadow: 0 2px 8px rgba(64, 201, 255, 0.12) !important;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15) !important;
   transform: translateX(4px);
 }
 
 .mobile-menu-item-active:hover {
-  background: linear-gradient(135deg, #40c9ff25 0%, #e81cff25 100%) !important;
+  background: linear-gradient(135deg, #667eea25 0%, #764ba225 100%) !important;
 }
 
 /* Mobile Drawer Responsive Styles */
 .ant-drawer-header {
   padding: 12px 16px !important;
-  background: linear-gradient(135deg, #40c9ff 0%, #e81cff 100%) !important;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
 }
 
 .ant-drawer-title {

@@ -86,7 +86,7 @@ const StatsPanel: React.FC = () => {
 
       <Row gutter={[14, 14]} style={{ padding: '0 20px 20px 20px' }}>
         {items.map((it: any) => (
-          <Col key={it.key} xs={12} sm={12} md={8} lg={8} style={{ display: 'flex' }}>
+          <Col key={it.key} xs={12} sm={12} md={12} lg={4} style={{ display: 'flex' }}>
             <div 
               style={{ 
                 display: 'flex', 

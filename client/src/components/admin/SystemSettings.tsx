@@ -850,9 +850,11 @@ const SystemSettings: React.FC = () => {
                                 return;
                               }
                               await adminAPI.uploadOfficialPhoto(off._id, file as File);
+                              // Refresh officials list to show new photo
                               const refreshed = await adminAPI.getOfficials();
                               setOfficials(Array.isArray(refreshed) ? refreshed : officials);
                               antdMessage.success('Photo uploaded');
+                              // Clear preview URL after successful upload
                               try {
                                 const key = off._id || '';
                                 const u = previewUrlsRef.current[key];

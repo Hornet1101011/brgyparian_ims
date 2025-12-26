@@ -48,9 +48,10 @@ export const useSystemSettings = (autoRefresh: boolean = true): UseSystemSetting
   const enablePublicViews = Boolean((globalThis as any).__APP_CONFIG__?.ENABLE_PUBLIC_VIEWS || process.env.REACT_APP_ENABLE_PUBLIC_VIEWS === 'true');
 
   const fetchSettings = async () => {
+    setLoading(true);
+    setError(null);
+    
     try {
-      setLoading(true);
-      setError(null);
       
       // Fetch from publicviews collection for optimized cached data (if enabled)
       if (enablePublicViews) {
@@ -104,13 +105,12 @@ export const useSystemSettings = (autoRefresh: boolean = true): UseSystemSetting
         });
       }
     } finally {
-      if (mountedRef.current) {
-        setLoading(false);
-      }
+      setLoading(false);
     }
   };
 
   useEffect(() => {
+    mountedRef.current = true;
     // Only attempt fetch once, don't auto-refresh since endpoint doesn't exist
     if (!hasAttemptedFetchRef.current) {
       hasAttemptedFetchRef.current = true;
