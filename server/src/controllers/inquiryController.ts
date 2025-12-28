@@ -833,3 +833,44 @@ export const addMessage = async (req: any, res: Response, next: NextFunction) =>
     return res.status(500).json({ message: 'Failed to add message' });
   }
 };
+
+export const closeInquiry = async (req: any, res: Response, next: NextFunction) => {
+  try {
+    const id = req.params.id;
+    const reason = (req.body && req.body.reason) ? String(req.body.reason).trim() : '';
+
+    const inquiry = await Inquiry.findById(id);
+    if (!inquiry) return res.status(404).json({ message: 'Inquiry not found' });
+
+    const curStatus = String(inquiry.status || '').toLowerCase();
+    if (curStatus === 'closed') return res.status(400).json({ message: 'Inquiry is already closed.' });
+
+    inquiry.status = 'closed';
+    if (reason) inquiry.cancellationReason = reason;
+    inquiry.canceledBy = (req as any).user?._id || null;
+    inquiry.canceledAt = new Date();
+
+    await inquiry.save();
+
+    // Notify resident of closure
+    try {
+      const resident = await User.findOne({ username: inquiry.username, barangayID: inquiry.barangayID, role: 'resident' }).catch(() => null);
+      if (resident) {
+        const Notification = require('../../models/Notification');
+        await Notification.create({
+          userId: resident._id,
+          type: 'inquiries',
+          title: 'Inquiry Closed',
+          message: `Your inquiry has been closed.${reason ? ' Reason: ' + reason : ''}`
+        }).catch((e: any) => console.warn('Failed to create closure notification', e));
+      }
+    } catch (notifyErr) {
+      console.warn('Failed to notify resident of closure', notifyErr);
+    }
+
+    return res.json({ success: true, inquiry });
+  } catch (err) {
+    console.error('Error in closeInquiry:', err);
+    return res.status(500).json({ message: 'Error closing inquiry', error: err });
+  }
+};

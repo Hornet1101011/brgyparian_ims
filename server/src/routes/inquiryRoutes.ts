@@ -17,6 +17,7 @@ import {
   checkAvailability,
   addStaffNote,
   addMessage,
+  closeInquiry,
 } from '../controllers/inquiryController';
 import { Request, Response, NextFunction } from 'express';
 
@@ -70,6 +71,9 @@ router.post('/:id/check-availability', auth, authorize('admin', 'staff'), (req: 
 
 // Cancel an appointment (staff only) with reason
 router.patch('/:id/cancel', auth, authorize('admin', 'staff'), (req: any, res: Response, next: NextFunction) => cancelInquiry(req, res, next));
+
+// Close an inquiry (staff only) - marks as 'closed'
+router.patch('/:id/close', auth, authorize('admin', 'staff'), (req: any, res: Response, next: NextFunction) => closeInquiry(req, res, next));
 
 // Add a response to an inquiry (allow resident and staff replies)
 // Allow file attachments with responses as well

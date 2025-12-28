@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { List, Typography, Spin, Input, Button, Modal, message as antdMessage } from 'antd';
 import AppAvatar from '../components/AppAvatar';
 import styles from './staffInbox.module.css';
-import { InboxOutlined, SendOutlined, PlusOutlined, QuestionCircleOutlined } from '@ant-design/icons';
+import { InboxOutlined, SendOutlined, PlusOutlined, QuestionCircleOutlined, CloseOutlined } from '@ant-design/icons';
 import { contactAPI, adminAPI, getAbsoluteApiUrl } from '../services/api';
 
 interface FilterState {
@@ -223,6 +223,45 @@ const StaffInbox: React.FC = () => {
     } finally {
       setReplyLoading(r => ({ ...r, [sendingKey]: false }));
     }
+  };
+
+  const handleCloseInquiry = async () => {
+    if (!selectedInquiry || !selectedInquiry._id) {
+      return antdMessage.error('No inquiry selected');
+    }
+
+    Modal.confirm({
+      title: 'Close Inquiry',
+      content: 'Are you sure you want to close this inquiry? The resident will be notified.',
+      okText: 'Close',
+      okType: 'danger',
+      cancelText: 'Cancel',
+      onOk: async () => {
+        try {
+          const response = await fetch(`/api/inquiries/${selectedInquiry._id}/close`, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+            },
+            body: JSON.stringify({ reason: 'Inquiry closed by staff' })
+          });
+
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Failed to close inquiry');
+          }
+
+          const updatedInquiry = await response.json();
+          setInquiries(prev => prev.map(i => i._id === updatedInquiry.inquiry._id ? updatedInquiry.inquiry : i));
+          setSelectedInquiry(null);
+          antdMessage.success('Inquiry closed successfully');
+        } catch (err) {
+          console.error('Failed to close inquiry', err);
+          antdMessage.error(`Failed to close inquiry: ${(err as any).message}`);
+        }
+      }
+    });
   };
 
   // ============ FILTERING LOGIC ============
@@ -830,6 +869,40 @@ const StaffInbox: React.FC = () => {
                   }}
                 >
                   <SendOutlined style={{ fontSize: isMobile ? 12 : 14 }} />
+                </button>
+
+                <button
+                  onClick={handleCloseInquiry}
+                  style={{
+                    background: 'linear-gradient(135deg, #f5222d 0%, #ff4d4f 100%)',
+                    color: '#fff',
+                    border: 'none',
+                    padding: isMobile ? '6px 10px' : '8px 16px',
+                    borderRadius: 20,
+                    cursor: 'pointer',
+                    fontSize: isMobile ? 12 : 14,
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.3s ease-in-out',
+                    gap: isMobile ? 4 : 6,
+                    flexShrink: 0,
+                    minWidth: isMobile ? 32 : 40,
+                    minHeight: isMobile ? 32 : 36,
+                    boxShadow: '0 4px 20px rgba(245, 34, 45, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.4)'
+                  }}
+                  title="Close Inquiry"
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.boxShadow = '0 6px 24px rgba(245, 34, 45, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.4)';
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.boxShadow = '0 4px 20px rgba(245, 34, 45, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.4)';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}
+                >
+                  <CloseOutlined style={{ fontSize: isMobile ? 12 : 14 }} />
                 </button>
               </div>
             </>

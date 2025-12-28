@@ -20,7 +20,7 @@ export interface IInquiry extends Document {
   subject: string;
   message: string;
   type?: string;
-  status: 'open' | 'pending' | 'in-progress' | 'scheduled' | 'resolved' | 'canceled';
+  status: 'open' | 'pending' | 'in-progress' | 'scheduled' | 'resolved' | 'canceled' | 'closed';
   createdBy: mongoose.Types.ObjectId;
   username: string;
   barangayID: string;
@@ -88,7 +88,7 @@ const inquirySchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['open', 'pending', 'in-progress', 'scheduled', 'resolved', 'canceled'],
+    enum: ['open', 'pending', 'in-progress', 'scheduled', 'resolved', 'canceled', 'closed'],
     default: 'open',
   },
   createdBy: {
