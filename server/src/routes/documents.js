@@ -88,10 +88,11 @@ router.post('/:fileId/generate-filled', requireAuth, isAdmin, async (req, res) =
           if (rawType) parts.push(makeSafe(rawType));
           const filenameBase = parts.length ? parts.join('_') : (files[0] && files[0].filename ? makeSafe(files[0].filename) : `filled_${fileId}`);
           const filename = `${filenameBase}.docx`;
-          // Upload generated file to GridFS 'documents' bucket and persist id
+          // Upload generated file to GridFS 'processed_documents' bucket and persist id
           try {
             const filesDb = mongoose.connection.db;
-            // Store generated/processed copies in a dedicated GridFS bucket to avoid mixing with general 'documents' bucket
+            // Store generated/processed copies in the 'processed_documents' GridFS bucket
+            // This stores files in processed_documents.files and processed_documents.chunks collections
             const documentsBucket = new GridFSBucket(filesDb, { bucketName: 'processed_documents' });
             const { Readable } = require('stream');
             const readable = new Readable();
