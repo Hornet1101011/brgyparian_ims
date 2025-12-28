@@ -73,9 +73,9 @@ app.use((req, res, next) => {
   res.status(403).send('CORS origin denied');
 });
 
-// Serve static files from client and its subfolders
+// Serve static files from client build folder (for production)
 const path = require('path');
-app.use(express.static(path.join(__dirname, '../client')));
+app.use(express.static(path.join(__dirname, '../client/build')));
 app.use('/css', express.static(path.join(__dirname, '../css')));
 app.use('/javascript', express.static(path.join(__dirname, '../javascript')));
 
@@ -546,6 +546,11 @@ if (process.env.DEBUG_PUBLIC_SETTINGS === 'true') {
     console.error('Failed to create public settings debug endpoint', e);
   }
 }
+
+// Fallback route: Serve index.html for all non-API routes (React Router SPA)
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../client/build/index.html'));
+});
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
