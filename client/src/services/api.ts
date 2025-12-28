@@ -450,6 +450,9 @@ export const contact = {
     const resp = await axiosInstance.post(`/inquiries/${id}`, payload);
     return resp.data as { success?: boolean; conflicts?: ConflictItem[] } | any;
   },
+  // Close an inquiry (staff/admin only)
+  closeInquiry: (id: string, reason?: string) =>
+    axiosInstance.patch(`/inquiries/${id}/close`, { reason: reason || 'Inquiry closed by staff' }).then(response => response.data),
   // Public announcements
   getAnnouncements: () =>
     axiosInstance.get('/announcements').then(response => response.data),

@@ -238,21 +238,7 @@ const StaffInbox: React.FC = () => {
       cancelText: 'Cancel',
       onOk: async () => {
         try {
-          const response = await fetch(`/api/inquiries/${selectedInquiry._id}/close`, {
-            method: 'PATCH',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${localStorage.getItem('authToken')}`
-            },
-            body: JSON.stringify({ reason: 'Inquiry closed by staff' })
-          });
-
-          if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Failed to close inquiry');
-          }
-
-          const updatedInquiry = await response.json();
+          const updatedInquiry = await contactAPI.closeInquiry(selectedInquiry._id);
           setInquiries(prev => prev.map(i => i._id === updatedInquiry.inquiry._id ? updatedInquiry.inquiry : i));
           setSelectedInquiry(null);
           antdMessage.success('Inquiry closed successfully');
