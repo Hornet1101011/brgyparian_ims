@@ -10,6 +10,7 @@ import messageRoutes from './routes/messageRoutes';
 import logsRoutes from './routes/logs';
 import verificationRoutes from './routes/verificationRoutes';
 import analyticsRoutes from './routes/analyticsRoutes';
+import inquiryRoutes from './routes/inquiryRoutes';
 console.log('Loaded inboxRoutes in app.ts');
 import express from 'express';
 import morgan from 'morgan';
@@ -211,6 +212,7 @@ try {
 }
 
 app.use('/api/inbox', (req, res, next) => { console.log('Received request to /api/inbox'); next(); }, inboxRoutes);
+app.use('/api/inquiries', inquiryRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/logs', logsRoutes);
 app.use('/api/notifications', notificationRoutes);
