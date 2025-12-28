@@ -77,8 +77,23 @@ const DEBUG_ORIGINS = String(process.env.DEBUG_ORIGINS || '').toLowerCase() === 
 // Custom CORS middleware: explicitly set a single Access-Control-Allow-Origin
 // header (prevents the server or proxies from returning multiple comma-separated values).
 const ALLOW_ALL_ORIGINS = String(process.env.ALLOW_ALL_ORIGINS || '').toLowerCase() === 'true';
+
+// Helper to check if origin is allowed (including localhost variants in development)
+const isOriginAllowed = (origin: string, isDev: boolean): boolean => {
+  if (!origin) return false;
+  if (FRONTEND_ORIGINS.includes('*')) return true;
+  if (FRONTEND_ORIGINS.includes(origin)) return true;
+  
+  // Allow localhost and 127.0.0.1 on any port in development
+  const isLocalhost = origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:');
+  if (isLocalhost && isDev) return true;
+  
+  return false;
+};
+
 app.use((req, res, next) => {
   const origin = (req.headers.origin as string) || '';
+  const isDev = process.env.NODE_ENV === 'development';
 
   // Debug log to help diagnose CORS issues in production (safe to remove later)
   if (origin) {
@@ -96,6 +111,7 @@ app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+    res.setHeader('Access-Control-Expose-Headers', 'X-Transaction-Code, X-Filled-File-Id, X-Generated-Doc-Id, X-Processed-Doc-Id, X-Processed-GridFS-Id');
     return next();
   }
 
@@ -105,6 +121,7 @@ app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+    res.setHeader('Access-Control-Expose-Headers', 'X-Transaction-Code, X-Filled-File-Id, X-Generated-Doc-Id, X-Processed-Doc-Id, X-Processed-GridFS-Id');
     if (req.method === 'OPTIONS') return res.sendStatus(204);
     return next();
   }
@@ -116,17 +133,19 @@ app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+    res.setHeader('Access-Control-Expose-Headers', 'X-Transaction-Code, X-Filled-File-Id, X-Generated-Doc-Id, X-Processed-Doc-Id, X-Processed-GridFS-Id');
     if (req.method === 'OPTIONS') return res.sendStatus(204);
     return next();
   }
 
-  // Only allow a single matching origin value
-  if (FRONTEND_ORIGINS.includes(origin)) {
+  // Check if origin is explicitly allowed or is localhost in development
+  if (isOriginAllowed(origin, isDev)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+    res.setHeader('Access-Control-Expose-Headers', 'X-Transaction-Code, X-Filled-File-Id, X-Generated-Doc-Id, X-Processed-Doc-Id, X-Processed-GridFS-Id');
     if (req.method === 'OPTIONS') return res.sendStatus(204);
     return next();
   }

@@ -39,18 +39,32 @@ app.use(passport.session());
 const rawAllowed = process.env.CORS_ALLOWED_ORIGINS || 'http://localhost:3000';
 const allowedOrigins = rawAllowed.split(',').map(s => s.trim()).filter(Boolean);
 
+// Helper to check if origin is allowed (including localhost variants)
+const isOriginAllowed = (origin) => {
+  if (!origin) return false;
+  if (allowedOrigins.includes('*')) return true;
+  if (allowedOrigins.includes(origin)) return true;
+  
+  // Allow localhost and 127.0.0.1 on any port in development
+  const isLocalhost = origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:');
+  const isDev = process.env.NODE_ENV === 'development';
+  if (isLocalhost && isDev) return true;
+  
+  return false;
+};
+
 app.use((req, res, next) => {
   // If no Origin header (server-to-server or same-origin), continue
   const origin = req.headers.origin;
   if (!origin) return next();
 
-  if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+  if (isOriginAllowed(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
     // Expose custom headers so the browser/axios can read them
-    res.setHeader('Access-Control-Expose-Headers', 'Authorization, X-Filled-File-Id, X-Generated-Doc-Id, X-Processed-Doc-Id, X-Processed-GridFS-Id');
+    res.setHeader('Access-Control-Expose-Headers', 'Authorization, X-Filled-File-Id, X-Generated-Doc-Id, X-Processed-Doc-Id, X-Processed-GridFS-Id, X-Transaction-Code');
     if (req.method === 'OPTIONS') return res.sendStatus(204);
     return next();
   }
