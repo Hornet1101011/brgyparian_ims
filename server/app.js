@@ -101,142 +101,7 @@ mongoose.connection.on('connected', () => {
   console.log('MongoDB connected');
 });
 
-let dbInitialized = false;
-
-// Consolidated database initialization
-mongoose.connection.once('connected', async () => {
-  if (dbInitialized) return; // Prevent duplicate initialization
-  dbInitialized = true;
-  
-  console.log('\n\n========================================');
-  console.log('DATABASE INITIALIZATION STARTING');
-  console.log('========================================\n');
-  
-  try {
-    const db = mongoose.connection.db;
-    if (!db) {
-      console.error('ERROR: MongoDB db not available for initialization');
-      return;
-    }
-
-    console.log('[Init] Connected to database');
-    const collList = await db.listCollections({}).toArray();
-    const collNames = collList.map(c => c.name);
-    console.log('[Init] Found', collNames.length, 'existing collections');
-
-    // 1. Ensure templateconfig collection exists
-    console.log('[Init] ------- Checking templateconfig -------');
-    if (!collNames.includes('templateconfig')) {
-      console.log('[Init] Creating templateconfig collection...');
-      try {
-        await db.createCollection('templateconfig');
-        const configColl = db.collection('templateconfig');
-        await configColl.createIndex({ templateId: 1 });
-        await configColl.createIndex({ updatedAt: 1 });
-        console.log('[Init] ✓✓✓ templateconfig collection CREATED with indexes ✓✓✓');
-      } catch (e) {
-        console.error('[Init] ERROR creating templateconfig:', e && e.message);
-      }
-    } else {
-      console.log('[Init] ✓ templateconfig collection already exists');
-    }
-
-    // 2. Ensure processed_documents GridFS bucket exists
-    console.log('[Init] ------- Checking processed_documents -------');
-    const filesName = 'processed_documents.files';
-    const chunksName = 'processed_documents.chunks';
-
-    if (!collNames.includes(filesName)) {
-      console.log('[Init] Creating collection', filesName);
-      try { await db.createCollection(filesName); } catch (e) { console.warn('[Init] createCollection files failed', e && e.message); }
-    }
-    if (!collNames.includes(chunksName)) {
-      console.log('[Init] Creating collection', chunksName);
-      try { await db.createCollection(chunksName); } catch (e) { console.warn('[Init] createCollection chunks failed', e && e.message); }
-    }
-
-    // Ensure indexes on files collection and unique index on chunks (idempotent)
-    try {
-      const filesColl = db.collection(filesName);
-      const chunksColl = db.collection(chunksName);
-
-      async function ensureIndexExists(coll, key, opts) {
-        try {
-          const existing = await coll.indexes();
-          const has = existing.some(ix => {
-            const ixKeys = ix.key || {};
-            const wantKeys = key || {};
-            const ixKeyNames = Object.keys(ixKeys).sort();
-            const wantKeyNames = Object.keys(wantKeys).sort();
-            if (ixKeyNames.length !== wantKeyNames.length) return false;
-            for (let i = 0; i < ixKeyNames.length; i++) {
-              const k = ixKeyNames[i];
-              if (k !== wantKeyNames[i]) return false;
-              if (ixKeys[k] !== wantKeys[k]) return false;
-            }
-            return true;
-          });
-          if (!has) {
-            await coll.createIndex(key, opts || {});
-            console.log('[Init] Created index on', coll.collectionName, JSON.stringify(key));
-          }
-        } catch (err) {
-          if (err && (err.code === 11000 || /index already exists/i.test(err.message))) {
-            // harmless
-          } else {
-            console.warn(`[Init] Failed to ensure index on ${coll.collectionName}:`, err && err.message);
-          }
-        }
-      }
-
-      await ensureIndexExists(filesColl, { filename: 1 });
-      await ensureIndexExists(filesColl, { uploadDate: 1 });
-      await ensureIndexExists(filesColl, { 'metadata.sourceFileId': 1 });
-      await ensureIndexExists(chunksColl, { files_id: 1, n: 1 }, { unique: true });
-    } catch (e) {
-      console.warn('[Init] Failed to create/check indexes on processed_documents collections', e && e.message);
-    }
-
-    console.log('[Init] ✓ Ensured processed_documents GridFS bucket collections and indexes.');
-
-    // 3. Initialize system settings if they don't exist
-    console.log('[Init] ------- Checking system settings -------');
-    try {
-      const SystemSetting = require('./models/SystemSetting');
-      const existingSettings = await SystemSetting.findOne();
-      if (!existingSettings) {
-        console.log('[Init] Creating default system settings...');
-        const defaultSettings = {
-          siteName: 'Barangay Information Management System',
-          barangayName: 'Barangay Parian',
-          barangayAddress: 'Barangay Parian, Calamba, Laguna',
-          contactEmail: 'barangayparian@gmail.com',
-          contactPhone: '09614215746',
-          systemNotice: '',
-          maintenanceMode: false,
-          allowRegistrations: true,
-          requireEmailVerification: true,
-          maxDocumentRequestsPerUser: 5,
-          documentProcessingDays: 3,
-          allowMultipleAccountsPerIP: false,
-          maxAccountsPerIP: 1,
-        };
-        await SystemSetting.create(defaultSettings);
-        console.log('[Init] ✓ System settings initialized');
-      } else {
-        console.log('[Init] ✓ System settings already exist');
-      }
-    } catch (err) {
-      console.error('[Init] Error initializing system settings:', err && err.message);
-    }
-
-    console.log('\n========================================');
-    console.log('✓✓✓ ALL DATABASE INITIALIZATION COMPLETE ✓✓✓');
-    console.log('========================================\n');
-  } catch (err) {
-    console.error('\nERROR during database initialization:', err && err.message, '\n');
-  }
-});
+// Removed: initialization moved to ensureTemplateConfigCollection() function called after server starts
 
 // Hardcoded fallback endpoint - returns static values if database is empty
 // This ensures login page always shows something even if DB is not initialized
@@ -571,6 +436,60 @@ app.get('*', (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+
+// Dedicated function to ensure templateconfig collection exists
+async function ensureTemplateConfigCollection() {
+  try {
+    // Wait for MongoDB connection to be ready
+    // Check connection state up to 10 times (10 seconds max)
+    let connectionReady = false;
+    for (let i = 0; i < 10; i++) {
+      if (mongoose.connection.readyState === 1) { // 1 = connected
+        connectionReady = true;
+        console.log('[Template Config] MongoDB connection ready');
+        break;
+      }
+      console.log('[Template Config] Waiting for MongoDB connection... attempt', i + 1);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    if (!connectionReady) {
+      console.error('[Template Config] ERROR: MongoDB connection never reached ready state (readyState:', mongoose.connection.readyState + ')');
+      return;
+    }
+
+    const db = mongoose.connection.db;
+    if (!db) {
+      console.error('[Template Config] ERROR: MongoDB db object not available even though connected');
+      return;
+    }
+
+    console.log('[Template Config] Checking for templateconfig collection...');
+    if (!collNames.includes('templateconfig')) {
+      console.log('[Template Config] Creating templateconfig collection...');
+      try {
+        await db.createCollection('templateconfig');
+        const configColl = db.collection('templateconfig');
+        
+        // Create indexes
+        await configColl.createIndex({ templateId: 1 });
+        await configColl.createIndex({ updatedAt: 1 });
+        
+        console.log('[Template Config] ✓✓✓ SUCCESS: templateconfig collection created with indexes ✓✓✓\n');
+      } catch (err) {
+        console.error('[Template Config] ERROR creating collection:', err.message);
+      }
+    } else {
+      console.log('[Template Config] ✓ Collection already exists\n');
+    }
+  } catch (err) {
+    console.error('[Template Config] ERROR:', err.message);
+  }
+}
+
+app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
+  
+  // Ensure templateconfig collection exists after server starts
+  await ensureTemplateConfigCollection();
 });
