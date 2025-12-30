@@ -437,64 +437,70 @@ app.get('*', (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 
-// Dedicated function to ensure templateconfig collection exists
-async function ensureTemplateConfigCollection() {
+// Ensure templateconfig collection exists after MongoDB connection
+mongoose.connection.on('connected', async () => {
   try {
-    // Wait for MongoDB connection to be ready
-    // Check connection state up to 10 times (10 seconds max)
-    let connectionReady = false;
-    for (let i = 0; i < 10; i++) {
-      if (mongoose.connection.readyState === 1) { // 1 = connected
-        connectionReady = true;
-        console.log('[Template Config] MongoDB connection ready');
-        break;
-      }
-      console.log('[Template Config] Waiting for MongoDB connection... attempt', i + 1);
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
-
-    if (!connectionReady) {
-      console.error('[Template Config] ERROR: MongoDB connection never reached ready state (readyState:', mongoose.connection.readyState + ')');
-      return;
-    }
-
+    console.log('\n========== [Template Config Initialization] ==========');
+    
     const db = mongoose.connection.db;
     if (!db) {
-      console.error('[Template Config] ERROR: MongoDB db object not available even though connected');
+      console.error('[Template Config] ✗ ERROR: MongoDB db object not available');
+      console.log('========== [Template Config Initialization FAILED] ==========\n');
       return;
     }
 
-    console.log('[Template Config] Checking for templateconfig collection...');
+    console.log('[Template Config] 🔍 Checking for templateconfig collection...');
     
     // Get list of existing collections
-    const collections = await db.listCollections().toArray();
+    const collections = await db.listCollections({}).toArray();
     const collNames = collections.map(c => c.name);
+    console.log('[Template Config] Found', collNames.length, 'existing collections');
     
     if (!collNames.includes('templateconfig')) {
-      console.log('[Template Config] Creating templateconfig collection...');
+      console.log('[Template Config] 📝 Creating templateconfig collection...');
       try {
         await db.createCollection('templateconfig');
-        const configColl = db.collection('templateconfig');
-        
-        // Create indexes
-        await configColl.createIndex({ templateId: 1 });
-        await configColl.createIndex({ updatedAt: 1 });
-        
-        console.log('[Template Config] ✓✓✓ SUCCESS: templateconfig collection created with indexes ✓✓✓\n');
-      } catch (err) {
-        console.error('[Template Config] ERROR creating collection:', err.message);
+        console.log('[Template Config] ✓ Collection created');
+      } catch (cErr) {
+        console.warn('[Template Config] ⚠ Warning creating collection:', cErr && cErr.message);
       }
     } else {
-      console.log('[Template Config] ✓ Collection already exists\n');
+      console.log('[Template Config] ✓ Collection already exists');
+    }
+
+    // Create indexes on templateconfig collection
+    try {
+      const configColl = db.collection('templateconfig');
+      
+      // Create index on templateId
+      try {
+        await configColl.createIndex({ templateId: 1 });
+        console.log('[Template Config] ✓ Index created on templateId');
+      } catch (idxErr) {
+        console.warn('[Template Config] ⚠ Warning creating templateId index:', idxErr && idxErr.message);
+      }
+      
+      // Create index on updatedAt
+      try {
+        await configColl.createIndex({ updatedAt: 1 });
+        console.log('[Template Config] ✓ Index created on updatedAt');
+      } catch (idxErr) {
+        console.warn('[Template Config] ⚠ Warning creating updatedAt index:', idxErr && idxErr.message);
+      }
+      
+      console.log('[Template Config] ✓✓✓ SUCCESS: templateconfig collection initialized with indexes ✓✓✓');
+      console.log('========== [Template Config Initialization SUCCESS] ==========\n');
+    } catch (indexErr) {
+      console.error('[Template Config] ✗ ERROR creating indexes:', indexErr && indexErr.message);
+      console.log('========== [Template Config Initialization FAILED] ==========\n');
     }
   } catch (err) {
-    console.error('[Template Config] ERROR:', err.message);
+    console.error('[Template Config] ✗ FATAL ERROR:', err && err.message);
+    console.error(err);
+    console.log('========== [Template Config Initialization FAILED] ==========\n');
   }
-}
+});
 
 app.listen(PORT, async () => {
-  console.log(`Server running on port ${PORT}`);
-  
-  // Ensure templateconfig collection exists after server starts
-  await ensureTemplateConfigCollection();
+  console.log(`\nServer running on port ${PORT}`);
 });
