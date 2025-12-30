@@ -125,52 +125,16 @@ const TemplateValidationConfig: React.FC<TemplateValidationConfigProps> = ({
   const loadValidations = async () => {
     setLoading(true);
     try {
-      // Try new /config endpoint first, fall back to /validations
-      try {
-        const res = await axiosInstance.get(`/documents/${templateId}/config`);
-        const data = res.data || {};
-        const loadedValidations = data.validations || [];
-        setValidations(loadedValidations);
-        setSavedValidations(loadedValidations);
-        setSaveStatus('saved');
-        // Clear localStorage on successful load
-        try {
-          localStorage.removeItem(`validations_${templateId}`);
-        } catch (e) {}
-      } catch (err) {
-        // Fall back to legacy /validations endpoint
-        console.log('Config endpoint not available, trying legacy endpoint...');
-        const res = await axiosInstance.get(`/documents/${templateId}/validations`);
-        const data = res.data || {};
-        const loadedValidations = data.validations || [];
-        setValidations(loadedValidations);
-        setSavedValidations(loadedValidations);
-        setSaveStatus('saved');
-        // Clear localStorage on successful load
-        try {
-          localStorage.removeItem(`validations_${templateId}`);
-        } catch (e) {}
-      }
+      const res = await axiosInstance.get(`/documents/${templateId}/config`);
+      const data = res.data || {};
+      const loadedValidations = data.validations || [];
+      setValidations(loadedValidations);
+      setSavedValidations(loadedValidations);
+      setSaveStatus('saved');
     } catch (err) {
       console.error('Failed to load validations from server:', err);
-      // Try to load from localStorage as fallback
-      try {
-        const cached = localStorage.getItem(`validations_${templateId}`);
-        if (cached) {
-          const parsedValidations = JSON.parse(cached);
-          setValidations(parsedValidations);
-          setSavedValidations(parsedValidations);
-          setSaveStatus('saved');
-          message.warning('Loaded validations from local cache (backend unavailable)');
-        } else {
-          setValidations([]);
-          setSavedValidations([]);
-        }
-      } catch (e) {
-        console.error('Failed to load from localStorage:', e);
-        setValidations([]);
-        setSavedValidations([]);
-      }
+      setValidations([]);
+      setSavedValidations([]);
     }
     setLoading(false);
   };
@@ -266,37 +230,15 @@ const TemplateValidationConfig: React.FC<TemplateValidationConfigProps> = ({
     setIsSaving(true);
     setSaveStatus('saving');
     try {
-      // Try new /config endpoint first
-      try {
-        await axiosInstance.post(`/documents/${templateId}/config`, {
-          validations,
-          config: {}
-        });
-      } catch (err) {
-        // Fall back to legacy /validations endpoint
-        console.log('Config endpoint not available, using legacy endpoint...');
-        await axiosInstance.post(`/documents/${templateId}/validations`, {
-          validations,
-        });
-      }
+      await axiosInstance.post(`/documents/${templateId}/config`, {
+        validations,
+        config: {}
+      });
       setSavedValidations(validations);
       setSaveStatus('saved');
-      message.success('✓ Validations auto-saved');
-      // Clear localStorage on successful save
-      try {
-        localStorage.removeItem(`validations_${templateId}`);
-      } catch (e) {}
     } catch (err) {
       console.error('Failed to auto-save validations:', err);
       setSaveStatus('unsaved');
-      // Save to localStorage as fallback
-      try {
-        localStorage.setItem(`validations_${templateId}`, JSON.stringify(validations));
-        message.warning('Saving to local cache (backend unavailable)');
-      } catch (e) {
-        console.error('Failed to save to localStorage:', e);
-        message.error('Failed to save validations');
-      }
     }
     setIsSaving(false);
   };
@@ -305,38 +247,18 @@ const TemplateValidationConfig: React.FC<TemplateValidationConfigProps> = ({
     setLoading(true);
     setSaveStatus('saving');
     try {
-      // Try new /config endpoint first
-      try {
-        await axiosInstance.post(`/documents/${templateId}/config`, {
-          validations,
-          config: {}
-        });
-      } catch (err) {
-        // Fall back to legacy /validations endpoint
-        console.log('Config endpoint not available, using legacy endpoint...');
-        await axiosInstance.post(`/documents/${templateId}/validations`, {
-          validations,
-        });
-      }
+      await axiosInstance.post(`/documents/${templateId}/config`, {
+        validations,
+        config: {}
+      });
       setSavedValidations(validations);
       setSaveStatus('saved');
       message.success('✓ All validation configurations saved successfully');
-      // Clear localStorage on successful save
-      try {
-        localStorage.removeItem(`validations_${templateId}`);
-      } catch (e) {}
       onSave();
     } catch (err) {
       console.error('Failed to save validations:', err);
       setSaveStatus('unsaved');
-      // Save to localStorage as fallback
-      try {
-        localStorage.setItem(`validations_${templateId}`, JSON.stringify(validations));
-        message.warning('Saving validations to local cache (backend currently unavailable). They will sync when the server is ready.');
-      } catch (e) {
-        console.error('Failed to save to localStorage:', e);
-        message.error('Failed to save validations');
-      }
+      message.error('Failed to save validations');
     }
     setLoading(false);
   };
