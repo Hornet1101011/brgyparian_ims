@@ -56,6 +56,11 @@ router.get('/:fileId/config', async (req, res) => {
       return res.status(500).json({ success: false, message: 'Database not initialized.' });
     }
 
+    // Validate ObjectId format
+    if (!ObjectId.isValid(req.params.fileId)) {
+      return res.json({ validations: [], config: {} });
+    }
+
     // Check if templateconfig collection exists
     const collections = await db.listCollections().toArray();
     const hasConfigCollection = collections.some((c: any) => c.name === 'templateconfig');
@@ -66,7 +71,7 @@ router.get('/:fileId/config', async (req, res) => {
     }
 
     const config = await db.collection('templateconfig').findOne({
-      templateId: ObjectId(req.params.fileId)
+      templateId: new ObjectId(req.params.fileId)
     });
 
     res.json({
@@ -90,6 +95,11 @@ router.post('/:fileId/config', auth, authorize('admin', 'staff'), async (req, re
       return res.status(400).json({ success: false, message: 'Validations must be an array' });
     }
 
+    // Validate ObjectId format
+    if (!ObjectId.isValid(req.params.fileId)) {
+      return res.status(400).json({ success: false, message: 'Invalid file ID format' });
+    }
+
     const db = mongoose.connection.db;
     if (!db) {
       return res.status(500).json({ success: false, message: 'Database not initialized.' });
@@ -104,7 +114,7 @@ router.post('/:fileId/config', auth, authorize('admin', 'staff'), async (req, re
       console.log('Created templateconfig collection');
     }
 
-    const templateId = ObjectId(req.params.fileId);
+    const templateId = new ObjectId(req.params.fileId);
 
     // Upsert template configuration
     const result = await db.collection('templateconfig').updateOne(
