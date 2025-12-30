@@ -31,8 +31,17 @@ export const useTemplateValidations = (templateId: string) => {
       setLoading(true);
       setError(null);
       try {
-        const res = await axiosPublic.get(`/documents/${templateId}/validations`);
-        const data = res.data?.validations || [];
+        let data: any[] = [];
+        // Try new /config endpoint first
+        try {
+          const res = await axiosPublic.get(`/documents/${templateId}/config`);
+          data = res.data?.validations || [];
+        } catch (err) {
+          // Fall back to legacy /validations endpoint
+          console.log('Config endpoint not available, trying legacy endpoint...');
+          const res = await axiosPublic.get(`/documents/${templateId}/validations`);
+          data = res.data?.validations || [];
+        }
         const validationMap = data.reduce((acc: any, v: PlaceholderValidation) => {
           acc[v.placeholder] = v;
           return acc;

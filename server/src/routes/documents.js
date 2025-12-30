@@ -303,33 +303,118 @@ try {
   console.error('Failed to register upload-inline route', e);
 }
 
-// GET validation rules for a template
-router.get('/:fileId/validations', async (req, res) => {
+// GET template configuration (including validations)
+router.get('/:fileId/config', async (req, res) => {
   try {
     const mongoose = require('mongoose');
     const { ObjectId } = mongoose.Types;
     
-    // Try to find validation rules in a collection or as metadata
     const db = mongoose.connection.db;
     if (!db) {
       return res.status(500).json({ success: false, message: 'Database not initialized.' });
     }
 
-    // Check if validations collection exists
+    // Check if templateconfig collection exists
     const collections = await db.listCollections().toArray();
-    const hasValidationsCollection = collections.some(c => c.name === 'template_validations');
+    const hasConfigCollection = collections.some(c => c.name === 'templateconfig');
     
-    if (!hasValidationsCollection) {
-      // Return empty validations if collection doesn't exist yet
-      return res.json({ validations: [] });
+    if (!hasConfigCollection) {
+      // Return empty config if collection doesn't exist yet
+      return res.json({ validations: [], config: {} });
     }
 
-    const validation = await db.collection('template_validations').findOne({
+    const config = await db.collection('templateconfig').findOne({
       templateId: ObjectId(req.params.fileId)
     });
 
     res.json({
-      validations: validation ? (validation.validations || []) : []
+      validations: config ? (config.validations || []) : [],
+      config: config || {}
+    });
+  } catch (err) {
+    console.error('Error fetching template config:', err);
+    res.status(500).json({ success: false, message: 'Failed to fetch template config', error: err.message });
+  }
+});
+
+// POST template configuration (including validations)
+router.post('/:fileId/config', requireAuth, isAdmin, async (req, res) => {
+  try {
+    const mongoose = require('mongoose');
+    const { ObjectId } = mongoose.Types;
+    const { validations, config } = req.body;
+
+    if (!validations || !Array.isArray(validations)) {
+      return res.status(400).json({ success: false, message: 'Validations must be an array' });
+    }
+
+    const db = mongoose.connection.db;
+    if (!db) {
+      return res.status(500).json({ success: false, message: 'Database not initialized.' });
+    }
+
+    // Create collection if it doesn't exist
+    const collections = await db.listCollections().toArray();
+    const hasConfigCollection = collections.some(c => c.name === 'templateconfig');
+    
+    if (!hasConfigCollection) {
+      await db.createCollection('templateconfig');
+      console.log('Created templateconfig collection');
+    }
+
+    const templateId = ObjectId(req.params.fileId);
+
+    // Upsert template configuration
+    const result = await db.collection('templateconfig').updateOne(
+      { templateId },
+      {
+        $set: {
+          templateId,
+          validations,
+          config: config || {},
+          updatedAt: new Date(),
+          updatedBy: req.user && req.user._id ? req.user._id : undefined
+        }
+      },
+      { upsert: true }
+    );
+
+    res.json({
+      success: true,
+      message: 'Template configuration saved successfully',
+      result
+    });
+  } catch (err) {
+    console.error('Error saving template config:', err);
+    res.status(500).json({ success: false, message: 'Failed to save template config', error: err.message });
+  }
+});
+
+// Legacy endpoints for backward compatibility
+router.get('/:fileId/validations', async (req, res) => {
+  try {
+    const mongoose = require('mongoose');
+    const { ObjectId } = mongoose.Types;
+    
+    const db = mongoose.connection.db;
+    if (!db) {
+      return res.status(500).json({ success: false, message: 'Database not initialized.' });
+    }
+
+    // Check if templateconfig collection exists
+    const collections = await db.listCollections().toArray();
+    const hasConfigCollection = collections.some(c => c.name === 'templateconfig');
+    
+    if (!hasConfigCollection) {
+      return res.json({ validations: [] });
+    }
+
+    const config = await db.collection('templateconfig').findOne({
+      templateId: ObjectId(req.params.fileId)
+    });
+
+    res.json({
+      validations: config ? (config.validations || []) : []
     });
   } catch (err) {
     console.error('Error fetching validations:', err);
@@ -337,7 +422,7 @@ router.get('/:fileId/validations', async (req, res) => {
   }
 });
 
-// POST validation rules for a template
+// POST validation rules for a template (legacy, saves to templateconfig)
 router.post('/:fileId/validations', requireAuth, isAdmin, async (req, res) => {
   try {
     const mongoose = require('mongoose');
@@ -355,16 +440,17 @@ router.post('/:fileId/validations', requireAuth, isAdmin, async (req, res) => {
 
     // Create collection if it doesn't exist
     const collections = await db.listCollections().toArray();
-    const hasValidationsCollection = collections.some(c => c.name === 'template_validations');
+    const hasConfigCollection = collections.some(c => c.name === 'templateconfig');
     
-    if (!hasValidationsCollection) {
-      await db.createCollection('template_validations');
+    if (!hasConfigCollection) {
+      await db.createCollection('templateconfig');
+      console.log('Created templateconfig collection');
     }
 
     const templateId = ObjectId(req.params.fileId);
 
-    // Upsert validation rules
-    const result = await db.collection('template_validations').updateOne(
+    // Upsert validation rules in templateconfig
+    const result = await db.collection('templateconfig').updateOne(
       { templateId },
       {
         $set: {
