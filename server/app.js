@@ -100,27 +100,52 @@ mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/alphaversio
 mongoose.connection.on('connected', () => {
   console.log('MongoDB connected');
 });
-// Ensure processed_documents GridFS bucket exists (collections and indexes)
+
+let dbInitialized = false;
+
+// Consolidated database initialization
 mongoose.connection.on('connected', async () => {
+  if (dbInitialized) return; // Prevent duplicate initialization
+  dbInitialized = true;
+  
   try {
     const db = mongoose.connection.db;
     if (!db) {
-      console.warn('MongoDB db not available to ensure processed_documents bucket');
+      console.warn('MongoDB db not available for initialization');
       return;
     }
-    const filesName = 'processed_documents.files';
-    const chunksName = 'processed_documents.chunks';
 
+    console.log('[Init] Starting database initialization...');
     const collList = await db.listCollections({}).toArray();
     const collNames = collList.map(c => c.name);
 
+    // 1. Ensure templateconfig collection exists
+    if (!collNames.includes('templateconfig')) {
+      console.log('[Init] Creating templateconfig collection');
+      try {
+        await db.createCollection('templateconfig');
+        const configColl = db.collection('templateconfig');
+        await configColl.createIndex({ templateId: 1 });
+        await configColl.createIndex({ updatedAt: 1 });
+        console.log('[Init] ✓ templateconfig collection created with indexes');
+      } catch (e) {
+        console.warn('[Init] Failed to create templateconfig collection:', e && e.message);
+      }
+    } else {
+      console.log('[Init] ✓ templateconfig collection already exists');
+    }
+
+    // 2. Ensure processed_documents GridFS bucket exists
+    const filesName = 'processed_documents.files';
+    const chunksName = 'processed_documents.chunks';
+
     if (!collNames.includes(filesName)) {
-      console.log('Creating collection', filesName);
-      try { await db.createCollection(filesName); } catch (e) { console.warn('createCollection files failed', e && e.message); }
+      console.log('[Init] Creating collection', filesName);
+      try { await db.createCollection(filesName); } catch (e) { console.warn('[Init] createCollection files failed', e && e.message); }
     }
     if (!collNames.includes(chunksName)) {
-      console.log('Creating collection', chunksName);
-      try { await db.createCollection(chunksName); } catch (e) { console.warn('createCollection chunks failed', e && e.message); }
+      console.log('[Init] Creating collection', chunksName);
+      try { await db.createCollection(chunksName); } catch (e) { console.warn('[Init] createCollection chunks failed', e && e.message); }
     }
 
     // Ensure indexes on files collection and unique index on chunks (idempotent)
@@ -132,7 +157,6 @@ mongoose.connection.on('connected', async () => {
         try {
           const existing = await coll.indexes();
           const has = existing.some(ix => {
-            // compare keys
             const ixKeys = ix.key || {};
             const wantKeys = key || {};
             const ixKeyNames = Object.keys(ixKeys).sort();
@@ -147,17 +171,13 @@ mongoose.connection.on('connected', async () => {
           });
           if (!has) {
             await coll.createIndex(key, opts || {});
-            console.log('Created index on', coll.collectionName, JSON.stringify(key), opts || {});
-          } else {
-            // already exists
-            // console.log('Index already exists on', coll.collectionName, JSON.stringify(key));
+            console.log('[Init] Created index on', coll.collectionName, JSON.stringify(key));
           }
         } catch (err) {
-          // Ignore duplicate index errors and log others
           if (err && (err.code === 11000 || /index already exists/i.test(err.message))) {
             // harmless if the same index exists
           } else {
-            console.warn(`Failed to ensure index ${JSON.stringify(key)} on ${coll.collectionName}:`, err && err.message);
+            console.warn(`[Init] Failed to ensure index ${JSON.stringify(key)} on ${coll.collectionName}:`, err && err.message);
           }
         }
       }
@@ -165,108 +185,46 @@ mongoose.connection.on('connected', async () => {
       await ensureIndexExists(filesColl, { filename: 1 });
       await ensureIndexExists(filesColl, { uploadDate: 1 });
       await ensureIndexExists(filesColl, { 'metadata.sourceFileId': 1 });
-
       await ensureIndexExists(chunksColl, { files_id: 1, n: 1 }, { unique: true });
     } catch (e) {
-      console.warn('Failed to create/check indexes on processed_documents collections', e && e.message);
+      console.warn('[Init] Failed to create/check indexes on processed_documents collections', e && e.message);
     }
 
-    console.log('Ensured processed_documents GridFS bucket collections and indexes.');
-  } catch (err) {
-    console.error('Error ensuring processed_documents bucket', err && err.message);
-  }
+    console.log('[Init] ✓ Ensured processed_documents GridFS bucket collections and indexes.');
 
-  // Ensure templateconfig collection exists
-  try {
-    const db = mongoose.connection.db;
-    if (!db) {
-      console.warn('MongoDB db not available to ensure templateconfig collection');
-    } else {
-      const collList = await db.listCollections({}).toArray();
-      const collNames = collList.map(c => c.name);
-
-      if (!collNames.includes('templateconfig')) {
-        console.log('Creating templateconfig collection');
-        try {
-          await db.createCollection('templateconfig');
-          // Create indexes for better query performance
-          const configColl = db.collection('templateconfig');
-          await configColl.createIndex({ templateId: 1 });
-          await configColl.createIndex({ updatedAt: 1 });
-          console.log('✓ templateconfig collection created with indexes');
-        } catch (e) {
-          console.warn('Failed to create templateconfig collection:', e && e.message);
-        }
-      } else {
-        console.log('✓ templateconfig collection already exists');
-      }
-    }
-  } catch (err) {
-    console.error('Error ensuring templateconfig collection:', err && err.message);
-  }
-
-  // Initialize system settings if they don't exist
-  try {
-    const SystemSetting = require('./models/SystemSetting');
-    const existingSettings = await SystemSetting.findOne();
-    if (!existingSettings) {
-      console.log('[Init] No system settings found - creating default settings...');
-      const defaultSettings = {
-        siteName: 'Barangay Information Management System',
-        barangayName: 'Barangay Parian',
-        barangayAddress: 'Barangay Parian, Calamba, Laguna',
-        contactEmail: 'barangayparian@gmail.com',
-        contactPhone: '09614215746',
-        systemNotice: '',
-        maintenanceMode: false,
-        allowRegistrations: true,
-        requireEmailVerification: true,
-        maxDocumentRequestsPerUser: 5,
-        documentProcessingDays: 3,
-        allowMultipleAccountsPerIP: false,
-        maxAccountsPerIP: 1,
-      };
-      const created = await SystemSetting.create(defaultSettings);
-      console.log('[Init] ✅ System settings initialized successfully');
-      console.log('[Init] Settings:', created);
-    } else {
-      console.log('[Init] ✅ System settings already exist');
-      console.log('[Init] Current settings:', existingSettings);
-    }
-  } catch (err) {
-    console.log('[Init] ❌ Failed to initialize system settings:', err && err.message);
-  }
-
-  // Initialize PublicView collection if it doesn't exist
-  try {
-    const PublicView = require('./models/PublicView');
-    const SystemSetting = require('./models/SystemSetting');
-    
-    const existingPublicView = await PublicView.findOne({ isActive: true });
-    if (!existingPublicView) {
-      console.log('[Init] No PublicView cache found - creating from SystemSetting...');
-      const systemSetting = await SystemSetting.findOne();
-      if (systemSetting) {
-        const publicViewData = {
-          siteName: systemSetting.siteName || '',
-          barangayName: systemSetting.barangayName || '',
-          barangayAddress: systemSetting.barangayAddress || '',
-          contactEmail: systemSetting.contactEmail || '',
-          contactPhone: systemSetting.contactPhone || '',
-          systemNotice: systemSetting.systemNotice || '',
-          isActive: true,
-          lastSyncedAt: new Date()
+    // 3. Initialize system settings if they don't exist
+    try {
+      const SystemSetting = require('./models/SystemSetting');
+      const existingSettings = await SystemSetting.findOne();
+      if (!existingSettings) {
+        console.log('[Init] No system settings found - creating default settings...');
+        const defaultSettings = {
+          siteName: 'Barangay Information Management System',
+          barangayName: 'Barangay Parian',
+          barangayAddress: 'Barangay Parian, Calamba, Laguna',
+          contactEmail: 'barangayparian@gmail.com',
+          contactPhone: '09614215746',
+          systemNotice: '',
+          maintenanceMode: false,
+          allowRegistrations: true,
+          requireEmailVerification: true,
+          maxDocumentRequestsPerUser: 5,
+          documentProcessingDays: 3,
+          allowMultipleAccountsPerIP: false,
+          maxAccountsPerIP: 1,
         };
-        const created = await PublicView.create(publicViewData);
-        console.log('[Init] ✅ PublicView cache initialized successfully');
-        console.log('[Init] PublicView:', created);
+        await SystemSetting.create(defaultSettings);
+        console.log('[Init] ✓ System settings initialized successfully');
+      } else {
+        console.log('[Init] ✓ System settings already exist');
       }
-    } else {
-      console.log('[Init] ✅ PublicView cache already exists');
-      console.log('[Init] Current PublicView:', existingPublicView);
+    } catch (err) {
+      console.error('[Init] Error initializing system settings:', err && err.message);
     }
+
+    console.log('[Init] ✓ All database initialization completed successfully');
   } catch (err) {
-    console.log('[Init] ❌ Failed to initialize PublicView:', err && err.message);
+    console.error('[Init] Error during database initialization:', err && err.message);
   }
 });
 
