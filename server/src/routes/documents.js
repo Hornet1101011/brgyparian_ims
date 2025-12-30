@@ -303,6 +303,91 @@ try {
   console.error('Failed to register upload-inline route', e);
 }
 
+// GET validation rules for a template
+router.get('/:fileId/validations', async (req, res) => {
+  try {
+    const mongoose = require('mongoose');
+    const { ObjectId } = mongoose.Types;
+    
+    // Try to find validation rules in a collection or as metadata
+    const db = mongoose.connection.db;
+    if (!db) {
+      return res.status(500).json({ success: false, message: 'Database not initialized.' });
+    }
+
+    // Check if validations collection exists
+    const collections = await db.listCollections().toArray();
+    const hasValidationsCollection = collections.some(c => c.name === 'template_validations');
+    
+    if (!hasValidationsCollection) {
+      // Return empty validations if collection doesn't exist yet
+      return res.json({ validations: [] });
+    }
+
+    const validation = await db.collection('template_validations').findOne({
+      templateId: ObjectId(req.params.fileId)
+    });
+
+    res.json({
+      validations: validation ? (validation.validations || []) : []
+    });
+  } catch (err) {
+    console.error('Error fetching validations:', err);
+    res.status(500).json({ success: false, message: 'Failed to fetch validations', error: err.message });
+  }
+});
+
+// POST validation rules for a template
+router.post('/:fileId/validations', requireAuth, isAdmin, async (req, res) => {
+  try {
+    const mongoose = require('mongoose');
+    const { ObjectId } = mongoose.Types;
+    const { validations } = req.body;
+
+    if (!validations || !Array.isArray(validations)) {
+      return res.status(400).json({ success: false, message: 'Validations must be an array' });
+    }
+
+    const db = mongoose.connection.db;
+    if (!db) {
+      return res.status(500).json({ success: false, message: 'Database not initialized.' });
+    }
+
+    // Create collection if it doesn't exist
+    const collections = await db.listCollections().toArray();
+    const hasValidationsCollection = collections.some(c => c.name === 'template_validations');
+    
+    if (!hasValidationsCollection) {
+      await db.createCollection('template_validations');
+    }
+
+    const templateId = ObjectId(req.params.fileId);
+
+    // Upsert validation rules
+    const result = await db.collection('template_validations').updateOne(
+      { templateId },
+      {
+        $set: {
+          templateId,
+          validations,
+          updatedAt: new Date(),
+          updatedBy: req.user && req.user._id ? req.user._id : undefined
+        }
+      },
+      { upsert: true }
+    );
+
+    res.json({
+      success: true,
+      message: 'Validations saved successfully',
+      result
+    });
+  } catch (err) {
+    console.error('Error saving validations:', err);
+    res.status(500).json({ success: false, message: 'Failed to save validations', error: err.message });
+  }
+});
+
 // Placeholder route for documents
 router.get('/', (req, res) => {
   res.json({ message: 'Documents route placeholder' });

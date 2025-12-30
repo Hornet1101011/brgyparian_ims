@@ -1,13 +1,17 @@
 import React, { useState } from 'react';
 import { Button, Tooltip, Upload, message, Card, Spin, Empty, Modal, Space } from 'antd';
-import { UploadOutlined, EyeOutlined, DownloadOutlined, DeleteOutlined, FileWordOutlined, CloudUploadOutlined } from '@ant-design/icons';
+import { UploadOutlined, EyeOutlined, DownloadOutlined, DeleteOutlined, FileWordOutlined, CloudUploadOutlined, SettingOutlined } from '@ant-design/icons';
 import { axiosInstance, axiosPublic } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
+import TemplateValidationConfig from './TemplateValidationConfig';
 import styles from './TemplatesManager.module.css';
 
 const getLabel = (filename?: string) =>
   filename ? filename.replace(/_/g, " ").replace(/\.docx$/, "") : "Untitled";
 
 const TemplatesManager: React.FC = () => {
+  const { user } = useAuth();
+  const isStaff = user?.role === 'staff';
   const [templateList, setTemplateList] = useState<any[]>([]);
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -15,6 +19,8 @@ const TemplatesManager: React.FC = () => {
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [htmlContent, setHtmlContent] = useState<string>('');
   const [previewModalVisible, setPreviewModalVisible] = useState(false);
+  const [validationConfigVisible, setValidationConfigVisible] = useState(false);
+  const [selectedTemplateForValidation, setSelectedTemplateForValidation] = useState<any>(null);
 
   React.useEffect(() => {
     const fetchTemplates = async () => {
@@ -209,65 +215,84 @@ const TemplatesManager: React.FC = () => {
                         Preview
                       </Button>
                     </Tooltip>
-                    <Tooltip title="Download Template">
-                      <Button
-                        type="primary"
-                        size="middle"
-                        icon={<DownloadOutlined />}
-                        onClick={async () => {
-                          setDownloadError(null);
-                          try {
-                            const res = await axiosInstance.get(`/documents/original/${file._id}`, { responseType: 'blob' });
-                            const blob = res.data;
-                            const url = window.URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = file.filename;
-                            document.body.appendChild(a);
-                            a.click();
-                            a.remove();
-                            window.URL.revokeObjectURL(url);
-                            message.success('✅ Template downloaded');
-                          } catch (err) {
-                            setDownloadError(`Failed to download ${file.filename}`);
-                            message.error('Download failed');
-                          }
-                        }}
-                        style={{ borderRadius: 8, flex: 1, background: 'linear-gradient(135deg, #52c41a 0%, #13c2c2 100%)', border: 'none', fontWeight: 600 }}
-                      >
-                        Download
-                      </Button>
-                    </Tooltip>
-                    <Tooltip title="Delete Template">
-                      <Button
-                        danger
-                        size="middle"
-                        icon={<DeleteOutlined />}
-                        onClick={async () => {
-                          Modal.confirm({
-                            title: '🗑️ Delete Template',
-                            content: `Are you sure you want to delete "${getLabel(file.filename)}"? This action cannot be undone.`,
-                            okText: 'Delete',
-                            okType: 'danger',
-                            cancelText: 'Cancel',
-                            onOk: async () => {
-                              setLoading(true);
-                              setError(null);
-                              try {
-                                const res = await axiosInstance.delete(`/documents/file/${file._id}`);
-                                const data = res.data;
-                                if (data && data.success) {
-                                  const resList = await axiosPublic.get('/documents/list');
-                                  setTemplateList(resList.data || []);
-                                  message.success('Template deleted successfully');
-                                } else {
+                    {!isStaff && (
+                      <Tooltip title="Configure Validations">
+                        <Button
+                          size="middle"
+                          icon={<SettingOutlined />}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedTemplateForValidation(file);
+                            setValidationConfigVisible(true);
+                          }}
+                          style={{ borderRadius: 8, flex: 1, borderColor: 'rgba(102, 126, 234, 0.3)' }}
+                        >
+                          Configure
+                        </Button>
+                      </Tooltip>
+                    )}
+                    {!isStaff && (
+                      <Tooltip title="Download Template">
+                        <Button
+                          type="primary"
+                          size="middle"
+                          icon={<DownloadOutlined />}
+                          onClick={async () => {
+                            setDownloadError(null);
+                            try {
+                              const res = await axiosInstance.get(`/documents/original/${file._id}`, { responseType: 'blob' });
+                              const blob = res.data;
+                              const url = window.URL.createObjectURL(blob);
+                              const a = document.createElement('a');
+                              a.href = url;
+                              a.download = file.filename;
+                              document.body.appendChild(a);
+                              a.click();
+                              a.remove();
+                              window.URL.revokeObjectURL(url);
+                              message.success('✅ Template downloaded');
+                            } catch (err) {
+                              setDownloadError(`Failed to download ${file.filename}`);
+                              message.error('Download failed');
+                            }
+                          }}
+                          style={{ borderRadius: 8, flex: 1, background: 'linear-gradient(135deg, #52c41a 0%, #13c2c2 100%)', border: 'none', fontWeight: 600 }}
+                        >
+                          Download
+                        </Button>
+                      </Tooltip>
+                    )}
+                    {!isStaff && (
+                      <Tooltip title="Delete Template">
+                        <Button
+                          danger
+                          size="middle"
+                          icon={<DeleteOutlined />}
+                          onClick={async () => {
+                            Modal.confirm({
+                              title: '🗑️ Delete Template',
+                              content: `Are you sure you want to delete "${getLabel(file.filename)}"? This action cannot be undone.`,
+                              okText: 'Delete',
+                              okType: 'danger',
+                              cancelText: 'Cancel',
+                              onOk: async () => {
+                                setLoading(true);
+                                setError(null);
+                                try {
+                                  const res = await axiosInstance.delete(`/documents/file/${file._id}`);
+                                  const data = res.data;
+                                  if (data && data.success) {
+                                    const resList = await axiosPublic.get('/documents/list');
+                                    setTemplateList(resList.data || []);
+                                    message.success('Template deleted successfully');
+                                  } else {
+                                    setError('Delete failed.');
+                                    message.error('Delete failed');
+                                  }
+                                } catch (err) {
                                   setError('Delete failed.');
                                   message.error('Delete failed');
                                 }
-                              } catch (err) {
-                                setError('Delete failed.');
-                                message.error('Delete failed');
-                              }
                               setLoading(false);
                             }
                           });
@@ -275,6 +300,7 @@ const TemplatesManager: React.FC = () => {
                         style={{ borderRadius: 8, borderColor: 'rgba(255, 77, 79, 0.3)' }}
                       />
                     </Tooltip>
+                    )}
                   </div>
                 </div>
               </Card>
@@ -331,6 +357,7 @@ const TemplatesManager: React.FC = () => {
         </Modal>
 
         {/* Upload Section */}
+        {!isStaff && (
         <div style={{ marginTop: 36 }}>
           <Card
             style={{
@@ -425,7 +452,35 @@ const TemplatesManager: React.FC = () => {
             </div>
           </Card>
         </div>
+        )}
       </div>
+
+      {/* Validation Config Modal */}
+      <Modal
+        title="Template Validation Configuration"
+        open={validationConfigVisible}
+        onCancel={() => {
+          setValidationConfigVisible(false);
+          setSelectedTemplateForValidation(null);
+        }}
+        footer={null}
+        width={900}
+        bodyStyle={{ maxHeight: '80vh', overflowY: 'auto' }}
+      >
+        {selectedTemplateForValidation && (
+          <TemplateValidationConfig
+            templateId={selectedTemplateForValidation._id}
+            templateName={getLabel(selectedTemplateForValidation.filename)}
+            onClose={() => {
+              setValidationConfigVisible(false);
+              setSelectedTemplateForValidation(null);
+            }}
+            onSave={() => {
+              // Optionally refresh the template list
+            }}
+          />
+        )}
+      </Modal>
       </Spin>
       </div>
     </div>

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import './DocumentRequestForm.css';
 import { documentsAPI, axiosInstance } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { useTemplateValidations } from '../hooks/useTemplateValidations';
 import { FileWordOutlined, MoreOutlined, EyeOutlined, DownloadOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { 
   Card, 
@@ -126,6 +127,7 @@ const DocumentRequestForm: React.FC = () => {
   const [selectedFields, setSelectedFields] = useState<string[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalDocName, setModalDocName] = useState('');
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [showVerifyModal, setShowVerifyModal] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
@@ -135,6 +137,9 @@ const DocumentRequestForm: React.FC = () => {
   const [sortBy, setSortBy] = useState<'name' | 'date' | 'type'>('name');
   const [loading, setLoading] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
+  
+  // Load validations for selected template
+  const { getValidation, validateField } = useTemplateValidations(selectedTemplateId || '');
   
 
   const { user: authUser } = useAuth();
@@ -210,6 +215,7 @@ const DocumentRequestForm: React.FC = () => {
     }
     // If resident and not verified, normally we'd prompt for verification.
     // That behavior is currently disabled while verification is paused.
+    setSelectedTemplateId(file._id);
     setModalDocName(file.filename.replace(/\.docx$/i, ''));
     try {
       const api = await import('../services/api');
@@ -266,6 +272,7 @@ const DocumentRequestForm: React.FC = () => {
       setShowVerifyModal(true);
       return;
     }
+    setSelectedTemplateId(file._id);
     setModalDocName(file.filename.replace(/\.docx$/i, ''));
     try {
       const api = await import('../services/api');
@@ -593,28 +600,60 @@ const DocumentRequestForm: React.FC = () => {
                 </Form.Item>
               </Col>
 
-              {selectedFields.map((field, idx) => (
+              {selectedFields.map((field, idx) => {
+                const fieldValidation = getValidation(field);
+                const isDate = /date|dob|birth|issued/i.test(field);
+                
+                return (
                 <Col xs={24} sm={12} key={idx}>
                   <Form.Item
                     name={['fields', field]}
-                    label={<span style={{ fontWeight: 600, color: '#333' }}>{field} <span style={{ color: '#ff4d4f' }}>*</span></span>}
-                    rules={[{ required: true, message: `Please enter ${field}` }]}
+                    label={
+                      <span style={{ fontWeight: 600, color: '#333' }}>
+                        {field} 
+                        {fieldValidation?.isRequired && <span style={{ color: '#ff4d4f' }}>*</span>}
+                        {fieldValidation?.tooltip && (
+                          <Tooltip title={fieldValidation.tooltip}>
+                            <span style={{ marginLeft: 8, color: '#1890ff', cursor: 'help' }}>ℹ️</span>
+                          </Tooltip>
+                        )}
+                      </span>
+                    }
+                    rules={[
+                      { required: fieldValidation?.isRequired || true, message: `Please enter ${field}` },
+                      {
+                        validator: (_, value) => {
+                          if (!value) return Promise.resolve();
+                          const result = validateField(field, value);
+                          if (!result.valid) {
+                            return Promise.reject(new Error(result.error));
+                          }
+                          return Promise.resolve();
+                        }
+                      }
+                    ]}
                   >
-                    { /date|dob|birth|issued/i.test(field) ? 
+                    {isDate ? 
                       <DatePicker 
                         style={{ width: '100%' }} 
                         format="MM/DD/YYYY"
                         className="document-request-input"
+                        disabled={fieldValidation?.disabled}
+                        readOnly={fieldValidation?.readOnly}
                       /> 
                       : 
                       <Input 
                         placeholder={`Enter ${field}`}
                         className="document-request-input"
+                        maxLength={fieldValidation?.maxCharacters}
+                        disabled={fieldValidation?.disabled}
+                        readOnly={fieldValidation?.readOnly}
                       /> 
                     }
                   </Form.Item>
                 </Col>
-              ))}
+                );
+              })}
 
               <Col span={24} style={{ textAlign: 'right', marginTop: 16, paddingTop: 16, borderTop: '1px solid #f0f0f0' }}>
                 <Space size="large" wrap>

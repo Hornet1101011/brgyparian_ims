@@ -20,6 +20,8 @@ import {
   BellOutlined,
   CalendarOutlined,
   CloseOutlined,
+  CheckOutlined,
+  DeliveredProcedureOutlined,
 } from '@ant-design/icons';
 import './AppLayoutSidebar.css';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -83,11 +85,36 @@ const navConfig: {
       label: 'Admin Dashboard',
     },
     {
+      key: '/admin/notifications',
+      icon: <BellOutlined />,
+      label: 'Notifications',
+    },
+    {
       key: '/admin/users',
       icon: <TeamOutlined />,
       label: 'User Management',
     },
     // Activity Logs menu removed from admin sidebar per request
+    {
+      key: '/admin/verification-requests',
+      icon: <CheckOutlined />,
+      label: 'Verification Requests',
+    },
+    {
+      key: '/templates-manager',
+      icon: <FileProtectOutlined />,
+      label: 'Templates Manager',
+    },
+    {
+      key: '/document-processing',
+      icon: <DeliveredProcedureOutlined />,
+      label: 'Document Processing',
+    },
+    {
+      key: '/document-history',
+      icon: <HistoryOutlined />,
+      label: 'Document History',
+    },
     {
       key: '/admin/statistics',
       icon: <BarChartOutlined />,
@@ -97,16 +124,6 @@ const navConfig: {
       key: '/admin/settings',
       icon: <SettingOutlined />,
       label: 'System Settings',
-    },
-    {
-      key: '/admin/verification-requests',
-      icon: <FileProtectOutlined />,
-      label: 'Verification Requests',
-    },
-    {
-      key: '/admin/notifications',
-      icon: <BellOutlined />,
-      label: 'Notifications',
     },
   ],
   staff: [
@@ -132,7 +149,7 @@ const navConfig: {
     },
     {
       key: '/document-processing',
-      icon: <FileDoneOutlined />,
+      icon: <DeliveredProcedureOutlined />,
       label: 'Document Processing',
     },
     {
