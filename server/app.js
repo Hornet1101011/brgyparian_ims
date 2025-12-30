@@ -73,6 +73,13 @@ app.use((req, res, next) => {
   res.status(403).send('CORS origin denied');
 });
 
+// Content Security Policy middleware: allow WebSocket connections
+app.use((req, res, next) => {
+  // Set a permissive CSP that allows WebSocket connections and same-origin requests
+  res.setHeader('Content-Security-Policy', "default-src 'self' https: wss: ws:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https:; connect-src 'self' https: wss: ws: http://localhost:*");
+  next();
+});
+
 // Serve static files from client build and its subfolders
 const path = require('path');
 const buildPath = path.join(__dirname, '../client/build');
