@@ -176,6 +176,35 @@ mongoose.connection.on('connected', async () => {
     console.error('Error ensuring processed_documents bucket', err && err.message);
   }
 
+  // Ensure templateconfig collection exists
+  try {
+    const db = mongoose.connection.db;
+    if (!db) {
+      console.warn('MongoDB db not available to ensure templateconfig collection');
+    } else {
+      const collList = await db.listCollections({}).toArray();
+      const collNames = collList.map(c => c.name);
+
+      if (!collNames.includes('templateconfig')) {
+        console.log('Creating templateconfig collection');
+        try {
+          await db.createCollection('templateconfig');
+          // Create indexes for better query performance
+          const configColl = db.collection('templateconfig');
+          await configColl.createIndex({ templateId: 1 });
+          await configColl.createIndex({ updatedAt: 1 });
+          console.log('✓ templateconfig collection created with indexes');
+        } catch (e) {
+          console.warn('Failed to create templateconfig collection:', e && e.message);
+        }
+      } else {
+        console.log('✓ templateconfig collection already exists');
+      }
+    }
+  } catch (err) {
+    console.error('Error ensuring templateconfig collection:', err && err.message);
+  }
+
   // Initialize system settings if they don't exist
   try {
     const SystemSetting = require('./models/SystemSetting');
