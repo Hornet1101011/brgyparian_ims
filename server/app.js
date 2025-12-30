@@ -465,6 +465,11 @@ async function ensureTemplateConfigCollection() {
     }
 
     console.log('[Template Config] Checking for templateconfig collection...');
+    
+    // Get list of existing collections
+    const collections = await db.listCollections().toArray();
+    const collNames = collections.map(c => c.name);
+    
     if (!collNames.includes('templateconfig')) {
       console.log('[Template Config] Creating templateconfig collection...');
       try {
