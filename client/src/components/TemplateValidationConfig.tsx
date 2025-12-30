@@ -131,10 +131,30 @@ const TemplateValidationConfig: React.FC<TemplateValidationConfigProps> = ({
       setValidations(loadedValidations);
       setSavedValidations(loadedValidations);
       setSaveStatus('saved');
+      // Clear localStorage on successful load
+      try {
+        localStorage.removeItem(`validations_${templateId}`);
+      } catch (e) {}
     } catch (err) {
-      console.error('Failed to load validations:', err);
-      setValidations([]);
-      setSavedValidations([]);
+      console.error('Failed to load validations from server:', err);
+      // Try to load from localStorage as fallback
+      try {
+        const cached = localStorage.getItem(`validations_${templateId}`);
+        if (cached) {
+          const parsedValidations = JSON.parse(cached);
+          setValidations(parsedValidations);
+          setSavedValidations(parsedValidations);
+          setSaveStatus('saved');
+          message.warning('Loaded validations from local cache (backend unavailable)');
+        } else {
+          setValidations([]);
+          setSavedValidations([]);
+        }
+      } catch (e) {
+        console.error('Failed to load from localStorage:', e);
+        setValidations([]);
+        setSavedValidations([]);
+      }
     }
     setLoading(false);
   };
@@ -236,10 +256,21 @@ const TemplateValidationConfig: React.FC<TemplateValidationConfigProps> = ({
       setSavedValidations(validations);
       setSaveStatus('saved');
       message.success('✓ Validations auto-saved');
+      // Clear localStorage on successful save
+      try {
+        localStorage.removeItem(`validations_${templateId}`);
+      } catch (e) {}
     } catch (err) {
       console.error('Failed to auto-save validations:', err);
       setSaveStatus('unsaved');
-      message.error('Failed to auto-save validations');
+      // Save to localStorage as fallback
+      try {
+        localStorage.setItem(`validations_${templateId}`, JSON.stringify(validations));
+        message.warning('Saving to local cache (backend unavailable)');
+      } catch (e) {
+        console.error('Failed to save to localStorage:', e);
+        message.error('Failed to save validations');
+      }
     }
     setIsSaving(false);
   };
@@ -254,11 +285,22 @@ const TemplateValidationConfig: React.FC<TemplateValidationConfigProps> = ({
       setSavedValidations(validations);
       setSaveStatus('saved');
       message.success('✓ All validation configurations saved successfully');
+      // Clear localStorage on successful save
+      try {
+        localStorage.removeItem(`validations_${templateId}`);
+      } catch (e) {}
       onSave();
     } catch (err) {
-      message.error('Failed to save validations');
+      console.error('Failed to save validations:', err);
       setSaveStatus('unsaved');
-      console.error(err);
+      // Save to localStorage as fallback
+      try {
+        localStorage.setItem(`validations_${templateId}`, JSON.stringify(validations));
+        message.warning('Saving validations to local cache (backend currently unavailable). They will sync when the server is ready.');
+      } catch (e) {
+        console.error('Failed to save to localStorage:', e);
+        message.error('Failed to save validations');
+      }
     }
     setLoading(false);
   };
