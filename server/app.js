@@ -104,38 +104,45 @@ mongoose.connection.on('connected', () => {
 let dbInitialized = false;
 
 // Consolidated database initialization
-mongoose.connection.on('connected', async () => {
+mongoose.connection.once('connected', async () => {
   if (dbInitialized) return; // Prevent duplicate initialization
   dbInitialized = true;
+  
+  console.log('\n\n========================================');
+  console.log('DATABASE INITIALIZATION STARTING');
+  console.log('========================================\n');
   
   try {
     const db = mongoose.connection.db;
     if (!db) {
-      console.warn('MongoDB db not available for initialization');
+      console.error('ERROR: MongoDB db not available for initialization');
       return;
     }
 
-    console.log('[Init] Starting database initialization...');
+    console.log('[Init] Connected to database');
     const collList = await db.listCollections({}).toArray();
     const collNames = collList.map(c => c.name);
+    console.log('[Init] Found', collNames.length, 'existing collections');
 
     // 1. Ensure templateconfig collection exists
+    console.log('[Init] ------- Checking templateconfig -------');
     if (!collNames.includes('templateconfig')) {
-      console.log('[Init] Creating templateconfig collection');
+      console.log('[Init] Creating templateconfig collection...');
       try {
         await db.createCollection('templateconfig');
         const configColl = db.collection('templateconfig');
         await configColl.createIndex({ templateId: 1 });
         await configColl.createIndex({ updatedAt: 1 });
-        console.log('[Init] ✓ templateconfig collection created with indexes');
+        console.log('[Init] ✓✓✓ templateconfig collection CREATED with indexes ✓✓✓');
       } catch (e) {
-        console.warn('[Init] Failed to create templateconfig collection:', e && e.message);
+        console.error('[Init] ERROR creating templateconfig:', e && e.message);
       }
     } else {
       console.log('[Init] ✓ templateconfig collection already exists');
     }
 
     // 2. Ensure processed_documents GridFS bucket exists
+    console.log('[Init] ------- Checking processed_documents -------');
     const filesName = 'processed_documents.files';
     const chunksName = 'processed_documents.chunks';
 
@@ -175,9 +182,9 @@ mongoose.connection.on('connected', async () => {
           }
         } catch (err) {
           if (err && (err.code === 11000 || /index already exists/i.test(err.message))) {
-            // harmless if the same index exists
+            // harmless
           } else {
-            console.warn(`[Init] Failed to ensure index ${JSON.stringify(key)} on ${coll.collectionName}:`, err && err.message);
+            console.warn(`[Init] Failed to ensure index on ${coll.collectionName}:`, err && err.message);
           }
         }
       }
@@ -193,11 +200,12 @@ mongoose.connection.on('connected', async () => {
     console.log('[Init] ✓ Ensured processed_documents GridFS bucket collections and indexes.');
 
     // 3. Initialize system settings if they don't exist
+    console.log('[Init] ------- Checking system settings -------');
     try {
       const SystemSetting = require('./models/SystemSetting');
       const existingSettings = await SystemSetting.findOne();
       if (!existingSettings) {
-        console.log('[Init] No system settings found - creating default settings...');
+        console.log('[Init] Creating default system settings...');
         const defaultSettings = {
           siteName: 'Barangay Information Management System',
           barangayName: 'Barangay Parian',
@@ -214,7 +222,7 @@ mongoose.connection.on('connected', async () => {
           maxAccountsPerIP: 1,
         };
         await SystemSetting.create(defaultSettings);
-        console.log('[Init] ✓ System settings initialized successfully');
+        console.log('[Init] ✓ System settings initialized');
       } else {
         console.log('[Init] ✓ System settings already exist');
       }
@@ -222,9 +230,11 @@ mongoose.connection.on('connected', async () => {
       console.error('[Init] Error initializing system settings:', err && err.message);
     }
 
-    console.log('[Init] ✓ All database initialization completed successfully');
+    console.log('\n========================================');
+    console.log('✓✓✓ ALL DATABASE INITIALIZATION COMPLETE ✓✓✓');
+    console.log('========================================\n');
   } catch (err) {
-    console.error('[Init] Error during database initialization:', err && err.message);
+    console.error('\nERROR during database initialization:', err && err.message, '\n');
   }
 });
 
