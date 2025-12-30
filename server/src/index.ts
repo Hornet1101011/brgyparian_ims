@@ -347,6 +347,59 @@ mongoose.connection.on('connected', async () => {
     } catch (createIdxErr) {
       console.warn('Error creating model indexes at startup:', createIdxErr && (createIdxErr as Error).message);
     }
+
+    // Ensure templateconfig collection exists for template validation configurations
+    try {
+      console.log('\n========== [Template Config Initialization] ==========');
+      const templateConfigCollName = 'templateconfig';
+      const collList3 = await db.listCollections({}).toArray();
+      const collNames3 = collList3.map((c: any) => c.name);
+      
+      console.log('[Template Config] 🔍 Checking for templateconfig collection...');
+      
+      if (!collNames3.includes(templateConfigCollName)) {
+        console.log('[Template Config] 📝 Creating templateconfig collection...');
+        try {
+          await db.createCollection(templateConfigCollName);
+          console.log('[Template Config] ✓ Collection created');
+        } catch (cErr: any) {
+          console.warn('[Template Config] ⚠ Warning creating collection:', cErr && cErr.message);
+        }
+      } else {
+        console.log('[Template Config] ✓ Collection already exists');
+      }
+
+      // Create indexes on templateconfig collection
+      try {
+        const configColl = db.collection(templateConfigCollName);
+        
+        // Create index on templateId
+        try {
+          await configColl.createIndex({ templateId: 1 });
+          console.log('[Template Config] ✓ Index created on templateId');
+        } catch (idxErr: any) {
+          console.warn('[Template Config] ⚠ Warning creating templateId index:', idxErr && idxErr.message);
+        }
+        
+        // Create index on updatedAt
+        try {
+          await configColl.createIndex({ updatedAt: 1 });
+          console.log('[Template Config] ✓ Index created on updatedAt');
+        } catch (idxErr: any) {
+          console.warn('[Template Config] ⚠ Warning creating updatedAt index:', idxErr && idxErr.message);
+        }
+        
+        console.log('[Template Config] ✓✓✓ SUCCESS: templateconfig collection initialized with indexes ✓✓✓');
+        console.log('========== [Template Config Initialization SUCCESS] ==========\n');
+      } catch (indexErr: any) {
+        console.error('[Template Config] ✗ ERROR creating indexes:', indexErr && indexErr.message);
+        console.log('========== [Template Config Initialization FAILED] ==========\n');
+      }
+    } catch (templateConfigErr: any) {
+      console.error('[Template Config] ✗ FATAL ERROR:', templateConfigErr && templateConfigErr.message);
+      console.log('========== [Template Config Initialization FAILED] ==========\n');
+    }
+
   } catch (err: any) {
     console.error('Error ensuring processed_documents bucket', err && err.message);
   }
