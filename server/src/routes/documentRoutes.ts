@@ -45,4 +45,92 @@ router.patch('/:id', auth, authorize('admin', 'staff'), documentController.updat
 // Preview a document
 router.get('/preview/:id', documentController.previewDocument);
 
+// GET template configuration (including validations)
+router.get('/:fileId/config', async (req, res) => {
+  try {
+    const mongoose = require('mongoose');
+    const { ObjectId } = mongoose.Types;
+    
+    const db = mongoose.connection.db;
+    if (!db) {
+      return res.status(500).json({ success: false, message: 'Database not initialized.' });
+    }
+
+    // Check if templateconfig collection exists
+    const collections = await db.listCollections().toArray();
+    const hasConfigCollection = collections.some((c: any) => c.name === 'templateconfig');
+    
+    if (!hasConfigCollection) {
+      // Return empty config if collection doesn't exist yet
+      return res.json({ validations: [], config: {} });
+    }
+
+    const config = await db.collection('templateconfig').findOne({
+      templateId: ObjectId(req.params.fileId)
+    });
+
+    res.json({
+      validations: config ? (config.validations || []) : [],
+      config: config || {}
+    });
+  } catch (err) {
+    console.error('Error fetching template config:', err);
+    res.status(500).json({ success: false, message: 'Failed to fetch template config', error: (err as any).message });
+  }
+});
+
+// POST template configuration (including validations)
+router.post('/:fileId/config', auth, authorize('admin', 'staff'), async (req, res) => {
+  try {
+    const mongoose = require('mongoose');
+    const { ObjectId } = mongoose.Types;
+    const { validations, config } = req.body;
+
+    if (!validations || !Array.isArray(validations)) {
+      return res.status(400).json({ success: false, message: 'Validations must be an array' });
+    }
+
+    const db = mongoose.connection.db;
+    if (!db) {
+      return res.status(500).json({ success: false, message: 'Database not initialized.' });
+    }
+
+    // Create collection if it doesn't exist
+    const collections = await db.listCollections().toArray();
+    const hasConfigCollection = collections.some((c: any) => c.name === 'templateconfig');
+    
+    if (!hasConfigCollection) {
+      await db.createCollection('templateconfig');
+      console.log('Created templateconfig collection');
+    }
+
+    const templateId = ObjectId(req.params.fileId);
+
+    // Upsert template configuration
+    const result = await db.collection('templateconfig').updateOne(
+      { templateId },
+      {
+        $set: {
+          templateId,
+          validations,
+          config: config || {},
+          updatedAt: new Date(),
+          updatedBy: (req as any).user && (req as any).user._id ? (req as any).user._id : undefined
+        }
+      },
+      { upsert: true }
+    );
+
+    res.json({
+      success: true,
+      message: 'Template configuration saved',
+      matched: result.matchedCount,
+      upserted: result.upsertedCount
+    });
+  } catch (err) {
+    console.error('Error saving template config:', err);
+    res.status(500).json({ success: false, message: 'Failed to save template config', error: (err as any).message });
+  }
+});
+
 export default router;
