@@ -95,7 +95,7 @@ function createTransporterFromConfig(cfg: SmtpConfig) {
     // Add relaxed TLS settings for better compatibility with cloud providers
     tls: {
       rejectUnauthorized: false, // Allow self-signed certs from cloud proxies
-      minVersion: 'TLSv1.0', // Support older TLS versions for compatibility
+      minVersion: 'TLSv1_2', // Minimum TLS 1.2
     },
     // Connection pooling and extended timeouts for unreliable networks
     pool: true,
