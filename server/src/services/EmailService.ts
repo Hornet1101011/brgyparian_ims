@@ -25,9 +25,9 @@ async function resolveSmtpConfig(): Promise<SmtpConfig | null> {
       host: envHost,
       port: Number(process.env.SMTP_PORT) || 587,
       secure: Number(process.env.SMTP_PORT) === 465,
-      user: process.env.SMTP_USER || undefined,
-      pass: process.env.SMTP_PASS || undefined,
-      from: process.env.SMTP_FROM || process.env.SMTP_USER || undefined,
+      user: process.env.SMTP_USER || 'brgystaff0001@gmail.com',
+      pass: process.env.SMTP_PASS || 'fprr ownw kpbl fbgg',
+      from: process.env.SMTP_FROM || process.env.SMTP_USER || 'brgystaff0001@gmail.com',
     };
   }
 
@@ -50,12 +50,12 @@ async function resolveSmtpConfig(): Promise<SmtpConfig | null> {
       }
     }
     return {
-      host: settings.smtp.host || '',
+      host: settings.smtp.host || 'smtp.gmail.com',
       port: settings.smtp.port || 587,
       secure: !!settings.smtp.secure,
-      user: settings.smtp.user || undefined,
-      pass,
-      from: settings.smtp.fromName || settings.smtp.user || undefined,
+      user: settings.smtp.user || 'brgystaff0001@gmail.com',
+      pass: pass || 'fprr ownw kpbl fbgg',
+      from: settings.smtp.fromName || settings.smtp.user || 'brgystaff0001@gmail.com',
     };
   } catch (err) {
     console.error('resolveSmtpConfig error', err);
