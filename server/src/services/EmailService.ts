@@ -92,28 +92,30 @@ function createTransporterFromConfig(cfg: SmtpConfig) {
     secure: secure,
     // Only supply auth when both user and pass are available
     auth: cfg.user && cfg.pass ? { user: cfg.user, pass: cfg.pass } : undefined,
-    // Add relaxed TLS settings for better compatibility with cloud providers
-    tls: {
-      rejectUnauthorized: false, // Allow self-signed certs from cloud proxies
-      minVersion: 'TLSv1_2', // Minimum TLS 1.2
-    },
     // Connection pooling and extended timeouts for unreliable networks
     pool: true,
-    maxConnections: 3, // Reduced from 5 for stability
+    maxConnections: 3,
     maxMessages: 50,
-    rateDelta: 2000, // 2 second delay between messages
-    rateLimit: 5, // 5 messages per rateDelta
-    connectionTimeout: 20000, // 20 seconds to establish connection
-    socketTimeout: 20000, // 20 seconds for socket operations
-    greetingTimeout: 10000, // 10 seconds for SMTP greeting
-    logger: false, // Set to true for debug logs
-    debug: false, // Set to true for detailed debug output
+    rateDelta: 2000,
+    rateLimit: 5,
+    connectionTimeout: 20000, // 20 seconds
+    socketTimeout: 20000, // 20 seconds
+    greetingTimeout: 10000, // 10 seconds
   };
+
+  // Only add TLS config for non-SSL connections (STARTTLS)
+  if (!secure) {
+    transportConfig.tls = {
+      rejectUnauthorized: false,
+      minVersion: 'TLSv1_2',
+    };
+  }
 
   console.log('[EmailService] Creating transporter with config:', {
     host: cfg.host,
     port: cfg.port,
     secure: secure,
+    protocol: secure ? 'SSL' : 'TLS/STARTTLS',
     auth: cfg.user && cfg.pass ? 'configured' : 'none',
     timeouts: `${transportConfig.connectionTimeout}ms connection, ${transportConfig.socketTimeout}ms socket`,
   });
