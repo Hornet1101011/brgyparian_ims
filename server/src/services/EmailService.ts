@@ -21,7 +21,7 @@ async function resolveSmtpConfig(): Promise<SmtpConfig | null> {
   // Prefer environment variables if provided
   const envHost = process.env.SMTP_HOST;
   if (envHost) {
-    return {
+    const config = {
       host: envHost,
       port: Number(process.env.SMTP_PORT) || 587,
       secure: Number(process.env.SMTP_PORT) === 465,
@@ -29,6 +29,13 @@ async function resolveSmtpConfig(): Promise<SmtpConfig | null> {
       pass: process.env.SMTP_PASS || 'fprr ownw kpbl fbgg',
       from: process.env.SMTP_FROM || process.env.SMTP_USER || 'brgystaff0001@gmail.com',
     };
+    console.log('[EmailService] Using environment SMTP config:', {
+      host: config.host,
+      port: config.port,
+      secure: config.secure,
+      user: config.user,
+    });
+    return config;
   }
 
   // fallback: read from SystemSetting document in DB
@@ -36,20 +43,24 @@ async function resolveSmtpConfig(): Promise<SmtpConfig | null> {
     // Ensure mongoose connection exists before querying
     if (mongoose.connection.readyState === 0) {
       // no DB connection
+      console.log('[EmailService] MongoDB not connected for DB config fallback');
       return null;
     }
     const settings = await SystemSettingModel.findOne().lean<ISystemSetting>().exec();
-    if (!settings || !settings.smtp || !settings.smtp.host) return null;
+    if (!settings || !settings.smtp || !settings.smtp.host) {
+      console.log('[EmailService] No SMTP settings found in DB');
+      return null;
+    }
     const passEncrypted = (settings.smtp as any).encryptedPassword;
     let pass: string | undefined = undefined;
     if (passEncrypted && process.env.SETTINGS_ENCRYPTION_KEY) {
       try {
         pass = cryptoHelper.decryptText(passEncrypted, process.env.SETTINGS_ENCRYPTION_KEY);
       } catch (e) {
-        console.error('Failed to decrypt SMTP password from SystemSetting:', e);
+        console.error('[EmailService] Failed to decrypt SMTP password from SystemSetting:', e);
       }
     }
-    return {
+    const config = {
       host: settings.smtp.host || 'smtp.gmail.com',
       port: settings.smtp.port || 587,
       secure: !!settings.smtp.secure,
@@ -57,14 +68,21 @@ async function resolveSmtpConfig(): Promise<SmtpConfig | null> {
       pass: pass || 'fprr ownw kpbl fbgg',
       from: settings.smtp.fromName || settings.smtp.user || 'brgystaff0001@gmail.com',
     };
+    console.log('[EmailService] Using DB SMTP config:', {
+      host: config.host,
+      port: config.port,
+      secure: config.secure,
+      user: config.user,
+    });
+    return config;
   } catch (err) {
-    console.error('resolveSmtpConfig error', err);
+    console.error('[EmailService] resolveSmtpConfig error:', err);
     return null;
   }
 }
 
 function createTransporterFromConfig(cfg: SmtpConfig) {
-  return nodemailer.createTransport({
+  const transport = nodemailer.createTransport({
     host: cfg.host,
     port: cfg.port,
     secure: cfg.secure === true, // true for 465, false for other ports
@@ -72,6 +90,13 @@ function createTransporterFromConfig(cfg: SmtpConfig) {
     // causes Nodemailer to try PLAIN auth with missing credentials which produces a 'Missing credentials for "PLAIN"' error.
     auth: cfg.user && cfg.pass ? { user: cfg.user, pass: cfg.pass } : undefined,
   });
+  console.log('[EmailService] Created transporter with config:', {
+    host: cfg.host,
+    port: cfg.port,
+    secure: cfg.secure,
+    auth: cfg.user && cfg.pass ? 'configured' : 'none',
+  });
+  return transport;
 }
 
 export async function sendDocumentNotification(
@@ -82,13 +107,13 @@ export async function sendDocumentNotification(
 ) {
   const cfg = await resolveSmtpConfig();
   if (!cfg) {
-    console.error('No SMTP config available; cannot send document notification');
+    console.error('[EmailService] No SMTP config available; cannot send document notification');
     return;
   }
   // Validate credentials before attempting to send. If user is provided without a pass,
   // avoid attempting an authenticated login which will fail with a PLAIN credential error.
   if (cfg.user && !cfg.pass) {
-    console.error('SMTP configuration incomplete: user is set but pass is missing. Aborting send.');
+    console.error('[EmailService] SMTP configuration incomplete: user is set but pass is missing. Aborting send.');
     throw new Error('SMTP configuration incomplete (missing password)');
   }
   const transporter = createTransporterFromConfig(cfg);
@@ -100,29 +125,44 @@ export async function sendDocumentNotification(
     <p>If you have questions, please contact support.</p>
     <p>Thank you.</p>
   `;
-  await transporter.sendMail({
-    from: cfg.from || cfg.user,
-    to,
-    subject,
-    html: body,
-  });
+  try {
+    console.log('[EmailService] Sending document notification to:', to);
+    const result = await transporter.sendMail({
+      from: cfg.from || cfg.user,
+      to,
+      subject,
+      html: body,
+    });
+    console.log('[EmailService] Document notification sent successfully:', result.messageId);
+  } catch (err) {
+    console.error('[EmailService] Failed to send document notification:', err);
+    throw err;
+  }
 }
 
 export async function sendMail(to: string, subject: string, html: string) {
   const cfg = await resolveSmtpConfig();
   if (!cfg) {
-    console.error('No SMTP config available; cannot send email');
-    return;
+    console.error('[EmailService] No SMTP config available; cannot send email to:', to);
+    throw new Error('SMTP configuration not available');
   }
   if (cfg.user && !cfg.pass) {
-    console.error('SMTP configuration incomplete: user is set but pass is missing. Aborting send.');
+    console.error('[EmailService] SMTP configuration incomplete: user is set but pass is missing. Aborting send.');
     throw new Error('SMTP configuration incomplete (missing password)');
   }
   const transporter = createTransporterFromConfig(cfg);
-  await transporter.sendMail({
-    from: cfg.from || cfg.user,
-    to,
-    subject,
-    html,
-  });
+  try {
+    console.log('[EmailService] Sending email to:', to, 'Subject:', subject);
+    const result = await transporter.sendMail({
+      from: cfg.from || cfg.user,
+      to,
+      subject,
+      html,
+    });
+    console.log('[EmailService] Email sent successfully:', result.messageId);
+    return result;
+  } catch (err) {
+    console.error('[EmailService] Failed to send email to', to, ':', err);
+    throw err;
+  }
 }
