@@ -35,13 +35,10 @@ export async function forgotPassword(req: Request, res: Response) {
       <h2 style="letter-spacing:4px">${token}</h2>
       <p>If you didn't request this, you can safely ignore this email.</p>`;
 
-    // send email containing OTP
-    try {
-      await sendMail(user.email, 'Your password reset code', html);
-    } catch (emailErr) {
+    // send email in background (don't await - fire and forget)
+    sendMail(user.email, 'Your password reset code', html).catch((emailErr) => {
       console.error('Failed to send reset OTP email', emailErr);
-      // continue - do not leak email sending errors
-    }
+    });
   } else {
     // default: link-token flow (existing behavior)
     token = crypto.randomBytes(32).toString('hex');
@@ -55,13 +52,10 @@ export async function forgotPassword(req: Request, res: Response) {
       <p><a href="${resetLink}">${resetLink}</a></p>
       <p>If you didn't request this, you can safely ignore this email.</p>`;
 
-    // send email
-    try {
-      await sendMail(user.email, 'Password reset request', html);
-    } catch (emailErr) {
+    // send email in background (don't await - fire and forget)
+    sendMail(user.email, 'Password reset request', html).catch((emailErr) => {
       console.error('Failed to send reset email', emailErr);
-      // continue - do not leak email sending errors
-    }
+    });
   }
 
   console.log('forgotPassword: reset token created for userId=', String((user as any)._id));
@@ -200,16 +194,13 @@ export async function verifyOtpAndEmailNewPassword(req: Request, res: Response) 
     // delete token so it cannot be reused
     await PasswordResetToken.deleteOne({ _id: tokenDoc._id });
 
-    // Email the new password to the user
+    // Email the new password to the user (in background - don't await)
     const html = `<p>Your password has been reset as requested. A new temporary password has been generated for your account. Please log in and change it immediately.</p>
       <p><strong>Temporary password:</strong> <code style="letter-spacing:2px">${newPassword}</code></p>
       <p>If you didn't request this, contact support immediately.</p>`;
-    try {
-      await sendMail(user.email, 'Your new temporary password', html);
-    } catch (emailErr) {
+    sendMail(user.email, 'Your new temporary password', html).catch((emailErr) => {
       console.error('Failed to send new-password email', emailErr);
-      // proceed — user password has been changed; but return 200 with message advising to check email
-    }
+    });
 
     console.log('verifyOtp: new password generated and emailed for userId=', String((user as any)._id));
     return res.json({ message: 'If the code was valid, a temporary password has been emailed to the account.' });
