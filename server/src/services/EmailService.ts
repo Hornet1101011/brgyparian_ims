@@ -21,14 +21,14 @@ async function resolveSmtpConfig(): Promise<SmtpConfig | null> {
   // Prefer environment variables if provided
   const envHost = process.env.SMTP_HOST;
   if (envHost) {
-    const port = Number(process.env.SMTP_PORT) || 25; // Default to port 25 for better Render compatibility
+    const port = Number(process.env.SMTP_PORT) || 587;
     const config = {
       host: envHost,
       port: port,
-      secure: port === 465, // Only SSL on 465
-      user: process.env.SMTP_USER || 'brgystaff0001@gmail.com',
-      pass: process.env.SMTP_PASS || 'fprr ownw kpbl fbgg',
-      from: process.env.SMTP_FROM || process.env.SMTP_USER || 'brgystaff0001@gmail.com',
+      secure: port === 465, // SSL on 465, TLS on 587
+      user: process.env.SMTP_USER || 'apikey',
+      pass: process.env.SMTP_PASS || '',
+      from: process.env.SMTP_FROM || 'noreply@barangay.system',
     };
     console.log('[EmailService] Using environment SMTP config:', {
       host: config.host,
@@ -49,8 +49,16 @@ async function resolveSmtpConfig(): Promise<SmtpConfig | null> {
     }
     const settings = await SystemSettingModel.findOne().lean<ISystemSetting>().exec();
     if (!settings || !settings.smtp || !settings.smtp.host) {
-      console.log('[EmailService] No SMTP settings found in DB');
-      return null;
+      console.log('[EmailService] No SMTP settings found in DB, using SendGrid defaults');
+      // Return SendGrid defaults
+      return {
+        host: 'smtp.sendgrid.net',
+        port: 587,
+        secure: false, // TLS on 587
+        user: 'apikey',
+        pass: process.env.SENDGRID_API_KEY || '',
+        from: 'noreply@barangay.system',
+      };
     }
     const passEncrypted = (settings.smtp as any).encryptedPassword;
     let pass: string | undefined = undefined;
@@ -62,12 +70,12 @@ async function resolveSmtpConfig(): Promise<SmtpConfig | null> {
       }
     }
     const config = {
-      host: settings.smtp.host || 'smtp.gmail.com',
-      port: settings.smtp.port || 25, // Default to port 25 for better Render compatibility
+      host: settings.smtp.host || 'smtp.sendgrid.net',
+      port: settings.smtp.port || 587,
       secure: !!settings.smtp.secure,
-      user: settings.smtp.user || 'brgystaff0001@gmail.com',
-      pass: pass || 'fprr ownw kpbl fbgg',
-      from: settings.smtp.fromName || settings.smtp.user || 'brgystaff0001@gmail.com',
+      user: settings.smtp.user || 'apikey',
+      pass: pass || process.env.SENDGRID_API_KEY || '',
+      from: settings.smtp.fromName || settings.smtp.user || 'noreply@barangay.system',
     };
     console.log('[EmailService] Using DB SMTP config:', {
       host: config.host,
@@ -84,7 +92,7 @@ async function resolveSmtpConfig(): Promise<SmtpConfig | null> {
 
 function createTransporterFromConfig(cfg: SmtpConfig) {
   // Determine secure flag based on port
-  let secure = cfg.port === 465; // SSL on port 465
+  let secure = cfg.port === 465; // SSL on port 465, TLS (STARTTLS) on 587
   
   const transportConfig: any = {
     host: cfg.host,
@@ -103,11 +111,10 @@ function createTransporterFromConfig(cfg: SmtpConfig) {
     greetingTimeout: 10000, // 10 seconds
   };
 
-  // Only add TLS config for non-SSL connections (STARTTLS)
-  if (!secure) {
+  // Add TLS config for STARTTLS (port 587)
+  if (!secure && cfg.port === 587) {
     transportConfig.tls = {
-      rejectUnauthorized: false,
-      minVersion: 'TLSv1_2',
+      rejectUnauthorized: false, // Allow self-signed certs
     };
   }
 
@@ -115,7 +122,7 @@ function createTransporterFromConfig(cfg: SmtpConfig) {
     host: cfg.host,
     port: cfg.port,
     secure: secure,
-    protocol: secure ? 'SSL' : 'TLS/STARTTLS',
+    protocol: secure ? 'SSL' : (cfg.port === 587 ? 'STARTTLS' : 'PLAIN'),
     auth: cfg.user && cfg.pass ? 'configured' : 'none',
     timeouts: `${transportConfig.connectionTimeout}ms connection, ${transportConfig.socketTimeout}ms socket`,
   });
