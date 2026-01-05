@@ -83,20 +83,54 @@ async function resolveSmtpConfig(): Promise<SmtpConfig | null> {
 }
 
 function createTransporterFromConfig(cfg: SmtpConfig) {
-  const transport = nodemailer.createTransport({
+  // Determine secure flag based on port
+  let secure = cfg.port === 465; // SSL on port 465
+  
+  const transportConfig: any = {
     host: cfg.host,
     port: cfg.port,
-    secure: cfg.secure === true, // true for 465, false for other ports
-    // Only supply auth when both user and pass are available. Supplying a user without a pass
-    // causes Nodemailer to try PLAIN auth with missing credentials which produces a 'Missing credentials for "PLAIN"' error.
+    secure: secure,
+    // Only supply auth when both user and pass are available
     auth: cfg.user && cfg.pass ? { user: cfg.user, pass: cfg.pass } : undefined,
-  });
-  console.log('[EmailService] Created transporter with config:', {
+    // Add relaxed TLS settings for better compatibility with cloud providers
+    tls: {
+      rejectUnauthorized: false, // Allow self-signed certs from cloud proxies
+      minVersion: 'TLSv1.0', // Support older TLS versions for compatibility
+    },
+    // Connection pooling and extended timeouts for unreliable networks
+    pool: true,
+    maxConnections: 3, // Reduced from 5 for stability
+    maxMessages: 50,
+    rateDelta: 2000, // 2 second delay between messages
+    rateLimit: 5, // 5 messages per rateDelta
+    connectionTimeout: 20000, // 20 seconds to establish connection
+    socketTimeout: 20000, // 20 seconds for socket operations
+    greetingTimeout: 10000, // 10 seconds for SMTP greeting
+    logger: false, // Set to true for debug logs
+    debug: false, // Set to true for detailed debug output
+  };
+
+  console.log('[EmailService] Creating transporter with config:', {
     host: cfg.host,
     port: cfg.port,
-    secure: cfg.secure,
+    secure: secure,
     auth: cfg.user && cfg.pass ? 'configured' : 'none',
+    timeouts: `${transportConfig.connectionTimeout}ms connection, ${transportConfig.socketTimeout}ms socket`,
   });
+
+  const transport = nodemailer.createTransport(transportConfig);
+  
+  // Verify connection on creation (non-blocking)
+  setImmediate(() => {
+    transport.verify((err, success) => {
+      if (err) {
+        console.error('[EmailService] Transporter verification failed:', err.message);
+      } else if (success) {
+        console.log('[EmailService] SMTP connection verified successfully');
+      }
+    });
+  });
+
   return transport;
 }
 
@@ -141,7 +175,7 @@ export async function sendDocumentNotification(
   }
 }
 
-export async function sendMail(to: string, subject: string, html: string) {
+export async function sendMail(to: string, subject: string, html: string, retries: number = 3): Promise<any> {
   const cfg = await resolveSmtpConfig();
   if (!cfg) {
     console.error('[EmailService] No SMTP config available; cannot send email to:', to);
@@ -151,21 +185,45 @@ export async function sendMail(to: string, subject: string, html: string) {
     console.error('[EmailService] SMTP configuration incomplete: user is set but pass is missing. Aborting send.');
     throw new Error('SMTP configuration incomplete (missing password)');
   }
-  const transporter = createTransporterFromConfig(cfg);
-  try {
-    console.log('[EmailService] Sending email to:', to, 'Subject:', subject);
-    const result = await transporter.sendMail({
-      from: cfg.from || cfg.user,
-      to,
-      subject,
-      html,
-    });
-    console.log('[EmailService] Email sent successfully:', result.messageId);
-    return result;
-  } catch (err) {
-    console.error('[EmailService] Failed to send email to', to, ':', err);
-    throw err;
+
+  let lastError: any;
+  
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(`[EmailService] Attempt ${attempt}/${retries} - Sending email to:`, to, 'Subject:', subject);
+      
+      const transporter = createTransporterFromConfig(cfg);
+      const result = await transporter.sendMail({
+        from: cfg.from || cfg.user,
+        to,
+        subject,
+        html,
+      });
+      
+      console.log('[EmailService] Email sent successfully:', result.messageId);
+      transporter.close(); // Close connection after sending
+      return result;
+    } catch (err: any) {
+      lastError = err;
+      console.error(`[EmailService] Attempt ${attempt}/${retries} failed:`, err.message);
+      
+      // Don't retry on auth errors
+      if (err.message && (err.message.includes('Invalid login') || err.message.includes('Authentication failed'))) {
+        console.error('[EmailService] Authentication error - will not retry');
+        throw err;
+      }
+      
+      // Wait before retrying
+      if (attempt < retries) {
+        const delay = Math.min(1000 * attempt, 5000); // 1s, 2s, 3s, 4s, 5s
+        console.log(`[EmailService] Waiting ${delay}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
   }
+  
+  console.error('[EmailService] Failed to send email after', retries, 'attempts');
+  throw lastError || new Error('Failed to send email');
 }
 
 export async function testSmtpConnection(): Promise<{ success: boolean; message: string; config?: any; error?: string }> {
