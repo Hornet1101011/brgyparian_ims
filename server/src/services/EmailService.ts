@@ -28,7 +28,7 @@ async function resolveSmtpConfig(): Promise<SmtpConfig | null> {
       secure: port === 465, // SSL on 465, TLS on 587
       user: process.env.SMTP_USER || 'apikey',
       pass: process.env.SMTP_PASS || '',
-      from: process.env.SMTP_FROM || 'noreply@barangay.system',
+      from: process.env.SMTP_FROM || 'brgystaff0001@gmail.com',
     };
     console.log('[EmailService] Using environment SMTP config:', {
       host: config.host,
@@ -57,7 +57,7 @@ async function resolveSmtpConfig(): Promise<SmtpConfig | null> {
         secure: false, // TLS on 587
         user: 'apikey',
         pass: process.env.SENDGRID_API_KEY || '',
-        from: 'noreply@barangay.system',
+        from: 'brgystaff0001@gmail.com',
       };
     }
     const passEncrypted = (settings.smtp as any).encryptedPassword;
@@ -75,7 +75,7 @@ async function resolveSmtpConfig(): Promise<SmtpConfig | null> {
       secure: !!settings.smtp.secure,
       user: settings.smtp.user || 'apikey',
       pass: pass || process.env.SENDGRID_API_KEY || '',
-      from: settings.smtp.fromName || settings.smtp.user || 'noreply@barangay.system',
+      from: settings.smtp.fromName || settings.smtp.user || 'brgystaff0001@gmail.com',
     };
     console.log('[EmailService] Using DB SMTP config:', {
       host: config.host,
