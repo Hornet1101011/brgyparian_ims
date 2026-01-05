@@ -10,13 +10,22 @@ import { handleSaveError } from '../utils/handleSaveError';
 export async function forgotPassword(req: Request, res: Response) {
   try {
     const { email, mode } = req.body; // mode: 'link' (default) or 'otp'
-    if (!email) return res.status(400).json({ message: 'Email is required' });
+    console.log('\n========== FORGOT PASSWORD START ==========');
+    console.log('📧 Email received:', email);
+    console.log('📋 Mode:', mode);
+    
+    if (!email) {
+      console.log('❌ No email provided');
+      return res.status(400).json({ message: 'Email is required' });
+    }
 
     const user = await User.findOne({ email: email.toLowerCase() });
     if (!user) {
-      console.log('forgotPassword: email not found, returning generic response for', email);
+      console.log('⚠️  User not found for email:', email);
       return res.status(200).json({ message: 'If that email is registered, a reset link has been sent.' }); // avoid enumeration
     }
+    
+    console.log('✅ User found:', user._id);
 
   // Support two modes: 'link' (default) or 'otp' (numeric 6-digit code)
   let token: string;
@@ -24,31 +33,42 @@ export async function forgotPassword(req: Request, res: Response) {
   let expiresAt: Date;
 
   if (mode === 'otp') {
+    console.log('🔐 OTP mode selected');
     // generate a 6-digit numeric OTP (zero-padded)
     const otpNum = crypto.randomInt(0, 1000000);
     token = String(otpNum).padStart(6, '0');
     tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes for OTP
+    console.log('🎲 Generated OTP:', token);
+    
     await PasswordResetToken.create({ userId: user._id, tokenHash, expiresAt });
+    console.log('💾 Saved token to database');
 
     const html = `<p>You requested a password reset. Use the 6-digit code below to reset your password. This code expires in 10 minutes.</p>
       <h2 style="letter-spacing:4px">${token}</h2>
       <p>If you didn't request this, you can safely ignore this email.</p>`;
 
     // send email and log any errors
+    console.log('📨 About to send OTP email to:', user.email);
     try {
-      await sendMail(user.email, 'Your password reset code', html);
-      console.log('✅ Password reset OTP email sent to:', user.email);
+      const result = await sendMail(user.email, 'Your password reset code', html);
+      console.log('✅ Password reset OTP email sent successfully');
+      console.log('📋 Result:', result);
     } catch (emailErr) {
-      console.error('❌ Failed to send reset OTP email:', emailErr);
-      // Still return success to prevent email enumeration, but log the error
+      console.error('❌ ERROR sending reset OTP email:', emailErr);
+      console.error('Error type:', emailErr instanceof Error ? emailErr.message : emailErr);
+      throw emailErr;
     }
   } else {
+    console.log('🔗 Link mode selected');
     // default: link-token flow (existing behavior)
     token = crypto.randomBytes(32).toString('hex');
     tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+    console.log('🎲 Generated token');
+    
     await PasswordResetToken.create({ userId: user._id, tokenHash, expiresAt });
+    console.log('💾 Saved token to database');
 
     // include the raw token in the reset link (raw token is emailed once)
     const resetLink = `${process.env.FRONTEND_URL || ''}/reset-password/${token}`;
@@ -57,19 +77,25 @@ export async function forgotPassword(req: Request, res: Response) {
       <p>If you didn't request this, you can safely ignore this email.</p>`;
 
     // send email and log any errors
+    console.log('📨 About to send link email to:', user.email);
     try {
-      await sendMail(user.email, 'Password reset request', html);
-      console.log('✅ Password reset link email sent to:', user.email);
+      const result = await sendMail(user.email, 'Password reset request', html);
+      console.log('✅ Password reset link email sent successfully');
+      console.log('📋 Result:', result);
     } catch (emailErr) {
-      console.error('❌ Failed to send reset link email:', emailErr);
-      // Still return success to prevent email enumeration, but log the error
+      console.error('❌ ERROR sending reset link email:', emailErr);
+      console.error('Error type:', emailErr instanceof Error ? emailErr.message : emailErr);
+      throw emailErr;
     }
   }
 
-  console.log('forgotPassword: reset token created for userId=', String((user as any)._id));
+  console.log('✅ Reset token created for userId:', String((user as any)._id));
+  console.log('========== FORGOT PASSWORD SUCCESS ==========\n');
     return res.json({ message: 'If that email is registered, a reset link has been sent.' });
   } catch (err) {
-    console.error('forgotPassword error', err);
+    console.error('❌ FORGOT PASSWORD ERROR:', err);
+    console.error('Error stack:', err instanceof Error ? err.stack : err);
+    console.log('========== FORGOT PASSWORD FAILED ==========\n');
     return res.status(500).json({ message: 'Server error' });
   }
 }

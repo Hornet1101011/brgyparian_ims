@@ -166,3 +166,47 @@ export async function sendMail(to: string, subject: string, html: string) {
     throw err;
   }
 }
+
+export async function testSmtpConnection(): Promise<{ success: boolean; message: string; config?: any; error?: string }> {
+  console.log('[EmailService] Testing SMTP connection...');
+  try {
+    const cfg = await resolveSmtpConfig();
+    if (!cfg) {
+      return { success: false, message: 'No SMTP config found' };
+    }
+    
+    console.log('[EmailService] SMTP Config:', {
+      host: cfg.host,
+      port: cfg.port,
+      secure: cfg.secure,
+      user: cfg.user ? `${cfg.user.substring(0, 5)}...` : 'none',
+    });
+
+    const transporter = createTransporterFromConfig(cfg);
+    const info = await transporter.verify();
+    
+    console.log('[EmailService] SMTP verification result:', info);
+    
+    if (info) {
+      return {
+        success: true,
+        message: 'SMTP connection successful',
+        config: {
+          host: cfg.host,
+          port: cfg.port,
+          secure: cfg.secure,
+          user: cfg.user,
+        }
+      };
+    } else {
+      return { success: false, message: 'SMTP verification failed', error: 'transporter.verify() returned false' };
+    }
+  } catch (err: any) {
+    console.error('[EmailService] SMTP connection test failed:', err);
+    return {
+      success: false,
+      message: 'SMTP connection failed',
+      error: err?.message || String(err)
+    };
+  }
+}

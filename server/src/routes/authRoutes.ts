@@ -24,6 +24,7 @@ import {
 const guestController = require('../controllers/guestController');
 const createGuest = guestController.createGuest || guestController.default || guestController;
 import { createRateLimiter } from '../middleware/rateLimiter';
+import { testSmtpConnection } from '../services/EmailService';
 
 const router = express.Router();
 
@@ -48,6 +49,15 @@ router.post('/reset-password/:token', resetPasswordLimiter, resetPassword);
 router.post('/reset-password', resetPasswordLimiter, resetPassword);
 // Verify OTP and generate/email a temporary password
 router.post('/verify-otp', resetPasswordLimiter, verifyOtpAndEmailNewPassword);
+
+// Test SMTP endpoint (for debugging email issues)
+router.get('/test-smtp', async (req: any, res: Response) => {
+  console.log('\n========== SMTP TEST ENDPOINT CALLED ==========');
+  const result = await testSmtpConnection();
+  console.log('SMTP Test Result:', result);
+  console.log('========== SMTP TEST ENDPOINT RESULT ==========\n');
+  res.json(result);
+});
 
 // Public routes with rate limiting
 // Allow unlimited public registrations for now (no rate-limiter)
