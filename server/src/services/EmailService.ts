@@ -21,11 +21,11 @@ async function resolveSmtpConfig(): Promise<SmtpConfig | null> {
   // Prefer environment variables if provided
   const envHost = process.env.SMTP_HOST;
   if (envHost) {
-    const port = Number(process.env.SMTP_PORT) || 465; // Default to 465 (SSL) instead of 587
+    const port = Number(process.env.SMTP_PORT) || 25; // Default to port 25 for better Render compatibility
     const config = {
       host: envHost,
       port: port,
-      secure: port === 465 || port === 25 ? false : true, // 465 = SSL (but nodemailer handles it), others = TLS
+      secure: port === 465, // Only SSL on 465
       user: process.env.SMTP_USER || 'brgystaff0001@gmail.com',
       pass: process.env.SMTP_PASS || 'fprr ownw kpbl fbgg',
       from: process.env.SMTP_FROM || process.env.SMTP_USER || 'brgystaff0001@gmail.com',
@@ -63,7 +63,7 @@ async function resolveSmtpConfig(): Promise<SmtpConfig | null> {
     }
     const config = {
       host: settings.smtp.host || 'smtp.gmail.com',
-      port: settings.smtp.port || 465, // Default to 465 (SSL) instead of 587
+      port: settings.smtp.port || 25, // Default to port 25 for better Render compatibility
       secure: !!settings.smtp.secure,
       user: settings.smtp.user || 'brgystaff0001@gmail.com',
       pass: pass || 'fprr ownw kpbl fbgg',
