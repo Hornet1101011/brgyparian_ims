@@ -126,3 +126,34 @@ export async function sendMail(to: string, subject: string, html: string) {
     html,
   });
 }
+
+export async function testSmtpConnection() {
+  try {
+    const cfg = await resolveSmtpConfig();
+    if (!cfg) {
+      return { success: false, message: 'No SMTP configuration found' };
+    }
+    
+    const transporter = createTransporterFromConfig(cfg);
+    await transporter.verify();
+    
+    return {
+      success: true,
+      message: 'SMTP connection successful',
+      config: {
+        host: cfg.host,
+        port: cfg.port,
+        secure: cfg.secure,
+        user: cfg.user,
+        from: cfg.from
+      }
+    };
+  } catch (err) {
+    console.error('SMTP test connection error:', err);
+    return {
+      success: false,
+      message: 'SMTP connection failed',
+      error: (err as any).message
+    };
+  }
+}
