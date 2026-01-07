@@ -1,18 +1,77 @@
-import sgMail, { MailDataRequired } from '@sendgrid/mail';
+import nodemailer from 'nodemailer';
+import mongoose from 'mongoose';
+import SystemSettingModel, { ISystemSetting } from '../models/SystemSetting';
 
-// Initialize SendGrid with API key
-function initializeSendGrid() {
-  const apiKey = process.env.SENDGRID_API_KEY;
-  if (!apiKey) {
-    console.warn('[EmailService] SENDGRID_API_KEY not set in environment');
+// crypto helper (encrypt/decrypt) - commonjs module
+// use require to match existing module.exports in utils
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+// helper lives outside of src at server/utils/cryptoHelper.js
+const cryptoHelper = require('../../utils/cryptoHelper');
+
+type SmtpConfig = {
+  host: string;
+  port: number;
+  secure?: boolean;
+  user?: string;
+  pass?: string;
+  from?: string;
+};
+
+async function resolveSmtpConfig(): Promise<SmtpConfig | null> {
+  // Prefer environment variables if provided
+  const envHost = process.env.SMTP_HOST;
+  if (envHost) {
+    return {
+      host: envHost,
+      port: Number(process.env.SMTP_PORT) || 587,
+      secure: Number(process.env.SMTP_PORT) === 465,
+      user: process.env.SMTP_USER || 'brgystaff0001@gmail.com',
+      pass: process.env.SMTP_PASS || 'fprr ownw kpbl fbgg',
+      from: process.env.SMTP_FROM || process.env.SMTP_USER || 'brgystaff0001@gmail.com',
+    };
+  }
+
+  // fallback: read from SystemSetting document in DB
+  try {
+    // Ensure mongoose connection exists before querying
+    if (mongoose.connection.readyState === 0) {
+      // no DB connection
+      return null;
+    }
+    const settings = await SystemSettingModel.findOne().lean<ISystemSetting>().exec();
+    if (!settings || !settings.smtp || !settings.smtp.host) return null;
+    const passEncrypted = (settings.smtp as any).encryptedPassword;
+    let pass: string | undefined = undefined;
+    if (passEncrypted && process.env.SETTINGS_ENCRYPTION_KEY) {
+      try {
+        pass = cryptoHelper.decryptText(passEncrypted, process.env.SETTINGS_ENCRYPTION_KEY);
+      } catch (e) {
+        console.error('Failed to decrypt SMTP password from SystemSetting:', e);
+      }
+    }
+    return {
+      host: settings.smtp.host || 'smtp.gmail.com',
+      port: settings.smtp.port || 587,
+      secure: !!settings.smtp.secure,
+      user: settings.smtp.user || 'brgystaff0001@gmail.com',
+      pass: pass || 'fprr ownw kpbl fbgg',
+      from: settings.smtp.fromName || settings.smtp.user || 'brgystaff0001@gmail.com',
+    };
+  } catch (err) {
+    console.error('resolveSmtpConfig error', err);
     return null;
   }
-  sgMail.setApiKey(apiKey);
-  return sgMail;
 }
 
-function getFromAddress(): string {
-  return process.env.SMTP_FROM || 'brgystaff0001@gmail.com';
+function createTransporterFromConfig(cfg: SmtpConfig) {
+  return nodemailer.createTransport({
+    host: cfg.host,
+    port: cfg.port,
+    secure: cfg.secure === true, // true for 465, false for other ports
+    // Only supply auth when both user and pass are available. Supplying a user without a pass
+    // causes Nodemailer to try PLAIN auth with missing credentials which produces a 'Missing credentials for "PLAIN"' error.
+    auth: cfg.user && cfg.pass ? { user: cfg.user, pass: cfg.pass } : undefined,
+  });
 }
 
 export async function sendDocumentNotification(
@@ -21,12 +80,18 @@ export async function sendDocumentNotification(
   documentType: string,
   notes?: string
 ) {
-  const sg = initializeSendGrid();
-  if (!sg) {
-    console.error('[EmailService] SendGrid not initialized; cannot send document notification');
-    throw new Error('SendGrid API key not configured');
+  const cfg = await resolveSmtpConfig();
+  if (!cfg) {
+    console.error('No SMTP config available; cannot send document notification');
+    return;
   }
-
+  // Validate credentials before attempting to send. If user is provided without a pass,
+  // avoid attempting an authenticated login which will fail with a PLAIN credential error.
+  if (cfg.user && !cfg.pass) {
+    console.error('SMTP configuration incomplete: user is set but pass is missing. Aborting send.');
+    throw new Error('SMTP configuration incomplete (missing password)');
+  }
+  const transporter = createTransporterFromConfig(cfg);
   const subject = `Your document request has been ${status}`;
   const body = `
     <p>Dear user,</p>
@@ -35,113 +100,29 @@ export async function sendDocumentNotification(
     <p>If you have questions, please contact support.</p>
     <p>Thank you.</p>
   `;
-
-  try {
-    console.log('[EmailService] Sending document notification to:', to);
-    const msg: MailDataRequired = {
-      to,
-      from: getFromAddress(),
-      subject,
-      html: body,
-    };
-    const result = await sgMail.send(msg);
-    console.log('[EmailService] Document notification sent successfully:', result[0].statusCode);
-  } catch (err) {
-    console.error('[EmailService] Failed to send document notification:', err);
-    throw err;
-  }
+  await transporter.sendMail({
+    from: cfg.from || cfg.user,
+    to,
+    subject,
+    html: body,
+  });
 }
 
-export async function sendMail(to: string, subject: string, html: string, retries: number = 3): Promise<any> {
-  const sg = initializeSendGrid();
-  if (!sg) {
-    console.error('[EmailService] SendGrid not initialized; cannot send email to:', to);
-    throw new Error('SendGrid API key not configured');
+export async function sendMail(to: string, subject: string, html: string) {
+  const cfg = await resolveSmtpConfig();
+  if (!cfg) {
+    console.error('No SMTP config available; cannot send email');
+    return;
   }
-
-  let lastError: any;
-
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      console.log(`[EmailService] Attempt ${attempt}/${retries} - Sending email to:`, to, 'Subject:', subject);
-
-      const msg: MailDataRequired = {
-        to,
-        from: getFromAddress(),
-        subject,
-        html,
-      };
-
-      const result = await sgMail.send(msg);
-      console.log('[EmailService] Email sent successfully. Status code:', result[0].statusCode);
-      return result;
-    } catch (err: any) {
-      lastError = err;
-      const errorMsg = err.message || JSON.stringify(err);
-      console.error(`[EmailService] Attempt ${attempt}/${retries} failed:`, errorMsg);
-
-      // Don't retry on auth errors
-      if (errorMsg.includes('Invalid') || errorMsg.includes('Authentication') || errorMsg.includes('401') || errorMsg.includes('403')) {
-        console.error('[EmailService] Authentication error - will not retry');
-        throw err;
-      }
-
-      // Wait before retrying
-      if (attempt < retries) {
-        const delay = Math.min(1000 * attempt, 5000); // 1s, 2s, 3s, 4s, 5s
-        console.log(`[EmailService] Waiting ${delay}ms before retry...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-      }
-    }
+  if (cfg.user && !cfg.pass) {
+    console.error('SMTP configuration incomplete: user is set but pass is missing. Aborting send.');
+    throw new Error('SMTP configuration incomplete (missing password)');
   }
-
-  console.error('[EmailService] Failed to send email after', retries, 'attempts');
-  throw lastError || new Error('Failed to send email');
-}
-
-export async function testSmtpConnection(): Promise<{ success: boolean; message: string; config?: any; error?: string }> {
-  console.log('[EmailService] Testing SendGrid connection...');
-  
-  const apiKey = process.env.SENDGRID_API_KEY;
-  const fromAddress = getFromAddress();
-
-  if (!apiKey) {
-    return {
-      success: false,
-      message: 'SendGrid API key not configured',
-      error: 'SENDGRID_API_KEY environment variable is missing',
-    };
-  }
-
-  try {
-    const sg = initializeSendGrid();
-    if (!sg) {
-      return {
-        success: false,
-        message: 'Failed to initialize SendGrid',
-        error: 'SendGrid initialization failed',
-      };
-    }
-
-    console.log('[EmailService] Verifying SendGrid API configuration...');
-    console.log('[EmailService] Using SendGrid API key: configured');
-    console.log('[EmailService] From address:', fromAddress);
-
-    return {
-      success: true,
-      message: 'SendGrid API is configured and ready',
-      config: {
-        method: 'SendGrid API (HTTP)',
-        apiKeySet: !!apiKey,
-        fromAddress: fromAddress,
-      },
-    };
-  } catch (err: any) {
-    console.error('[EmailService] SendGrid test failed:', err.message);
-    return {
-      success: false,
-      message: 'SendGrid API test failed',
-      error: err.message || 'Unknown error',
-    };
-  }
+  const transporter = createTransporterFromConfig(cfg);
+  await transporter.sendMail({
+    from: cfg.from || cfg.user,
+    to,
+    subject,
+    html,
+  });
 }
