@@ -66,14 +66,27 @@ async function resolveSmtpConfig(): Promise<SmtpConfig | null> {
 }
 
 function createTransporterFromConfig(cfg: SmtpConfig) {
-  return nodemailer.createTransport({
+  const transportOptions: any = {
     host: cfg.host,
     port: cfg.port,
     secure: cfg.secure === true, // true for 465, false for other ports
-    // Only supply auth when both user and pass are available. Supplying a user without a pass
-    // causes Nodemailer to try PLAIN auth with missing credentials which produces a 'Missing credentials for "PLAIN"' error.
     auth: cfg.user && cfg.pass ? { user: cfg.user, pass: cfg.pass } : undefined,
-  });
+    // Connection settings to work around Render firewall issues
+    connectionTimeout: 30000, // 30 seconds (increased from default 2000)
+    socketTimeout: 30000,     // 30 seconds
+    greetingTimeout: 30000,   // 30 seconds
+    pool: {
+      maxConnections: 5,
+      maxMessages: 100,
+      rateDelta: 1000,
+      rateLimit: 14, // ~14 messages per second
+    },
+    // TLS settings
+    tls: {
+      rejectUnauthorized: false, // Allow self-signed certs as fallback
+    },
+  };
+  return nodemailer.createTransport(transportOptions);
 }
 
 export async function sendDocumentNotification(
