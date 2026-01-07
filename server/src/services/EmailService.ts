@@ -24,7 +24,7 @@ async function resolveSmtpConfig(): Promise<SmtpConfig | null> {
     return {
       host: envHost,
       port: Number(process.env.SMTP_PORT) || 587,
-      secure: Number(process.env.SMTP_PORT) === 465,
+      secure: Number(process.env.SMTP_PORT) === 587,
       user: process.env.SMTP_USER || 'brgystaff0001@gmail.com',
       pass: process.env.SMTP_PASS || 'fprr ownw kpbl fbgg',
       from: process.env.SMTP_FROM || process.env.SMTP_USER || 'brgystaff0001@gmail.com',
