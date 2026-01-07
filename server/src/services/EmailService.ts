@@ -21,10 +21,11 @@ async function resolveSmtpConfig(): Promise<SmtpConfig | null> {
   // Prefer environment variables if provided
   const envHost = process.env.SMTP_HOST;
   if (envHost) {
+    const port = Number(process.env.SMTP_PORT) || 465; // Default to 465 (SSL) - better for Render
     return {
       host: envHost,
-      port: Number(process.env.SMTP_PORT) || 587,
-      secure: Number(process.env.SMTP_PORT) === 587,
+      port: port,
+      secure: port === 465 || port === 993, // 465/993 = SSL, 587/25 = TLS
       user: process.env.SMTP_USER || 'brgystaff0001@gmail.com',
       pass: process.env.SMTP_PASS || 'fprr ownw kpbl fbgg',
       from: process.env.SMTP_FROM || process.env.SMTP_USER || 'brgystaff0001@gmail.com',
@@ -49,10 +50,11 @@ async function resolveSmtpConfig(): Promise<SmtpConfig | null> {
         console.error('Failed to decrypt SMTP password from SystemSetting:', e);
       }
     }
+    const port = settings.smtp.port || 465; // Default to 465 (SSL) - better for Render
     return {
       host: settings.smtp.host || 'smtp.gmail.com',
-      port: settings.smtp.port || 587,
-      secure: !!settings.smtp.secure,
+      port: port,
+      secure: port === 465 || port === 993 || !!settings.smtp.secure,
       user: settings.smtp.user || 'brgystaff0001@gmail.com',
       pass: pass || 'fprr ownw kpbl fbgg',
       from: settings.smtp.fromName || settings.smtp.user || 'brgystaff0001@gmail.com',
