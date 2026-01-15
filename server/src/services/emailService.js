@@ -1,0 +1,269 @@
+const nodemailer = require('nodemailer');
+
+/**
+ * Gmail SMTP Transporter
+ * Uses environment variables BIMS_EMAIL and BIMS_EMAIL_PASSWORD
+ * This transporter is reusable across the entire application
+ */
+
+let gmailTransporter = null;
+let EmailLog = null;
+
+/**
+ * Initialize EmailLog model (lazy load to avoid circular dependencies)
+ */
+function getEmailLogModel() {
+  if (!EmailLog) {
+    try {
+      // Note: This requires EmailLog model to be compiled, so we lazy load it
+      EmailLog = require('../models/EmailLog').EmailLog;
+    } catch (err) {
+      console.warn('[EmailService] Failed to load EmailLog model for logging:', err.message);
+    }
+  }
+  return EmailLog;
+}
+
+/**
+ * Log email sending attempt to database
+ * @param {string} recipient - Email recipient
+ * @param {string} subject - Email subject
+ * @param {boolean} success - Whether email was sent successfully
+ * @param {string} [error] - Error message if failed
+ * @param {string} [messageId] - Nodemailer message ID if successful
+ * @param {string} [emailType] - Type of email (password-reset, announcement, etc.)
+ * @param {number} [bccCount] - Number of BCC recipients
+ */
+async function logEmail(recipient, subject, success, error, messageId, emailType, bccCount) {
+  try {
+    const EmailLogModel = getEmailLogModel();
+    if (!EmailLogModel) {
+      console.warn('[EmailService] EmailLog model not available for logging');
+      return;
+    }
+
+    await EmailLogModel.create({
+      recipient: recipient || 'unknown',
+      subject: subject || 'No subject',
+      status: success ? 'sent' : 'failed',
+      errorMessage: error || null,
+      messageId: messageId || null,
+      emailType: emailType || 'generic',
+      bccRecipientsCount: bccCount || 0,
+    });
+
+    console.log(`[EmailService] Email log created for ${recipient} (${emailType})`);
+  } catch (logErr) {
+    // Don't fail the email process if logging fails
+    console.error('[EmailService] Failed to log email:', logErr.message);
+  }
+}
+
+/**
+ * Initialize and return a Gmail SMTP transporter
+ * Caches the transporter instance to avoid recreating it
+ * @returns {object} Nodemailer transporter
+ * @throws {Error} If Gmail credentials are missing
+ */
+function getGmailTransporter() {
+  if (gmailTransporter) {
+    return gmailTransporter;
+  }
+
+  const email = process.env.BIMS_EMAIL;
+  const password = process.env.BIMS_EMAIL_PASSWORD;
+
+  if (!email || !password) {
+    const error = new Error(
+      'Missing Gmail credentials. Please set BIMS_EMAIL and BIMS_EMAIL_PASSWORD environment variables.'
+    );
+    console.error('[EmailService] ' + error.message);
+    throw error;
+  }
+
+  try {
+    gmailTransporter = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true, // true for port 465, false for other ports
+      auth: {
+        user: email,
+        pass: password, // Use App Password for Gmail accounts with 2FA enabled
+      },
+      // Connection settings to work around firewall issues
+      connectionTimeout: 30000, // 30 seconds
+      socketTimeout: 30000, // 30 seconds
+      greetingTimeout: 30000, // 30 seconds
+      pool: {
+        maxConnections: 5,
+        maxMessages: 100,
+        rateDelta: 1000,
+        rateLimit: 14, // ~14 messages per second
+      },
+      // TLS settings
+      tls: {
+        rejectUnauthorized: false,
+      },
+    });
+
+    console.log('[EmailService] Gmail SMTP transporter initialized successfully');
+    return gmailTransporter;
+  } catch (err) {
+    console.error('[EmailService] Failed to initialize Gmail transporter:', err);
+    throw err;
+  }
+}
+
+/**
+ * Export the reusable Gmail transporter
+ * Can be imported and used directly: const { emailTransporter } = require('./emailService')
+ * @returns {object} Nodemailer transporter
+ */
+const emailTransporter = () => {
+  try {
+    return getGmailTransporter();
+  } catch (err) {
+    console.error('[EmailService] Error in emailTransporter:', err);
+    throw err;
+  }
+};
+
+/**
+ * Send a document approval/rejection notification
+ * @param {string} to - Recipient email address
+ * @param {string} status - 'approved' or 'rejected'
+ * @param {string} documentType - Type of document
+ * @param {string} [notes] - Optional notes for rejection
+ */
+async function sendDocumentNotification(to, status, documentType, notes) {
+  try {
+    const transporter = getGmailTransporter();
+    const email = process.env.BIMS_EMAIL;
+
+    const subject = `Your document request has been ${status}`;
+    const body = `
+      <p>Dear user,</p>
+      <p>Your request for <strong>${documentType}</strong> has been <strong>${status}</strong>.</p>
+      ${notes ? `<p>Notes: ${notes}</p>` : ''}
+      <p>If you have questions, please contact support.</p>
+      <p>Thank you.</p>
+    `;
+
+    const info = await transporter.sendMail({
+      from: email,
+      to,
+      subject,
+      html: body,
+    });
+
+    console.log('[EmailService] Document notification sent:', info.messageId);
+    
+    // Log the email
+    await logEmail(to, subject, true, null, info.messageId, 'document-notification');
+    
+    return info;
+  } catch (err) {
+    console.error('[EmailService] Failed to send document notification:', err);
+    
+    // Log the failure
+    await logEmail(to, `Your document request has been ${status}`, false, err.message || String(err), null, 'document-notification');
+    
+    throw err;
+  }
+}
+
+/**
+ * Send a generic email
+ * @param {string} to - Primary recipient email address
+ * @param {string} subject - Email subject
+ * @param {string} html - HTML email content
+ * @param {string[]} [bcc] - Optional BCC recipients array
+ * @param {string} [emailType] - Type of email for logging (password-reset, otp, announcement, generic)
+ */
+async function sendMail(to, subject, html, bcc, emailType) {
+  try {
+    const transporter = getGmailTransporter();
+    const email = process.env.BIMS_EMAIL;
+
+    const mailOptions = {
+      from: email,
+      to,
+      subject,
+      html,
+    };
+
+    // Add BCC if provided
+    if (bcc && Array.isArray(bcc) && bcc.length > 0) {
+      mailOptions.bcc = bcc;
+    }
+
+    const info = await transporter.sendMail(mailOptions);
+
+    console.log('[EmailService] Email sent:', info.messageId, bcc ? `(BCC to ${bcc.length} recipients)` : '');
+    
+    // Log the email
+    if (bcc && bcc.length > 0) {
+      // For BCC emails, log once with count
+      await logEmail(to, subject, true, null, info.messageId, emailType || 'generic', bcc.length);
+    } else {
+      // For regular emails, log individual recipient
+      await logEmail(to, subject, true, null, info.messageId, emailType || 'generic');
+    }
+    
+    return info;
+  } catch (err) {
+    console.error('[EmailService] Failed to send email:', err);
+    
+    // Log the failure
+    if (bcc && bcc.length > 0) {
+      await logEmail(to, subject, false, err.message || String(err), null, emailType || 'generic', bcc.length);
+    } else {
+      await logEmail(to, subject, false, err.message || String(err), null, emailType || 'generic');
+    }
+    
+    throw err;
+  }
+}
+
+/**
+ * Test the Gmail SMTP connection
+ * @returns {Promise<object>} Test result with success status and details
+ */
+async function testSmtpConnection() {
+  try {
+    const transporter = getGmailTransporter();
+    await transporter.verify();
+
+    const result = {
+      success: true,
+      message: 'Gmail SMTP connection successful',
+      config: {
+        host: 'smtp.gmail.com',
+        port: 465,
+        secure: true,
+        user: process.env.BIMS_EMAIL,
+      },
+    };
+
+    console.log('[EmailService] SMTP connection test passed');
+    return result;
+  } catch (err) {
+    const result = {
+      success: false,
+      message: 'Gmail SMTP connection failed',
+      error: err.message,
+    };
+
+    console.error('[EmailService] SMTP connection test failed:', err);
+    return result;
+  }
+}
+
+module.exports = {
+  emailTransporter,
+  sendDocumentNotification,
+  sendMail,
+  testSmtpConnection,
+  getGmailTransporter,
+  logEmail,
+};

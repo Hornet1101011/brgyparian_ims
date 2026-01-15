@@ -44,6 +44,8 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { Announcement } from '../models/Announcement';
+import { sendAnnouncementEmail } from '../services/announcementEmailService';
+import { EmailLog } from '../models/EmailLog';
 import mongoose from 'mongoose';
 import { GridFSBucket, ObjectId } from 'mongodb';
 import sharp from 'sharp';
@@ -148,6 +150,35 @@ router.post('/announcements', isAdmin, upload.single('image'), async (req, res) 
 			console.error('Failed to create announcement:', err);
 			return res.status(500).json({ message: 'Failed to create announcement', error: err && err.message ? err.message : err });
 		}
+
+		// Send announcement email to all active residents (fire and forget)
+		const subject = '📢 New Announcement from Barangay';
+		const imageUrl = imagePath ? `${process.env.FRONTEND_URL || 'http://localhost:3000'}/api/announcements/${ann._id}/image` : undefined;
+
+		sendAnnouncementEmail(subject, ann.text, imageUrl)
+			.then((result) => {
+				// Update announcement with email status
+				return Announcement.findByIdAndUpdate(ann._id, {
+					emailSent: result.success,
+					emailSentAt: result.success ? new Date() : null,
+					emailRecipientsCount: result.recipientsCount,
+					emailError: result.error || null,
+				});
+			})
+			.then(() => {
+				console.log(`[AdminRoutes] Announcement ${ann._id} email status updated`);
+			})
+			.catch((emailErr) => {
+				console.error(`[AdminRoutes] Failed to send announcement email for ${ann._id}:`, emailErr);
+				// Update announcement with failure status
+				Announcement.findByIdAndUpdate(ann._id, {
+					emailSent: false,
+					emailError: emailErr.message || 'Unknown email error',
+				}).catch((updateErr) => {
+					console.error(`[AdminRoutes] Failed to update email error status for ${ann._id}:`, updateErr);
+				});
+			});
+
 		res.json({ message: 'Announcement created', announcement: ann });
 	} catch (err) {
 		console.error('Failed to create announcement', err);
@@ -514,6 +545,100 @@ router.put('/announcements/:id', isAdmin, upload.single('image'), async (req, re
 	} catch (err) {
 		console.error('Failed to update announcement', err);
 		res.status(500).json({ message: 'Failed to update announcement', error: err && typeof err === 'object' && 'message' in err ? err.message : err });
+	}
+});
+
+// GET /admin/email-logs - admin endpoint to view email logs
+router.get('/email-logs', isAdmin, async (req, res) => {
+	try {
+		const page = parseInt(req.query.page as string) || 1;
+		const limit = parseInt(req.query.limit as string) || 50;
+		const status = req.query.status as string; // filter by 'sent' or 'failed'
+		const emailType = req.query.emailType as string; // filter by email type
+		const recipient = req.query.recipient as string; // filter by recipient
+		const days = parseInt(req.query.days as string) || 7; // filter by recent N days
+
+		const filter: any = {};
+
+		// Date filter
+		if (days > 0) {
+			const startDate = new Date();
+			startDate.setDate(startDate.getDate() - days);
+			filter.dateSent = { $gte: startDate };
+		}
+
+		// Status filter
+		if (status && ['sent', 'failed'].includes(status)) {
+			filter.status = status;
+		}
+
+		// Email type filter
+		if (emailType) {
+			filter.emailType = emailType;
+		}
+
+		// Recipient filter
+		if (recipient) {
+			filter.recipient = { $regex: recipient, $options: 'i' };
+		}
+
+		const totalLogs = await EmailLog.countDocuments(filter);
+		const logs = await EmailLog.find(filter)
+			.sort({ dateSent: -1 })
+			.limit(limit)
+			.skip((page - 1) * limit)
+			.lean();
+
+		res.json({
+			data: logs,
+			pagination: {
+				page,
+				limit,
+				total: totalLogs,
+				pages: Math.ceil(totalLogs / limit),
+			},
+		});
+	} catch (err) {
+		console.error('Failed to fetch email logs', err);
+		res.status(500).json({ message: 'Failed to fetch email logs', error: err && typeof err === 'object' && 'message' in err ? err.message : err });
+	}
+});
+
+// GET /admin/email-logs/stats - admin endpoint for email statistics
+router.get('/email-logs/stats', isAdmin, async (req, res) => {
+	try {
+		const days = parseInt(req.query.days as string) || 7;
+
+		const startDate = new Date();
+		startDate.setDate(startDate.getDate() - days);
+
+		const filter = { dateSent: { $gte: startDate } };
+
+		const [totalSent, totalFailed, byType, byStatus] = await Promise.all([
+			EmailLog.countDocuments({ ...filter, status: 'sent' }),
+			EmailLog.countDocuments({ ...filter, status: 'failed' }),
+			EmailLog.aggregate([
+				{ $match: filter },
+				{ $group: { _id: '$emailType', count: { $sum: 1 } } },
+				{ $sort: { count: -1 } },
+			]),
+			EmailLog.aggregate([
+				{ $match: filter },
+				{ $group: { _id: '$status', count: { $sum: 1 } } },
+			]),
+		]);
+
+		res.json({
+			period: `Last ${days} days`,
+			totalSent,
+			totalFailed,
+			successRate: totalSent + totalFailed > 0 ? ((totalSent / (totalSent + totalFailed)) * 100).toFixed(2) + '%' : 'N/A',
+			byType,
+			byStatus,
+		});
+	} catch (err) {
+		console.error('Failed to fetch email statistics', err);
+		res.status(500).json({ message: 'Failed to fetch email statistics', error: err && typeof err === 'object' && 'message' in err ? err.message : err });
 	}
 });
 

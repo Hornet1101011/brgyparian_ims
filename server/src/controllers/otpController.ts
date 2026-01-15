@@ -31,13 +31,17 @@ export async function forgotPassword(req: Request, res: Response) {
     expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes for OTP
     await PasswordResetToken.create({ userId: user._id, tokenHash, expiresAt });
 
-    const html = `<p>You requested a password reset. Use the 6-digit code below to reset your password. This code expires in 10 minutes.</p>
-      <h2 style="letter-spacing:4px">${token}</h2>
-      <p>If you didn't request this, you can safely ignore this email.</p>`;
+    const html = `
+      <p>Dear ${(user as any).firstName || user.email},</p>
+      <p>You requested a password reset. Use the 6-digit code below to reset your password. This code expires in 10 minutes.</p>
+      <h2 style="letter-spacing: 4px; font-size: 32px; margin: 20px 0; font-family: monospace;">${token}</h2>
+      <p>If you didn't request this, you can safely ignore this email. Your account will remain secure.</p>
+      <p>Thank you,<br>Barangay Information Management System</p>
+    `;
 
     // send email in background (don't await - fire and forget)
-    sendMail(user.email, 'Your password reset code', html).catch((emailErr) => {
-      console.error('Failed to send reset OTP email', emailErr);
+    sendMail(user.email, 'Your Password Reset Code', html, undefined, 'otp').catch((emailErr) => {
+      console.error('[forgotPassword] Failed to send reset OTP email:', emailErr);
     });
   } else {
     // default: link-token flow (existing behavior)
@@ -47,14 +51,21 @@ export async function forgotPassword(req: Request, res: Response) {
     await PasswordResetToken.create({ userId: user._id, tokenHash, expiresAt });
 
     // include the raw token in the reset link (raw token is emailed once)
-    const resetLink = `${process.env.FRONTEND_URL || ''}/reset-password/${token}`;
-    const html = `<p>You requested a password reset. Click the link below to reset your password. This link expires in 15 minutes.</p>
-      <p><a href="${resetLink}">${resetLink}</a></p>
-      <p>If you didn't request this, you can safely ignore this email.</p>`;
+    const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password/${token}`;
+    const html = `
+      <p>Dear ${(user as any).firstName || user.email},</p>
+      <p>You requested a password reset for your Barangay Information Management System account. Click the link below to reset your password. This link expires in 15 minutes.</p>
+      <p style="margin: 20px 0;">
+        <a href="${resetLink}" style="background-color: #1890ff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">Reset Password</a>
+      </p>
+      <p>Or copy this link: <a href="${resetLink}">${resetLink}</a></p>
+      <p>If you didn't request this, you can safely ignore this email. Your account will remain secure.</p>
+      <p>Thank you,<br>Barangay Information Management System</p>
+    `;
 
     // send email in background (don't await - fire and forget)
-    sendMail(user.email, 'Password reset request', html).catch((emailErr) => {
-      console.error('Failed to send reset email', emailErr);
+    sendMail(user.email, 'Password Reset Request', html, undefined, 'password-reset').catch((emailErr) => {
+      console.error('[forgotPassword] Failed to send reset email:', emailErr);
     });
   }
 

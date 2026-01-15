@@ -7,7 +7,12 @@ const AnnouncementSchema = new mongoose.Schema({
   imageData: { type: Buffer },
   imageContentType: { type: String },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  createdAt: { type: Date, default: Date.now }
+  createdAt: { type: Date, default: Date.now },
+  // Email notification fields
+  emailSent: { type: Boolean, default: false },
+  emailSentAt: { type: Date, default: null },
+  emailRecipientsCount: { type: Number, default: 0 },
+  emailError: { type: String, default: null },
 });
 
 // Guard against recompilation in dev
