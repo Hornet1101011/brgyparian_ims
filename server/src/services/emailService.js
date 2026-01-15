@@ -8,6 +8,69 @@ const nodemailer = require('nodemailer');
 
 let gmailTransporter = null;
 let EmailLog = null;
+let SystemSetting = null;
+
+/**
+ * Initialize SystemSetting model (lazy load to avoid circular dependencies)
+ */
+function getSystemSettingModel() {
+  if (!SystemSetting) {
+    try {
+      SystemSetting = require('../models/SystemSetting');
+      if (SystemSetting.default) {
+        SystemSetting = SystemSetting.default;
+      }
+    } catch (err) {
+      console.warn('[EmailService] Failed to load SystemSetting model for email settings:', err.message);
+    }
+  }
+  return SystemSetting;
+}
+
+/**
+ * Check if an email type is enabled based on SystemSetting configuration
+ * @param {string} [emailType] - Type of email (password-reset, otp, document-notification, announcement)
+ * @returns {Promise<boolean>} True if email type is enabled
+ */
+async function isEmailTypeEnabled(emailType) {
+  try {
+    const SystemSettingModel = getSystemSettingModel();
+    if (!SystemSettingModel) {
+      console.warn('[EmailService] SystemSetting model not available, allowing email');
+      return true; // Fail open - allow email if settings can't be read
+    }
+
+    const settings = await SystemSettingModel.findOne();
+    if (!settings || !settings.emailSettings) {
+      console.warn('[EmailService] No email settings found, allowing email');
+      return true; // Fail open
+    }
+
+    // Check global enable flag
+    if (!settings.emailSettings.enabled) {
+      console.log('[EmailService] Global email sending disabled');
+      return false;
+    }
+
+    // Check specific email type flags
+    switch (emailType) {
+      case 'password-reset':
+        return settings.emailSettings.enablePasswordResetEmails !== false;
+      case 'otp':
+        return settings.emailSettings.enableOtpEmails !== false;
+      case 'document-notification':
+        return settings.emailSettings.enableDocumentNotificationEmails !== false;
+      case 'announcement':
+        return settings.emailSettings.enableAnnouncementEmails !== false;
+      default:
+        // For generic emails or unknown types, check if global is enabled
+        return settings.emailSettings.enabled !== false;
+    }
+  } catch (err) {
+    console.error('[EmailService] Error checking email settings:', err.message);
+    return true; // Fail open - allow email if there's an error
+  }
+}
 
 /**
  * Initialize EmailLog model (lazy load to avoid circular dependencies)
@@ -182,6 +245,14 @@ async function sendDocumentNotification(to, status, documentType, notes) {
  */
 async function sendMail(to, subject, html, bcc, emailType) {
   try {
+    // Check if this email type is enabled
+    const enabled = await isEmailTypeEnabled(emailType);
+    if (!enabled) {
+      console.log(`[EmailService] Skipped: Email type "${emailType}" disabled in settings`);
+      await logEmail(to, subject, true, 'Skipped: Email type disabled', 'skipped', emailType, bcc ? bcc.length : 0);
+      return { messageId: 'skipped', response: 'Email sending disabled for this type' };
+    }
+
     const transporter = getGmailTransporter();
     const email = process.env.BIMS_EMAIL;
 
@@ -266,4 +337,5 @@ module.exports = {
   testSmtpConnection,
   getGmailTransporter,
   logEmail,
+  isEmailTypeEnabled,
 };

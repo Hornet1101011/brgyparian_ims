@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer';
 import { Transporter } from 'nodemailer';
 import { EmailLog } from '../models/EmailLog';
+import SystemSetting from '../models/SystemSetting';
 
 /**
  * Gmail SMTP Transporter
@@ -9,6 +10,41 @@ import { EmailLog } from '../models/EmailLog';
  */
 
 let gmailTransporter: Transporter | null = null;
+
+/**
+ * Check if email sending is enabled for a specific email type
+ */
+async function isEmailTypeEnabled(emailType?: string): Promise<boolean> {
+  try {
+    const settings = await SystemSetting.findOne().lean();
+    
+    // If email system is disabled globally, return false
+    if (settings?.emailSettings?.enabled === false) {
+      console.log('[EmailService] Email system is globally disabled');
+      return false;
+    }
+    
+    // Check specific email type settings
+    if (emailType === 'password-reset' && settings?.emailSettings?.enablePasswordResetEmails === false) {
+      return false;
+    }
+    if (emailType === 'otp' && settings?.emailSettings?.enableOtpEmails === false) {
+      return false;
+    }
+    if (emailType === 'document-notification' && settings?.emailSettings?.enableDocumentNotificationEmails === false) {
+      return false;
+    }
+    if (emailType === 'announcement' && settings?.emailSettings?.enableAnnouncementEmails === false) {
+      return false;
+    }
+    
+    return true;
+  } catch (err) {
+    console.error('[EmailService] Failed to check email settings:', err);
+    // Default to true if we can't read settings (allow sending)
+    return true;
+  }
+}
 
 /**
  * Log email sending attempt to database
@@ -125,6 +161,19 @@ export async function sendDocumentNotification(
  */
 export async function sendMail(to: string, subject: string, html: string, bcc?: string[], emailType?: string) {
   try {
+    // Check if this email type is enabled
+    const enabled = await isEmailTypeEnabled(emailType);
+    if (!enabled) {
+      console.log(`[EmailService] Email type '${emailType || 'generic'}' is disabled in settings. Skipping send.`);
+      // Log as skipped (we can track disabled emails)
+      if (bcc && bcc.length > 0) {
+        await logEmailToDb(to, subject, true, 'Skipped: Email type disabled', undefined, emailType || 'generic', bcc.length);
+      } else {
+        await logEmailToDb(to, subject, true, 'Skipped: Email type disabled', undefined, emailType || 'generic');
+      }
+      return { messageId: 'skipped', response: 'Email sending disabled for this type' };
+    }
+    
     const transporter = getGmailTransporter();
     const email = process.env.BIMS_EMAIL;
 

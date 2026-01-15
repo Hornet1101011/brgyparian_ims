@@ -9,6 +9,19 @@ export interface ISmtp {
   fromName?: string;
 }
 
+export interface IEmailSettings {
+  enabled?: boolean;
+  enablePasswordResetEmails?: boolean;
+  enableOtpEmails?: boolean;
+  enableDocumentNotificationEmails?: boolean;
+  enableAnnouncementEmails?: boolean;
+  enableAnnouncementBcc?: boolean;
+  recipientEmailsPerBatch?: number;
+  retryFailedEmails?: boolean;
+  retryAttempts?: number;
+  retryDelayMinutes?: number;
+}
+
 export interface ISystemSetting extends Document {
   siteName?: string;
   barangayName?: string;
@@ -24,6 +37,7 @@ export interface ISystemSetting extends Document {
   documentProcessingDays?: number;
   systemNotice?: string;
   smtp?: ISmtp;
+  emailSettings?: IEmailSettings;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -35,6 +49,19 @@ const smtpSchema = new Schema<ISmtp>({
   user: { type: String },
   encryptedPassword: { type: String },
   fromName: { type: String },
+});
+
+const emailSettingsSchema = new Schema<IEmailSettings>({
+  enabled: { type: Boolean, default: true },
+  enablePasswordResetEmails: { type: Boolean, default: true },
+  enableOtpEmails: { type: Boolean, default: true },
+  enableDocumentNotificationEmails: { type: Boolean, default: true },
+  enableAnnouncementEmails: { type: Boolean, default: true },
+  enableAnnouncementBcc: { type: Boolean, default: true },
+  recipientEmailsPerBatch: { type: Number, default: 100 },
+  retryFailedEmails: { type: Boolean, default: true },
+  retryAttempts: { type: Number, default: 3 },
+  retryDelayMinutes: { type: Number, default: 5 },
 });
 
 const systemSettingSchema = new Schema<ISystemSetting>({
@@ -53,6 +80,7 @@ const systemSettingSchema = new Schema<ISystemSetting>({
   documentProcessingDays: { type: Number, default: 3 },
   systemNotice: { type: String },
   smtp: { type: smtpSchema, default: {} },
+  emailSettings: { type: emailSettingsSchema, default: {} },
 }, { timestamps: true });
 
 const modelName = 'SystemSetting';

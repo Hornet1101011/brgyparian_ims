@@ -562,4 +562,91 @@ router.get('/public/contact-info', async (req, res) => {
   }
 });
 
+// GET /api/settings/email - Get email settings (admin only)
+router.get('/email', requireAuth, isAdmin, async (req, res) => {
+  try {
+    let settings = await SystemSetting.findOne().lean();
+    if (!settings) {
+      settings = new SystemSetting();
+    }
+    
+    // Return email settings with defaults
+    const emailSettings = settings.emailSettings || {
+      enabled: true,
+      enablePasswordResetEmails: true,
+      enableOtpEmails: true,
+      enableDocumentNotificationEmails: true,
+      enableAnnouncementEmails: true,
+      enableAnnouncementBcc: true,
+      recipientEmailsPerBatch: 100,
+      retryFailedEmails: true,
+      retryAttempts: 3,
+      retryDelayMinutes: 5
+    };
+    
+    return res.json(emailSettings);
+  } catch (err) {
+    console.error('GET /api/settings/email error', err);
+    return res.status(500).json({ message: 'Failed to load email settings' });
+  }
+});
+
+// PATCH /api/settings/email - Update email settings (admin only)
+router.patch('/email', requireAuth, isAdmin, async (req, res) => {
+  try {
+    const payload = req.body || {};
+    
+    // Validate numeric fields
+    if (payload.recipientEmailsPerBatch != null && !(Number(payload.recipientEmailsPerBatch) > 0)) {
+      return res.status(400).json({ message: 'recipientEmailsPerBatch must be > 0' });
+    }
+    if (payload.retryAttempts != null && !(Number(payload.retryAttempts) >= 0)) {
+      return res.status(400).json({ message: 'retryAttempts must be >= 0' });
+    }
+    if (payload.retryDelayMinutes != null && !(Number(payload.retryDelayMinutes) > 0)) {
+      return res.status(400).json({ message: 'retryDelayMinutes must be > 0' });
+    }
+    
+    // Build update object with emailSettings prefix
+    const updatePayload = {};
+    const emailSettingsFields = [
+      'enabled',
+      'enablePasswordResetEmails',
+      'enableOtpEmails',
+      'enableDocumentNotificationEmails',
+      'enableAnnouncementEmails',
+      'enableAnnouncementBcc',
+      'recipientEmailsPerBatch',
+      'retryFailedEmails',
+      'retryAttempts',
+      'retryDelayMinutes'
+    ];
+    
+    for (const field of emailSettingsFields) {
+      if (field in payload) {
+        updatePayload[`emailSettings.${field}`] = payload[field];
+      }
+    }
+    
+    const before = await SystemSetting.findOne().lean();
+    const updated = await SystemSetting.findOneAndUpdate(
+      {},
+      { $set: updatePayload },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+    
+    // Record audit
+    const diff = { before, after: updated.toObject ? updated.toObject() : updated };
+    await recordAudit(req.user?._id, 'update_email_settings', diff, req.ip || req.headers['x-forwarded-for']);
+    
+    console.log('[Settings] Email settings updated by admin:', req.user?._id);
+    
+    const emailSettings = updated.emailSettings || {};
+    return res.json(emailSettings);
+  } catch (err) {
+    console.error('PATCH /api/settings/email error', err);
+    return res.status(500).json({ message: 'Failed to update email settings' });
+  }
+});
+
 module.exports = router;
