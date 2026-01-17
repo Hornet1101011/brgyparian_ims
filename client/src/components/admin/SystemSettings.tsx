@@ -16,9 +16,7 @@ import {
   DialogActions,
 } from '@mui/material';
 import TestEmailModal from '../TestEmailModal';
-import { adminAPI } from '../../services/api';
-import axios from 'axios';
-import { API_URL } from '../../services/api';
+import { adminAPI, axiosInstance, API_URL } from '../../services/api';
 import { UploadOutlined, UsergroupAddOutlined, DeleteOutlined } from '@ant-design/icons';
 import { Upload as AntdUpload, message as antdMessage } from 'antd';
 import AppAvatar from '../AppAvatar';
@@ -213,10 +211,10 @@ const SystemSettings: React.FC = () => {
       } catch (err) {
         // fallback: call backend directly at configured API_URL (avoid client origin)
         try {
-          const res = await axios.get(`${API_URL}/admin/settings`, { withCredentials: true, signal } as any);
+          const res = await axiosInstance.get(`/admin/settings`, { signal } as any);
           if (res?.data) sys = res.data;
         } catch (err2) {
-          console.warn('Failed to load system settings via adminAPI and API_URL fallback', err, err2);
+          console.warn('Failed to load system settings via adminAPI and axiosInstance fallback', err, err2);
         }
       }
       if (sys) {
@@ -224,22 +222,22 @@ const SystemSettings: React.FC = () => {
         originalSettingsRef.current = sys;
       }
 
-      // officials: try adminAPI then API_URL fallback
+      // officials: try adminAPI then axiosInstance fallback
       setOfficialsLoading(true);
       try {
         const offs = await adminAPI.getOfficials();
         if (Array.isArray(offs)) {
           setOfficials(offs);
         } else {
-          const r = await axios.get(`${API_URL}/admin/officials`, { withCredentials: true, signal } as any);
+          const r = await axiosInstance.get(`/admin/officials`, { signal } as any);
           if (r?.data) setOfficials(r.data);
         }
       } catch (err) {
         try {
-          const r = await axios.get(`${API_URL}/admin/officials`, { withCredentials: true, signal } as any);
+          const r = await axiosInstance.get(`/admin/officials`, { signal } as any);
           if (r?.data) setOfficials(r.data);
         } catch (err2) {
-          console.warn('Failed to load officials via adminAPI and API_URL fallback', err, err2);
+          console.warn('Failed to load officials via adminAPI and axiosInstance fallback', err, err2);
         }
       } finally {
         setOfficialsLoading(false);
@@ -362,14 +360,17 @@ const SystemSettings: React.FC = () => {
   const fetchEmailSettings = async () => {
     setEmailSettingsLoading(true);
     try {
-      const response = await axios.get(`${API_URL}/settings/email`, { 
-        withCredentials: true 
-      });
+      const response = await axiosInstance.get(`/settings/email`);
       if (response?.data) {
         setEmailSettings(response.data);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load email settings', err);
+      if (err?.response?.status === 401) {
+        // Not authenticated - settings will use defaults
+        console.log('User not authenticated, using default email settings');
+        return;
+      }
       antdMessage.error('Failed to load email settings');
     } finally {
       setEmailSettingsLoading(false);
@@ -380,12 +381,14 @@ const SystemSettings: React.FC = () => {
   const saveEmailSettings = async () => {
     setSavingEmailSettings(true);
     try {
-      await axios.patch(`${API_URL}/settings/email`, emailSettings, { 
-        withCredentials: true 
-      });
+      await axiosInstance.patch(`/settings/email`, emailSettings);
       antdMessage.success('Email settings saved successfully');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to save email settings', err);
+      if (err?.response?.status === 401) {
+        antdMessage.error('You must be logged in as an admin to change email settings');
+        return;
+      }
       antdMessage.error('Failed to save email settings');
     } finally {
       setSavingEmailSettings(false);
