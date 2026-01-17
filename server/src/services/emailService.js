@@ -133,12 +133,16 @@ function getGmailTransporter() {
     return gmailTransporter;
   }
 
-  const email = process.env.BIMS_EMAIL;
-  const password = process.env.BIMS_EMAIL_PASSWORD;
+  // Support both BIMS_EMAIL/BIMS_EMAIL_PASSWORD and SMTP_USER/SMTP_PASSWORD
+  const email = process.env.BIMS_EMAIL || process.env.SMTP_USER;
+  const password = process.env.BIMS_EMAIL_PASSWORD || process.env.SMTP_PASSWORD;
+  const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const smtpPort = parseInt(process.env.SMTP_PORT || '465');
+  const smtpSecure = process.env.SMTP_SECURITY === 'SSL' ? true : (smtpPort === 465 ? true : false);
 
   if (!email || !password) {
     const error = new Error(
-      'Missing Gmail credentials. Please set BIMS_EMAIL and BIMS_EMAIL_PASSWORD environment variables.'
+      'Missing email credentials. Please configure SMTP settings in admin settings or set BIMS_EMAIL and BIMS_EMAIL_PASSWORD environment variables.'
     );
     console.error('[EmailService] ' + error.message);
     throw error;
@@ -146,9 +150,9 @@ function getGmailTransporter() {
 
   try {
     gmailTransporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 465,
-      secure: true, // true for port 465, false for other ports
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpSecure,
       auth: {
         user: email,
         pass: password, // Use App Password for Gmail accounts with 2FA enabled
@@ -169,7 +173,7 @@ function getGmailTransporter() {
       },
     });
 
-    console.log('[EmailService] Gmail SMTP transporter initialized successfully');
+    console.log('[EmailService] SMTP transporter initialized successfully', `(${smtpHost}:${smtpPort})`);
     return gmailTransporter;
   } catch (err) {
     console.error('[EmailService] Failed to initialize Gmail transporter:', err);
