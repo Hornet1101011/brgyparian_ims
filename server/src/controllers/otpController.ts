@@ -63,23 +63,10 @@ export async function forgotPassword(req: Request, res: Response) {
       <p>Thank you,<br>Barangay Information Management System</p>
     `;
 
-    // Send password reset email with timeout handling (fire and forget with better error logging)
-    const emailPromise = sendMail(user.email, 'Password Reset Request', html, undefined, 'password-reset')
-      .catch((emailErr) => {
-        console.error('[forgotPassword] Failed to send reset email to', user.email, ':', emailErr);
-        // Log email failure for debugging without blocking the response
-      });
-
-    // Set a timeout for email sending (don't wait longer than 10 seconds)
-    const emailTimeout = new Promise((resolve) => {
-      setTimeout(() => {
-        console.warn('[forgotPassword] Email sending timed out for', user.email, ', will continue in background');
-        resolve(null);
-      }, 10000);
+    // send email in background (don't await - fire and forget)
+    sendMail(user.email, 'Password Reset Request', html, undefined, 'password-reset').catch((emailErr) => {
+      console.error('[forgotPassword] Failed to send reset email:', emailErr);
     });
-
-    // Race: send email but don't wait if it takes too long
-    Promise.race([emailPromise, emailTimeout]).catch(() => {});
   }
 
   console.log('forgotPassword: reset token created for userId=', String((user as any)._id));
