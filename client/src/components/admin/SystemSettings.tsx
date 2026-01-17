@@ -14,6 +14,7 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  MenuItem,
 } from '@mui/material';
 import TestEmailModal from '../TestEmailModal';
 import { adminAPI, axiosInstance, API_URL } from '../../services/api';
@@ -598,9 +599,9 @@ const SystemSettings: React.FC = () => {
                   value={(settings as any).smtp?.securityType || 'tls'}
                   onChange={(e) => setSettings((prev) => ({ ...(prev as any), smtp: { ...(prev as any).smtp, securityType: e.target.value } }) as SystemSettingsData)}
                 >
-                  <option value="ssl">SSL (Port 465)</option>
-                  <option value="tls">TLS/STARTTLS (Port 587)</option>
-                  <option value="none">None (Port 25)</option>
+                  <MenuItem value="ssl">SSL (Port 465)</MenuItem>
+                  <MenuItem value="tls">TLS/STARTTLS (Port 587)</MenuItem>
+                  <MenuItem value="none">None (Port 25)</MenuItem>
                 </StyledTextField>
               </Box>
               <StyledTextField
