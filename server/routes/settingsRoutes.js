@@ -223,42 +223,49 @@ router.put('/', requireAuth, isAdmin, async (req, res) => {
 });
 
 // PATCH /api/settings (partial update) - Protected endpoint, requires authentication
+// PATCH /api/settings (partial update) - Protected endpoint, requires authentication
 router.patch('/', requireAuth, isAdmin, async (req, res) => {
   try {
     const payload = req.body || {};
     const errors = validateSettingsPayload(payload);
     if (errors.length) return res.status(400).json({ message: 'Validation error', errors });
 
-    // Set secure flag based on securityType
-    // ssl -> secure: true (port 465)
-    // tls -> secure: false (port 587, STARTTLS)
-    // none -> secure: false (port 25, plain)
-    if (payload.smtp && payload.smtp.securityType) {
-      if (payload.smtp.securityType === 'ssl') {
-        payload['smtp.secure'] = true;
-        console.log('[Settings] Set SMTP secure=true for SSL');
-      } else if (payload.smtp.securityType === 'tls' || payload.smtp.securityType === 'none') {
-        payload['smtp.secure'] = false;
-        console.log('[Settings] Set SMTP secure=false for', payload.smtp.securityType);
+    // Handle SMTP updates with proper nesting
+    const updatePayload = { ...payload };
+    
+    if (payload.smtp) {
+      // Set secure flag based on securityType
+      if (payload.smtp.securityType) {
+        console.log('[Settings] Processing SMTP with securityType:', payload.smtp.securityType);
+        if (payload.smtp.securityType === 'ssl') {
+          payload.smtp.secure = true;
+          console.log('[Settings] Set SMTP secure=true for SSL');
+        } else if (payload.smtp.securityType === 'tls' || payload.smtp.securityType === 'none') {
+          payload.smtp.secure = false;
+          console.log('[Settings] Set SMTP secure=false for', payload.smtp.securityType);
+        }
       }
-    }
 
-    // handle smtp.password plaintext: encrypt to encryptedPassword
-    if (payload.smtp && payload.smtp.password) {
-      if (!process.env.SETTINGS_ENCRYPTION_KEY) {
-        return res.status(500).json({ message: 'Encryption key not configured' });
+      // Handle password encryption
+      if (payload.smtp.password) {
+        if (!process.env.SETTINGS_ENCRYPTION_KEY) {
+          return res.status(500).json({ message: 'Encryption key not configured' });
+        }
+        try {
+          payload.smtp.encryptedPassword = encryptText(String(payload.smtp.password), process.env.SETTINGS_ENCRYPTION_KEY);
+          console.log('[Settings] SMTP password encrypted');
+        } catch (e) {
+          console.error('Failed to encrypt smtp password', e);
+          return res.status(500).json({ message: 'Failed to encrypt smtp password' });
+        }
+        delete payload.smtp.password;
       }
-      try {
-        payload['smtp.encryptedPassword'] = encryptText(String(payload.smtp.password), process.env.SETTINGS_ENCRYPTION_KEY);
-      } catch (e) {
-        console.error('Failed to encrypt smtp password', e);
-        return res.status(500).json({ message: 'Failed to encrypt smtp password' });
-      }
-      delete payload.smtp.password;
+      
+      updatePayload.smtp = payload.smtp;
     }
 
     const before = await SystemSetting.findOne().lean();
-    const updated = await SystemSetting.findOneAndUpdate({}, { $set: payload }, { new: true, upsert: true, setDefaultsOnInsert: true });
+    const updated = await SystemSetting.findOneAndUpdate({}, { $set: updatePayload }, { new: true, upsert: true, setDefaultsOnInsert: true });
     const diff = { before, after: updated.toObject ? updated.toObject() : updated };
     await recordAudit(req.user?._id, 'patch_settings', diff, req.ip || req.headers['x-forwarded-for']);
     

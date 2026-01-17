@@ -382,10 +382,13 @@ const SystemSettings: React.FC = () => {
   const saveEmailSettings = async () => {
     setSavingEmailSettings(true);
     try {
-      await axiosInstance.patch(`/settings/email`, emailSettings);
+      console.log('[SMTP Debug] Sending email settings:', JSON.stringify(emailSettings, null, 2));
+      const response = await axiosInstance.patch(`/settings/email`, emailSettings);
+      console.log('[SMTP Debug] Response from server:', JSON.stringify(response.data, null, 2));
       antdMessage.success('Email settings saved successfully');
     } catch (err: any) {
       console.error('Failed to save email settings', err);
+      console.error('[SMTP Debug] Error response:', err?.response?.data);
       if (err?.response?.status === 401) {
         antdMessage.error('You must be logged in as an admin to change email settings');
         return;
@@ -597,7 +600,17 @@ const SystemSettings: React.FC = () => {
                   select
                   label="Security Type"
                   value={(settings as any).smtp?.securityType || 'tls'}
-                  onChange={(e) => setSettings((prev) => ({ ...(prev as any), smtp: { ...(prev as any).smtp, securityType: e.target.value } }) as SystemSettingsData)}
+                  onChange={(e) => {
+                    console.log('[SMTP Debug] Security Type changed to:', e.target.value);
+                    setSettings((prev) => {
+                      const newSettings = { 
+                        ...(prev as any), 
+                        smtp: { ...(prev as any).smtp, securityType: e.target.value } 
+                      } as SystemSettingsData;
+                      console.log('[SMTP Debug] Updated settings:', JSON.stringify(newSettings, null, 2));
+                      return newSettings;
+                    });
+                  }}
                 >
                   <MenuItem value="ssl">SSL (Port 465)</MenuItem>
                   <MenuItem value="tls">TLS/STARTTLS (Port 587)</MenuItem>
