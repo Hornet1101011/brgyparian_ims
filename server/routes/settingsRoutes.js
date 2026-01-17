@@ -132,6 +132,20 @@ router.put('/', requireAuth, isAdmin, async (req, res) => {
     const errors = validateSettingsPayload(payload);
     if (errors.length) return res.status(400).json({ message: 'Validation error', errors });
 
+    // Auto-set secure flag based on port
+    // Port 465 = SSL (implicit TLS) -> secure: true
+    // Port 587 = STARTTLS (explicit TLS) -> secure: false
+    // Port 25 = Plain -> secure: false
+    if (payload.smtp && payload.smtp.port) {
+      if (payload.smtp.port === 465) {
+        payload.smtp.secure = true;
+        console.log('[Settings] Auto-set SMTP secure=true for port 465');
+      } else if (payload.smtp.port === 587 || payload.smtp.port === 25) {
+        payload.smtp.secure = false;
+        console.log('[Settings] Auto-set SMTP secure=false for port', payload.smtp.port);
+      }
+    }
+
     // handle smtp password plaintext
     if (payload.smtp && payload.smtp.password) {
       if (!process.env.SETTINGS_ENCRYPTION_KEY) {
@@ -214,6 +228,20 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
     const payload = req.body || {};
     const errors = validateSettingsPayload(payload);
     if (errors.length) return res.status(400).json({ message: 'Validation error', errors });
+
+    // Auto-set secure flag based on port
+    // Port 465 = SSL (implicit TLS) -> secure: true
+    // Port 587 = STARTTLS (explicit TLS) -> secure: false
+    // Port 25 = Plain -> secure: false
+    if (payload.smtp && payload.smtp.port) {
+      if (payload.smtp.port === 465) {
+        payload['smtp.secure'] = true;
+        console.log('[Settings] Auto-set SMTP secure=true for port 465');
+      } else if (payload.smtp.port === 587 || payload.smtp.port === 25) {
+        payload['smtp.secure'] = false;
+        console.log('[Settings] Auto-set SMTP secure=false for port', payload.smtp.port);
+      }
+    }
 
     // handle smtp.password plaintext: encrypt to encryptedPassword
     if (payload.smtp && payload.smtp.password) {
