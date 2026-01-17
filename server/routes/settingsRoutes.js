@@ -245,9 +245,25 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
     const errors = validateSettingsPayload(payload);
     if (errors.length) return res.status(400).json({ message: 'Validation error', errors });
 
-    // Handle SMTP updates with proper nesting
-    const updatePayload = { ...payload };
+    // Build update payload, separating email settings which don't need encryption
+    const updatePayload = {};
     
+    // Copy all simple fields (strings, booleans, numbers)
+    for (const [key, value] of Object.entries(payload)) {
+      if (key === 'smtp' || key === 'emailSettings') {
+        // Skip these for now, we'll handle them separately
+        continue;
+      }
+      updatePayload[key] = value;
+    }
+    
+    // Handle email settings (no encryption needed)
+    if (payload.emailSettings) {
+      updatePayload.emailSettings = payload.emailSettings;
+      console.log('[Settings] Email settings updated:', Object.keys(payload.emailSettings));
+    }
+    
+    // Handle SMTP updates with proper nesting
     if (payload.smtp) {
       // Set secure flag based on securityType
       if (payload.smtp.securityType) {
