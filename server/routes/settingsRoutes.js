@@ -293,30 +293,35 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
 
       // Handle password encryption (both password and appPassword)
       if (smtpData.password) {
-        if (!process.env.SETTINGS_ENCRYPTION_KEY) {
-          return res.status(500).json({ message: 'Encryption key not configured' });
-        }
-        try {
-          smtpData.encryptedPassword = encryptText(String(smtpData.password), process.env.SETTINGS_ENCRYPTION_KEY);
-          console.log('[Settings] SMTP password encrypted');
-        } catch (e) {
-          console.error('Failed to encrypt smtp password', e);
-          return res.status(500).json({ message: 'Failed to encrypt smtp password' });
+        if (process.env.SETTINGS_ENCRYPTION_KEY) {
+          try {
+            smtpData.encryptedPassword = encryptText(String(smtpData.password), process.env.SETTINGS_ENCRYPTION_KEY);
+            console.log('[Settings] SMTP password encrypted');
+          } catch (e) {
+            console.error('Failed to encrypt smtp password', e);
+            return res.status(500).json({ message: 'Failed to encrypt smtp password' });
+          }
+        } else {
+          // If encryption key is not available, save as plaintext (fallback)
+          console.warn('[Settings] SETTINGS_ENCRYPTION_KEY not configured, saving password unencrypted');
+          smtpData.encryptedPassword = smtpData.password;
         }
         delete smtpData.password;
       }
 
       // Handle app password encryption (Gmail with 2FA)
       if (smtpData.appPassword) {
-        if (!process.env.SETTINGS_ENCRYPTION_KEY) {
-          return res.status(500).json({ message: 'Encryption key not configured' });
-        }
-        try {
-          smtpData.appPassword = encryptText(String(smtpData.appPassword), process.env.SETTINGS_ENCRYPTION_KEY);
-          console.log('[Settings] SMTP app password encrypted');
-        } catch (e) {
-          console.error('Failed to encrypt smtp app password', e);
-          return res.status(500).json({ message: 'Failed to encrypt smtp app password' });
+        if (process.env.SETTINGS_ENCRYPTION_KEY) {
+          try {
+            smtpData.appPassword = encryptText(String(smtpData.appPassword), process.env.SETTINGS_ENCRYPTION_KEY);
+            console.log('[Settings] SMTP app password encrypted');
+          } catch (e) {
+            console.error('Failed to encrypt smtp app password', e);
+            return res.status(500).json({ message: 'Failed to encrypt smtp app password' });
+          }
+        } else {
+          // If encryption key is not available, save unencrypted (fallback)
+          console.warn('[Settings] SETTINGS_ENCRYPTION_KEY not configured, saving app password unencrypted');
         }
       }
       
