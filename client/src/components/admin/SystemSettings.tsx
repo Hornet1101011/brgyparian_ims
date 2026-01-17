@@ -362,7 +362,7 @@ const SystemSettings: React.FC = () => {
   const fetchEmailSettings = async () => {
     setEmailSettingsLoading(true);
     try {
-      const response = await axios.get(`${API_URL}/api/settings/email`, { 
+      const response = await axios.get(`${API_URL}/settings/email`, { 
         withCredentials: true 
       });
       if (response?.data) {
@@ -380,7 +380,7 @@ const SystemSettings: React.FC = () => {
   const saveEmailSettings = async () => {
     setSavingEmailSettings(true);
     try {
-      await axios.patch(`${API_URL}/api/settings/email`, emailSettings, { 
+      await axios.patch(`${API_URL}/settings/email`, emailSettings, { 
         withCredentials: true 
       });
       antdMessage.success('Email settings saved successfully');
