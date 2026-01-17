@@ -127,11 +127,21 @@ async function getConfiguredTransporter(): Promise<Transporter> {
         const { decryptText } = require('../utils/cryptoHelper');
         const decryptedPassword = decryptText(settings.smtp.encryptedPassword, encryptionKey);
 
+        const smtpPort = settings.smtp.port || 587;
+        
+        // Determine secure based on port if not explicitly set:
+        // Port 465 = Implicit TLS (secure: true)
+        // Port 587 = STARTTLS (secure: false)
+        // Otherwise use stored value or default to port-based logic
+        let isSecure = settings.smtp.secure !== undefined ? settings.smtp.secure : (smtpPort === 465);
+
         console.log('[EmailService] Using custom SMTP settings from database');
+        console.log('[EmailService] SMTP Config: host=', settings.smtp.host, 'port=', smtpPort, 'secure=', isSecure, 'user=', settings.smtp.user);
+        
         return nodemailer.createTransport({
           host: settings.smtp.host,
-          port: settings.smtp.port || 587,
-          secure: settings.smtp.secure !== false, // Default to true for security
+          port: smtpPort,
+          secure: isSecure, // Port 465 = true, Port 587 = false
           auth: {
             user: settings.smtp.user,
             pass: decryptedPassword,

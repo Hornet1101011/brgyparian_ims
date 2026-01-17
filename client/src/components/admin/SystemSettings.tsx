@@ -592,6 +592,15 @@ const SystemSettings: React.FC = () => {
                   value={(settings as any).smtp?.port || ''}
                   onChange={(e) => setSettings((prev) => ({ ...(prev as any), smtp: { ...(prev as any).smtp, port: parseInt(e.target.value || '0') } }) as SystemSettingsData)}
                 />
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={(settings as any).smtp?.secure ?? ((settings as any).smtp?.port === 465)}
+                      onChange={(e) => setSettings((prev) => ({ ...(prev as any), smtp: { ...(prev as any).smtp, secure: e.target.checked } }) as SystemSettingsData)}
+                    />
+                  }
+                  label="Use TLS/SSL (Port 465 = true, 587 = false)"
+                />
               </Box>
               <StyledTextField
                 label="SMTP User"
