@@ -108,6 +108,56 @@ function getGmailTransporter(): Transporter {
 }
 
 /**
+ * Get a transporter configured from database SMTP settings (preferred)
+ * Falls back to hardcoded Gmail credentials if database settings are empty
+ */
+async function getConfiguredTransporter(): Promise<Transporter> {
+  try {
+    // Try to load SMTP settings from database first
+    const settings = await SystemSetting.findOne().lean();
+    if (settings?.smtp?.host && settings?.smtp?.user && settings?.smtp?.encryptedPassword) {
+      // Decrypt the password
+      const encryptionKey = process.env.SETTINGS_ENCRYPTION_KEY;
+      if (!encryptionKey) {
+        console.warn('[EmailService] SETTINGS_ENCRYPTION_KEY not set, cannot decrypt SMTP password');
+        return getGmailTransporter();
+      }
+
+      try {
+        const { decryptText } = require('../utils/cryptoHelper');
+        const decryptedPassword = decryptText(settings.smtp.encryptedPassword, encryptionKey);
+
+        console.log('[EmailService] Using custom SMTP settings from database');
+        return nodemailer.createTransport({
+          host: settings.smtp.host,
+          port: settings.smtp.port || 587,
+          secure: settings.smtp.secure !== false, // Default to true for security
+          auth: {
+            user: settings.smtp.user,
+            pass: decryptedPassword,
+          },
+          // Connection timeout settings
+          connectionTimeout: 10000, // 10 seconds to establish connection
+          socketTimeout: 10000, // 10 seconds for socket operations
+          // Allow self-signed certificates for testing
+          tls: {
+            rejectUnauthorized: false,
+          },
+        });
+      } catch (decryptErr) {
+        console.error('[EmailService] Failed to decrypt SMTP password:', decryptErr);
+        return getGmailTransporter();
+      }
+    }
+  } catch (err) {
+    console.warn('[EmailService] Failed to load SMTP settings from database, falling back to Gmail:', err);
+  }
+
+  // Fallback to hardcoded Gmail credentials
+  return getGmailTransporter();
+}
+
+/**
  * Export the reusable Gmail transporter
  * Can be imported and used directly: import { emailTransporter } from './EmailService'
  */
@@ -174,11 +224,16 @@ export async function sendMail(to: string, subject: string, html: string, bcc?: 
       return { messageId: 'skipped', response: 'Email sending disabled for this type' };
     }
     
-    const transporter = getGmailTransporter();
-    const email = process.env.BIMS_EMAIL;
+    // Use configured transporter (database SMTP settings with fallback to Gmail)
+    const transporter = await getConfiguredTransporter();
+    const settings = await SystemSetting.findOne().lean();
+    
+    // Use configured SMTP user, or fallback to BIMS_EMAIL
+    let fromEmail = settings?.smtp?.user || process.env.BIMS_EMAIL;
+    let fromName = settings?.smtp?.fromName || 'Barangay Information System';
 
     const mailOptions: any = {
-      from: email,
+      from: `${fromName} <${fromEmail}>`,
       to,
       subject,
       html,
