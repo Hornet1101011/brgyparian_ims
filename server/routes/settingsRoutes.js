@@ -242,6 +242,18 @@ router.put('/', requireAuth, isAdmin, async (req, res) => {
 router.patch('/', requireAuth, isAdmin, async (req, res) => {
   try {
     const payload = req.body || {};
+    console.log('[Settings PATCH] Received payload keys:', Object.keys(payload));
+    if (payload.smtp) {
+      console.log('[Settings PATCH] SMTP data received:', { 
+        host: payload.smtp.host, 
+        port: payload.smtp.port, 
+        user: payload.smtp.user,
+        hasPassword: !!payload.smtp.password,
+        hasAppPassword: !!payload.smtp.appPassword,
+        securityType: payload.smtp.securityType
+      });
+    }
+    
     const errors = validateSettingsPayload(payload);
     if (errors.length) return res.status(400).json({ message: 'Validation error', errors });
 
@@ -265,40 +277,42 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
     
     // Handle SMTP updates with proper nesting
     if (payload.smtp) {
+      const smtpData = { ...payload.smtp };
+      
       // Set secure flag based on securityType
-      if (payload.smtp.securityType) {
-        console.log('[Settings] Processing SMTP with securityType:', payload.smtp.securityType);
-        if (payload.smtp.securityType === 'ssl') {
-          payload.smtp.secure = true;
+      if (smtpData.securityType) {
+        console.log('[Settings] Processing SMTP with securityType:', smtpData.securityType);
+        if (smtpData.securityType === 'ssl') {
+          smtpData.secure = true;
           console.log('[Settings] Set SMTP secure=true for SSL');
-        } else if (payload.smtp.securityType === 'tls' || payload.smtp.securityType === 'none') {
-          payload.smtp.secure = false;
-          console.log('[Settings] Set SMTP secure=false for', payload.smtp.securityType);
+        } else if (smtpData.securityType === 'tls' || smtpData.securityType === 'none') {
+          smtpData.secure = false;
+          console.log('[Settings] Set SMTP secure=false for', smtpData.securityType);
         }
       }
 
       // Handle password encryption (both password and appPassword)
-      if (payload.smtp.password) {
+      if (smtpData.password) {
         if (!process.env.SETTINGS_ENCRYPTION_KEY) {
           return res.status(500).json({ message: 'Encryption key not configured' });
         }
         try {
-          payload.smtp.encryptedPassword = encryptText(String(payload.smtp.password), process.env.SETTINGS_ENCRYPTION_KEY);
+          smtpData.encryptedPassword = encryptText(String(smtpData.password), process.env.SETTINGS_ENCRYPTION_KEY);
           console.log('[Settings] SMTP password encrypted');
         } catch (e) {
           console.error('Failed to encrypt smtp password', e);
           return res.status(500).json({ message: 'Failed to encrypt smtp password' });
         }
-        delete payload.smtp.password;
+        delete smtpData.password;
       }
 
       // Handle app password encryption (Gmail with 2FA)
-      if (payload.smtp.appPassword) {
+      if (smtpData.appPassword) {
         if (!process.env.SETTINGS_ENCRYPTION_KEY) {
           return res.status(500).json({ message: 'Encryption key not configured' });
         }
         try {
-          payload.smtp.appPassword = encryptText(String(payload.smtp.appPassword), process.env.SETTINGS_ENCRYPTION_KEY);
+          smtpData.appPassword = encryptText(String(smtpData.appPassword), process.env.SETTINGS_ENCRYPTION_KEY);
           console.log('[Settings] SMTP app password encrypted');
         } catch (e) {
           console.error('Failed to encrypt smtp app password', e);
@@ -306,7 +320,15 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
         }
       }
       
-      updatePayload.smtp = payload.smtp;
+      updatePayload.smtp = smtpData;
+      console.log('[Settings] SMTP data prepared for update:', { 
+        host: smtpData.host, 
+        port: smtpData.port, 
+        user: smtpData.user,
+        hasPassword: !!smtpData.encryptedPassword,
+        hasAppPassword: !!smtpData.appPassword,
+        secure: smtpData.secure
+      });
     }
 
     const before = await SystemSetting.findOne().lean();
