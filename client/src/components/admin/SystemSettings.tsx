@@ -592,6 +592,16 @@ const SystemSettings: React.FC = () => {
                   value={(settings as any).smtp?.port || ''}
                   onChange={(e) => setSettings((prev) => ({ ...(prev as any), smtp: { ...(prev as any).smtp, port: parseInt(e.target.value || '0') } }) as SystemSettingsData)}
                 />
+                <StyledTextField
+                  select
+                  label="Security Type"
+                  value={(settings as any).smtp?.securityType || 'tls'}
+                  onChange={(e) => setSettings((prev) => ({ ...(prev as any), smtp: { ...(prev as any).smtp, securityType: e.target.value } }) as SystemSettingsData)}
+                >
+                  <option value="ssl">SSL (Port 465)</option>
+                  <option value="tls">TLS/STARTTLS (Port 587)</option>
+                  <option value="none">None (Port 25)</option>
+                </StyledTextField>
               </Box>
               <StyledTextField
                 label="SMTP User"

@@ -132,17 +132,17 @@ router.put('/', requireAuth, isAdmin, async (req, res) => {
     const errors = validateSettingsPayload(payload);
     if (errors.length) return res.status(400).json({ message: 'Validation error', errors });
 
-    // Auto-set secure flag based on port
-    // Port 465 = SSL (implicit TLS) -> secure: true
-    // Port 587 = STARTTLS (explicit TLS) -> secure: false
-    // Port 25 = Plain -> secure: false
-    if (payload.smtp && payload.smtp.port) {
-      if (payload.smtp.port === 465) {
+    // Set secure flag based on securityType
+    // ssl -> secure: true (port 465)
+    // tls -> secure: false (port 587, STARTTLS)
+    // none -> secure: false (port 25, plain)
+    if (payload.smtp && payload.smtp.securityType) {
+      if (payload.smtp.securityType === 'ssl') {
         payload.smtp.secure = true;
-        console.log('[Settings] Auto-set SMTP secure=true for port 465');
-      } else if (payload.smtp.port === 587 || payload.smtp.port === 25) {
+        console.log('[Settings] Set SMTP secure=true for SSL');
+      } else if (payload.smtp.securityType === 'tls' || payload.smtp.securityType === 'none') {
         payload.smtp.secure = false;
-        console.log('[Settings] Auto-set SMTP secure=false for port', payload.smtp.port);
+        console.log('[Settings] Set SMTP secure=false for', payload.smtp.securityType);
       }
     }
 
@@ -229,17 +229,17 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
     const errors = validateSettingsPayload(payload);
     if (errors.length) return res.status(400).json({ message: 'Validation error', errors });
 
-    // Auto-set secure flag based on port
-    // Port 465 = SSL (implicit TLS) -> secure: true
-    // Port 587 = STARTTLS (explicit TLS) -> secure: false
-    // Port 25 = Plain -> secure: false
-    if (payload.smtp && payload.smtp.port) {
-      if (payload.smtp.port === 465) {
+    // Set secure flag based on securityType
+    // ssl -> secure: true (port 465)
+    // tls -> secure: false (port 587, STARTTLS)
+    // none -> secure: false (port 25, plain)
+    if (payload.smtp && payload.smtp.securityType) {
+      if (payload.smtp.securityType === 'ssl') {
         payload['smtp.secure'] = true;
-        console.log('[Settings] Auto-set SMTP secure=true for port 465');
-      } else if (payload.smtp.port === 587 || payload.smtp.port === 25) {
+        console.log('[Settings] Set SMTP secure=true for SSL');
+      } else if (payload.smtp.securityType === 'tls' || payload.smtp.securityType === 'none') {
         payload['smtp.secure'] = false;
-        console.log('[Settings] Auto-set SMTP secure=false for port', payload.smtp.port);
+        console.log('[Settings] Set SMTP secure=false for', payload.smtp.securityType);
       }
     }
 

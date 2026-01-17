@@ -4,6 +4,7 @@ export interface ISmtp {
   host?: string;
   port?: number;
   secure?: boolean;
+  securityType?: string; // 'ssl' (port 465), 'tls' (port 587), 'none' (port 25)
   user?: string;
   encryptedPassword?: string;
   fromName?: string;
@@ -46,6 +47,7 @@ const smtpSchema = new Schema<ISmtp>({
   host: { type: String },
   port: { type: Number },
   secure: { type: Boolean },
+  securityType: { type: String, enum: ['ssl', 'tls', 'none'], default: 'tls' },
   user: { type: String },
   encryptedPassword: { type: String },
   fromName: { type: String },
