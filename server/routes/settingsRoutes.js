@@ -430,6 +430,9 @@ router.post('/test-smtp', requireAuth, isAdmin, async (req, res) => {
       host: smtp.host,
       port: smtp.port || 587,
       secure: !!smtp.secure,
+      // Reduce timeouts for test-smtp endpoint to provide faster feedback
+      connectionTimeout: 10000, // 10 seconds (reduced from default 30s)
+      socketTimeout: 10000,    // 10 seconds
     };
     // only set auth when both user and password are available
     if (smtp.user && smtpPassword) {
