@@ -563,7 +563,11 @@ try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const settingsRoutes = requireRoute('settingsRoutes');
   const requireAuth = require('../middleware/requireAuth');
-  if (settingsRoutes) app.use('/api/admin/settings', requireAuth, settingsRoutes);
+  // Mount at both /api/settings (with auth handled by individual routes) and /api/admin/settings (with explicit requireAuth)
+  if (settingsRoutes) {
+    app.use('/api/settings', settingsRoutes);
+    app.use('/api/admin/settings', requireAuth, settingsRoutes);
+  }
   // Mount officials routes (created as CommonJS in server/routes/officials.js)
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
