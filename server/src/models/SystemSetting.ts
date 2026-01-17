@@ -7,6 +7,7 @@ export interface ISmtp {
   securityType?: string; // 'ssl' (port 465), 'tls' (port 587), 'none' (port 25)
   user?: string;
   encryptedPassword?: string;
+  appPassword?: string; // App-specific password for Gmail with 2FA
   fromName?: string;
 }
 
@@ -50,6 +51,7 @@ const smtpSchema = new Schema<ISmtp>({
   securityType: { type: String, enum: ['ssl', 'tls', 'none'], default: 'tls' },
   user: { type: String },
   encryptedPassword: { type: String },
+  appPassword: { type: String }, // Encrypted app password for Gmail
   fromName: { type: String },
 });
 

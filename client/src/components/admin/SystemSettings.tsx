@@ -618,6 +618,15 @@ const SystemSettings: React.FC = () => {
                 </StyledTextField>
               </Box>
               <StyledTextField
+                label="App Password"
+                type="password"
+                value={(settings as any).smtp?.appPassword || ''}
+                onChange={(e) => setSettings((prev) => ({ ...(prev as any), smtp: { ...(prev as any).smtp, appPassword: e.target.value } }) as SystemSettingsData)}
+                fullWidth
+                placeholder="Enter Gmail App Password (for accounts with 2FA enabled)"
+                helperText="For Gmail accounts with 2-factor authentication, use an App Password instead of your main password"
+              />
+              <StyledTextField
                 label="SMTP User"
                 value={(settings as any).smtp?.user || ''}
                 onChange={(e) => setSettings((prev) => ({ ...(prev as any), smtp: { ...(prev as any).smtp, user: e.target.value } }) as SystemSettingsData)}
@@ -627,8 +636,8 @@ const SystemSettings: React.FC = () => {
                 <Button variant="contained" size="small" onClick={() => setTestModalOpen(true)} sx={{ textTransform: 'none', fontWeight: 500 }}>
                   Send Test Email
                 </Button>
-                <Button variant="outlined" size="small" onClick={() => setSettings((prev) => ({ ...(prev as any), smtp: { ...(prev as any).smtp, password: '' } }) as SystemSettingsData)} sx={{ textTransform: 'none' }}>
-                  Clear Password
+                <Button variant="outlined" size="small" onClick={() => setSettings((prev) => ({ ...(prev as any), smtp: { ...(prev as any).smtp, password: '', appPassword: '' } }) as SystemSettingsData)} sx={{ textTransform: 'none' }}>
+                  Clear Passwords
                 </Button>
               </Box>
             </Box>
