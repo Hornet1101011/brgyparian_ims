@@ -90,27 +90,26 @@ async function getConfiguredTransporter(): Promise<Transporter> {
     if (settings?.smtp?.host && settings.smtp.port && settings.smtp.user) {
       const decryptedPassword = settings.smtp.appPassword || settings.smtp.encryptedPassword;
       
-      if (!decryptedPassword) {
-        console.warn('[EmailService] SMTP settings found but no password configured');
-        throw new Error('SMTP password not configured in database settings');
+      if (decryptedPassword) {
+        console.log(`[EmailService] Creating transporter from database settings (${settings.smtp.host}:${settings.smtp.port})`);
+
+        gmailTransporter = nodemailer.createTransport({
+          host: settings.smtp.host,
+          port: settings.smtp.port,
+          secure: settings.smtp.secure === true, // Use SSL/TLS if secure is true
+          auth: {
+            user: settings.smtp.user,
+            pass: decryptedPassword,
+          },
+          tls: {
+            rejectUnauthorized: false,
+          },
+        });
+
+        return gmailTransporter;
+      } else {
+        console.warn('[EmailService] SMTP settings found in database but no password configured, falling back to environment variables');
       }
-
-      console.log(`[EmailService] Creating transporter from database settings (${settings.smtp.host}:${settings.smtp.port})`);
-
-      gmailTransporter = nodemailer.createTransport({
-        host: settings.smtp.host,
-        port: settings.smtp.port,
-        secure: settings.smtp.secure === true, // Use SSL/TLS if secure is true
-        auth: {
-          user: settings.smtp.user,
-          pass: decryptedPassword,
-        },
-        tls: {
-          rejectUnauthorized: false,
-        },
-      });
-
-      return gmailTransporter;
     }
   } catch (err) {
     console.warn('[EmailService] Failed to load settings from database, falling back to environment variables:', 
@@ -118,8 +117,9 @@ async function getConfiguredTransporter(): Promise<Transporter> {
   }
 
   // Fallback to environment variables (legacy behavior)
-  const email = process.env.BIMS_EMAIL;
-  const password = process.env.BIMS_EMAIL_PASSWORD;
+  // Support both BIMS_EMAIL/BIMS_EMAIL_PASSWORD and SMTP_USER/SMTP_PASSWORD
+  const email = process.env.BIMS_EMAIL || process.env.SMTP_USER;
+  const password = process.env.BIMS_EMAIL_PASSWORD || process.env.SMTP_PASSWORD;
 
   if (!email || !password) {
     throw new Error(
@@ -127,18 +127,41 @@ async function getConfiguredTransporter(): Promise<Transporter> {
     );
   }
 
-  console.log('[EmailService] Creating transporter from environment variables (Gmail service)');
+  // If using SMTP_* variables, create a custom transport; otherwise use Gmail service
+  const smtpHost = process.env.SMTP_HOST;
+  if (smtpHost) {
+    const smtpPort = parseInt(process.env.SMTP_PORT || '465');
+    const smtpSecure = process.env.SMTP_SECURITY === 'SSL' ? true : (smtpPort === 465 ? true : false);
+    
+    console.log(`[EmailService] Creating transporter from SMTP environment variables (${smtpHost}:${smtpPort})`);
 
-  gmailTransporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: email,
-      pass: password, // Use App Password for Gmail accounts with 2FA enabled
-    },
-    tls: {
-      rejectUnauthorized: false,
-    },
-  });
+    gmailTransporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpSecure,
+      auth: {
+        user: email,
+        pass: password,
+      },
+      tls: {
+        rejectUnauthorized: false,
+      },
+    });
+  } else {
+    // Default to Gmail service (legacy)
+    console.log('[EmailService] Creating transporter from environment variables (Gmail service)');
+
+    gmailTransporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: email,
+        pass: password, // Use App Password for Gmail accounts with 2FA enabled
+      },
+      tls: {
+        rejectUnauthorized: false,
+      },
+    });
+  }
 
   return gmailTransporter;
 }
