@@ -263,17 +263,33 @@ const SystemSettings: React.FC = () => {
       setError(null);
       // Normalize numeric fields and map client keys to server-side field names
       const payload: any = {
-        ...settings,
+        siteName: settings.siteName,
+        barangayName: settings.barangayName,
+        barangayAddress: settings.barangayAddress,
+        contactEmail: settings.contactEmail,
+        contactPhone: settings.contactPhone,
+        systemNotice: settings.systemNotice,
         // compatibility: server uses 'maintenanceMode' while client uses 'maintainanceMode' (typo)
         maintenanceMode: (settings as any).maintainanceMode,
         // server expects allowRegistrations and maxDocumentRequestsPerUser
         allowRegistrations: (settings as any).allowNewRegistrations,
         maxDocumentRequestsPerUser: Number((settings as any).maxDocumentRequests) || 1,
         documentProcessingDays: Number(settings.documentProcessingDays) || 1,
+        enableVerifications: (settings as any).enableVerifications,
         ...(typeof (settings as any).maxAccountsPerIP !== 'undefined'
           ? { maxAccountsPerIP: Number((settings as any).maxAccountsPerIP) || 1 }
           : {}),
-      } as SystemSettingsData;
+      };
+
+      // Include SMTP settings if present
+      if (settings.smtp) {
+        payload.smtp = settings.smtp;
+      }
+
+      // Include emailSettings if present
+      if ((settings as any).emailSettings) {
+        payload.emailSettings = (settings as any).emailSettings;
+      }
 
       await adminAPI.updateSystemSettings(payload);
       // optimistic: update original copy and clear dirty flag
