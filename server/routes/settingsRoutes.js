@@ -3,10 +3,10 @@ const router = express.Router();
 const requireAuth = require('../middleware/requireAuth');
 const isAdmin = require('../middleware/isAdmin');
 const { encryptText, decryptText } = require('../utils/cryptoHelper');
+const smtpHelper = require('../utils/smtpHelper');
 const SystemSetting = require('../models/SystemSetting');
 const PublicView = require('../models/PublicView');
 const AuditLog = require('../models/AuditLog');
-const nodemailer = require('nodemailer');
 const { createRateLimiter } = require('../middleware/rateLimiter');
 const VerificationRequest = require('../models/VerificationRequest');
 const mongoose = require('mongoose');
@@ -31,9 +31,7 @@ router.use((req, res, next) => {
 function sanitizeForClient(setting) {
   const s = setting.toObject ? setting.toObject() : { ...setting };
   if (s.smtp) {
-    s.smtp = { ...s.smtp };
-    s.smtp.passwordSet = !!s.smtp.encryptedPassword;
-    delete s.smtp.encryptedPassword;
+    s.smtp = smtpHelper.sanitizeSMTPConfig(s.smtp);
   }
   return s;
 }
@@ -59,15 +57,7 @@ router.get('/smtp-debug', requireAuth, isAdmin, async (req, res) => {
   try {
     const settings = await SystemSetting.findOne().lean();
     if (!settings || !settings.smtp) return res.json({ smtp: null });
-    const smtp = settings.smtp || {};
-    return res.json({
-      host: smtp.host || null,
-      port: smtp.port || null,
-      secure: !!smtp.secure,
-      user: smtp.user || null,
-      passwordSet: !!smtp.encryptedPassword || !!smtp.password,
-      hasEncryptedPassword: !!smtp.encryptedPassword
-    });
+    return res.json({ smtp: smtpHelper.sanitizeSMTPConfig(settings.smtp) });
   } catch (err) {
     console.error('GET /api/admin/settings/smtp-debug error', err);
     return res.status(500).json({ message: 'Failed to read SMTP debug info' });
@@ -279,59 +269,39 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
     if (payload.smtp) {
       const smtpData = { ...payload.smtp };
       
+      // Validate SMTP configuration
+      const smtpErrors = smtpHelper.validateSMTPConfig(smtpData);
+      if (smtpErrors.length > 0) {
+        return res.status(400).json({ message: 'SMTP validation error', errors: smtpErrors });
+      }
+
       // Set secure flag based on securityType
       if (smtpData.securityType) {
         console.log('[Settings] Processing SMTP with securityType:', smtpData.securityType);
-        if (smtpData.securityType === 'ssl') {
-          smtpData.secure = true;
-          console.log('[Settings] Set SMTP secure=true for SSL');
-        } else if (smtpData.securityType === 'tls' || smtpData.securityType === 'none') {
-          smtpData.secure = false;
-          console.log('[Settings] Set SMTP secure=false for', smtpData.securityType);
-        }
+        smtpData.secure = smtpData.securityType === 'ssl';
       }
 
-      // Handle password encryption (both password and appPassword)
+      // Handle password encryption
       if (smtpData.password) {
-        if (process.env.SETTINGS_ENCRYPTION_KEY) {
-          try {
-            smtpData.encryptedPassword = encryptText(String(smtpData.password), process.env.SETTINGS_ENCRYPTION_KEY);
-            console.log('[Settings] SMTP password encrypted');
-          } catch (e) {
-            console.error('Failed to encrypt smtp password', e);
-            return res.status(500).json({ message: 'Failed to encrypt smtp password' });
-          }
-        } else {
-          // If encryption key is not available, save as plaintext (fallback)
-          console.warn('[Settings] SETTINGS_ENCRYPTION_KEY not configured, saving password unencrypted');
-          smtpData.encryptedPassword = smtpData.password;
+        try {
+          smtpData.encryptedPassword = smtpHelper.encryptSMTPPassword(smtpData.password);
+          console.log('[Settings] SMTP password encrypted');
+        } catch (e) {
+          console.error('Failed to encrypt SMTP password', e.message);
+          return res.status(500).json({ message: e.message });
         }
         delete smtpData.password;
       }
 
-      // Handle app password encryption (Gmail with 2FA)
-      if (smtpData.appPassword) {
-        if (process.env.SETTINGS_ENCRYPTION_KEY) {
-          try {
-            smtpData.appPassword = encryptText(String(smtpData.appPassword), process.env.SETTINGS_ENCRYPTION_KEY);
-            console.log('[Settings] SMTP app password encrypted');
-          } catch (e) {
-            console.error('Failed to encrypt smtp app password', e);
-            return res.status(500).json({ message: 'Failed to encrypt smtp app password' });
-          }
-        } else {
-          // If encryption key is not available, save unencrypted (fallback)
-          console.warn('[Settings] SETTINGS_ENCRYPTION_KEY not configured, saving app password unencrypted');
-        }
-      }
+      // Remove securityType (it's converted to secure flag)
+      delete smtpData.securityType;
       
       updatePayload.smtp = smtpData;
-      console.log('[Settings] SMTP data prepared for update:', { 
-        host: smtpData.host, 
-        port: smtpData.port, 
+      console.log('[Settings] SMTP data prepared for update:', {
+        host: smtpData.host,
+        port: smtpData.port,
         user: smtpData.user,
         hasPassword: !!smtpData.encryptedPassword,
-        hasAppPassword: !!smtpData.appPassword,
         secure: smtpData.secure
       });
     }
@@ -392,77 +362,42 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
   }
 });
 
-// POST /api/settings/test-smtp - Protected endpoint, requires authentication and admin
-// Protect test-smtp endpoint with rate limiter: 5 requests per hour per IP
-// Allow a higher limit for SMTP tests to avoid quick lockouts during debugging
-// This endpoint is admin-only; do not apply the per-IP rate limiter to admins so admins can freely debug SMTP settings.
+// POST /api/settings/test-smtp - Send test email to verify SMTP configuration
+// Protected: requires authentication and admin privileges
 router.post('/test-smtp', requireAuth, isAdmin, async (req, res) => {
   try {
-    const to = req.body?.to;
+    const { to } = req.body || {};
     const settings = await SystemSetting.findOne().lean();
-    if (!settings || !settings.smtp || !settings.smtp.host) return res.status(400).json({ message: 'SMTP not configured' });
 
-    const smtp = settings.smtp;
-    let smtpPassword = null;
-    // Prefer encryptedPassword, but allow legacy plaintext smtp.password if present (helpful during config/debug)
-    if (smtp.encryptedPassword) {
-      if (!process.env.SETTINGS_ENCRYPTION_KEY) {
-        console.error('SMTP test: SETTINGS_ENCRYPTION_KEY missing but encryptedPassword exists');
-        return res.status(500).json({ message: 'Encryption key not configured for SMTP password' });
-      }
-      try {
-        smtpPassword = decryptText(smtp.encryptedPassword, process.env.SETTINGS_ENCRYPTION_KEY);
-      } catch (e) {
-        console.error('Failed to decrypt smtp password', e);
-        return res.status(500).json({ message: 'Failed to decrypt smtp password' });
-      }
-    } else if (smtp.password) {
-      // fallback: developer/admin may have saved plaintext password in DB during manual edits
-      smtpPassword = smtp.password;
+    if (!settings || !settings.smtp || !settings.smtp.host) {
+      return res.status(400).json({ success: false, message: 'SMTP not configured' });
     }
 
-    // show sanitized smtp config in server logs for debugging
-    try {
-      console.log('SMTP test config:', { host: smtp.host, port: smtp.port || 587, secure: !!smtp.secure, user: smtp.user ? smtp.user : null });
-    } catch (e) {}
-
-    const transportOptions = {
-      host: smtp.host,
-      port: smtp.port || 587,
-      secure: !!smtp.secure,
-      // Reduce timeouts for test-smtp endpoint to provide faster feedback
-      connectionTimeout: 6000, // 10 seconds (reduced from default 30s)
-      socketTimeout: 60000,    // 10 seconds
-    };
-    // only set auth when both user and password are available
-    if (smtp.user && smtpPassword) {
-      transportOptions.auth = { user: smtp.user, pass: smtpPassword };
+    // Default recipient: provided email > site contact email > admin email
+    const recipient = to || settings.contactEmail || (req.user?.email) || null;
+    if (!recipient) {
+      return res.status(400).json({ success: false, message: 'No recipient email provided' });
     }
-    // allow optional tls settings in smtp config (useful for self-signed servers)
-    if (smtp.tls && typeof smtp.tls === 'object') transportOptions.tls = smtp.tls;
-    // enable debug/logging if DEBUG_SMTP env var is truthy
-    if (process.env.DEBUG_SMTP) {
-      transportOptions.logger = true;
-      transportOptions.debug = true;
-    }
-
-    const transporter = nodemailer.createTransport(transportOptions);
-
-    const sendTo = to || settings.contactEmail || (req.user && req.user.email) || 'no-reply@example.com';
-    const html = `<p>Test Email from Barangay System</p><p>Time: ${new Date().toISOString()}</p><p>Site: ${settings.siteName || ''}</p>`;
 
     try {
-      await transporter.sendMail({ from: `${smtp.fromName || settings.siteName || 'Barangay'} <${settings.contactEmail || smtp.user || 'no-reply@example.com'}>`, to: sendTo, subject: 'Test Email from Barangay System', html });
-      return res.json({ success: true, message: 'SMTP test sent' });
+      const result = await smtpHelper.sendTestEmail(settings.smtp, {
+        to: recipient,
+        siteInfo: {
+          siteName: settings.siteName,
+          contactEmail: settings.contactEmail
+        }
+      });
+
+      console.log('[SMTP Test] Success - sent to:', recipient);
+      return res.json(result);
     } catch (err) {
-      // Log full error on server for debugging (sanitized in response)
-      console.error('SMTP test failed', err && err.message ? err.message : err);
-      const serverMsg = err && err.message ? String(err.message).slice(0, 300) : 'SMTP test failed';
-      return res.status(500).json({ success: false, message: serverMsg });
+      const message = err.message || 'Failed to send test email';
+      console.error('[SMTP Test] Failed:', message);
+      return res.status(500).json({ success: false, message });
     }
   } catch (err) {
-    console.error('POST /api/settings/test-smtp error', err);
-    return res.status(500).json({ message: 'Failed to run SMTP test' });
+    console.error('POST /api/settings/test-smtp error:', err.message);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
   }
 });
 
