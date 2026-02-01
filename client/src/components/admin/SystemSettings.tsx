@@ -413,8 +413,12 @@ const SystemSettings: FC = () => {
   const saveEmailSettings = async () => {
     setSavingEmailSettings(true);
     try {
-      console.log('[SMTP Debug] Sending email settings:', JSON.stringify(emailSettings, null, 2));
-      const response = await axiosInstance.patch(`/settings/email`, emailSettings);
+      // Defensive: Remove _id before sending
+      const cleanEmailSettings = { ...emailSettings };
+      delete (cleanEmailSettings as any)._id;
+      
+      console.log('[SMTP Debug] Sending email settings:', JSON.stringify(cleanEmailSettings, null, 2));
+      const response = await axiosInstance.patch(`/settings/email`, cleanEmailSettings);
       console.log('[SMTP Debug] Response from server:', JSON.stringify(response.data, null, 2));
       antdMessage.success('Email settings saved successfully');
     } catch (err: any) {

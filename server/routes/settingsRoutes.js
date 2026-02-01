@@ -681,7 +681,10 @@ router.get('/email', requireAuth, isAdmin, async (req, res) => {
 // PATCH /api/settings/email - Update email settings (admin only)
 router.patch('/email', requireAuth, isAdmin, async (req, res) => {
   try {
-    const payload = req.body || {};
+    let payload = req.body || {};
+    
+    // Defensive: Remove _id from payload as MongoDB doesn't allow updating it
+    if (payload._id) delete payload._id;
     
     // Validate numeric fields
     if (payload.recipientEmailsPerBatch != null && !(Number(payload.recipientEmailsPerBatch) > 0)) {
