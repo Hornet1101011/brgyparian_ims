@@ -294,7 +294,10 @@ const SystemSettings: FC = () => {
 
       // Include emailSettings if present
       if ((settings as any).emailSettings) {
-        payload.emailSettings = (settings as any).emailSettings;
+        // Clone and remove _id since MongoDB doesn't allow updating it
+        const emailSettings = { ...(settings as any).emailSettings };
+        delete emailSettings._id;
+        payload.emailSettings = emailSettings;
       }
 
       await adminAPI.updateSystemSettings(payload);
