@@ -609,8 +609,24 @@ const admin: AdminAPI = {
 
   updateSystemSettings: async (settings: SystemSettings): Promise<void> => {
     try {
-      const response = await axiosInstance.patch('/settings', settings);
-      await localDB.saveSettings(settings);
+      // Defensive: ensure _id is removed from all nested objects
+      const cleanSettings = { ...settings } as any;
+      delete cleanSettings._id;
+      if (cleanSettings.smtp) {
+        cleanSettings.smtp = { ...cleanSettings.smtp };
+        delete cleanSettings.smtp._id;
+      }
+      if (cleanSettings.emailSettings) {
+        cleanSettings.emailSettings = { ...cleanSettings.emailSettings };
+        delete cleanSettings.emailSettings._id;
+      }
+      if (cleanSettings.gmail) {
+        cleanSettings.gmail = { ...cleanSettings.gmail };
+        delete cleanSettings.gmail._id;
+      }
+      
+      const response = await axiosInstance.patch('/settings', cleanSettings);
+      await localDB.saveSettings(cleanSettings);
       return response.data;
     } catch (error) {
       // If offline, queue for sync and return
@@ -622,9 +638,24 @@ const admin: AdminAPI = {
       // try a direct request to the backend API base as a fallback.
       try {
         // Attempt direct PATCH using configured API base
-        const resp = await axiosInstance.patch('/settings', settings, { withCredentials: true });
+        const cleanSettings = { ...settings } as any;
+        delete cleanSettings._id;
+        if (cleanSettings.smtp) {
+          cleanSettings.smtp = { ...cleanSettings.smtp };
+          delete cleanSettings.smtp._id;
+        }
+        if (cleanSettings.emailSettings) {
+          cleanSettings.emailSettings = { ...cleanSettings.emailSettings };
+          delete cleanSettings.emailSettings._id;
+        }
+        if (cleanSettings.gmail) {
+          cleanSettings.gmail = { ...cleanSettings.gmail };
+          delete cleanSettings.gmail._id;
+        }
+        
+        const resp = await axiosInstance.patch('/settings', cleanSettings, { withCredentials: true });
         // persist locally as well
-        try { await localDB.saveSettings(settings); } catch (e) {}
+        try { await localDB.saveSettings(cleanSettings); } catch (e) {}
         return resp.data;
       } catch (fall) {
         // rethrow original error so callers receive the initial failure context
