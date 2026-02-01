@@ -609,7 +609,7 @@ const admin: AdminAPI = {
 
   updateSystemSettings: async (settings: SystemSettings): Promise<void> => {
     try {
-      const response = await axiosInstance.patch('/admin/settings', settings);
+      const response = await axiosInstance.patch('/settings', settings);
       await localDB.saveSettings(settings);
       return response.data;
     } catch (error) {
@@ -622,7 +622,7 @@ const admin: AdminAPI = {
       // try a direct request to the backend API base as a fallback.
       try {
         // Attempt direct PATCH using configured API base
-        const resp = await axiosInstance.patch('/admin/settings', settings, { withCredentials: true });
+        const resp = await axiosInstance.patch('/settings', settings, { withCredentials: true });
         // persist locally as well
         try { await localDB.saveSettings(settings); } catch (e) {}
         return resp.data;
