@@ -138,14 +138,17 @@ function validateSMTPConfig(smtpConfig) {
     return errors;
   }
 
-  if (!smtpConfig.host) {
-    errors.push('SMTP host is required');
+  // Only validate host if provided (allow partial updates)
+  if (smtpConfig.host === '' || (smtpConfig.host && typeof smtpConfig.host !== 'string')) {
+    errors.push('SMTP host must be a non-empty string if provided');
   }
 
+  // Only validate port if provided
   if (smtpConfig.port && (smtpConfig.port < 1 || smtpConfig.port > 65535)) {
     errors.push('SMTP port must be between 1 and 65535');
   }
 
+  // Only require password if user is being specified
   if (smtpConfig.user && !smtpConfig.encryptedPassword && !smtpConfig.password) {
     errors.push('SMTP password is required when user is specified');
   }
