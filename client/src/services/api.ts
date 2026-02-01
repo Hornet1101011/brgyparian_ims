@@ -632,6 +632,14 @@ const admin: AdminAPI = {
       await localDB.saveSettings(cleanSettings);
       return response.data;
     } catch (error) {
+      // Log full error details for debugging
+      console.error('[updateSystemSettings] PATCH error:', {
+        status: (error as any)?.response?.status,
+        statusText: (error as any)?.response?.statusText,
+        errorData: (error as any)?.response?.data,
+        message: (error as any)?.message,
+      });
+      
       // If offline, queue for sync and return
       if (!navigator.onLine) {
         await syncService.performOperation('update', 'settings', settings);

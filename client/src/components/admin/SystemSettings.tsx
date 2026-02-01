@@ -306,6 +306,8 @@ const SystemSettings: FC = () => {
       // Also remove _id from root payload if present
       delete (payload as any)._id;
 
+      console.log('[Settings Save] Full payload being sent:', JSON.stringify(payload, null, 2));
+
       await adminAPI.updateSystemSettings(payload);
       // optimistic: update original copy and clear dirty flag
       originalSettingsRef.current = payload;
