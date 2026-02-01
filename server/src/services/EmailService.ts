@@ -2,7 +2,7 @@ import nodemailer from 'nodemailer';
 import { Transporter } from 'nodemailer';
 import { EmailLog } from '../models/EmailLog';
 import SystemSetting from '../models/SystemSetting';
-import { createGmailTransporter, decryptGmailPassword, sanitizeGmailConfig } from '../../../utils/gmailHelper';
+import { createGmailTransporter, decryptGmailPassword, sanitizeGmailConfig } from '../utils/gmailHelper';
 
 /**
  * Gmail SMTP Transporter
@@ -202,18 +202,18 @@ export async function sendDocumentNotification(
     const settings = await SystemSetting.findOne().lean();
     
     // Determine sender based on whether Gmail or SMTP is active
-    let fromEmail: string;
+    let fromEmail: string | undefined;
     let fromName: string;
     
     if (settings?.gmail?.enabled && settings.gmail.gmailAddress) {
       fromEmail = settings.gmail.gmailAddress;
       fromName = settings.gmail.displayName || 'Barangay System';
     } else {
-      fromEmail = settings?.smtp?.user || process.env.BIMS_EMAIL;
+      fromEmail = settings?.smtp?.user || process.env.BIMS_EMAIL || 'noreply@barangay.system';
       fromName = settings?.smtp?.fromName || 'Barangay System';
     }
     
-    const from = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
+    const from = fromName && fromEmail ? `${fromName} <${fromEmail}>` : (fromEmail || 'noreply@barangay.system');
     
     const subject = `Your document request has been ${status}`;
     const body = `
@@ -265,18 +265,18 @@ export async function sendMail(to: string, subject: string, html: string, bcc?: 
     const settings = await SystemSetting.findOne().lean();
     
     // Determine sender based on whether Gmail or SMTP is active
-    let fromEmail: string;
+    let fromEmail: string | undefined;
     let fromName: string;
     
     if (settings?.gmail?.enabled && settings.gmail.gmailAddress) {
       fromEmail = settings.gmail.gmailAddress;
       fromName = settings.gmail.displayName || 'Barangay System';
     } else {
-      fromEmail = settings?.smtp?.user || process.env.BIMS_EMAIL;
+      fromEmail = settings?.smtp?.user || process.env.BIMS_EMAIL || 'noreply@barangay.system';
       fromName = settings?.smtp?.fromName || 'Barangay System';
     }
     
-    const from = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
+    const from = fromName && fromEmail ? `${fromName} <${fromEmail}>` : (fromEmail || 'noreply@barangay.system');
 
     const mailOptions: any = {
       from,

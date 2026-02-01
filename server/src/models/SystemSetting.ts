@@ -11,6 +11,14 @@ export interface ISmtp {
   fromName?: string;
 }
 
+export interface IGmailSettings {
+  enabled?: boolean;
+  gmailAddress?: string;
+  appPassword?: string; // Encrypted app password (16-character Google App Password)
+  displayName?: string;
+  useAppPassword?: boolean;
+}
+
 export interface IEmailSettings {
   enabled?: boolean;
   enablePasswordResetEmails?: boolean;
@@ -39,6 +47,7 @@ export interface ISystemSetting extends Document {
   documentProcessingDays?: number;
   systemNotice?: string;
   smtp?: ISmtp;
+  gmail?: IGmailSettings;
   emailSettings?: IEmailSettings;
   createdAt?: Date;
   updatedAt?: Date;
@@ -53,6 +62,14 @@ const smtpSchema = new Schema<ISmtp>({
   encryptedPassword: { type: String },
   appPassword: { type: String }, // Encrypted app password for Gmail
   fromName: { type: String },
+});
+
+const gmailSchema = new Schema<IGmailSettings>({
+  enabled: { type: Boolean, default: false },
+  gmailAddress: { type: String },
+  appPassword: { type: String }, // Encrypted app password
+  displayName: { type: String },
+  useAppPassword: { type: Boolean, default: true },
 });
 
 const emailSettingsSchema = new Schema<IEmailSettings>({
@@ -84,6 +101,7 @@ const systemSettingSchema = new Schema<ISystemSetting>({
   documentProcessingDays: { type: Number, default: 3 },
   systemNotice: { type: String },
   smtp: { type: smtpSchema, default: {} },
+  gmail: { type: gmailSchema, default: {} },
   emailSettings: { type: emailSettingsSchema, default: {} },
 }, { timestamps: true });
 
