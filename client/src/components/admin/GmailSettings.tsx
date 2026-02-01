@@ -1,4 +1,4 @@
-import React, { useState, useEffect, FunctionComponent } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Paper,
@@ -27,14 +27,14 @@ interface GmailSettingsProps {
   onGmailStatusChange?: (enabled: boolean) => void;
 }
 
-const GmailSettingsComponent: React.FC<GmailSettingsProps> = ({ onGmailStatusChange }) => {
-  const [gmailSettings, setGmailSettings] = useState<GmailSettings>({
+const GmailSettingsComponent = ({ onGmailStatusChange }: GmailSettingsProps) => {
+  const [gmailSettings, setGmailSettings] = useState({
     enabled: false,
     gmailAddress: '',
     appPassword: '',
     displayName: '',
     useAppPassword: true,
-  });
+  } as GmailSettings);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);

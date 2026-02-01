@@ -14,6 +14,15 @@ import { localDB } from './localDatabase';
 import { syncService } from './syncService';
 import type { ScheduledAppointment, ConflictItem } from '../types/appointments';
 import { getFileExtension, getFileTypeLabel } from '../utils/fileTypeDetector';
+
+// Type definition for admin API methods
+interface AdminAPI {
+  get: (path: string, config?: any) => Promise<any>;
+  patch: (path: string, data?: any, config?: any) => Promise<any>;
+  post: (path: string, data?: any, config?: any) => Promise<any>;
+  [key: string]: any;
+}
+
 // Fetch template text for a document type
 export const getTemplateText = (type: string) =>
   axiosInstance.get(`/templates/${type}`).then(res => res.data.text);
@@ -482,7 +491,7 @@ export const requestsAPI = {
 };
 
 // Admin API
-const admin = {
+const admin: AdminAPI = {
   createUser: async (userData: any): Promise<void> => {
     try {
       const response = await axiosInstance.post('/admin/users', userData);
@@ -907,6 +916,20 @@ const admin = {
       console.error('Error fetching all analytics:', error);
       throw error;
     }
+  },
+
+  // Generic HTTP methods for admin API calls
+  get: async (path: string, config?: any) => {
+    const response = await axiosInstance.get(path, config);
+    return response;
+  },
+  patch: async (path: string, data?: any, config?: any) => {
+    const response = await axiosInstance.patch(path, data, config);
+    return response;
+  },
+  post: async (path: string, data?: any, config?: any) => {
+    const response = await axiosInstance.post(path, data, config);
+    return response;
   },
 };
 

@@ -9,7 +9,6 @@
     "allowJs": true,
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
-    "suppressImplicitAnyIndexErrors": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "strict": false,
