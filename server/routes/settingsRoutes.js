@@ -246,7 +246,10 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
     }
     
     const errors = validateSettingsPayload(payload);
-    if (errors.length) return res.status(400).json({ message: 'Validation error', errors });
+    if (errors.length) {
+      console.error('[Settings PATCH] Validation errors:', errors);
+      return res.status(400).json({ message: 'Validation error', errors });
+    }
 
     // Build update payload, separating email settings which don't need encryption
     const updatePayload = {};
@@ -273,6 +276,7 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
       // Validate SMTP configuration
       const smtpErrors = smtpHelper.validateSMTPConfig(smtpData);
       if (smtpErrors.length > 0) {
+        console.error('[Settings PATCH] SMTP validation errors:', smtpErrors);
         return res.status(400).json({ message: 'SMTP validation error', errors: smtpErrors });
       }
 

@@ -289,7 +289,10 @@ const SystemSettings: FC = () => {
 
       // Include SMTP settings if present
       if (settings.smtp) {
-        payload.smtp = settings.smtp;
+        // Clone and remove _id since MongoDB doesn't allow updating it
+        const smtpSettings = { ...settings.smtp };
+        delete smtpSettings._id;
+        payload.smtp = smtpSettings;
       }
 
       // Include emailSettings if present
@@ -299,6 +302,9 @@ const SystemSettings: FC = () => {
         delete emailSettings._id;
         payload.emailSettings = emailSettings;
       }
+
+      // Also remove _id from root payload if present
+      delete (payload as any)._id;
 
       await adminAPI.updateSystemSettings(payload);
       // optimistic: update original copy and clear dirty flag
