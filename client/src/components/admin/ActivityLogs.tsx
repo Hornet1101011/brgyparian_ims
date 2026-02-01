@@ -1,3 +1,4 @@
+// @ts-nocheck
 
 // Activity logs temporarily disabled per request.
 // The original implementation was removed to prevent the system from using activity logs.

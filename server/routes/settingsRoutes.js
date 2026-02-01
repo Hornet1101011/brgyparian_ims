@@ -694,4 +694,125 @@ router.patch('/email', requireAuth, isAdmin, async (req, res) => {
   }
 });
 
+// ===== GMAIL CONFIGURATION ROUTES =====
+
+const gmailHelper = require('../utils/gmailHelper');
+
+// GET /api/settings/gmail - Get Gmail configuration (sanitized)
+router.get('/gmail', requireAuth, isAdmin, async (req, res) => {
+  try {
+    const settings = await SystemSetting.findOne().lean();
+    const gmailConfig = settings?.gmail ? gmailHelper.sanitizeGmailConfig(settings.gmail) : null;
+    return res.json({ gmail: gmailConfig });
+  } catch (err) {
+    console.error('GET /api/settings/gmail error:', err);
+    return res.status(500).json({ message: 'Failed to load Gmail settings' });
+  }
+});
+
+// PATCH /api/settings/gmail - Update Gmail configuration
+router.patch('/gmail', requireAuth, isAdmin, async (req, res) => {
+  try {
+    const { gmailAddress, appPassword, displayName, useAppPassword, enabled } = req.body;
+    
+    // Validate Gmail config
+    const config = {
+      gmailAddress,
+      appPassword,
+      useAppPassword: useAppPassword !== false
+    };
+    
+    const errors = gmailHelper.validateGmailConfig(config);
+    if (errors.length > 0) {
+      return res.status(400).json({ message: 'Validation error', errors });
+    }
+    
+    let settings = await SystemSetting.findOne();
+    if (!settings) {
+      settings = new SystemSetting();
+    }
+    
+    // Encrypt the app password
+    const encryptedPassword = gmailHelper.encryptGmailPassword(appPassword);
+    
+    settings.gmail = {
+      enabled,
+      gmailAddress,
+      encryptedPassword: encryptedPassword,
+      displayName: displayName || gmailAddress.split('@')[0],
+      useAppPassword: useAppPassword !== false
+    };
+    
+    const updated = await settings.save();
+    
+    // Record audit
+    await recordAudit(req.user._id, 'gmail_config_updated', {
+      gmailAddress,
+      enabled,
+      displayName
+    }, req.ip);
+    
+    console.log('[Settings] Gmail configuration updated by admin:', req.user._id);
+    
+    // Clear transporter cache so next email uses new config
+    // This is done by the email service itself when it detects settings have changed
+    
+    return res.json({
+      success: true,
+      gmail: gmailHelper.sanitizeGmailConfig(updated.gmail)
+    });
+  } catch (err) {
+    console.error('PATCH /api/settings/gmail error:', err);
+    return res.status(500).json({ message: 'Failed to update Gmail settings', error: err.message });
+  }
+});
+
+// POST /api/settings/gmail/test - Test Gmail connection
+router.post('/gmail/test', requireAuth, isAdmin, async (req, res) => {
+  try {
+    const { testEmail } = req.body;
+    
+    if (!testEmail || !testEmail.includes('@')) {
+      return res.status(400).json({ message: 'Valid test email is required' });
+    }
+    
+    const settings = await SystemSetting.findOne().lean();
+    if (!settings?.gmail?.enabled || !settings.gmail.gmailAddress) {
+      return res.status(400).json({ message: 'Gmail is not configured or enabled' });
+    }
+    
+    // Prepare config for testing (decrypt password)
+    const gmailConfig = {
+      ...settings.gmail,
+      appPassword: settings.gmail.encryptedPassword ? 
+        gmailHelper.decryptGmailPassword(settings.gmail.encryptedPassword) : null
+    };
+    
+    const result = await gmailHelper.testGmailConnection(gmailConfig, testEmail);
+    
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        message: 'Gmail test failed',
+        error: result.error
+      });
+    }
+    
+    console.log('[Settings] Gmail test successful by admin:', req.user._id);
+    
+    return res.json({
+      success: true,
+      message: 'Test email sent successfully',
+      messageId: result.messageId
+    });
+  } catch (err) {
+    console.error('POST /api/settings/gmail/test error:', err);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to test Gmail',
+      error: err.message
+    });
+  }
+});
+
 module.exports = router;

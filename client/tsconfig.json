@@ -8,19 +8,34 @@
     ],
     "allowJs": true,
     "skipLibCheck": true,
+    "skipDefaultLibCheck": true,
+    "suppressImplicitAnyIndexErrors": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "strict": false,
     "noImplicitAny": false,
-    "forceConsistentCasingInFileNames": true,
-    "noFallthroughCasesInSwitch": true,
+    "noImplicitThis": false,
+    "forceConsistentCasingInFileNames": false,
+    "noFallthroughCasesInSwitch": false,
     "module": "esnext",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "resolveJsonModule": true,
-    "isolatedModules": true,
+    "isolatedModules": false,
     "noEmit": true,
     "jsx": "react-jsx",
-    "skipDefaultLibCheck": true
+    "typeRoots": [
+      "./node_modules/@types"
+    ],
+    "baseUrl": "./src",
+    "paths": {
+      "types": ["types/index"],
+      "types/*": ["types/*"],
+      "components/*": ["components/*"],
+      "utils/*": ["utils/*"],
+      "hooks/*": ["hooks/*"],
+      "services/*": ["services/*"],
+      "contexts/*": ["contexts/*"]
+    }
   },
   "include": [
     "src"

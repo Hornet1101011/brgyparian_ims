@@ -9,6 +9,16 @@ const smtpSchema = new mongoose.Schema({
   fromName: { type: String },
 });
 
+const gmailSchema = new mongoose.Schema({
+  enabled: { type: Boolean, default: false },
+  gmailAddress: { type: String },
+  useAppPassword: { type: Boolean, default: true },
+  encryptedPassword: { type: String }, // encrypted app password
+  displayName: { type: String },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
 const systemSettingSchema = new mongoose.Schema({
   siteName: { type: String },
   barangayName: { type: String },
@@ -26,6 +36,7 @@ const systemSettingSchema = new mongoose.Schema({
   maxAccountsPerIP: { type: Number, default: 1 },
   systemNotice: { type: String },
   smtp: { type: smtpSchema, default: {} },
+  gmail: { type: gmailSchema, default: {} },
 }, { timestamps: true });
 
 // Prevent OverwriteModelError when this file is required multiple times (e.g. ts-node/nodemon)

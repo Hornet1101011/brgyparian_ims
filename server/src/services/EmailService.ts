@@ -2,6 +2,7 @@ import nodemailer from 'nodemailer';
 import { Transporter } from 'nodemailer';
 import { EmailLog } from '../models/EmailLog';
 import SystemSetting from '../models/SystemSetting';
+import { createGmailTransporter, decryptGmailPassword, sanitizeGmailConfig } from '../../../utils/gmailHelper';
 
 /**
  * Gmail SMTP Transporter
@@ -76,22 +77,34 @@ async function logEmailToDb(
 
 /**
  * Initialize and return a transporter based on settings from database
- * Falls back to environment variables if database settings are not available
+ * Priority: Gmail (if enabled) > SMTP (from database) > Environment variables
  * Caches the transporter instance to avoid recreating it
  */
 async function getConfiguredTransporter(): Promise<Transporter> {
-  // Clear cache if we're trying to get a fresh transporter
+  // Clear cache to get fresh transporter
   gmailTransporter = null;
 
   try {
-    // First, try to get settings from database
+    // First, check if Gmail is enabled
     const settings = await SystemSetting.findOne().lean();
     
+    if (settings?.gmail?.enabled && settings.gmail.gmailAddress) {
+      try {
+        console.log('[EmailService] Creating transporter using Gmail configuration');
+        gmailTransporter = createGmailTransporter(settings.gmail);
+        return gmailTransporter;
+      } catch (err) {
+        console.error('[EmailService] Failed to create Gmail transporter:', err instanceof Error ? err.message : err);
+        console.log('[EmailService] Falling back to SMTP or environment variables');
+      }
+    }
+    
+    // Try SMTP from database
     if (settings?.smtp?.host && settings.smtp.port && settings.smtp.user) {
       const decryptedPassword = settings.smtp.appPassword || settings.smtp.encryptedPassword;
       
       if (decryptedPassword) {
-        console.log(`[EmailService] Creating transporter from database settings (${settings.smtp.host}:${settings.smtp.port})`);
+        console.log(`[EmailService] Creating transporter from database SMTP settings (${settings.smtp.host}:${settings.smtp.port})`);
 
         gmailTransporter = nodemailer.createTransport({
           host: settings.smtp.host,
@@ -123,7 +136,7 @@ async function getConfiguredTransporter(): Promise<Transporter> {
 
   if (!email || !password) {
     throw new Error(
-      'Missing email credentials. Please configure SMTP settings in admin settings or set BIMS_EMAIL and BIMS_EMAIL_PASSWORD environment variables.'
+      'Missing email credentials. Please configure Gmail or SMTP settings in admin settings or set BIMS_EMAIL and BIMS_EMAIL_PASSWORD environment variables.'
     );
   }
 
@@ -187,8 +200,19 @@ export async function sendDocumentNotification(
   try {
     const transporter = await getConfiguredTransporter();
     const settings = await SystemSetting.findOne().lean();
-    const fromEmail = settings?.smtp?.user || process.env.BIMS_EMAIL;
-    const fromName = settings?.smtp?.fromName || 'Barangay System';
+    
+    // Determine sender based on whether Gmail or SMTP is active
+    let fromEmail: string;
+    let fromName: string;
+    
+    if (settings?.gmail?.enabled && settings.gmail.gmailAddress) {
+      fromEmail = settings.gmail.gmailAddress;
+      fromName = settings.gmail.displayName || 'Barangay System';
+    } else {
+      fromEmail = settings?.smtp?.user || process.env.BIMS_EMAIL;
+      fromName = settings?.smtp?.fromName || 'Barangay System';
+    }
+    
     const from = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
     
     const subject = `Your document request has been ${status}`;
@@ -239,8 +263,19 @@ export async function sendMail(to: string, subject: string, html: string, bcc?: 
     
     const transporter = await getConfiguredTransporter();
     const settings = await SystemSetting.findOne().lean();
-    const fromEmail = settings?.smtp?.user || process.env.BIMS_EMAIL;
-    const fromName = settings?.smtp?.fromName || 'Barangay System';
+    
+    // Determine sender based on whether Gmail or SMTP is active
+    let fromEmail: string;
+    let fromName: string;
+    
+    if (settings?.gmail?.enabled && settings.gmail.gmailAddress) {
+      fromEmail = settings.gmail.gmailAddress;
+      fromName = settings.gmail.displayName || 'Barangay System';
+    } else {
+      fromEmail = settings?.smtp?.user || process.env.BIMS_EMAIL;
+      fromName = settings?.smtp?.fromName || 'Barangay System';
+    }
+    
     const from = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
 
     const mailOptions: any = {

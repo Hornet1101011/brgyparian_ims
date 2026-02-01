@@ -1,8 +1,9 @@
 const nodemailer = require('nodemailer');
+const gmailHelper = require('../../../utils/gmailHelper');
 
 /**
  * Gmail SMTP Transporter
- * Uses environment variables BIMS_EMAIL and BIMS_EMAIL_PASSWORD
+ * Uses environment variables BIMS_EMAIL and BIMS_EMAIL_PASSWORD or Gmail config
  * This transporter is reusable across the entire application
  */
 
@@ -123,7 +124,108 @@ async function logEmail(recipient, subject, success, error, messageId, emailType
 }
 
 /**
- * Initialize and return a Gmail SMTP transporter
+ * Initialize and return a transporter based on settings
+ * Priority: Gmail (if enabled) > SMTP (from database) > Environment variables
+ * @returns {object} Nodemailer transporter
+ * @throws {Error} If no credentials configured
+ */
+async function getConfiguredTransporter() {
+  // Clear cache to get fresh transporter
+  gmailTransporter = null;
+
+  try {
+    // First, check if Gmail is enabled
+    const SystemSettingModel = getSystemSettingModel();
+    const settings = SystemSettingModel ? await SystemSettingModel.findOne().lean() : null;
+    
+    if (settings?.gmail?.enabled && settings.gmail.gmailAddress) {
+      try {
+        console.log('[EmailService] Creating transporter using Gmail configuration');
+        gmailTransporter = gmailHelper.createGmailTransporter(settings.gmail);
+        return gmailTransporter;
+      } catch (err) {
+        console.error('[EmailService] Failed to create Gmail transporter:', err.message);
+        console.log('[EmailService] Falling back to SMTP or environment variables');
+      }
+    }
+    
+    // Try SMTP from database
+    if (settings?.smtp?.host && settings.smtp.port && settings.smtp.user) {
+      const decryptedPassword = settings.smtp.appPassword || settings.smtp.encryptedPassword;
+      
+      if (decryptedPassword) {
+        console.log(`[EmailService] Creating transporter from database SMTP settings (${settings.smtp.host}:${settings.smtp.port})`);
+
+        gmailTransporter = nodemailer.createTransport({
+          host: settings.smtp.host,
+          port: settings.smtp.port,
+          secure: settings.smtp.secure === true,
+          auth: {
+            user: settings.smtp.user,
+            pass: decryptedPassword,
+          },
+          tls: {
+            rejectUnauthorized: false,
+          },
+        });
+
+        return gmailTransporter;
+      } else {
+        console.warn('[EmailService] SMTP settings found in database but no password configured, falling back to environment variables');
+      }
+    }
+  } catch (err) {
+    console.warn('[EmailService] Failed to load settings from database, falling back to environment variables:', err.message);
+  }
+
+  // Fallback to environment variables
+  const email = process.env.BIMS_EMAIL || process.env.SMTP_USER;
+  const password = process.env.BIMS_EMAIL_PASSWORD || process.env.SMTP_PASSWORD;
+  const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const smtpPort = parseInt(process.env.SMTP_PORT || '465');
+  const smtpSecure = process.env.SMTP_SECURITY === 'SSL' ? true : (smtpPort === 465 ? true : false);
+
+  if (!email || !password) {
+    const error = new Error(
+      'Missing email credentials. Please configure Gmail or SMTP settings in admin settings or set BIMS_EMAIL and BIMS_EMAIL_PASSWORD environment variables.'
+    );
+    console.error('[EmailService] ' + error.message);
+    throw error;
+  }
+
+  try {
+    gmailTransporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpSecure,
+      auth: {
+        user: email,
+        pass: password,
+      },
+      connectionTimeout: 30000,
+      socketTimeout: 30000,
+      greetingTimeout: 30000,
+      pool: {
+        maxConnections: 5,
+        maxMessages: 100,
+        rateDelta: 1000,
+        rateLimit: 14,
+      },
+      tls: {
+        rejectUnauthorized: false,
+      },
+    });
+
+    console.log('[EmailService] SMTP transporter initialized successfully', `(${smtpHost}:${smtpPort})`);
+    return gmailTransporter;
+  } catch (err) {
+    console.error('[EmailService] Failed to initialize transporter:', err);
+    throw err;
+  }
+}
+
+/**
+ * Initialize and return a Gmail SMTP transporter (legacy function for backward compatibility)
  * Caches the transporter instance to avoid recreating it
  * @returns {object} Nodemailer transporter
  * @throws {Error} If Gmail credentials are missing
@@ -155,19 +257,17 @@ function getGmailTransporter() {
       secure: smtpSecure,
       auth: {
         user: email,
-        pass: password, // Use App Password for Gmail accounts with 2FA enabled
+        pass: password,
       },
-      // Connection settings to work around firewall issues
-      connectionTimeout: 30000, // 30 seconds
-      socketTimeout: 30000, // 30 seconds
-      greetingTimeout: 30000, // 30 seconds
+      connectionTimeout: 30000,
+      socketTimeout: 30000,
+      greetingTimeout: 30000,
       pool: {
         maxConnections: 5,
         maxMessages: 100,
         rateDelta: 1000,
-        rateLimit: 14, // ~14 messages per second
+        rateLimit: 14,
       },
-      // TLS settings
       tls: {
         rejectUnauthorized: false,
       },
@@ -204,8 +304,23 @@ const emailTransporter = () => {
  */
 async function sendDocumentNotification(to, status, documentType, notes) {
   try {
-    const transporter = getGmailTransporter();
-    const email = process.env.BIMS_EMAIL;
+    const transporter = await getConfiguredTransporter();
+    const SystemSettingModel = getSystemSettingModel();
+    const settings = SystemSettingModel ? await SystemSettingModel.findOne().lean() : null;
+    
+    // Determine sender based on whether Gmail or SMTP is active
+    let fromEmail;
+    let fromName;
+    
+    if (settings?.gmail?.enabled && settings.gmail.gmailAddress) {
+      fromEmail = settings.gmail.gmailAddress;
+      fromName = settings.gmail.displayName || 'Barangay System';
+    } else {
+      fromEmail = settings?.smtp?.user || process.env.BIMS_EMAIL;
+      fromName = settings?.smtp?.fromName || 'Barangay System';
+    }
+    
+    const from = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
 
     const subject = `Your document request has been ${status}`;
     const body = `
@@ -217,7 +332,7 @@ async function sendDocumentNotification(to, status, documentType, notes) {
     `;
 
     const info = await transporter.sendMail({
-      from: email,
+      from,
       to,
       subject,
       html: body,
@@ -257,11 +372,26 @@ async function sendMail(to, subject, html, bcc, emailType) {
       return { messageId: 'skipped', response: 'Email sending disabled for this type' };
     }
 
-    const transporter = getGmailTransporter();
-    const email = process.env.BIMS_EMAIL;
+    const transporter = await getConfiguredTransporter();
+    const SystemSettingModel = getSystemSettingModel();
+    const settings = SystemSettingModel ? await SystemSettingModel.findOne().lean() : null;
+    
+    // Determine sender based on whether Gmail or SMTP is active
+    let fromEmail;
+    let fromName;
+    
+    if (settings?.gmail?.enabled && settings.gmail.gmailAddress) {
+      fromEmail = settings.gmail.gmailAddress;
+      fromName = settings.gmail.displayName || 'Barangay System';
+    } else {
+      fromEmail = settings?.smtp?.user || process.env.BIMS_EMAIL;
+      fromName = settings?.smtp?.fromName || 'Barangay System';
+    }
+    
+    const from = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
 
     const mailOptions = {
-      from: email,
+      from,
       to,
       subject,
       html,
@@ -342,4 +472,5 @@ module.exports = {
   getGmailTransporter,
   logEmail,
   isEmailTypeEnabled,
+  getConfiguredTransporter,
 };
