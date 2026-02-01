@@ -232,8 +232,10 @@ router.put('/', requireAuth, isAdmin, async (req, res) => {
 // PATCH /api/settings (partial update) - Protected endpoint, requires authentication
 router.patch('/', requireAuth, isAdmin, async (req, res) => {
   try {
+    console.log('[Settings PATCH] Handler called');
     const payload = req.body || {};
     console.log('[Settings PATCH] Received payload keys:', Object.keys(payload));
+    console.log('[Settings PATCH] Full payload:', JSON.stringify(payload, null, 2));
     if (payload.smtp) {
       console.log('[Settings PATCH] SMTP data received:', { 
         host: payload.smtp.host, 
@@ -386,8 +388,12 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
     }
     return res.json(sanitizeForClient(updated));
   } catch (err) {
-    console.error('PATCH /api/settings error', err);
-    return res.status(500).json({ message: 'Failed to update settings' });
+    console.error('PATCH /api/settings error:', {
+      message: err && err.message,
+      stack: err && err.stack,
+      name: err && err.name,
+    });
+    return res.status(500).json({ message: 'Failed to update settings', error: err && err.message });
   }
 });
 
