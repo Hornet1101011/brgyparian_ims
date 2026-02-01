@@ -4,6 +4,7 @@ const requireAuth = require('../middleware/requireAuth');
 const isAdmin = require('../middleware/isAdmin');
 const { encryptText, decryptText } = require('../utils/cryptoHelper');
 const smtpHelper = require('../utils/smtpHelper');
+const gmailHelper = require('../utils/gmailHelper');
 const SystemSetting = require('../models/SystemSetting');
 const PublicView = require('../models/PublicView');
 const AuditLog = require('../models/AuditLog');
@@ -719,8 +720,6 @@ router.patch('/email', requireAuth, isAdmin, async (req, res) => {
 });
 
 // ===== GMAIL CONFIGURATION ROUTES =====
-
-const gmailHelper = require('../utils/gmailHelper');
 
 // GET /api/settings/gmail - Get Gmail configuration (sanitized)
 router.get('/gmail', requireAuth, isAdmin, async (req, res) => {
