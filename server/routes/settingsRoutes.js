@@ -252,7 +252,7 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
     
     // Copy all simple fields (strings, booleans, numbers)
     for (const [key, value] of Object.entries(payload)) {
-      if (key === 'smtp' || key === 'emailSettings') {
+      if (key === 'smtp' || key === 'emailSettings' || key === 'gmail') {
         // Skip these for now, we'll handle them separately
         continue;
       }
@@ -303,6 +303,30 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
         user: smtpData.user,
         hasPassword: !!smtpData.encryptedPassword,
         secure: smtpData.secure
+      });
+    }
+
+    // Handle Gmail updates with proper encryption
+    if (payload.gmail) {
+      const gmailData = { ...payload.gmail };
+      
+      // Handle app password encryption if provided
+      if (gmailData.appPassword) {
+        try {
+          gmailData.appPassword = gmailHelper.encryptGmailPassword(gmailData.appPassword);
+          console.log('[Settings] Gmail app password encrypted');
+        } catch (e) {
+          console.error('Failed to encrypt Gmail app password', e.message);
+          return res.status(500).json({ message: e.message });
+        }
+      }
+      
+      updatePayload.gmail = gmailData;
+      console.log('[Settings] Gmail data prepared for update:', {
+        enabled: gmailData.enabled,
+        gmailAddress: gmailData.gmailAddress,
+        hasPassword: !!gmailData.appPassword,
+        displayName: gmailData.displayName
       });
     }
 

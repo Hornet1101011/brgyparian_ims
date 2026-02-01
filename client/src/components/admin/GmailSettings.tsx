@@ -48,7 +48,7 @@ const GmailSettingsComponent = ({ onGmailStatusChange }: GmailSettingsProps) => 
   const loadGmailSettings = async () => {
     try {
       setLoading(true);
-      const response = await adminAPI.get('/api/settings/gmail');
+      const response = await adminAPI.get('/settings/gmail');
       if (response.data?.gmail) {
         setGmailSettings(response.data.gmail);
       }
@@ -75,7 +75,7 @@ const GmailSettingsComponent = ({ onGmailStatusChange }: GmailSettingsProps) => 
       }
 
       setSaving(true);
-      const response = await adminAPI.patch('/api/settings/gmail', gmailSettings);
+      const response = await adminAPI.patch('/settings/gmail', gmailSettings);
 
       if (response.data?.gmail) {
         setGmailSettings(response.data.gmail);
@@ -103,7 +103,7 @@ const GmailSettingsComponent = ({ onGmailStatusChange }: GmailSettingsProps) => 
       }
 
       setTesting(true);
-      const response = await adminAPI.post('/api/settings/gmail/test', {
+      const response = await adminAPI.post('/settings/gmail/test', {
         testEmail: gmailSettings.gmailAddress,
       });
 
