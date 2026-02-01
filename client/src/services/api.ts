@@ -608,22 +608,25 @@ const admin: AdminAPI = {
   },
 
   updateSystemSettings: async (settings: SystemSettings): Promise<void> => {
+    // Helper: recursively remove all _id fields from object
+    const removeAllIds = (obj: any): any => {
+      if (!obj || typeof obj !== 'object') return obj;
+      if (Array.isArray(obj)) {
+        return obj.map(removeAllIds);
+      }
+      const cleaned = { ...obj };
+      delete (cleaned as any)._id;
+      for (const key in cleaned) {
+        if (cleaned[key] && typeof cleaned[key] === 'object') {
+          cleaned[key] = removeAllIds(cleaned[key]);
+        }
+      }
+      return cleaned;
+    };
+
     try {
-      // Defensive: ensure _id is removed from all nested objects
-      const cleanSettings = { ...settings } as any;
-      delete cleanSettings._id;
-      if (cleanSettings.smtp) {
-        cleanSettings.smtp = { ...cleanSettings.smtp };
-        delete cleanSettings.smtp._id;
-      }
-      if (cleanSettings.emailSettings) {
-        cleanSettings.emailSettings = { ...cleanSettings.emailSettings };
-        delete cleanSettings.emailSettings._id;
-      }
-      if (cleanSettings.gmail) {
-        cleanSettings.gmail = { ...cleanSettings.gmail };
-        delete cleanSettings.gmail._id;
-      }
+      // Deep clean: remove all _id from entire settings object and nested properties
+      const cleanSettings = removeAllIds(settings);
       
       const response = await axiosInstance.patch('/settings', cleanSettings);
       await localDB.saveSettings(cleanSettings);
@@ -638,20 +641,7 @@ const admin: AdminAPI = {
       // try a direct request to the backend API base as a fallback.
       try {
         // Attempt direct PATCH using configured API base
-        const cleanSettings = { ...settings } as any;
-        delete cleanSettings._id;
-        if (cleanSettings.smtp) {
-          cleanSettings.smtp = { ...cleanSettings.smtp };
-          delete cleanSettings.smtp._id;
-        }
-        if (cleanSettings.emailSettings) {
-          cleanSettings.emailSettings = { ...cleanSettings.emailSettings };
-          delete cleanSettings.emailSettings._id;
-        }
-        if (cleanSettings.gmail) {
-          cleanSettings.gmail = { ...cleanSettings.gmail };
-          delete cleanSettings.gmail._id;
-        }
+        const cleanSettings = removeAllIds(settings);
         
         const resp = await axiosInstance.patch('/settings', cleanSettings, { withCredentials: true });
         // persist locally as well

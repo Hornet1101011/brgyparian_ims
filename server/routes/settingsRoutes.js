@@ -235,11 +235,21 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
     console.log('[Settings PATCH] Handler called');
     let payload = req.body || {};
     
-    // Defensive: Remove _id from all nested objects as MongoDB doesn't allow it
-    if (payload._id) delete payload._id;
-    if (payload.smtp && payload.smtp._id) delete payload.smtp._id;
-    if (payload.emailSettings && payload.emailSettings._id) delete payload.emailSettings._id;
-    if (payload.gmail && payload.gmail._id) delete payload.gmail._id;
+    // Defensive: Recursively remove all _id fields from payload
+    const removeAllIds = (obj) => {
+      if (!obj || typeof obj !== 'object') return obj;
+      if (Array.isArray(obj)) return obj.map(removeAllIds);
+      const cleaned = { ...obj };
+      delete cleaned._id;
+      for (const key in cleaned) {
+        if (cleaned[key] && typeof cleaned[key] === 'object') {
+          cleaned[key] = removeAllIds(cleaned[key]);
+        }
+      }
+      return cleaned;
+    };
+    
+    payload = removeAllIds(payload);
     
     console.log('[Settings PATCH] Received payload keys:', Object.keys(payload));
     console.log('[Settings PATCH] Full payload:', JSON.stringify(payload, null, 2));
