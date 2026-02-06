@@ -780,8 +780,12 @@ router.patch('/gmail', requireAuth, isAdmin, async (req, res) => {
     
     let settings = await SystemSetting.findOne();
     if (!settings) {
+      console.log('[Settings PATCH] Creating new settings document');
       settings = new SystemSetting();
+      await settings.save();
     }
+    
+    console.log('[Settings PATCH] Settings document ID:', settings._id);
 
     // If appPassword is provided and not empty, encrypt it
     let encryptedPassword = settings.gmail?.encryptedPassword || null;
@@ -843,41 +847,49 @@ router.patch('/gmail', requireAuth, isAdmin, async (req, res) => {
       type: typeof encryptedPassword
     });
     
-    settings.gmail = {
-      enabled,
-      gmailAddress,
-      encryptedPassword: encryptedPassword,
-      displayName: displayName || (gmailAddress && gmailAddress.split('@')[0]) || 'Barangay System',
-      useAppPassword: useAppPassword !== false
-    };
+    // Use updateOne for more reliable nested field updates
+    const updateResult = await SystemSetting.updateOne(
+      { _id: settings._id },
+      {
+        $set: {
+          'gmail.enabled': enabled,
+          'gmail.gmailAddress': gmailAddress,
+          'gmail.encryptedPassword': encryptedPassword || '',
+          'gmail.displayName': displayName || (gmailAddress && gmailAddress.split('@')[0]) || 'Barangay System',
+          'gmail.useAppPassword': useAppPassword !== false,
+          'gmail.updatedAt': new Date()
+        }
+      },
+      { new: true }
+    );
     
-    // Mark the gmail field as modified so Mongoose saves it
-    settings.markModified('gmail');
-    
-    console.log('[Settings] Gmail settings prepared for save:', {
-      enabled,
-      gmailAddress,
-      displayName: settings.gmail.displayName,
-      hasEncryptedPassword: !!encryptedPassword,
-      encryptedPasswordValue: encryptedPassword ? `${encryptedPassword.substring(0, 10)}...` : null
+    console.log('[Settings PATCH] UpdateOne result:', {
+      acknowledged: updateResult.acknowledged,
+      matchedCount: updateResult.matchedCount,
+      modifiedCount: updateResult.modifiedCount,
+      upsertedId: updateResult.upsertedId
     });
     
-    const updated = await settings.save();
+    if (updateResult.matchedCount === 0) {
+      console.error('[Settings PATCH] Settings document not found by ID');
+      return res.status(500).json({ message: 'Settings document not found' });
+    }
     
-    console.log('[Settings] Verifying saved data immediately after save:', {
-      enabled: updated.gmail?.enabled,
-      gmailAddress: updated.gmail?.gmailAddress,
-      hasEncryptedPassword: !!updated.gmail?.encryptedPassword,
-      savedPasswordValue: updated.gmail?.encryptedPassword ? `${updated.gmail.encryptedPassword.substring(0, 10)}...` : null
-    });
+    if (!updateResult.acknowledged) {
+      console.error('[Settings PATCH] Update was not acknowledged by MongoDB');
+      return res.status(500).json({ message: 'Update was not acknowledged' });
+    }
     
-    // Double-check by fetching fresh from DB
-    const freshSettings = await SystemSetting.findOne();
-    console.log('[Settings] Fresh fetch from DB:', {
-      enabled: freshSettings?.gmail?.enabled,
-      gmailAddress: freshSettings?.gmail?.gmailAddress,
-      hasEncryptedPassword: !!freshSettings?.gmail?.encryptedPassword,
-      freshPasswordValue: freshSettings?.gmail?.encryptedPassword ? `${freshSettings.gmail.encryptedPassword.substring(0, 10)}...` : null
+    // Fetch fresh document to verify save - use lean for performance
+    const updated = await SystemSetting.findById(settings._id).lean();
+    
+    console.log('[Settings PATCH] Verification after updateOne:', {
+      enabled: updated?.gmail?.enabled,
+      gmailAddress: updated?.gmail?.gmailAddress,
+      hasEncryptedPassword: !!updated?.gmail?.encryptedPassword,
+      savedPasswordValue: updated?.gmail?.encryptedPassword ? `${updated.gmail.encryptedPassword.substring(0, 10)}...` : null,
+      savedPasswordLength: updated?.gmail?.encryptedPassword?.length || 0,
+      allGmailFields: Object.keys(updated?.gmail || {})
     });
     
     // Record audit
