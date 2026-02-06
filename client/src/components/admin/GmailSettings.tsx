@@ -40,6 +40,7 @@ const GmailSettingsComponent = ({ onGmailStatusChange }: GmailSettingsProps) => 
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [testEmailAddress, setTestEmailAddress] = useState('');
 
   useEffect(() => {
     loadGmailSettings();
@@ -57,10 +58,9 @@ const GmailSettingsComponent = ({ onGmailStatusChange }: GmailSettingsProps) => 
       antdMessage.error('Failed to load Gmail settings');
     } finally {
       setLoading(false);
-    }
+    }  
   };
-
-  const handleSaveGmailSettings = async () => {
+    const handleSaveGmailSettings = async () => {
     try {
       // Validate inputs
       if (gmailSettings.enabled) {
@@ -97,22 +97,43 @@ const GmailSettingsComponent = ({ onGmailStatusChange }: GmailSettingsProps) => 
 
   const handleTestGmailConnection = async () => {
     try {
-      if (!gmailSettings.gmailAddress || !gmailSettings.gmailAddress.includes('@')) {
-        antdMessage.error('Please enter a valid Gmail address first');
+      // Validate Gmail configuration
+      if (!gmailSettings.gmailAddress || !gmailSettings.gmailAddress.includes('@gmail.com')) {
+        antdMessage.error('Please configure a valid Gmail address first');
+        return;
+      }
+
+      if (!gmailSettings.appPassword) {
+        antdMessage.error('Please configure the app password first');
+        return;
+      }
+
+      // Validate test email recipient
+      const recipientEmail = testEmailAddress.trim() || gmailSettings.gmailAddress;
+      if (!recipientEmail.includes('@')) {
+        antdMessage.error('Please enter a valid email address for testing');
         return;
       }
 
       setTesting(true);
       const response = await adminAPI.post('/settings/gmail/test', {
-        testEmail: gmailSettings.gmailAddress,
+        testEmail: recipientEmail,
+        senderName: gmailSettings.displayName || 'Barangay System',
+        fromEmail: gmailSettings.gmailAddress,
       });
 
       if (response.data?.success) {
-        antdMessage.success('Test email sent successfully! Check your inbox.');
+        antdMessage.success(
+          `Test email sent successfully to ${recipientEmail}! Check your inbox.`
+        );
+        setTestEmailAddress(''); // Clear test email field
       }
     } catch (err: any) {
       console.error('Gmail test failed:', err);
-      const errorMsg = err.response?.data?.error || err.response?.data?.message || 'Gmail test failed';
+      const errorMsg = 
+        err.response?.data?.error || 
+        err.response?.data?.message || 
+        'Failed to send test email. Please check your Gmail configuration.';
       antdMessage.error(errorMsg);
     } finally {
       setTesting(false);
@@ -235,6 +256,24 @@ const GmailSettingsComponent = ({ onGmailStatusChange }: GmailSettingsProps) => 
               size="small"
             />
 
+            <Divider sx={{ my: 3 }} />
+
+            <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600, color: '#374151' }}>
+              📨 Test Email Configuration
+            </Typography>
+
+            <TextField
+              label="Test Email Recipient"
+              value={testEmailAddress}
+              onChange={(e) => setTestEmailAddress(e.target.value)}
+              fullWidth
+              margin="normal"
+              type="email"
+              placeholder="Leave blank to send to Gmail address above"
+              helperText="Enter an email address where you want to receive the test email"
+              size="small"
+            />
+
             <Box sx={{ mt: 3, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
               <Button
                 variant="contained"
@@ -253,16 +292,17 @@ const GmailSettingsComponent = ({ onGmailStatusChange }: GmailSettingsProps) => 
 
               <Button
                 variant="outlined"
+                color="success"
                 onClick={handleTestGmailConnection}
                 disabled={!gmailSettings.gmailAddress || !gmailSettings.appPassword || saving || testing}
                 sx={{ minWidth: 150 }}
               >
                 {testing ? (
                   <>
-                    <CircularProgress size={16} sx={{ mr: 1 }} /> Testing...
+                    <CircularProgress size={16} sx={{ mr: 1 }} /> Sending Test...
                   </>
                 ) : (
-                  'Test Connection'
+                  '📧 Send Test Email'
                 )}
               </Button>
             </Box>

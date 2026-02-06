@@ -292,7 +292,13 @@ const SystemSettings: FC = () => {
         // Clone and remove _id since MongoDB doesn't allow updating it
         const smtpSettings = { ...settings.smtp };
         delete smtpSettings._id;
-        payload.smtp = smtpSettings;
+        
+        // Only include SMTP if password was set or changed
+        // If passwordSet is false, don't include SMTP to avoid validation errors
+        // (server requires password if user is specified)
+        if ((smtpSettings as any).passwordSet !== false) {
+          payload.smtp = smtpSettings;
+        }
       }
 
       // Include emailSettings if present

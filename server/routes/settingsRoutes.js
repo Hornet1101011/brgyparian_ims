@@ -823,22 +823,42 @@ router.patch('/gmail', requireAuth, isAdmin, async (req, res) => {
 // POST /api/settings/gmail/test - Test Gmail connection
 router.post('/gmail/test', requireAuth, isAdmin, async (req, res) => {
   try {
-    const { testEmail } = req.body;
+    // Accept testEmail or use gmailAddress as fallback
+    const { testEmail, fromEmail, senderName } = req.body;
     
-    if (!testEmail || !testEmail.includes('@')) {
-      return res.status(400).json({ message: 'Valid test email is required' });
+    // Validate test email - if not provided, we'll validate after checking settings
+    if (!testEmail) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Test email address is required',
+        error: 'testEmail field is missing from request body'
+      });
+    }
+    
+    if (!testEmail.includes('@')) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Valid test email is required',
+        error: 'testEmail must be a valid email address'
+      });
     }
     
     const settings = await SystemSetting.findOne().lean();
     if (!settings?.gmail?.enabled || !settings.gmail.gmailAddress) {
-      return res.status(400).json({ message: 'Gmail is not configured or enabled' });
+      return res.status(400).json({ 
+        success: false,
+        message: 'Gmail is not configured or enabled',
+        error: 'Gmail settings are missing or disabled'
+      });
     }
     
     // Prepare config for testing (decrypt password)
     const gmailConfig = {
-      ...settings.gmail,
+      gmailAddress: fromEmail || settings.gmail.gmailAddress,
+      displayName: senderName || settings.gmail.displayName || 'Barangay System',
       appPassword: settings.gmail.encryptedPassword ? 
-        gmailHelper.decryptGmailPassword(settings.gmail.encryptedPassword) : null
+        gmailHelper.decryptGmailPassword(settings.gmail.encryptedPassword) : null,
+      encryptedPassword: null // Use appPassword directly for transporter
     };
     
     const result = await gmailHelper.testGmailConnection(gmailConfig, testEmail);
@@ -851,7 +871,7 @@ router.post('/gmail/test', requireAuth, isAdmin, async (req, res) => {
       });
     }
     
-    console.log('[Settings] Gmail test successful by admin:', req.user._id);
+    console.log('[Settings] Gmail test successful by admin:', req.user._id, 'sent to:', testEmail);
     
     return res.json({
       success: true,

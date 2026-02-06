@@ -55,7 +55,11 @@ function createGmailTransporter(gmailConfig) {
   }
 
   let decryptedPassword = null;
-  if (gmailConfig.encryptedPassword) {
+  
+  // Try to use appPassword first (for testing), then fall back to encryptedPassword (for production)
+  if (gmailConfig.appPassword) {
+    decryptedPassword = gmailConfig.appPassword;
+  } else if (gmailConfig.encryptedPassword) {
     try {
       decryptedPassword = decryptGmailPassword(gmailConfig.encryptedPassword);
     } catch (err) {
