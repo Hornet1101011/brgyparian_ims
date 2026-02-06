@@ -308,7 +308,7 @@ router.get('/file/:id', auth, authorize('admin'), async (req, res) => {
     const ObjectId = mongodb.ObjectId;
     
     // Validate ID format
-    if (!ObjectId.isValid(id)) {
+    if (!ObjectId.isValid(id as string)) {
       return res.status(400).json({ message: 'Invalid file ID' });
     }
     
