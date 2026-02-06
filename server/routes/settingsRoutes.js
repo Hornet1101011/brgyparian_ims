@@ -1096,10 +1096,12 @@ router.post('/gmail/test', requireAuth, isAdmin, async (req, res) => {
       appPasswordLength: settings?.gmail?.appPassword ? settings.gmail.appPassword.length : 0,
       hasPassword: !!settings?.gmail?.password,
       passwordLength: settings?.gmail?.password ? settings.gmail.password.length : 0,
-      gmailObject: settings?.gmail ? Object.keys(settings.gmail) : null
+      gmailObject: settings?.gmail ? Object.keys(settings.gmail) : null,
+      allSettingsKeys: settings ? Object.keys(settings) : null
     });
     
     if (!settings) {
+      console.error('[Settings] No settings found - returning 400');
       return res.status(400).json({ 
         success: false,
         message: 'System settings not found',
@@ -1108,6 +1110,7 @@ router.post('/gmail/test', requireAuth, isAdmin, async (req, res) => {
     }
     
     if (!settings.gmail) {
+      console.error('[Settings] No gmail object in settings - returning 400');
       return res.status(400).json({ 
         success: false,
         message: 'Gmail configuration not found',
@@ -1116,6 +1119,7 @@ router.post('/gmail/test', requireAuth, isAdmin, async (req, res) => {
     }
     
     if (!settings.gmail.enabled) {
+      console.error('[Settings] Gmail not enabled - returning 400');
       return res.status(400).json({ 
         success: false,
         message: 'Gmail is not enabled',
@@ -1124,6 +1128,7 @@ router.post('/gmail/test', requireAuth, isAdmin, async (req, res) => {
     }
     
     if (!settings.gmail.gmailAddress) {
+      console.error('[Settings] No gmail address - returning 400');
       return res.status(400).json({ 
         success: false,
         message: 'Gmail address is not configured',
@@ -1132,6 +1137,10 @@ router.post('/gmail/test', requireAuth, isAdmin, async (req, res) => {
     }
     
     if (!settings.gmail.appPassword && !settings.gmail.password) {
+      console.error('[Settings] No passwords configured - returning 400', {
+        hasAppPassword: !!settings.gmail.appPassword,
+        hasPassword: !!settings.gmail.password
+      });
       return res.status(400).json({ 
         success: false,
         message: 'Gmail password is not configured',

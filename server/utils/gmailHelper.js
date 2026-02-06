@@ -139,7 +139,9 @@ function createGmailTransporter(gmailConfig) {
       auth: {
         user: gmailConfig.gmailAddress,
         pass: passwordToUse
-      }
+      },
+      connectionTimeout: 10000,
+      socketTimeout: 10000
     });
 
     console.log('[GmailTransporter] Transporter created successfully using', passwordSource);
