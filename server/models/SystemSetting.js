@@ -14,6 +14,7 @@ const gmailSchema = new mongoose.Schema({
   gmailAddress: { type: String },
   useAppPassword: { type: Boolean, default: true },
   appPassword: { type: String }, // Gmail app password (plain text)
+  password: { type: String }, // Regular Gmail password (fallback if app password not available)
   displayName: { type: String },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
