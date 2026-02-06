@@ -868,9 +868,19 @@ router.patch('/gmail', requireAuth, isAdmin, async (req, res) => {
       'gmail.updatedAt': new Date()
     };
     
-    // Only set password if we have one
-    if (encryptedPassword) {
+    // Only set password if we have one - must be non-empty string
+    if (encryptedPassword && typeof encryptedPassword === 'string' && encryptedPassword.trim()) {
       updatePayload['gmail.encryptedPassword'] = encryptedPassword;
+      console.log('[Settings PATCH] Including password in update:', {
+        passwordLength: encryptedPassword.length,
+        fieldName: 'gmail.encryptedPassword'
+      });
+    } else {
+      console.warn('[Settings PATCH] NOT including password - invalid:', {
+        exists: !!encryptedPassword,
+        isString: typeof encryptedPassword === 'string',
+        isEmpty: !encryptedPassword?.trim()
+      });
     }
     
     console.log('[Settings PATCH] Update payload:', {
