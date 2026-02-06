@@ -148,22 +148,7 @@ function createGmailTransporter(gmailConfig) {
     throw new Error('Failed to create Gmail transporter: ' + err.message);
   }
 }
-  try {
-    console.log('[GmailTransporter] Creating nodemailer transporter for:', gmailConfig.gmailAddress);
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: gmailConfig.gmailAddress,
-        pass: decryptedPassword
-      }
-    });
 
-    console.log('[GmailTransporter] Transporter created successfully');
-    return transporter;
-  } catch (err) {
-    throw new Error('Failed to create Gmail transporter: ' + err.message);
-  }
-}
 
 /**
  * Validate Gmail configuration
@@ -236,22 +221,15 @@ async function testGmailConnection(gmailConfig, testEmail) {
       html
     });
 
-    console.log('[GmailHelper] Test email sent successfully:', result.messageId);
-    return {
-      success: true,
-      messageId: result.messageId,
-      message: 'Test email sent successfully'
-    };
+    console.log('[GmailHelper] Test email sent:', result && (result.response || result.messageId));
+    return { success: true, info: result };
   } catch (err) {
-    console.error('[GmailHelper] Connection test failed:', err);
+    console.error('[GmailHelper] Test email failed:', err && err.message);
     return {
       success: false,
-      error: err.message || String(err),
-      details: {
-        code: err.code,
-        statusCode: err.statusCode,
-        response: err.response?.body ? 'SMTP Error Response' : null
-      }
+      error: err && err.message,
+      statusCode: err && err.statusCode,
+      response: err && err.response
     };
   }
 }
