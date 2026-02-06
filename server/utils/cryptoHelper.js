@@ -1,14 +1,24 @@
 const crypto = require('crypto');
 
 /**
+ * Normalize encryption key to exactly 32 bytes using SHA-256
+ * @param {string} secret - Any length string
+ * @returns {Buffer} - 32-byte buffer
+ */
+function normalizeKey(secret) {
+  if (!secret) throw new Error('encryption secret required');
+  // Use SHA-256 to create a consistent 32-byte key from any length input
+  return crypto.createHash('sha256').update(secret).digest();
+}
+
+/**
  * Encrypt plain text using AES-256-CBC. Returns base64 string in format iv:cipher
  * @param {string} plain
- * @param {string} secret - 32 byte key
+ * @param {string} secret - Any length string, will be normalized to 32 bytes
  */
 function encryptText(plain, secret) {
   if (!secret) throw new Error('encryption secret required');
-  const key = Buffer.from(secret, 'utf8');
-  if (key.length !== 32) throw new Error('SETTINGS_ENCRYPTION_KEY must be 32 bytes');
+  const key = normalizeKey(secret);
   const iv = crypto.randomBytes(16);
   const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
   let encrypted = cipher.update(plain, 'utf8', 'base64');
@@ -20,12 +30,11 @@ function encryptText(plain, secret) {
 /**
  * Decrypt a base64 iv:cipher string using AES-256-CBC
  * @param {string} cipherText
- * @param {string} secret
+ * @param {string} secret - Any length string, will be normalized to 32 bytes
  */
 function decryptText(cipherText, secret) {
   if (!secret) throw new Error('encryption secret required');
-  const key = Buffer.from(secret, 'utf8');
-  if (key.length !== 32) throw new Error('SETTINGS_ENCRYPTION_KEY must be 32 bytes');
+  const key = normalizeKey(secret);
   const parts = cipherText.split(':');
   if (parts.length !== 2) throw new Error('Invalid cipher text format');
   const iv = Buffer.from(parts[0], 'base64');
