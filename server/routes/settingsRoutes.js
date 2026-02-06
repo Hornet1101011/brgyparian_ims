@@ -787,12 +787,21 @@ router.patch('/gmail', requireAuth, isAdmin, async (req, res) => {
     let encryptedPassword = settings.gmail?.encryptedPassword || null;
     const passwordProvided = appPassword && appPassword.trim();
     
+    console.log('[Settings PATCH] Password handling:', {
+      passwordProvided: !!passwordProvided,
+      passwordLength: appPassword?.length || 0,
+      existingPassword: !!settings.gmail?.encryptedPassword
+    });
+    
     if (passwordProvided) {
       try {
         encryptedPassword = gmailHelper.encryptGmailPassword(appPassword);
-        console.log('[Settings] Gmail password encrypted and ready to save');
+        console.log('[Settings PATCH] Password encrypted successfully:', {
+          encryptedLength: encryptedPassword?.length || 0,
+          encryptedValue: encryptedPassword ? `${encryptedPassword.substring(0, 10)}...` : null
+        });
       } catch (encryptErr) {
-        console.error('[Settings] Failed to encrypt Gmail password:', encryptErr.message);
+        console.error('[Settings PATCH] Failed to encrypt Gmail password:', encryptErr.message);
         return res.status(500).json({ 
           message: 'Failed to encrypt Gmail password',
           error: encryptErr.message
@@ -828,6 +837,12 @@ router.patch('/gmail', requireAuth, isAdmin, async (req, res) => {
       }
     }
     
+    console.log('[Settings PATCH] Before save - encryptedPassword:', {
+      value: encryptedPassword ? `${encryptedPassword.substring(0, 10)}...` : null,
+      length: encryptedPassword?.length || 0,
+      type: typeof encryptedPassword
+    });
+    
     settings.gmail = {
       enabled,
       gmailAddress,
@@ -849,11 +864,20 @@ router.patch('/gmail', requireAuth, isAdmin, async (req, res) => {
     
     const updated = await settings.save();
     
-    console.log('[Settings] Gmail settings saved to database:', {
+    console.log('[Settings] Verifying saved data immediately after save:', {
       enabled: updated.gmail?.enabled,
       gmailAddress: updated.gmail?.gmailAddress,
       hasEncryptedPassword: !!updated.gmail?.encryptedPassword,
       savedPasswordValue: updated.gmail?.encryptedPassword ? `${updated.gmail.encryptedPassword.substring(0, 10)}...` : null
+    });
+    
+    // Double-check by fetching fresh from DB
+    const freshSettings = await SystemSetting.findOne();
+    console.log('[Settings] Fresh fetch from DB:', {
+      enabled: freshSettings?.gmail?.enabled,
+      gmailAddress: freshSettings?.gmail?.gmailAddress,
+      hasEncryptedPassword: !!freshSettings?.gmail?.encryptedPassword,
+      freshPasswordValue: freshSettings?.gmail?.encryptedPassword ? `${freshSettings.gmail.encryptedPassword.substring(0, 10)}...` : null
     });
     
     // Record audit
