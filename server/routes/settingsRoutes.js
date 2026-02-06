@@ -1139,34 +1139,45 @@ router.post('/gmail/test', requireAuth, isAdmin, async (req, res) => {
       });
     }
     
-    // Use app password if available, otherwise fall back to regular password
-    let passwordToUse = settings.gmail.appPassword || settings.gmail.password;
-    const usingAppPassword = !!settings.gmail.appPassword;
+    // Determine which password to use - prefer app password, fall back to regular password
+    const hasAppPassword = !!settings.gmail.appPassword;
+    const hasRegularPassword = !!settings.gmail.password;
+    const passwordToUse = settings.gmail.appPassword || settings.gmail.password;
+    const passwordType = hasAppPassword ? 'appPassword' : 'password';
     
-    console.log('[Settings] Password selection:', {
-      hasAppPassword: !!settings.gmail.appPassword,
-      hasPassword: !!settings.gmail.password,
-      usingAppPassword,
-      passwordLength: passwordToUse.length
+    console.log('[Settings] Test Email Password Selection:', {
+      hasAppPassword,
+      appPasswordLength: settings.gmail.appPassword?.length || 0,
+      hasRegularPassword,
+      regularPasswordLength: settings.gmail.password?.length || 0,
+      usingPasswordType: passwordType,
+      selectedPasswordLength: passwordToUse.length,
+      priority: 'appPassword > password'
     });
     
     const gmailConfig = {
       gmailAddress: fromEmail || settings.gmail.gmailAddress,
       displayName: senderName || settings.gmail.displayName || 'Barangay System',
-      appPassword: passwordToUse
+      appPassword: passwordToUse,
+      passwordType // Pass password type for logging
     };
     
-    console.log('[Settings] Gmail config prepared for test:', {
+    console.log('[Settings] Gmail test config prepared:', {
       gmailAddress: gmailConfig.gmailAddress,
       displayName: gmailConfig.displayName,
-      usingAppPassword,
-      hasPassword: !!gmailConfig.appPassword
+      usingPasswordType: gmailConfig.passwordType,
+      passwordLength: gmailConfig.appPassword.length
     });
     
     const result = await gmailHelper.testGmailConnection(gmailConfig, testEmail);
     
     if (!result.success) {
-      console.error('[Settings] Gmail test failed:', result.error);
+      console.error('[Settings] Gmail test email failed:', {
+        error: result.error,
+        passwordType,
+        testEmail,
+        gmailAddress: gmailConfig.gmailAddress
+      });
       return res.status(400).json({
         success: false,
         message: 'Gmail test failed',
@@ -1175,15 +1186,25 @@ router.post('/gmail/test', requireAuth, isAdmin, async (req, res) => {
       });
     }
     
-    console.log('[Settings] Gmail test successful by admin:', req.user._id, 'sent to:', testEmail);
+    console.log('[Settings] Gmail test email successful:', {
+      adminId: req.user._id,
+      testEmail,
+      gmailAddress: gmailConfig.gmailAddress,
+      passwordType,
+      messageId: result.messageId
+    });
     
     return res.json({
       success: true,
       message: 'Test email sent successfully',
-      messageId: result.messageId
+      messageId: result.messageId,
+      passwordType // Inform client which password was used
     });
   } catch (err) {
-    console.error('POST /api/settings/gmail/test error:', err);
+    console.error('[Settings] POST /api/settings/gmail/test error:', {
+      error: err.message,
+      stack: err.stack
+    });
     return res.status(500).json({
       success: false,
       message: 'Failed to test Gmail',

@@ -100,26 +100,54 @@ function createGmailTransporter(gmailConfig) {
     throw new Error('Gmail not configured: missing email address');
   }
 
-  let decryptedPassword = null;
+  let passwordToUse = null;
+  let passwordSource = null;
   
-  // Try to use appPassword first (for testing), then fall back to encryptedPassword (for production)
+  // Priority: appPassword > password > encryptedPassword (for backwards compatibility)
   if (gmailConfig.appPassword) {
-    decryptedPassword = gmailConfig.appPassword;
+    passwordToUse = gmailConfig.appPassword;
+    passwordSource = 'appPassword';
     console.log('[GmailTransporter] Using appPassword from config');
+  } else if (gmailConfig.password) {
+    passwordToUse = gmailConfig.password;
+    passwordSource = 'password';
+    console.log('[GmailTransporter] Using regular password from config');
   } else if (gmailConfig.encryptedPassword) {
     try {
-      decryptedPassword = decryptGmailPassword(gmailConfig.encryptedPassword);
+      passwordToUse = decryptGmailPassword(gmailConfig.encryptedPassword);
+      passwordSource = 'encryptedPassword (decrypted)';
       console.log('[GmailTransporter] Decrypted encryptedPassword successfully');
     } catch (err) {
-      console.error('Failed to decrypt Gmail password:', err.message);
+      console.error('[GmailTransporter] Failed to decrypt Gmail password:', err.message);
       throw err;
     }
   }
 
-  if (!decryptedPassword) {
-    throw new Error('Gmail not configured: missing app password');
+  if (!passwordToUse) {
+    throw new Error('Gmail not configured: missing password (appPassword, password, or encryptedPassword required)');
   }
 
+  try {
+    console.log('[GmailTransporter] Creating nodemailer transporter:', {
+      gmailAddress: gmailConfig.gmailAddress,
+      passwordSource,
+      passwordLength: passwordToUse.length
+    });
+    
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: gmailConfig.gmailAddress,
+        pass: passwordToUse
+      }
+    });
+
+    console.log('[GmailTransporter] Transporter created successfully using', passwordSource);
+    return transporter;
+  } catch (err) {
+    throw new Error('Failed to create Gmail transporter: ' + err.message);
+  }
+}
   try {
     console.log('[GmailTransporter] Creating nodemailer transporter for:', gmailConfig.gmailAddress);
     const transporter = nodemailer.createTransport({
