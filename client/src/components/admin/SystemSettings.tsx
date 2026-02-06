@@ -317,8 +317,8 @@ const SystemSettings: FC = () => {
         payload.emailSettings = emailSettings;
       }
 
-      // Include Gmail settings if present or has app password to encrypt
-      if (gmailSettings && (gmailSettings.enabled || gmailSettings.appPassword)) {
+      // Include Gmail settings if present or has passwords to save
+      if (gmailSettings && (gmailSettings.enabled || gmailSettings.appPassword || gmailSettings.password)) {
         const gmailPayload: any = {
           enabled: gmailSettings.enabled,
           gmailAddress: gmailSettings.gmailAddress,
@@ -326,9 +326,14 @@ const SystemSettings: FC = () => {
           useAppPassword: gmailSettings.useAppPassword !== false,
         };
         
-        // Include app password if provided for encryption on server
+        // Include app password if provided
         if (gmailSettings.appPassword && gmailSettings.appPassword.trim()) {
           gmailPayload.appPassword = gmailSettings.appPassword;
+        }
+        
+        // Include regular password if provided
+        if (gmailSettings.password && gmailSettings.password.trim()) {
+          gmailPayload.password = gmailSettings.password;
         }
         
         payload.gmail = gmailPayload;
@@ -336,7 +341,9 @@ const SystemSettings: FC = () => {
           enabled: gmailPayload.enabled,
           gmailAddress: gmailPayload.gmailAddress,
           hasAppPassword: !!gmailPayload.appPassword,
-          passwordLength: gmailPayload.appPassword?.length || 0
+          appPasswordLength: gmailPayload.appPassword?.length || 0,
+          hasPassword: !!gmailPayload.password,
+          passwordLength: gmailPayload.password?.length || 0
         });
       }
 
@@ -351,13 +358,13 @@ const SystemSettings: FC = () => {
       setDirty(false);
       setSuccess(true);
       
-      // Clear sensitive app password from state after successful save
-      // It's now encrypted and stored on server
-      if (gmailSettings.appPassword) {
-        console.log('[Settings Save] Clearing appPassword from state after successful save');
+      // Clear sensitive passwords from state after successful save
+      if (gmailSettings.appPassword || gmailSettings.password) {
+        console.log('[Settings Save] Clearing passwords from state after successful save');
         setGmailSettings((prev: any) => ({
           ...prev,
-          appPassword: '' // Clear password from state
+          appPassword: '', // Clear app password from state
+          password: '' // Clear regular password from state
         }));
       }
       

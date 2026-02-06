@@ -19,6 +19,7 @@ interface GmailSettings {
   enabled: boolean;
   gmailAddress: string;
   appPassword: string;
+  password: string;
   displayName: string;
   useAppPassword: boolean;
 }
@@ -33,6 +34,7 @@ const GmailSettingsComponent = ({ onGmailStatusChange, onSettingsChange }: Gmail
     enabled: false,
     gmailAddress: '',
     appPassword: '',
+    password: '',
     displayName: '',
     useAppPassword: true,
   } as GmailSettings);
@@ -67,6 +69,7 @@ const GmailSettingsComponent = ({ onGmailStatusChange, onSettingsChange }: Gmail
         setGmailSettings({
           ...response.data.gmail,
           appPassword: '', // Always start with empty password for security
+          password: '', // Always start with empty password for security
         });
       }
     } catch (err) {
@@ -289,6 +292,23 @@ const GmailSettingsComponent = ({ onGmailStatusChange, onSettingsChange }: Gmail
               type={showPassword ? 'text' : 'password'}
               placeholder="xxxx xxxx xxxx xxxx"
               helperText={passwordSavedBefore ? '✓ Password saved (enter new password to update)' : '16-character app password (without spaces)'}
+              size="small"
+            />
+
+            <TextField
+              label="Gmail Password (Optional Fallback)"
+              value={gmailSettings.password}
+              onChange={(e) =>
+                setGmailSettings({
+                  ...gmailSettings,
+                  password: e.target.value,
+                })
+              }
+              fullWidth
+              margin="normal"
+              type={showPassword ? 'text' : 'password'}
+              placeholder="your-gmail-password"
+              helperText="Regular Gmail password - used only if app password is not available"
               size="small"
             />
 
