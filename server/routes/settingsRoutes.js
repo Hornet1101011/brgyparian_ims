@@ -1158,7 +1158,9 @@ router.post('/gmail/test', requireAuth, isAdmin, async (req, res) => {
     const gmailConfig = {
       gmailAddress: fromEmail || settings.gmail.gmailAddress,
       displayName: senderName || settings.gmail.displayName || 'Barangay System',
-      appPassword: passwordToUse,
+      appPassword: settings.gmail.appPassword,
+      password: settings.gmail.password,
+      encryptedPassword: settings.gmail.encryptedPassword,
       passwordType // Pass password type for logging
     };
     
