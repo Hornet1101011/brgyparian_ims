@@ -768,35 +768,78 @@ router.patch('/gmail', requireAuth, isAdmin, async (req, res) => {
   try {
     const { gmailAddress, appPassword, displayName, useAppPassword, enabled } = req.body;
     
-    // Validate Gmail config
-    const config = {
-      gmailAddress,
-      appPassword,
-      useAppPassword: useAppPassword !== false
-    };
-    
-    const errors = gmailHelper.validateGmailConfig(config);
-    if (errors.length > 0) {
-      return res.status(400).json({ message: 'Validation error', errors });
-    }
-    
     let settings = await SystemSetting.findOne();
     if (!settings) {
       settings = new SystemSetting();
     }
+
+    // If appPassword is provided and not empty, encrypt it
+    let encryptedPassword = settings.gmail?.encryptedPassword || null;
+    const passwordProvided = appPassword && appPassword.trim();
     
-    // Encrypt the app password
-    const encryptedPassword = gmailHelper.encryptGmailPassword(appPassword);
+    if (passwordProvided) {
+      try {
+        encryptedPassword = gmailHelper.encryptGmailPassword(appPassword);
+        console.log('[Settings] Gmail password encrypted and ready to save');
+      } catch (encryptErr) {
+        console.error('[Settings] Failed to encrypt Gmail password:', encryptErr.message);
+        return res.status(500).json({ 
+          message: 'Failed to encrypt Gmail password',
+          error: encryptErr.message
+        });
+      }
+    } else if (!encryptedPassword && enabled) {
+      // If enabling Gmail but no password provided and none exists, that's an error
+      return res.status(400).json({ 
+        message: 'App password is required when enabling Gmail',
+        errors: ['appPassword is required']
+      });
+    }
+    
+    // Validate Gmail config only if enabled
+    if (enabled) {
+      if (!gmailAddress) {
+        return res.status(400).json({ 
+          message: 'Gmail address is required',
+          errors: ['gmailAddress is required']
+        });
+      }
+      if (!gmailAddress.includes('@gmail.com')) {
+        return res.status(400).json({ 
+          message: 'Must be a valid Gmail address',
+          errors: ['Must use @gmail.com address']
+        });
+      }
+      if (!encryptedPassword) {
+        return res.status(400).json({ 
+          message: 'Gmail app password is required',
+          errors: ['appPassword is required']
+        });
+      }
+    }
     
     settings.gmail = {
       enabled,
       gmailAddress,
       encryptedPassword: encryptedPassword,
-      displayName: displayName || gmailAddress.split('@')[0],
+      displayName: displayName || (gmailAddress && gmailAddress.split('@')[0]) || 'Barangay System',
       useAppPassword: useAppPassword !== false
     };
     
+    console.log('[Settings] Gmail settings prepared for save:', {
+      enabled,
+      gmailAddress,
+      displayName: settings.gmail.displayName,
+      hasEncryptedPassword: !!encryptedPassword
+    });
+    
     const updated = await settings.save();
+    
+    console.log('[Settings] Gmail settings saved to database:', {
+      enabled: updated.gmail?.enabled,
+      gmailAddress: updated.gmail?.gmailAddress,
+      hasEncryptedPassword: !!updated.gmail?.encryptedPassword
+    });
     
     // Record audit
     await recordAudit(req.user._id, 'gmail_config_updated', {
@@ -805,10 +848,11 @@ router.patch('/gmail', requireAuth, isAdmin, async (req, res) => {
       displayName
     }, req.ip);
     
-    console.log('[Settings] Gmail configuration updated by admin:', req.user._id);
-    
-    // Clear transporter cache so next email uses new config
-    // This is done by the email service itself when it detects settings have changed
+    console.log('[Settings] Gmail configuration updated by admin:', req.user._id, {
+      enabled,
+      gmailAddress,
+      hasPassword: !!encryptedPassword
+    });
     
     return res.json({
       success: true,
@@ -825,6 +869,12 @@ router.post('/gmail/test', requireAuth, isAdmin, async (req, res) => {
   try {
     // Accept testEmail or use gmailAddress as fallback
     const { testEmail, fromEmail, senderName } = req.body;
+    
+    console.log('[Settings] Gmail test request received:', {
+      testEmail,
+      fromEmail,
+      senderName
+    });
     
     // Validate test email - if not provided, we'll validate after checking settings
     if (!testEmail) {
@@ -844,6 +894,13 @@ router.post('/gmail/test', requireAuth, isAdmin, async (req, res) => {
     }
     
     const settings = await SystemSetting.findOne().lean();
+    
+    console.log('[Settings] Gmail config check:', {
+      gmailEnabled: settings?.gmail?.enabled,
+      gmailAddress: settings?.gmail?.gmailAddress,
+      hasEncryptedPassword: !!settings?.gmail?.encryptedPassword
+    });
+    
     if (!settings?.gmail?.enabled || !settings.gmail.gmailAddress) {
       return res.status(400).json({ 
         success: false,
@@ -853,17 +910,45 @@ router.post('/gmail/test', requireAuth, isAdmin, async (req, res) => {
     }
     
     // Prepare config for testing (decrypt password)
+    let decryptedPassword = null;
+    try {
+      if (settings.gmail.encryptedPassword) {
+        decryptedPassword = gmailHelper.decryptGmailPassword(settings.gmail.encryptedPassword);
+      }
+    } catch (decryptErr) {
+      console.error('[Settings] Failed to decrypt Gmail password:', decryptErr.message);
+      return res.status(400).json({
+        success: false,
+        message: 'Failed to decrypt Gmail password',
+        error: 'The saved Gmail password could not be decrypted. Please update it.'
+      });
+    }
+    
+    if (!decryptedPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Gmail password not found',
+        error: 'No password is saved for Gmail. Please update your Gmail settings.'
+      });
+    }
+    
     const gmailConfig = {
       gmailAddress: fromEmail || settings.gmail.gmailAddress,
       displayName: senderName || settings.gmail.displayName || 'Barangay System',
-      appPassword: settings.gmail.encryptedPassword ? 
-        gmailHelper.decryptGmailPassword(settings.gmail.encryptedPassword) : null,
+      appPassword: decryptedPassword,
       encryptedPassword: null // Use appPassword directly for transporter
     };
+    
+    console.log('[Settings] Gmail config prepared for test:', {
+      gmailAddress: gmailConfig.gmailAddress,
+      displayName: gmailConfig.displayName,
+      hasPassword: !!gmailConfig.appPassword
+    });
     
     const result = await gmailHelper.testGmailConnection(gmailConfig, testEmail);
     
     if (!result.success) {
+      console.error('[Settings] Gmail test failed:', result.error);
       return res.status(400).json({
         success: false,
         message: 'Gmail test failed',

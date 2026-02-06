@@ -41,6 +41,7 @@ const GmailSettingsComponent = ({ onGmailStatusChange }: GmailSettingsProps) => 
   const [testing, setTesting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [testEmailAddress, setTestEmailAddress] = useState('');
+  const [passwordSavedBefore, setPasswordSavedBefore] = useState(false);
 
   useEffect(() => {
     loadGmailSettings();
@@ -51,7 +52,14 @@ const GmailSettingsComponent = ({ onGmailStatusChange }: GmailSettingsProps) => 
       setLoading(true);
       const response = await adminAPI.get('/settings/gmail');
       if (response.data?.gmail) {
-        setGmailSettings(response.data.gmail);
+        // Check if a password was previously saved
+        if (response.data.gmail.gmailAddress) {
+          setPasswordSavedBefore(true);
+        }
+        setGmailSettings({
+          ...response.data.gmail,
+          appPassword: '', // Always start with empty password for security
+        });
       }
     } catch (err) {
       console.error('Failed to load Gmail settings:', err);
@@ -60,7 +68,7 @@ const GmailSettingsComponent = ({ onGmailStatusChange }: GmailSettingsProps) => 
       setLoading(false);
     }  
   };
-    const handleSaveGmailSettings = async () => {
+  const handleSaveGmailSettings = async () => {
     try {
       // Validate inputs
       if (gmailSettings.enabled) {
@@ -68,7 +76,8 @@ const GmailSettingsComponent = ({ onGmailStatusChange }: GmailSettingsProps) => 
           antdMessage.error('Please enter a valid Gmail address');
           return;
         }
-        if (!gmailSettings.appPassword) {
+        // Only require password if it's new OR if no password was saved before
+        if (!gmailSettings.appPassword && !passwordSavedBefore) {
           antdMessage.error('Please enter the Gmail app password');
           return;
         }
@@ -78,7 +87,15 @@ const GmailSettingsComponent = ({ onGmailStatusChange }: GmailSettingsProps) => 
       const response = await adminAPI.patch('/settings/gmail', gmailSettings);
 
       if (response.data?.gmail) {
-        setGmailSettings(response.data.gmail);
+        // Mark that password has been saved
+        if (gmailSettings.enabled && gmailSettings.gmailAddress) {
+          setPasswordSavedBefore(true);
+        }
+        // Keep the entered password in state if it was just entered, otherwise clear it
+        setGmailSettings({
+          ...response.data.gmail,
+          appPassword: gmailSettings.appPassword, // Preserve what user entered
+        });
         antdMessage.success('Gmail settings updated successfully');
         
         // Notify parent about status change
@@ -103,7 +120,7 @@ const GmailSettingsComponent = ({ onGmailStatusChange }: GmailSettingsProps) => 
         return;
       }
 
-      if (!gmailSettings.appPassword) {
+      if (!gmailSettings.appPassword && !passwordSavedBefore) {
         antdMessage.error('Please configure the app password first');
         return;
       }
@@ -115,12 +132,20 @@ const GmailSettingsComponent = ({ onGmailStatusChange }: GmailSettingsProps) => 
         return;
       }
 
+      console.log('[GmailSettings] Sending test email request:', {
+        testEmail: recipientEmail,
+        gmailAddress: gmailSettings.gmailAddress,
+        displayName: gmailSettings.displayName,
+      });
+
       setTesting(true);
       const response = await adminAPI.post('/settings/gmail/test', {
         testEmail: recipientEmail,
         senderName: gmailSettings.displayName || 'Barangay System',
         fromEmail: gmailSettings.gmailAddress,
       });
+
+      console.log('[GmailSettings] Test email response:', response.data);
 
       if (response.data?.success) {
         antdMessage.success(
@@ -134,6 +159,11 @@ const GmailSettingsComponent = ({ onGmailStatusChange }: GmailSettingsProps) => 
         err.response?.data?.error || 
         err.response?.data?.message || 
         'Failed to send test email. Please check your Gmail configuration.';
+      console.error('Error details:', {
+        status: err.response?.status,
+        data: err.response?.data,
+        message: errorMsg
+      });
       antdMessage.error(errorMsg);
     } finally {
       setTesting(false);
@@ -224,7 +254,7 @@ const GmailSettingsComponent = ({ onGmailStatusChange }: GmailSettingsProps) => 
               margin="normal"
               type={showPassword ? 'text' : 'password'}
               placeholder="xxxx xxxx xxxx xxxx"
-              helperText="16-character app password (without spaces)"
+              helperText={passwordSavedBefore ? '✓ Password saved (enter new password to update)' : '16-character app password (without spaces)'}
               size="small"
             />
 
@@ -294,7 +324,7 @@ const GmailSettingsComponent = ({ onGmailStatusChange }: GmailSettingsProps) => 
                 variant="outlined"
                 color="success"
                 onClick={handleTestGmailConnection}
-                disabled={!gmailSettings.gmailAddress || !gmailSettings.appPassword || saving || testing}
+                disabled={!gmailSettings.gmailAddress || (!gmailSettings.appPassword && !passwordSavedBefore) || saving || testing}
                 sx={{ minWidth: 150 }}
               >
                 {testing ? (
