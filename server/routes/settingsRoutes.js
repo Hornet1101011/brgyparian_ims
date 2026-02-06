@@ -768,6 +768,16 @@ router.patch('/gmail', requireAuth, isAdmin, async (req, res) => {
   try {
     const { gmailAddress, appPassword, displayName, useAppPassword, enabled } = req.body;
     
+    console.log('[Settings PATCH] Gmail update request received:', {
+      enabled,
+      gmailAddress,
+      displayName,
+      hasAppPassword: !!appPassword,
+      appPasswordLength: appPassword?.length || 0,
+      useAppPassword,
+      allKeysInBody: Object.keys(req.body)
+    });
+    
     let settings = await SystemSetting.findOne();
     if (!settings) {
       settings = new SystemSetting();

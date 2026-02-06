@@ -84,7 +84,19 @@ const GmailSettingsComponent = ({ onGmailStatusChange }: GmailSettingsProps) => 
       }
 
       setSaving(true);
+      
+      // Log what we're sending
+      console.log('[GmailSettings] Saving Gmail settings:', {
+        enabled: gmailSettings.enabled,
+        gmailAddress: gmailSettings.gmailAddress,
+        displayName: gmailSettings.displayName,
+        hasPassword: !!gmailSettings.appPassword,
+        passwordLength: gmailSettings.appPassword?.length || 0
+      });
+      
       const response = await adminAPI.patch('/settings/gmail', gmailSettings);
+
+      console.log('[GmailSettings] Save response:', response.data);
 
       if (response.data?.gmail) {
         // Mark that password has been saved
