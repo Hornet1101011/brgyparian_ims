@@ -439,7 +439,37 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
       } : null
     });
     
-    const updated = await SystemSetting.findOneAndUpdate({}, { $set: updatePayload }, { new: true, upsert: true, setDefaultsOnInsert: true });
+    // Build explicit field updates for nested gmail object to ensure all fields are saved
+    const updateOps = { $set: {} };
+    
+    // Copy simple fields
+    for (const [key, value] of Object.entries(updatePayload)) {
+      if (key !== 'gmail') {
+        updateOps.$set[key] = value;
+      }
+    }
+    
+    // Explicitly set each gmail field to ensure Mongoose saves them properly
+    if (updatePayload.gmail) {
+      console.log('[Settings PATCH] Setting individual gmail fields:', {
+        'gmail.enabled': updatePayload.gmail.enabled,
+        'gmail.gmailAddress': updatePayload.gmail.gmailAddress,
+        'gmail.displayName': updatePayload.gmail.displayName,
+        'gmail.useAppPassword': updatePayload.gmail.useAppPassword,
+        'gmail.encryptedPassword_exists': !!updatePayload.gmail.encryptedPassword,
+        'gmail.encryptedPassword_length': updatePayload.gmail.encryptedPassword ? updatePayload.gmail.encryptedPassword.length : 0,
+        'gmail.updatedAt': updatePayload.gmail.updatedAt
+      });
+      
+      updateOps.$set['gmail.enabled'] = updatePayload.gmail.enabled;
+      updateOps.$set['gmail.gmailAddress'] = updatePayload.gmail.gmailAddress;
+      updateOps.$set['gmail.displayName'] = updatePayload.gmail.displayName;
+      updateOps.$set['gmail.useAppPassword'] = updatePayload.gmail.useAppPassword;
+      updateOps.$set['gmail.encryptedPassword'] = updatePayload.gmail.encryptedPassword;
+      updateOps.$set['gmail.updatedAt'] = updatePayload.gmail.updatedAt;
+    }
+    
+    const updated = await SystemSetting.findOneAndUpdate({}, updateOps, { new: true, upsert: true, setDefaultsOnInsert: true });
     
     console.log('[Settings PATCH] After save - Gmail in DB:', {
       hasGmail: !!updated?.gmail,
@@ -447,7 +477,8 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
       gmailAddress: updated?.gmail?.gmailAddress,
       hasEncryptedPassword: !!updated?.gmail?.encryptedPassword,
       encryptedPasswordLength: updated?.gmail?.encryptedPassword ? updated.gmail.encryptedPassword.length : 0,
-      gmailFields: updated?.gmail ? Object.keys(updated.gmail) : []
+      gmailFields: updated?.gmail ? Object.keys(updated.gmail) : [],
+      allGmailData: updated?.gmail ? JSON.stringify(updated.gmail) : 'null'
     });
     const diff = { before, after: updated.toObject ? updated.toObject() : updated };
     await recordAudit(req.user?._id, 'patch_settings', diff, req.ip || req.headers['x-forwarded-for']);
