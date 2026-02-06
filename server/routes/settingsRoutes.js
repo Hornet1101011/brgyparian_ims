@@ -1047,6 +1047,8 @@ router.post('/gmail/test', requireAuth, isAdmin, async (req, res) => {
       gmailEnabled: settings?.gmail?.enabled,
       gmailAddress: settings?.gmail?.gmailAddress,
       hasEncryptedPassword: !!settings?.gmail?.encryptedPassword,
+      encryptedPasswordLength: settings?.gmail?.encryptedPassword ? settings.gmail.encryptedPassword.length : 0,
+      encryptedPasswordPreview: settings?.gmail?.encryptedPassword ? settings.gmail.encryptedPassword.substring(0, 30) + '...' : null,
       gmailObject: settings?.gmail ? Object.keys(settings.gmail) : null
     });
     
@@ -1094,14 +1096,27 @@ router.post('/gmail/test', requireAuth, isAdmin, async (req, res) => {
     let decryptedPassword = null;
     try {
       if (settings.gmail.encryptedPassword) {
+        console.log('[Settings] Attempting to decrypt Gmail password:', {
+          encryptedLength: settings.gmail.encryptedPassword.length,
+          preview: settings.gmail.encryptedPassword.substring(0, 30) + '...',
+          encryptionKeySet: !!process.env.SETTINGS_ENCRYPTION_KEY
+        });
         decryptedPassword = gmailHelper.decryptGmailPassword(settings.gmail.encryptedPassword);
+        console.log('[Settings] Decryption successful:', {
+          hasDecryptedPassword: !!decryptedPassword,
+          decryptedLength: decryptedPassword ? decryptedPassword.length : 0
+        });
       }
     } catch (decryptErr) {
-      console.error('[Settings] Failed to decrypt Gmail password:', decryptErr.message);
+      console.error('[Settings] Failed to decrypt Gmail password:', {
+        error: decryptErr.message,
+        stack: decryptErr.stack
+      });
       return res.status(400).json({
         success: false,
         message: 'Failed to decrypt Gmail password',
-        error: 'The saved Gmail password could not be decrypted. Please update it.'
+        error: 'The saved Gmail password could not be decrypted. Please update it.',
+        details: decryptErr.message
       });
     }
     

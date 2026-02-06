@@ -11,19 +11,32 @@ const { decryptText, encryptText } = require('./cryptoHelper');
  * @returns {string} - Decrypted password
  */
 function decryptGmailPassword(encryptedPassword) {
-  if (!encryptedPassword) return null;
+  if (!encryptedPassword) {
+    console.log('[GmailHelper.decryptGmailPassword] No encrypted password provided');
+    return null;
+  }
   
   // If encryption key is not configured, assume password is stored unencrypted
   if (!process.env.SETTINGS_ENCRYPTION_KEY) {
-    console.warn('[GmailHelper] Encryption key not configured, treating password as unencrypted');
+    console.warn('[GmailHelper.decryptGmailPassword] Encryption key not configured, treating password as unencrypted');
     return encryptedPassword;
   }
 
   try {
-    return decryptText(encryptedPassword, process.env.SETTINGS_ENCRYPTION_KEY);
+    console.log('[GmailHelper.decryptGmailPassword] Attempting decryption with key length:', process.env.SETTINGS_ENCRYPTION_KEY.length);
+    const decrypted = decryptText(encryptedPassword, process.env.SETTINGS_ENCRYPTION_KEY);
+    console.log('[GmailHelper.decryptGmailPassword] Decryption successful:', {
+      decryptedLength: decrypted.length,
+      preview: decrypted.substring(0, 20) + '...'
+    });
+    return decrypted;
   } catch (err) {
     // If decryption fails, it might be an unencrypted password
-    console.warn('[GmailHelper] Decryption failed, treating as unencrypted password:', err.message);
+    console.warn('[GmailHelper.decryptGmailPassword] Decryption failed, treating as unencrypted password:', {
+      error: err.message,
+      encryptedLength: encryptedPassword.length,
+      returningAsIs: true
+    });
     return encryptedPassword;
   }
 }
