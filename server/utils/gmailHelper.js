@@ -59,9 +59,11 @@ function createGmailTransporter(gmailConfig) {
   // Try to use appPassword first (for testing), then fall back to encryptedPassword (for production)
   if (gmailConfig.appPassword) {
     decryptedPassword = gmailConfig.appPassword;
+    console.log('[GmailTransporter] Using appPassword from config');
   } else if (gmailConfig.encryptedPassword) {
     try {
       decryptedPassword = decryptGmailPassword(gmailConfig.encryptedPassword);
+      console.log('[GmailTransporter] Decrypted encryptedPassword successfully');
     } catch (err) {
       console.error('Failed to decrypt Gmail password:', err.message);
       throw err;
@@ -73,6 +75,7 @@ function createGmailTransporter(gmailConfig) {
   }
 
   try {
+    console.log('[GmailTransporter] Creating nodemailer transporter for:', gmailConfig.gmailAddress);
     const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
@@ -81,6 +84,7 @@ function createGmailTransporter(gmailConfig) {
       }
     });
 
+    console.log('[GmailTransporter] Transporter created successfully');
     return transporter;
   } catch (err) {
     throw new Error('Failed to create Gmail transporter: ' + err.message);
@@ -125,10 +129,13 @@ async function testGmailConnection(gmailConfig, testEmail) {
       throw new Error('Valid test email is required');
     }
 
+    console.log('[GmailHelper] Creating transporter for test...');
     const transporter = createGmailTransporter(gmailConfig);
     
     // Verify connection
+    console.log('[GmailHelper] Verifying SMTP connection...');
     await transporter.verify();
+    console.log('[GmailHelper] SMTP connection verified successfully');
     
     const displayName = gmailConfig.displayName || 'Barangay System';
     const from = `${displayName} <${gmailConfig.gmailAddress}>`;
@@ -147,6 +154,7 @@ async function testGmailConnection(gmailConfig, testEmail) {
       </html>
     `;
 
+    console.log('[GmailHelper] Sending test email to:', testEmail);
     const result = await transporter.sendMail({
       from,
       to: testEmail,
@@ -154,6 +162,7 @@ async function testGmailConnection(gmailConfig, testEmail) {
       html
     });
 
+    console.log('[GmailHelper] Test email sent successfully:', result.messageId);
     return {
       success: true,
       messageId: result.messageId,
@@ -163,7 +172,12 @@ async function testGmailConnection(gmailConfig, testEmail) {
     console.error('[GmailHelper] Connection test failed:', err);
     return {
       success: false,
-      error: err.message || String(err)
+      error: err.message || String(err),
+      details: {
+        code: err.code,
+        statusCode: err.statusCode,
+        response: err.response?.body ? 'SMTP Error Response' : null
+      }
     };
   }
 }

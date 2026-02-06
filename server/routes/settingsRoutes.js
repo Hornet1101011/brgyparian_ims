@@ -962,7 +962,8 @@ router.post('/gmail/test', requireAuth, isAdmin, async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Gmail test failed',
-        error: result.error
+        error: result.error,
+        details: result.details || 'Check server logs for more information'
       });
     }
     
