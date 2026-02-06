@@ -854,67 +854,38 @@ router.patch('/gmail', requireAuth, isAdmin, async (req, res) => {
       isString: typeof encryptedPassword === 'string'
     });
     
-    // Ensure we have a password to save (even if unencrypted)
-    if (!encryptedPassword) {
-      console.warn('[Settings PATCH] No encryptedPassword available for save');
-    }
-    
-    // Use updateOne for more reliable nested field updates
-    const updatePayload = {
-      'gmail.enabled': enabled,
-      'gmail.gmailAddress': gmailAddress,
-      'gmail.displayName': displayName || (gmailAddress && gmailAddress.split('@')[0]) || 'Barangay System',
-      'gmail.useAppPassword': useAppPassword !== false,
-      'gmail.updatedAt': new Date()
+    // Update settings object directly
+    settings.gmail = {
+      enabled: enabled,
+      gmailAddress: gmailAddress,
+      displayName: displayName || (gmailAddress && gmailAddress.split('@')[0]) || 'Barangay System',
+      useAppPassword: useAppPassword !== false,
+      encryptedPassword: encryptedPassword,
+      updatedAt: new Date()
     };
     
-    // Only set password if we have one - must be non-empty string
-    if (encryptedPassword && typeof encryptedPassword === 'string' && encryptedPassword.trim()) {
-      updatePayload['gmail.encryptedPassword'] = encryptedPassword;
-      console.log('[Settings PATCH] Including password in update:', {
-        passwordLength: encryptedPassword.length,
-        fieldName: 'gmail.encryptedPassword'
-      });
-    } else {
-      console.warn('[Settings PATCH] NOT including password - invalid:', {
-        exists: !!encryptedPassword,
-        isString: typeof encryptedPassword === 'string',
-        isEmpty: !encryptedPassword?.trim()
-      });
-    }
-    
-    console.log('[Settings PATCH] Update payload:', {
-      hasEncryptedPassword: !!updatePayload['gmail.encryptedPassword'],
-      updateKeys: Object.keys(updatePayload)
+    console.log('[Settings PATCH] Updated settings.gmail object:', {
+      enabled: settings.gmail.enabled,
+      gmailAddress: settings.gmail.gmailAddress,
+      hasEncryptedPassword: !!settings.gmail.encryptedPassword,
+      passwordLength: settings.gmail.encryptedPassword?.length || 0
     });
     
-    const updateResult = await SystemSetting.updateOne(
-      { _id: settings._id },
-      { $set: updatePayload },
-      { new: true }
-    );
+    // Save using Mongoose .save() for proper document handling
+    const savedSettings = await settings.save();
     
-    console.log('[Settings PATCH] UpdateOne result:', {
-      acknowledged: updateResult.acknowledged,
-      matchedCount: updateResult.matchedCount,
-      modifiedCount: updateResult.modifiedCount,
-      upsertedId: updateResult.upsertedId
+    console.log('[Settings PATCH] Save result:', {
+      savedId: savedSettings._id,
+      gmailEnabled: savedSettings.gmail?.enabled,
+      gmailAddress: savedSettings.gmail?.gmailAddress,
+      hasPasswordAfterSave: !!savedSettings.gmail?.encryptedPassword,
+      passwordLength: savedSettings.gmail?.encryptedPassword?.length || 0
     });
     
-    if (updateResult.matchedCount === 0) {
-      console.error('[Settings PATCH] Settings document not found by ID');
-      return res.status(500).json({ message: 'Settings document not found' });
-    }
-    
-    if (!updateResult.acknowledged) {
-      console.error('[Settings PATCH] Update was not acknowledged by MongoDB');
-      return res.status(500).json({ message: 'Update was not acknowledged' });
-    }
-    
-    // Fetch fresh document to verify save - use lean for performance
+    // Fetch fresh document to verify save
     const updated = await SystemSetting.findById(settings._id).lean();
     
-    console.log('[Settings PATCH] Verification after updateOne:', {
+    console.log('[Settings PATCH] Verification after save:', {
       enabled: updated?.gmail?.enabled,
       gmailAddress: updated?.gmail?.gmailAddress,
       hasEncryptedPassword: !!updated?.gmail?.encryptedPassword,
