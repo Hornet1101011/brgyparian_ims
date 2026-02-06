@@ -243,6 +243,7 @@ router.put('/', requireAuth, isAdmin, async (req, res) => {
 router.patch('/', requireAuth, isAdmin, async (req, res) => {
   try {
     console.log('[Settings PATCH] Handler called');
+    console.log('[Settings PATCH] Encryption key available:', !!process.env.SETTINGS_ENCRYPTION_KEY);
     let payload = req.body || {};
     
     // Defensive: Recursively remove all _id fields from payload
@@ -344,45 +345,110 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
     if (payload.gmail) {
       const gmailData = { ...payload.gmail };
       
+      console.log('[Settings PATCH] Gmail data received:', {
+        enabled: gmailData.enabled,
+        gmailAddress: gmailData.gmailAddress,
+        hasAppPassword: !!gmailData.appPassword,
+        appPasswordLength: gmailData.appPassword?.length || 0,
+        hasExistingEncrypted: !!gmailData.encryptedPassword
+      });
+      
       // Handle app password encryption if provided
       if (gmailData.appPassword) {
+        console.log('[Settings PATCH] Encrypting app password...');
         try {
           const encrypted = gmailHelper.encryptGmailPassword(gmailData.appPassword);
-          // Store encrypted password in the correct field
-          gmailData.encryptedPassword = encrypted;
+          console.log('[Settings PATCH] Encryption result:', {
+            encrypted: !!encrypted,
+            encryptedLength: encrypted ? encrypted.length : 0,
+            encryptedValue: encrypted ? encrypted.substring(0, 20) + '...' : null,
+            encryptedType: typeof encrypted
+          });
+          
+          if (encrypted) {
+            // Store encrypted password in the correct field
+            gmailData.encryptedPassword = encrypted;
+            console.log('[Settings PATCH] Setting encryptedPassword:', {
+              length: gmailData.encryptedPassword.length,
+              preview: gmailData.encryptedPassword.substring(0, 20) + '...'
+            });
+          } else {
+            console.error('[Settings PATCH] Encryption returned null/undefined/falsy');
+            return res.status(500).json({ message: 'Failed to encrypt Gmail app password: encryption returned no value' });
+          }
+          
           // Remove plain text password from payload
           delete gmailData.appPassword;
-          console.log('[Settings] Gmail app password encrypted and stored as encryptedPassword:', {
-            encryptedLength: encrypted.length,
-            encryptedValue: encrypted.substring(0, 20) + '...'
-          });
+          console.log('[Settings PATCH] Deleted plain text appPassword, gmailData keys now:', Object.keys(gmailData));
+          
         } catch (e) {
-          console.error('Failed to encrypt Gmail app password', e.message);
+          console.error('[Settings PATCH] Encryption error:', e.message, e.stack);
           return res.status(500).json({ message: 'Failed to encrypt Gmail app password: ' + e.message });
         }
       } else if (!gmailData.encryptedPassword && gmailData.enabled) {
         // If enabling Gmail but no password provided and none exists, that's an error
-        console.warn('[Settings] Cannot enable Gmail without app password');
+        console.warn('[Settings PATCH] Cannot enable Gmail without app password');
         return res.status(400).json({ 
           message: 'Gmail app password is required when enabling Gmail',
           errors: ['appPassword is required']
         });
+      } else {
+        console.log('[Settings PATCH] No password provided, keeping existing encrypted password');
       }
       
       // Set updatedAt timestamp for Gmail settings
       gmailData.updatedAt = new Date();
       
-      updatePayload.gmail = gmailData;
-      console.log('[Settings] Gmail data prepared for update:', {
+      console.log('[Settings PATCH] Final gmailData to save:', {
         enabled: gmailData.enabled,
         gmailAddress: gmailData.gmailAddress,
+        displayName: gmailData.displayName,
+        useAppPassword: gmailData.useAppPassword,
         hasEncryptedPassword: !!gmailData.encryptedPassword,
-        displayName: gmailData.displayName
+        encryptedPasswordLength: gmailData.encryptedPassword ? gmailData.encryptedPassword.length : 0,
+        hasAppPassword: !!gmailData.appPassword,
+        allKeys: Object.keys(gmailData)
+      });
+      
+      updatePayload.gmail = gmailData;
+      console.log('[Settings PATCH] updatePayload.gmail set:', {
+        enabled: updatePayload.gmail.enabled,
+        gmailAddress: updatePayload.gmail.gmailAddress,
+        hasEncryptedPassword: !!updatePayload.gmail.encryptedPassword,
+        encryptedPasswordLength: updatePayload.gmail.encryptedPassword ? updatePayload.gmail.encryptedPassword.length : 0,
+        allKeys: Object.keys(updatePayload.gmail)
       });
     }
 
     const before = await SystemSetting.findOne().lean();
+    console.log('[Settings PATCH] Before save - Gmail state:', {
+      hasGmail: !!before?.gmail,
+      gmailEnabled: before?.gmail?.enabled,
+      hasEncryptedPassword: !!before?.gmail?.encryptedPassword
+    });
+    
+    console.log('[Settings PATCH] updatePayload being saved:', {
+      keys: Object.keys(updatePayload),
+      hasGmail: !!updatePayload.gmail,
+      gmailData: updatePayload.gmail ? {
+        enabled: updatePayload.gmail.enabled,
+        gmailAddress: updatePayload.gmail.gmailAddress,
+        hasEncryptedPassword: !!updatePayload.gmail.encryptedPassword,
+        encryptedPasswordLength: updatePayload.gmail.encryptedPassword ? updatePayload.gmail.encryptedPassword.length : 0,
+        updatePayloadGmailKeys: Object.keys(updatePayload.gmail)
+      } : null
+    });
+    
     const updated = await SystemSetting.findOneAndUpdate({}, { $set: updatePayload }, { new: true, upsert: true, setDefaultsOnInsert: true });
+    
+    console.log('[Settings PATCH] After save - Gmail in DB:', {
+      hasGmail: !!updated?.gmail,
+      gmailEnabled: updated?.gmail?.enabled,
+      gmailAddress: updated?.gmail?.gmailAddress,
+      hasEncryptedPassword: !!updated?.gmail?.encryptedPassword,
+      encryptedPasswordLength: updated?.gmail?.encryptedPassword ? updated.gmail.encryptedPassword.length : 0,
+      gmailFields: updated?.gmail ? Object.keys(updated.gmail) : []
+    });
     const diff = { before, after: updated.toObject ? updated.toObject() : updated };
     await recordAudit(req.user?._id, 'patch_settings', diff, req.ip || req.headers['x-forwarded-for']);
     
@@ -1085,6 +1151,58 @@ router.post('/gmail/test', requireAuth, isAdmin, async (req, res) => {
       success: false,
       message: 'Failed to test Gmail',
       error: err.message
+    });
+  }
+});
+
+// DEBUG ENDPOINT - Test encryption (admin only)
+router.post('/test-encryption', requireAuth, isAdmin, async (req, res) => {
+  try {
+    const testPassword = 'test_password_12345';
+    console.log('[Test Encryption] Starting test with password length:', testPassword.length);
+    console.log('[Test Encryption] SETTINGS_ENCRYPTION_KEY available:', !!process.env.SETTINGS_ENCRYPTION_KEY);
+    console.log('[Test Encryption] SETTINGS_ENCRYPTION_KEY length:', process.env.SETTINGS_ENCRYPTION_KEY ? process.env.SETTINGS_ENCRYPTION_KEY.length : 0);
+    
+    const encrypted = gmailHelper.encryptGmailPassword(testPassword);
+    console.log('[Test Encryption] Encryption result:', {
+      success: !!encrypted,
+      length: encrypted ? encrypted.length : 0,
+      value: encrypted
+    });
+    
+    if (!encrypted) {
+      return res.json({
+        success: false,
+        message: 'Encryption returned null/undefined',
+        encryptionKeySet: !!process.env.SETTINGS_ENCRYPTION_KEY
+      });
+    }
+    
+    const decrypted = gmailHelper.decryptGmailPassword(encrypted);
+    console.log('[Test Encryption] Decryption result:', {
+      success: decrypted === testPassword,
+      decrypted,
+      original: testPassword,
+      match: decrypted === testPassword
+    });
+    
+    return res.json({
+      success: true,
+      message: 'Encryption test successful',
+      encryptionKeySet: !!process.env.SETTINGS_ENCRYPTION_KEY,
+      encryptionKeyLength: process.env.SETTINGS_ENCRYPTION_KEY ? process.env.SETTINGS_ENCRYPTION_KEY.length : 0,
+      testPassword,
+      encrypted,
+      decrypted,
+      decryptionMatches: decrypted === testPassword
+    });
+  } catch (err) {
+    console.error('[Test Encryption] Error:', err);
+    return res.status(500).json({
+      success: false,
+      message: 'Encryption test failed',
+      error: err.message,
+      encryptionKeySet: !!process.env.SETTINGS_ENCRYPTION_KEY
     });
   }
 });

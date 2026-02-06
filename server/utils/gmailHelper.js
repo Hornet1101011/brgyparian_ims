@@ -34,10 +34,18 @@ function decryptGmailPassword(encryptedPassword) {
  * @returns {string} - Encrypted password or plain password if no encryption key
  */
 function encryptGmailPassword(password) {
-  if (!password) return null;
+  if (!password) {
+    console.log('[GmailHelper.encryptGmailPassword] Password is null/empty, returning null');
+    return null;
+  }
   
   const passwordStr = String(password).trim();
   
+  if (!passwordStr) {
+    console.log('[GmailHelper.encryptGmailPassword] Password string is empty after trim, returning null');
+    return null;
+  }
+
   if (!process.env.SETTINGS_ENCRYPTION_KEY) {
     console.warn('[GmailHelper] Encryption key not configured, password will be stored as plain text:', {
       passwordLength: passwordStr.length,
@@ -48,13 +56,22 @@ function encryptGmailPassword(password) {
 
   try {
     const encrypted = encryptText(passwordStr, process.env.SETTINGS_ENCRYPTION_KEY);
+    if (!encrypted) {
+      console.error('[GmailHelper.encryptGmailPassword] encryptText returned null/undefined, falling back to plain password');
+      return passwordStr;
+    }
     console.log('[GmailHelper] Password encrypted successfully:', {
       originalLength: passwordStr.length,
-      encryptedLength: encrypted.length
+      encryptedLength: encrypted.length,
+      encryptedStart: encrypted.substring(0, 20) + '...'
     });
     return encrypted;
   } catch (err) {
-    console.error('[GmailHelper] Encryption failed, returning plain password:', err.message);
+    console.error('[GmailHelper] Encryption failed, falling back to plain password:', {
+      error: err.message,
+      stack: err.stack,
+      passwordLength: passwordStr.length
+    });
     // Fall back to returning plain password instead of throwing
     return passwordStr;
   }
