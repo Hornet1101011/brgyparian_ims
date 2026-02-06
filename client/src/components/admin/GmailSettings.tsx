@@ -111,10 +111,11 @@ const GmailSettingsComponent = ({ onGmailStatusChange, onSettingsChange }: Gmail
         if (gmailSettings.enabled && gmailSettings.gmailAddress) {
           setPasswordSavedBefore(true);
         }
-        // Keep the entered password in state if it was just entered, otherwise clear it
+        // Clear the app password from state after successful save
+        // The password is now encrypted and stored on server
         setGmailSettings({
           ...response.data.gmail,
-          appPassword: gmailSettings.appPassword, // Preserve what user entered
+          appPassword: '', // Clear password from state for security
         });
         antdMessage.success('Gmail settings updated successfully');
         

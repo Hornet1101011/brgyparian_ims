@@ -350,6 +350,17 @@ const SystemSettings: FC = () => {
       originalSettingsRef.current = payload;
       setDirty(false);
       setSuccess(true);
+      
+      // Clear sensitive app password from state after successful save
+      // It's now encrypted and stored on server
+      if (gmailSettings.appPassword) {
+        console.log('[Settings Save] Clearing appPassword from state after successful save');
+        setGmailSettings((prev: any) => ({
+          ...prev,
+          appPassword: '' // Clear password from state
+        }));
+      }
+      
       antdMessage.success('Settings saved');
     } catch (err) {
       console.error('Failed to save settings', err);

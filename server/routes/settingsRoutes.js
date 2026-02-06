@@ -34,6 +34,16 @@ function sanitizeForClient(setting) {
   if (s.smtp) {
     s.smtp = smtpHelper.sanitizeSMTPConfig(s.smtp);
   }
+  // Sanitize Gmail settings - remove encrypted password before sending to client
+  if (s.gmail && s.gmail.encryptedPassword) {
+    s.gmail = {
+      enabled: s.gmail.enabled,
+      gmailAddress: s.gmail.gmailAddress,
+      displayName: s.gmail.displayName,
+      useAppPassword: s.gmail.useAppPassword,
+      // Do NOT send encryptedPassword to client
+    };
+  }
   return s;
 }
 
@@ -337,19 +347,36 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
       // Handle app password encryption if provided
       if (gmailData.appPassword) {
         try {
-          gmailData.appPassword = gmailHelper.encryptGmailPassword(gmailData.appPassword);
-          console.log('[Settings] Gmail app password encrypted');
+          const encrypted = gmailHelper.encryptGmailPassword(gmailData.appPassword);
+          // Store encrypted password in the correct field
+          gmailData.encryptedPassword = encrypted;
+          // Remove plain text password from payload
+          delete gmailData.appPassword;
+          console.log('[Settings] Gmail app password encrypted and stored as encryptedPassword:', {
+            encryptedLength: encrypted.length,
+            encryptedValue: encrypted.substring(0, 20) + '...'
+          });
         } catch (e) {
           console.error('Failed to encrypt Gmail app password', e.message);
-          return res.status(500).json({ message: e.message });
+          return res.status(500).json({ message: 'Failed to encrypt Gmail app password: ' + e.message });
         }
+      } else if (!gmailData.encryptedPassword && gmailData.enabled) {
+        // If enabling Gmail but no password provided and none exists, that's an error
+        console.warn('[Settings] Cannot enable Gmail without app password');
+        return res.status(400).json({ 
+          message: 'Gmail app password is required when enabling Gmail',
+          errors: ['appPassword is required']
+        });
       }
+      
+      // Set updatedAt timestamp for Gmail settings
+      gmailData.updatedAt = new Date();
       
       updatePayload.gmail = gmailData;
       console.log('[Settings] Gmail data prepared for update:', {
         enabled: gmailData.enabled,
         gmailAddress: gmailData.gmailAddress,
-        hasPassword: !!gmailData.appPassword,
+        hasEncryptedPassword: !!gmailData.encryptedPassword,
         displayName: gmailData.displayName
       });
     }
