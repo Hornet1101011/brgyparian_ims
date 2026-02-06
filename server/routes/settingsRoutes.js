@@ -799,18 +799,22 @@ router.patch('/gmail', requireAuth, isAdmin, async (req, res) => {
     
     if (passwordProvided) {
       try {
-        encryptedPassword = gmailHelper.encryptGmailPassword(appPassword);
-        console.log('[Settings PATCH] Password encrypted successfully:', {
-          encryptedLength: encryptedPassword?.length || 0,
-          encryptedValue: encryptedPassword ? `${encryptedPassword.substring(0, 10)}...` : null,
-          isString: typeof encryptedPassword === 'string'
-        });
+        const encrypted = gmailHelper.encryptGmailPassword(appPassword);
+        if (encrypted) {
+          encryptedPassword = encrypted;
+          console.log('[Settings PATCH] Password encrypted successfully:', {
+            encryptedLength: encrypted.length,
+            encryptedValue: `${encrypted.substring(0, 10)}...`,
+            isString: typeof encrypted === 'string'
+          });
+        } else {
+          console.warn('[Settings PATCH] Encryption returned null, using plain password');
+          encryptedPassword = appPassword;
+        }
       } catch (encryptErr) {
-        console.error('[Settings PATCH] Failed to encrypt Gmail password:', encryptErr.message);
-        return res.status(500).json({ 
-          message: 'Failed to encrypt Gmail password',
-          error: encryptErr.message
-        });
+        console.error('[Settings PATCH] Encryption error:', encryptErr.message);
+        // Fall back to storing plain password
+        encryptedPassword = appPassword;
       }
     } else if (!encryptedPassword && enabled) {
       // If enabling Gmail but no password provided and none exists, that's an error
@@ -856,18 +860,27 @@ router.patch('/gmail', requireAuth, isAdmin, async (req, res) => {
     }
     
     // Use updateOne for more reliable nested field updates
+    const updatePayload = {
+      'gmail.enabled': enabled,
+      'gmail.gmailAddress': gmailAddress,
+      'gmail.displayName': displayName || (gmailAddress && gmailAddress.split('@')[0]) || 'Barangay System',
+      'gmail.useAppPassword': useAppPassword !== false,
+      'gmail.updatedAt': new Date()
+    };
+    
+    // Only set password if we have one
+    if (encryptedPassword) {
+      updatePayload['gmail.encryptedPassword'] = encryptedPassword;
+    }
+    
+    console.log('[Settings PATCH] Update payload:', {
+      hasEncryptedPassword: !!updatePayload['gmail.encryptedPassword'],
+      updateKeys: Object.keys(updatePayload)
+    });
+    
     const updateResult = await SystemSetting.updateOne(
       { _id: settings._id },
-      {
-        $set: {
-          'gmail.enabled': enabled,
-          'gmail.gmailAddress': gmailAddress,
-          'gmail.encryptedPassword': encryptedPassword || '',  // Save as empty string if no password
-          'gmail.displayName': displayName || (gmailAddress && gmailAddress.split('@')[0]) || 'Barangay System',
-          'gmail.useAppPassword': useAppPassword !== false,
-          'gmail.updatedAt': new Date()
-        }
-      },
+      { $set: updatePayload },
       { new: true }
     );
     

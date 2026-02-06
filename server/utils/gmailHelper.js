@@ -31,20 +31,32 @@ function decryptGmailPassword(encryptedPassword) {
 /**
  * Encrypt Gmail app password for secure storage
  * @param {string} password - Plain text app password
- * @returns {string} - Encrypted password
+ * @returns {string} - Encrypted password or plain password if no encryption key
  */
 function encryptGmailPassword(password) {
   if (!password) return null;
   
+  const passwordStr = String(password).trim();
+  
   if (!process.env.SETTINGS_ENCRYPTION_KEY) {
-    console.warn('Encryption key not configured, password will be stored unencrypted');
-    return password;
+    console.warn('[GmailHelper] Encryption key not configured, password will be stored as plain text:', {
+      passwordLength: passwordStr.length,
+      returning: 'plain password'
+    });
+    return passwordStr;
   }
 
   try {
-    return encryptText(String(password), process.env.SETTINGS_ENCRYPTION_KEY);
+    const encrypted = encryptText(passwordStr, process.env.SETTINGS_ENCRYPTION_KEY);
+    console.log('[GmailHelper] Password encrypted successfully:', {
+      originalLength: passwordStr.length,
+      encryptedLength: encrypted.length
+    });
+    return encrypted;
   } catch (err) {
-    throw new Error('Failed to encrypt Gmail password: ' + err.message);
+    console.error('[GmailHelper] Encryption failed, returning plain password:', err.message);
+    // Fall back to returning plain password instead of throwing
+    return passwordStr;
   }
 }
 
