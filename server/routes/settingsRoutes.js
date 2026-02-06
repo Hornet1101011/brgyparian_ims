@@ -836,11 +836,15 @@ router.patch('/gmail', requireAuth, isAdmin, async (req, res) => {
       useAppPassword: useAppPassword !== false
     };
     
+    // Mark the gmail field as modified so Mongoose saves it
+    settings.markModified('gmail');
+    
     console.log('[Settings] Gmail settings prepared for save:', {
       enabled,
       gmailAddress,
       displayName: settings.gmail.displayName,
-      hasEncryptedPassword: !!encryptedPassword
+      hasEncryptedPassword: !!encryptedPassword,
+      encryptedPasswordValue: encryptedPassword ? `${encryptedPassword.substring(0, 10)}...` : null
     });
     
     const updated = await settings.save();
@@ -848,7 +852,8 @@ router.patch('/gmail', requireAuth, isAdmin, async (req, res) => {
     console.log('[Settings] Gmail settings saved to database:', {
       enabled: updated.gmail?.enabled,
       gmailAddress: updated.gmail?.gmailAddress,
-      hasEncryptedPassword: !!updated.gmail?.encryptedPassword
+      hasEncryptedPassword: !!updated.gmail?.encryptedPassword,
+      savedPasswordValue: updated.gmail?.encryptedPassword ? `${updated.gmail.encryptedPassword.substring(0, 10)}...` : null
     });
     
     // Record audit
