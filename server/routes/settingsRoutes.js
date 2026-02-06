@@ -353,39 +353,16 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
         hasExistingEncrypted: !!gmailData.encryptedPassword
       });
       
-      // Handle app password encryption if provided
+      // Handle app password - store as plain text (no encryption)
       if (gmailData.appPassword) {
-        console.log('[Settings PATCH] Encrypting app password...');
-        try {
-          const encrypted = gmailHelper.encryptGmailPassword(gmailData.appPassword);
-          console.log('[Settings PATCH] Encryption result:', {
-            encrypted: !!encrypted,
-            encryptedLength: encrypted ? encrypted.length : 0,
-            encryptedValue: encrypted ? encrypted.substring(0, 20) + '...' : null,
-            encryptedType: typeof encrypted
-          });
-          
-          if (encrypted) {
-            // Store encrypted password in the correct field
-            gmailData.encryptedPassword = encrypted;
-            console.log('[Settings PATCH] Setting encryptedPassword:', {
-              length: gmailData.encryptedPassword.length,
-              preview: gmailData.encryptedPassword.substring(0, 20) + '...'
-            });
-          } else {
-            console.error('[Settings PATCH] Encryption returned null/undefined/falsy');
-            return res.status(500).json({ message: 'Failed to encrypt Gmail app password: encryption returned no value' });
-          }
-          
-          // Remove plain text password from payload
-          delete gmailData.appPassword;
-          console.log('[Settings PATCH] Deleted plain text appPassword, gmailData keys now:', Object.keys(gmailData));
-          
-        } catch (e) {
-          console.error('[Settings PATCH] Encryption error:', e.message, e.stack);
-          return res.status(500).json({ message: 'Failed to encrypt Gmail app password: ' + e.message });
-        }
-      } else if (!gmailData.encryptedPassword && gmailData.enabled) {
+        console.log('[Settings PATCH] App password provided, storing as plain text');
+        // Just keep the plain text password as-is
+        gmailData.appPassword = gmailData.appPassword.trim();
+        console.log('[Settings PATCH] Password stored:', {
+          length: gmailData.appPassword.length,
+          preview: gmailData.appPassword.substring(0, 5) + '***'
+        });
+      } else if (!gmailData.appPassword && gmailData.enabled) {
         // If enabling Gmail but no password provided and none exists, that's an error
         console.warn('[Settings PATCH] Cannot enable Gmail without app password');
         return res.status(400).json({ 
@@ -393,7 +370,7 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
           errors: ['appPassword is required']
         });
       } else {
-        console.log('[Settings PATCH] No password provided, keeping existing encrypted password');
+        console.log('[Settings PATCH] No password provided, keeping existing password');
       }
       
       // Set updatedAt timestamp for Gmail settings
@@ -404,9 +381,8 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
         gmailAddress: gmailData.gmailAddress,
         displayName: gmailData.displayName,
         useAppPassword: gmailData.useAppPassword,
-        hasEncryptedPassword: !!gmailData.encryptedPassword,
-        encryptedPasswordLength: gmailData.encryptedPassword ? gmailData.encryptedPassword.length : 0,
         hasAppPassword: !!gmailData.appPassword,
+        appPasswordLength: gmailData.appPassword ? gmailData.appPassword.length : 0,
         allKeys: Object.keys(gmailData)
       });
       
@@ -465,7 +441,7 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
       updateOps.$set['gmail.gmailAddress'] = updatePayload.gmail.gmailAddress;
       updateOps.$set['gmail.displayName'] = updatePayload.gmail.displayName;
       updateOps.$set['gmail.useAppPassword'] = updatePayload.gmail.useAppPassword;
-      updateOps.$set['gmail.encryptedPassword'] = updatePayload.gmail.encryptedPassword;
+      updateOps.$set['gmail.appPassword'] = updatePayload.gmail.appPassword;
       updateOps.$set['gmail.updatedAt'] = updatePayload.gmail.updatedAt;
       
       console.log('[Settings PATCH] FINAL updateOps being sent to MongoDB:', {
@@ -918,36 +894,23 @@ router.patch('/gmail', requireAuth, isAdmin, async (req, res) => {
     
     console.log('[Settings PATCH] Settings document ID:', settings._id);
 
-    // If appPassword is provided and not empty, encrypt it
-    let encryptedPassword = settings.gmail?.encryptedPassword || null;
+    // Store app password as plain text
+    let savedPassword = settings.gmail?.appPassword || null;
     const passwordProvided = appPassword && appPassword.trim();
     
     console.log('[Settings PATCH] Password handling:', {
       passwordProvided: !!passwordProvided,
       passwordLength: appPassword?.length || 0,
-      existingPassword: !!settings.gmail?.encryptedPassword
+      existingPassword: !!settings.gmail?.appPassword
     });
     
     if (passwordProvided) {
-      try {
-        const encrypted = gmailHelper.encryptGmailPassword(appPassword);
-        if (encrypted) {
-          encryptedPassword = encrypted;
-          console.log('[Settings PATCH] Password encrypted successfully:', {
-            encryptedLength: encrypted.length,
-            encryptedValue: `${encrypted.substring(0, 10)}...`,
-            isString: typeof encrypted === 'string'
-          });
-        } else {
-          console.warn('[Settings PATCH] Encryption returned null, using plain password');
-          encryptedPassword = appPassword;
-        }
-      } catch (encryptErr) {
-        console.error('[Settings PATCH] Encryption error:', encryptErr.message);
-        // Fall back to storing plain password
-        encryptedPassword = appPassword;
-      }
-    } else if (!encryptedPassword && enabled) {
+      savedPassword = appPassword.trim();
+      console.log('[Settings PATCH] Password will be stored as plain text:', {
+        length: savedPassword.length,
+        preview: savedPassword.substring(0, 5) + '***'
+      });
+    } else if (!savedPassword && enabled) {
       // If enabling Gmail but no password provided and none exists, that's an error
       return res.status(400).json({ 
         message: 'App password is required when enabling Gmail',
@@ -969,7 +932,7 @@ router.patch('/gmail', requireAuth, isAdmin, async (req, res) => {
           errors: ['Must use @gmail.com address']
         });
       }
-      if (!encryptedPassword) {
+      if (!savedPassword) {
         return res.status(400).json({ 
           message: 'Gmail app password is required',
           errors: ['appPassword is required']
@@ -977,11 +940,11 @@ router.patch('/gmail', requireAuth, isAdmin, async (req, res) => {
       }
     }
     
-    console.log('[Settings PATCH] Before save - encryptedPassword:', {
-      value: encryptedPassword ? `${encryptedPassword.substring(0, 10)}...` : null,
-      length: encryptedPassword?.length || 0,
-      type: typeof encryptedPassword,
-      isEmpty: !encryptedPassword,
+    console.log('[Settings PATCH] Before save - appPassword:', {
+      value: savedPassword ? `${savedPassword.substring(0, 5)}***` : null,
+      length: savedPassword?.length || 0,
+      type: typeof savedPassword,
+      isEmpty: !savedPassword,
       isString: typeof encryptedPassword === 'string'
     });
     
@@ -991,15 +954,15 @@ router.patch('/gmail', requireAuth, isAdmin, async (req, res) => {
       gmailAddress: gmailAddress,
       displayName: displayName || (gmailAddress && gmailAddress.split('@')[0]) || 'Barangay System',
       useAppPassword: useAppPassword !== false,
-      encryptedPassword: encryptedPassword,
+      appPassword: savedPassword,
       updatedAt: new Date()
     };
     
     console.log('[Settings PATCH] Updated settings.gmail object:', {
       enabled: settings.gmail.enabled,
       gmailAddress: settings.gmail.gmailAddress,
-      hasEncryptedPassword: !!settings.gmail.encryptedPassword,
-      passwordLength: settings.gmail.encryptedPassword?.length || 0
+      hasAppPassword: !!settings.gmail.appPassword,
+      passwordLength: settings.gmail.appPassword?.length || 0
     });
     
     // Save using Mongoose .save() for proper document handling
@@ -1009,8 +972,8 @@ router.patch('/gmail', requireAuth, isAdmin, async (req, res) => {
       savedId: savedSettings._id,
       gmailEnabled: savedSettings.gmail?.enabled,
       gmailAddress: savedSettings.gmail?.gmailAddress,
-      hasPasswordAfterSave: !!savedSettings.gmail?.encryptedPassword,
-      passwordLength: savedSettings.gmail?.encryptedPassword?.length || 0
+      hasPasswordAfterSave: !!savedSettings.gmail?.appPassword,
+      passwordLength: savedSettings.gmail?.appPassword?.length || 0
     });
     
     // Fetch fresh document to verify save
@@ -1019,9 +982,9 @@ router.patch('/gmail', requireAuth, isAdmin, async (req, res) => {
     console.log('[Settings PATCH] Verification after save:', {
       enabled: updated?.gmail?.enabled,
       gmailAddress: updated?.gmail?.gmailAddress,
-      hasEncryptedPassword: !!updated?.gmail?.encryptedPassword,
-      savedPasswordValue: updated?.gmail?.encryptedPassword ? `${updated.gmail.encryptedPassword.substring(0, 10)}...` : null,
-      savedPasswordLength: updated?.gmail?.encryptedPassword?.length || 0,
+      hasAppPassword: !!updated?.gmail?.appPassword,
+      savedPasswordValue: updated?.gmail?.appPassword ? `${updated.gmail.appPassword.substring(0, 5)}***` : null,
+      savedPasswordLength: updated?.gmail?.appPassword?.length || 0,
       allGmailFields: Object.keys(updated?.gmail || {})
     });
     
@@ -1130,35 +1093,10 @@ router.post('/gmail/test', requireAuth, isAdmin, async (req, res) => {
       });
     }
     
-    // Prepare config for testing (decrypt password)
-    let decryptedPassword = null;
-    try {
-      if (settings.gmail.encryptedPassword) {
-        console.log('[Settings] Attempting to decrypt Gmail password:', {
-          encryptedLength: settings.gmail.encryptedPassword.length,
-          preview: settings.gmail.encryptedPassword.substring(0, 30) + '...',
-          encryptionKeySet: !!process.env.SETTINGS_ENCRYPTION_KEY
-        });
-        decryptedPassword = gmailHelper.decryptGmailPassword(settings.gmail.encryptedPassword);
-        console.log('[Settings] Decryption successful:', {
-          hasDecryptedPassword: !!decryptedPassword,
-          decryptedLength: decryptedPassword ? decryptedPassword.length : 0
-        });
-      }
-    } catch (decryptErr) {
-      console.error('[Settings] Failed to decrypt Gmail password:', {
-        error: decryptErr.message,
-        stack: decryptErr.stack
-      });
-      return res.status(400).json({
-        success: false,
-        message: 'Failed to decrypt Gmail password',
-        error: 'The saved Gmail password could not be decrypted. Please update it.',
-        details: decryptErr.message
-      });
-    }
+    // Prepare config for testing (use plain text password)
+    let appPassword = settings.gmail.appPassword || settings.gmail.encryptedPassword;
     
-    if (!decryptedPassword) {
+    if (!appPassword) {
       return res.status(400).json({
         success: false,
         message: 'Gmail password not found',
@@ -1169,8 +1107,7 @@ router.post('/gmail/test', requireAuth, isAdmin, async (req, res) => {
     const gmailConfig = {
       gmailAddress: fromEmail || settings.gmail.gmailAddress,
       displayName: senderName || settings.gmail.displayName || 'Barangay System',
-      appPassword: decryptedPassword,
-      encryptedPassword: null // Use appPassword directly for transporter
+      appPassword: appPassword
     };
     
     console.log('[Settings] Gmail config prepared for test:', {

@@ -13,7 +13,7 @@ const gmailSchema = new mongoose.Schema({
   enabled: { type: Boolean, default: false },
   gmailAddress: { type: String },
   useAppPassword: { type: Boolean, default: true },
-  encryptedPassword: { type: String }, // encrypted app password
+  appPassword: { type: String }, // Gmail app password (plain text)
   displayName: { type: String },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
