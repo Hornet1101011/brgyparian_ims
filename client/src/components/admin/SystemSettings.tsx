@@ -136,6 +136,14 @@ const SystemSettings: FC = () => {
   });
   const [emailSettingsLoading, setEmailSettingsLoading] = useState(false);
   const [savingEmailSettings, setSavingEmailSettings] = useState(false);
+  // Gmail settings state - captured from GmailSettings component
+  const [gmailSettings, setGmailSettings] = useState<any>({
+    enabled: false,
+    gmailAddress: '',
+    appPassword: '',
+    displayName: '',
+    useAppPassword: true,
+  });
   // Officials state
   const [officials, setOfficials] = useState<Official[]>([]);
   const [officialsLoading, setOfficialsLoading] = useState(false);
@@ -307,6 +315,29 @@ const SystemSettings: FC = () => {
         const emailSettings = { ...(settings as any).emailSettings };
         delete emailSettings._id;
         payload.emailSettings = emailSettings;
+      }
+
+      // Include Gmail settings if present or has app password to encrypt
+      if (gmailSettings && (gmailSettings.enabled || gmailSettings.appPassword)) {
+        const gmailPayload: any = {
+          enabled: gmailSettings.enabled,
+          gmailAddress: gmailSettings.gmailAddress,
+          displayName: gmailSettings.displayName,
+          useAppPassword: gmailSettings.useAppPassword !== false,
+        };
+        
+        // Include app password if provided for encryption on server
+        if (gmailSettings.appPassword && gmailSettings.appPassword.trim()) {
+          gmailPayload.appPassword = gmailSettings.appPassword;
+        }
+        
+        payload.gmail = gmailPayload;
+        console.log('[Settings Save] Gmail settings included in payload:', {
+          enabled: gmailPayload.enabled,
+          gmailAddress: gmailPayload.gmailAddress,
+          hasAppPassword: !!gmailPayload.appPassword,
+          passwordLength: gmailPayload.appPassword?.length || 0
+        });
       }
 
       // Also remove _id from root payload if present
@@ -687,11 +718,22 @@ const SystemSettings: FC = () => {
           </Paper>
 
           {/* Gmail Settings Component */}
-          <GmailSettings onGmailStatusChange={(enabled) => {
-            console.log('[SystemSettings] Gmail status changed:', enabled);
-            // Optional: You can add logic here to handle Gmail status changes
-            // For example, disable SMTP section when Gmail is enabled
-          }} />
+          <GmailSettings 
+            onGmailStatusChange={(enabled) => {
+              console.log('[SystemSettings] Gmail status changed:', enabled);
+              // Optional: You can add logic here to handle Gmail status changes
+              // For example, disable SMTP section when Gmail is enabled
+            }}
+            onSettingsChange={(gmailSettings) => {
+              console.log('[SystemSettings] Gmail settings changed:', {
+                enabled: gmailSettings.enabled,
+                gmailAddress: gmailSettings.gmailAddress,
+                hasAppPassword: !!gmailSettings.appPassword,
+                passwordLength: gmailSettings.appPassword?.length || 0
+              });
+              setGmailSettings(gmailSettings);
+            }}
+          />
 
           {/* Email Behavior Control Card */}
           <Paper sx={{

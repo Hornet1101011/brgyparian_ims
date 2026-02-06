@@ -25,9 +25,10 @@ interface GmailSettings {
 
 interface GmailSettingsProps {
   onGmailStatusChange?: (enabled: boolean) => void;
+  onSettingsChange?: (settings: GmailSettings) => void;
 }
 
-const GmailSettingsComponent = ({ onGmailStatusChange }: GmailSettingsProps) => {
+const GmailSettingsComponent = ({ onGmailStatusChange, onSettingsChange }: GmailSettingsProps) => {
   const [gmailSettings, setGmailSettings] = useState({
     enabled: false,
     gmailAddress: '',
@@ -42,6 +43,13 @@ const GmailSettingsComponent = ({ onGmailStatusChange }: GmailSettingsProps) => 
   const [showPassword, setShowPassword] = useState(false);
   const [testEmailAddress, setTestEmailAddress] = useState('');
   const [passwordSavedBefore, setPasswordSavedBefore] = useState(false);
+
+  // Notify parent component whenever settings change
+  useEffect(() => {
+    if (onSettingsChange) {
+      onSettingsChange(gmailSettings);
+    }
+  }, [gmailSettings, onSettingsChange]);
 
   useEffect(() => {
     loadGmailSettings();
