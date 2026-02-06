@@ -13,14 +13,18 @@ const { decryptText, encryptText } = require('./cryptoHelper');
 function decryptGmailPassword(encryptedPassword) {
   if (!encryptedPassword) return null;
   
+  // If encryption key is not configured, assume password is stored unencrypted
   if (!process.env.SETTINGS_ENCRYPTION_KEY) {
-    throw new Error('Encryption key not configured');
+    console.warn('[GmailHelper] Encryption key not configured, treating password as unencrypted');
+    return encryptedPassword;
   }
 
   try {
     return decryptText(encryptedPassword, process.env.SETTINGS_ENCRYPTION_KEY);
   } catch (err) {
-    throw new Error('Failed to decrypt Gmail password: ' + err.message);
+    // If decryption fails, it might be an unencrypted password
+    console.warn('[GmailHelper] Decryption failed, treating as unencrypted password:', err.message);
+    return encryptedPassword;
   }
 }
 

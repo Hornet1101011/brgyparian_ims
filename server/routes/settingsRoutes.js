@@ -802,7 +802,8 @@ router.patch('/gmail', requireAuth, isAdmin, async (req, res) => {
         encryptedPassword = gmailHelper.encryptGmailPassword(appPassword);
         console.log('[Settings PATCH] Password encrypted successfully:', {
           encryptedLength: encryptedPassword?.length || 0,
-          encryptedValue: encryptedPassword ? `${encryptedPassword.substring(0, 10)}...` : null
+          encryptedValue: encryptedPassword ? `${encryptedPassword.substring(0, 10)}...` : null,
+          isString: typeof encryptedPassword === 'string'
         });
       } catch (encryptErr) {
         console.error('[Settings PATCH] Failed to encrypt Gmail password:', encryptErr.message);
@@ -844,8 +845,15 @@ router.patch('/gmail', requireAuth, isAdmin, async (req, res) => {
     console.log('[Settings PATCH] Before save - encryptedPassword:', {
       value: encryptedPassword ? `${encryptedPassword.substring(0, 10)}...` : null,
       length: encryptedPassword?.length || 0,
-      type: typeof encryptedPassword
+      type: typeof encryptedPassword,
+      isEmpty: !encryptedPassword,
+      isString: typeof encryptedPassword === 'string'
     });
+    
+    // Ensure we have a password to save (even if unencrypted)
+    if (!encryptedPassword) {
+      console.warn('[Settings PATCH] No encryptedPassword available for save');
+    }
     
     // Use updateOne for more reliable nested field updates
     const updateResult = await SystemSetting.updateOne(
@@ -854,7 +862,7 @@ router.patch('/gmail', requireAuth, isAdmin, async (req, res) => {
         $set: {
           'gmail.enabled': enabled,
           'gmail.gmailAddress': gmailAddress,
-          'gmail.encryptedPassword': encryptedPassword || '',
+          'gmail.encryptedPassword': encryptedPassword || '',  // Save as empty string if no password
           'gmail.displayName': displayName || (gmailAddress && gmailAddress.split('@')[0]) || 'Barangay System',
           'gmail.useAppPassword': useAppPassword !== false,
           'gmail.updatedAt': new Date()
