@@ -905,17 +905,52 @@ router.post('/gmail/test', requireAuth, isAdmin, async (req, res) => {
     
     const settings = await SystemSetting.findOne().lean();
     
-    console.log('[Settings] Gmail config check:', {
+    console.log('[Settings] Retrieved settings from DB:', {
+      hasSettings: !!settings,
+      hasGmail: !!settings?.gmail,
       gmailEnabled: settings?.gmail?.enabled,
       gmailAddress: settings?.gmail?.gmailAddress,
-      hasEncryptedPassword: !!settings?.gmail?.encryptedPassword
+      hasEncryptedPassword: !!settings?.gmail?.encryptedPassword,
+      gmailObject: settings?.gmail ? Object.keys(settings.gmail) : null
     });
     
-    if (!settings?.gmail?.enabled || !settings.gmail.gmailAddress) {
+    if (!settings) {
       return res.status(400).json({ 
         success: false,
-        message: 'Gmail is not configured or enabled',
-        error: 'Gmail settings are missing or disabled'
+        message: 'System settings not found',
+        error: 'No system settings in database'
+      });
+    }
+    
+    if (!settings.gmail) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Gmail configuration not found',
+        error: 'Gmail settings have not been configured yet'
+      });
+    }
+    
+    if (!settings.gmail.enabled) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Gmail is not enabled',
+        error: 'Enable Gmail in settings first'
+      });
+    }
+    
+    if (!settings.gmail.gmailAddress) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Gmail address is not configured',
+        error: 'Gmail address is missing from settings'
+      });
+    }
+    
+    if (!settings.gmail.encryptedPassword) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Gmail password is not configured',
+        error: 'Gmail password has not been set'
       });
     }
     

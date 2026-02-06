@@ -148,6 +148,8 @@ const GmailSettingsComponent = ({ onGmailStatusChange }: GmailSettingsProps) => 
         testEmail: recipientEmail,
         gmailAddress: gmailSettings.gmailAddress,
         displayName: gmailSettings.displayName,
+        passwordSavedBefore,
+        hasPasswordInState: !!gmailSettings.appPassword
       });
 
       setTesting(true);
@@ -166,17 +168,28 @@ const GmailSettingsComponent = ({ onGmailStatusChange }: GmailSettingsProps) => 
         setTestEmailAddress(''); // Clear test email field
       }
     } catch (err: any) {
-      console.error('Gmail test failed:', err);
+      console.error('[GmailSettings] Test email error:', err);
+      
+      const fullErrorData = err.response?.data;
       const errorMsg = 
         err.response?.data?.error || 
         err.response?.data?.message || 
         'Failed to send test email. Please check your Gmail configuration.';
-      console.error('Error details:', {
+      
+      console.error('[GmailSettings] Full error response:', {
         status: err.response?.status,
-        data: err.response?.data,
-        message: errorMsg
+        statusText: err.response?.statusText,
+        data: fullErrorData,
+        message: errorMsg,
+        details: fullErrorData?.details
       });
-      antdMessage.error(errorMsg);
+      
+      // Show detailed error to user
+      const displayMessage = fullErrorData?.details 
+        ? `${errorMsg} (${fullErrorData.details})`
+        : errorMsg;
+      
+      antdMessage.error(displayMessage);
     } finally {
       setTesting(false);
     }
