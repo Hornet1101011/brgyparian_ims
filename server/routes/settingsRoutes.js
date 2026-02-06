@@ -1043,7 +1043,7 @@ router.patch('/gmail', requireAuth, isAdmin, async (req, res) => {
     console.log('[Settings] Gmail configuration updated by admin:', req.user._id, {
       enabled,
       gmailAddress,
-      hasPassword: !!encryptedPassword
+      hasPassword: !!savedAppPassword || !!savedPassword
     });
     
     return res.json({
