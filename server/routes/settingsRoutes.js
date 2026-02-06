@@ -467,6 +467,12 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
       updateOps.$set['gmail.useAppPassword'] = updatePayload.gmail.useAppPassword;
       updateOps.$set['gmail.encryptedPassword'] = updatePayload.gmail.encryptedPassword;
       updateOps.$set['gmail.updatedAt'] = updatePayload.gmail.updatedAt;
+      
+      console.log('[Settings PATCH] FINAL updateOps being sent to MongoDB:', {
+        '$set': Object.keys(updateOps.$set),
+        'gmail.encryptedPassword_in_ops': !!updateOps.$set['gmail.encryptedPassword'],
+        'gmail.encryptedPassword_value': updateOps.$set['gmail.encryptedPassword'] ? updateOps.$set['gmail.encryptedPassword'].substring(0, 20) + '...' : 'NULL'
+      });
     }
     
     const updated = await SystemSetting.findOneAndUpdate({}, updateOps, { new: true, upsert: true, setDefaultsOnInsert: true });
@@ -477,8 +483,9 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
       gmailAddress: updated?.gmail?.gmailAddress,
       hasEncryptedPassword: !!updated?.gmail?.encryptedPassword,
       encryptedPasswordLength: updated?.gmail?.encryptedPassword ? updated.gmail.encryptedPassword.length : 0,
+      encryptedPasswordPreview: updated?.gmail?.encryptedPassword ? updated.gmail.encryptedPassword.substring(0, 20) + '...' : 'NULL',
       gmailFields: updated?.gmail ? Object.keys(updated.gmail) : [],
-      allGmailData: updated?.gmail ? JSON.stringify(updated.gmail) : 'null'
+      allGmailData: updated?.gmail ? JSON.stringify(updated.gmail, null, 2) : 'null'
     });
     const diff = { before, after: updated.toObject ? updated.toObject() : updated };
     await recordAudit(req.user?._id, 'patch_settings', diff, req.ip || req.headers['x-forwarded-for']);
