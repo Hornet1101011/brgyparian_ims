@@ -60,7 +60,7 @@ router.get('/:id/raw', async (req: Request, res: Response) => {
     let objectId: mongoose.Types.ObjectId;
 
     try {
-      objectId = new ObjectId(id);
+      objectId = new ObjectId(id as string);
     } catch (e) {
       return res.status(400).json({ message: 'Invalid document ID' });
     }
@@ -188,7 +188,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     let objectId: mongoose.Types.ObjectId;
 
     try {
-      objectId = new ObjectId(id);
+      objectId = new ObjectId(id as string);
     } catch (e) {
       return res.status(400).json({ message: 'Invalid document ID' });
     }

@@ -313,7 +313,7 @@ router.get('/file/:id', auth, authorize('admin'), async (req, res) => {
     }
     
     const bucket = new GridFSBucket(db, { bucketName: 'verificationRequests' });
-    const objectId = new ObjectId(id);
+    const objectId = new ObjectId(id as string);
     
     // Find the file metadata
     const files = await bucket.find({ _id: objectId }).toArray();
