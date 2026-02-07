@@ -506,15 +506,16 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
       });
       
       // Set individual smtp fields to ensure nested object is properly saved
-      updateOps.$set['smtp.enabled'] = updatePayload.smtp.enabled;
-      updateOps.$set['smtp.provider'] = updatePayload.smtp.provider;
-      updateOps.$set['smtp.fromName'] = updatePayload.smtp.fromName;
-      updateOps.$set['smtp.fromEmail'] = updatePayload.smtp.fromEmail;
-      updateOps.$set['smtp.host'] = updatePayload.smtp.host;
-      updateOps.$set['smtp.port'] = updatePayload.smtp.port;
-      updateOps.$set['smtp.secure'] = updatePayload.smtp.secure;
-      updateOps.$set['smtp.user'] = updatePayload.smtp.user;
-      updateOps.$set['smtp.password'] = updatePayload.smtp.password;
+      // Only set fields that have actual values to avoid overwriting with null
+      if (updatePayload.smtp.enabled !== undefined) updateOps.$set['smtp.enabled'] = updatePayload.smtp.enabled;
+      if (updatePayload.smtp.provider) updateOps.$set['smtp.provider'] = updatePayload.smtp.provider;
+      if (updatePayload.smtp.fromName) updateOps.$set['smtp.fromName'] = updatePayload.smtp.fromName;
+      if (updatePayload.smtp.fromEmail) updateOps.$set['smtp.fromEmail'] = updatePayload.smtp.fromEmail;
+      if (updatePayload.smtp.host) updateOps.$set['smtp.host'] = updatePayload.smtp.host;
+      if (updatePayload.smtp.port) updateOps.$set['smtp.port'] = updatePayload.smtp.port;
+      if (updatePayload.smtp.secure !== undefined) updateOps.$set['smtp.secure'] = updatePayload.smtp.secure;
+      if (updatePayload.smtp.user) updateOps.$set['smtp.user'] = updatePayload.smtp.user;
+      if (updatePayload.smtp.password) updateOps.$set['smtp.password'] = updatePayload.smtp.password;
       if (updatePayload.smtp.encryptedPassword) updateOps.$set['smtp.encryptedPassword'] = updatePayload.smtp.encryptedPassword;
       
       // Include provider-specific fields if present
@@ -1606,6 +1607,15 @@ router.post('/email/test', requireAuth, isAdmin, async (req, res) => {
     }
 
     console.log('[Settings] Sending test email using provider:', settings.smtp.provider);
+
+    // Additional validation for custom SMTP provider
+    if (settings.smtp.provider === 'custom' && (!settings.smtp.host || !settings.smtp.port)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Custom SMTP configuration incomplete',
+        error: 'Host and port are required for custom SMTP'
+      });
+    }
 
     const result = await emailProviderHelper.sendTestEmail(settings.smtp, testEmail);
 
