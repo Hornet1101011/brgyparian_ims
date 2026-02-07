@@ -307,10 +307,11 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
       console.log('[Settings] Email settings updated:', Object.keys(payload.emailSettings));
     }
 
-    // Handle email provider configuration
+    // Handle email provider configuration (saved to smtp field which works reliably)
     if (payload.email) {
-      updatePayload.email = payload.email;
-      console.log('[Settings] Email provider config updated:', {
+      // Store email provider config in smtp field (which persists correctly)
+      updatePayload.smtp = payload.email;
+      console.log('[Settings] Email provider config updated (saving to smtp field):', {
         provider: payload.email.provider,
         enabled: payload.email.enabled,
         fromName: payload.email.fromName,
@@ -320,7 +321,10 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
     }
     
     // Handle SMTP updates with proper nesting
-    if (payload.smtp) {
+    // Note: Email provider config from payload.email is already in updatePayload.smtp
+    // If payload.smtp is explicitly provided (legacy), handle it separately
+    if (payload.smtp && !payload.email) {
+      // Legacy SMTP payload handling
       const smtpData = { ...payload.smtp };
       
       // Validate SMTP configuration
@@ -491,48 +495,49 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
       });
     }
 
-    // Explicitly set each email provider field to ensure Mongoose saves them properly
-    if (updatePayload.email) {
-      console.log('[Settings PATCH] Setting individual email provider fields:', {
-        'email.enabled': updatePayload.email.enabled,
-        'email.provider': updatePayload.email.provider,
-        'email.fromName': updatePayload.email.fromName,
-        'email.fromEmail': updatePayload.email.fromEmail,
-        'email_keys': Object.keys(updatePayload.email)
+    // Explicitly set each email provider field (saved to smtp) to ensure Mongoose saves them properly
+    if (updatePayload.smtp) {
+      console.log('[Settings PATCH] Setting individual SMTP fields:', {
+        'smtp.enabled': updatePayload.smtp.enabled,
+        'smtp.provider': updatePayload.smtp.provider,
+        'smtp.fromName': updatePayload.smtp.fromName,
+        'smtp.fromEmail': updatePayload.smtp.fromEmail,
+        'smtp_keys': Object.keys(updatePayload.smtp)
       });
       
-      // Set individual email fields to ensure nested object is properly saved
-      updateOps.$set['email.enabled'] = updatePayload.email.enabled;
-      updateOps.$set['email.provider'] = updatePayload.email.provider;
-      updateOps.$set['email.fromName'] = updatePayload.email.fromName;
-      updateOps.$set['email.fromEmail'] = updatePayload.email.fromEmail;
-      updateOps.$set['email.host'] = updatePayload.email.host;
-      updateOps.$set['email.port'] = updatePayload.email.port;
-      updateOps.$set['email.secure'] = updatePayload.email.secure;
-      updateOps.$set['email.user'] = updatePayload.email.user;
-      updateOps.$set['email.password'] = updatePayload.email.password;
+      // Set individual smtp fields to ensure nested object is properly saved
+      updateOps.$set['smtp.enabled'] = updatePayload.smtp.enabled;
+      updateOps.$set['smtp.provider'] = updatePayload.smtp.provider;
+      updateOps.$set['smtp.fromName'] = updatePayload.smtp.fromName;
+      updateOps.$set['smtp.fromEmail'] = updatePayload.smtp.fromEmail;
+      updateOps.$set['smtp.host'] = updatePayload.smtp.host;
+      updateOps.$set['smtp.port'] = updatePayload.smtp.port;
+      updateOps.$set['smtp.secure'] = updatePayload.smtp.secure;
+      updateOps.$set['smtp.user'] = updatePayload.smtp.user;
+      updateOps.$set['smtp.password'] = updatePayload.smtp.password;
+      if (updatePayload.smtp.encryptedPassword) updateOps.$set['smtp.encryptedPassword'] = updatePayload.smtp.encryptedPassword;
       
       // Include provider-specific fields if present
-      if (updatePayload.email.gmailAddress) updateOps.$set['email.gmailAddress'] = updatePayload.email.gmailAddress;
-      if (updatePayload.email.gmailAppPassword) updateOps.$set['email.gmailAppPassword'] = updatePayload.email.gmailAppPassword;
-      if (updatePayload.email.sendgridApiKey) updateOps.$set['email.sendgridApiKey'] = updatePayload.email.sendgridApiKey;
-      if (updatePayload.email.awsAccessKeyId) updateOps.$set['email.awsAccessKeyId'] = updatePayload.email.awsAccessKeyId;
-      if (updatePayload.email.awsSecretAccessKey) updateOps.$set['email.awsSecretAccessKey'] = updatePayload.email.awsSecretAccessKey;
-      if (updatePayload.email.awsRegion) updateOps.$set['email.awsRegion'] = updatePayload.email.awsRegion;
+      if (updatePayload.smtp.gmailAddress) updateOps.$set['smtp.gmailAddress'] = updatePayload.smtp.gmailAddress;
+      if (updatePayload.smtp.gmailAppPassword) updateOps.$set['smtp.gmailAppPassword'] = updatePayload.smtp.gmailAppPassword;
+      if (updatePayload.smtp.sendgridApiKey) updateOps.$set['smtp.sendgridApiKey'] = updatePayload.smtp.sendgridApiKey;
+      if (updatePayload.smtp.awsAccessKeyId) updateOps.$set['smtp.awsAccessKeyId'] = updatePayload.smtp.awsAccessKeyId;
+      if (updatePayload.smtp.awsSecretAccessKey) updateOps.$set['smtp.awsSecretAccessKey'] = updatePayload.smtp.awsSecretAccessKey;
+      if (updatePayload.smtp.awsRegion) updateOps.$set['smtp.awsRegion'] = updatePayload.smtp.awsRegion;
       
-      console.log('[Settings PATCH] Email config fields set in updateOps:', Object.keys(updateOps.$set).filter(k => k.startsWith('email.')));
+      console.log('[Settings PATCH] SMTP config fields set in updateOps:', Object.keys(updateOps.$set).filter(k => k.startsWith('smtp.')));
     }
     
-    // Log the COMPLETE updateOps.$set before MongoDB operation to verify email fields are included
-    const emailFieldsInOps = Object.keys(updateOps.$set).filter(k => k.startsWith('email.'));
+    // Log the COMPLETE updateOps.$set before MongoDB operation to verify smtp fields are included
+    const smtpFieldsInOps = Object.keys(updateOps.$set).filter(k => k.startsWith('smtp.'));
     console.log('[Settings PATCH] COMPLETE updateOps before MongoDB update:', {
       totalFields: Object.keys(updateOps.$set).length,
-      emailFieldCount: emailFieldsInOps.length,
-      emailFieldsPresent: emailFieldsInOps,
-      sampleEmailValues: {
-        'email.enabled': updateOps.$set['email.enabled'],
-        'email.provider': updateOps.$set['email.provider'],
-        'email.host': updateOps.$set['email.host']
+      smtpFieldCount: smtpFieldsInOps.length,
+      smtpFieldsPresent: smtpFieldsInOps,
+      sampleSmtpValues: {
+        'smtp.enabled': updateOps.$set['smtp.enabled'],
+        'smtp.provider': updateOps.$set['smtp.provider'],
+        'smtp.host': updateOps.$set['smtp.host']
       }
     });
     
@@ -540,10 +545,10 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
     
     // Immediately query the database directly to verify what was actually saved
     const dbCheck = await SystemSetting.findOne().lean();
-    console.log('[Settings PATCH] Direct DB query after update - checking email field:', {
-      hasEmail: !!dbCheck?.email,
-      emailKeys: dbCheck?.email ? Object.keys(dbCheck.email) : [],
-      fullEmail: dbCheck?.email ? JSON.stringify(dbCheck.email, null, 2) : 'null'
+    console.log('[Settings PATCH] Direct DB query after update - checking SMTP field:', {
+      hasSmtp: !!dbCheck?.smtp,
+      smtpKeys: dbCheck?.smtp ? Object.keys(dbCheck.smtp) : [],
+      fullSmtp: dbCheck?.smtp ? JSON.stringify(dbCheck.smtp, null, 2) : 'null'
     });
     
     console.log('[Settings PATCH] After save - Gmail in DB:', {
@@ -1392,7 +1397,7 @@ router.get('/email', requireAuth, isAdmin, async (req, res) => {
   try {
     const settings = await SystemSetting.findOne().lean();
     
-    if (!settings || !settings.email) {
+    if (!settings || !settings.smtp) {
       return res.json({
         success: true,
         email: {
@@ -1404,7 +1409,7 @@ router.get('/email', requireAuth, isAdmin, async (req, res) => {
     }
 
     // Sanitize for client (remove passwords)
-    const sanitized = emailProviderHelper.sanitizeEmailConfig(settings.email);
+    const sanitized = emailProviderHelper.sanitizeEmailConfig(settings.smtp);
     
     res.json({
       success: true,
@@ -1544,7 +1549,7 @@ router.patch('/email', requireAuth, isAdmin, async (req, res) => {
       emailConfig.password = password;
     }
 
-    settings.email = emailConfig;
+    settings.smtp = emailConfig;
     await settings.save();
 
     console.log('[Settings] Email configuration updated:', {
@@ -1557,7 +1562,7 @@ router.patch('/email', requireAuth, isAdmin, async (req, res) => {
     res.json({
       success: true,
       message: 'Email settings updated',
-      email: emailProviderHelper.sanitizeEmailConfig(settings.email)
+      email: emailProviderHelper.sanitizeEmailConfig(settings.smtp)
     });
   } catch (err) {
     console.error('[Settings] PATCH /email error:', err);
@@ -1584,7 +1589,7 @@ router.post('/email/test', requireAuth, isAdmin, async (req, res) => {
 
     const settings = await SystemSetting.findOne().lean();
 
-    if (!settings || !settings.email || !settings.email.enabled) {
+    if (!settings || !settings.smtp || !settings.smtp.enabled) {
       return res.status(400).json({
         success: false,
         message: 'Email provider not configured or disabled',
@@ -1592,7 +1597,7 @@ router.post('/email/test', requireAuth, isAdmin, async (req, res) => {
       });
     }
 
-    if (!settings.email.provider) {
+    if (!settings.smtp.provider) {
       return res.status(400).json({
         success: false,
         message: 'No email provider selected',
@@ -1600,20 +1605,20 @@ router.post('/email/test', requireAuth, isAdmin, async (req, res) => {
       });
     }
 
-    console.log('[Settings] Sending test email using provider:', settings.email.provider);
+    console.log('[Settings] Sending test email using provider:', settings.smtp.provider);
 
-    const result = await emailProviderHelper.sendTestEmail(settings.email, testEmail);
+    const result = await emailProviderHelper.sendTestEmail(settings.smtp, testEmail);
 
     if (!result.success) {
       return res.status(400).json({
         success: false,
-        message: `${settings.email.provider} test failed`,
+        message: `${settings.smtp.provider} test failed`,
         error: result.error,
         provider: result.provider
       });
     }
 
-    console.log('[Settings] Test email sent successfully via', settings.email.provider);
+    console.log('[Settings] Test email sent successfully via', settings.smtp.provider);
 
     res.json({
       success: true,

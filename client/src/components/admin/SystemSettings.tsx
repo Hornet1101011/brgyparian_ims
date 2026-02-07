@@ -241,10 +241,10 @@ const SystemSettings: FC = () => {
       if (sys) {
         setSettings(sys);
         originalSettingsRef.current = sys;
-        // Load email provider config from system settings if available
-        if ((sys as any).email) {
-          setEmailProviderConfig((sys as any).email);
-          console.log('[SystemSettings] Email provider config loaded from system settings:', (sys as any).email);
+        // Load email provider config from system settings (stored in smtp field)
+        if ((sys as any).smtp) {
+          setEmailProviderConfig((sys as any).smtp);
+          console.log('[SystemSettings] Email provider config loaded from SMTP field:', (sys as any).smtp);
         }
       }
 
@@ -323,7 +323,7 @@ const SystemSettings: FC = () => {
       // Include email behavior settings
       payload.emailSettings = emailSettings;
 
-      // Include email provider configuration
+      // Include email provider configuration (stored in smtp field on backend)
       if (emailProviderConfig && Object.keys(emailProviderConfig).length > 0) {
         payload.email = emailProviderConfig;
       }
