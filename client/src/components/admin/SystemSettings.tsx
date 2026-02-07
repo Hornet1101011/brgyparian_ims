@@ -241,6 +241,11 @@ const SystemSettings: FC = () => {
       if (sys) {
         setSettings(sys);
         originalSettingsRef.current = sys;
+        // Load email provider config from system settings if available
+        if ((sys as any).email) {
+          setEmailProviderConfig((sys as any).email);
+          console.log('[SystemSettings] Email provider config loaded from system settings:', (sys as any).email);
+        }
       }
 
       // officials: try adminAPI then axiosInstance fallback

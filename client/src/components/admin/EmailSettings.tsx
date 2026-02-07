@@ -60,15 +60,14 @@ const EmailSettings = ({ onConfigChange }: { onConfigChange?: (config: EmailConf
   } as EmailConfig);
 
   const [providers, setProviders] = useState([] as Provider[]);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testEmail, setTestEmail] = useState('');
   const [showPasswords, setShowPasswords] = useState({} as Record<string, boolean>);
 
   useEffect(() => {
+    // Providers are static configuration, load once
     loadProviders();
-    loadEmailSettings();
   }, []);
 
   const loadProviders = async () => {
@@ -79,21 +78,7 @@ const EmailSettings = ({ onConfigChange }: { onConfigChange?: (config: EmailConf
       }
     } catch (err) {
       console.error('Failed to load providers:', err);
-    }
-  };
-
-  const loadEmailSettings = async () => {
-    try {
-      setLoading(true);
-      const response = await adminAPI.get('/settings/email');
-      if (response.data?.success && response.data.email) {
-        setConfig(response.data.email);
-      }
-    } catch (err) {
-      console.error('Failed to load email settings:', err);
-      message.error('Failed to load email settings');
-    } finally {
-      setLoading(false);
+      // Providers failed to load, but component can still work with static list
     }
   };
 
@@ -184,14 +169,6 @@ const EmailSettings = ({ onConfigChange }: { onConfigChange?: (config: EmailConf
       [field]: !prev[field]
     }));
   };
-
-  if (loading) {
-    return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
-        <CircularProgress />
-      </Box>
-    );
-  }
 
   const renderProviderFields = () => {
     const provider = config.provider;
