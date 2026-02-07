@@ -45,6 +45,13 @@ function sanitizeForClient(setting) {
       // Do NOT send encryptedPassword to client
     };
   }
+  // Sanitize email provider settings - mask password if present
+  if (s.email && s.email.password) {
+    s.email = {
+      ...s.email,
+      password: s.email.password ? '***MASKED***' : undefined
+    };
+  }
   return s;
 }
 
@@ -516,7 +523,28 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
       console.log('[Settings PATCH] Email config fields set in updateOps:', Object.keys(updateOps.$set).filter(k => k.startsWith('email.')));
     }
     
+    // Log the COMPLETE updateOps.$set before MongoDB operation to verify email fields are included
+    const emailFieldsInOps = Object.keys(updateOps.$set).filter(k => k.startsWith('email.'));
+    console.log('[Settings PATCH] COMPLETE updateOps before MongoDB update:', {
+      totalFields: Object.keys(updateOps.$set).length,
+      emailFieldCount: emailFieldsInOps.length,
+      emailFieldsPresent: emailFieldsInOps,
+      sampleEmailValues: {
+        'email.enabled': updateOps.$set['email.enabled'],
+        'email.provider': updateOps.$set['email.provider'],
+        'email.host': updateOps.$set['email.host']
+      }
+    });
+    
     const updated = await SystemSetting.findOneAndUpdate({}, updateOps, { new: true, upsert: true, setDefaultsOnInsert: true });
+    
+    // Immediately query the database directly to verify what was actually saved
+    const dbCheck = await SystemSetting.findOne().lean();
+    console.log('[Settings PATCH] Direct DB query after update - checking email field:', {
+      hasEmail: !!dbCheck?.email,
+      emailKeys: dbCheck?.email ? Object.keys(dbCheck.email) : [],
+      fullEmail: dbCheck?.email ? JSON.stringify(dbCheck.email, null, 2) : 'null'
+    });
     
     console.log('[Settings PATCH] After save - Gmail in DB:', {
       hasGmail: !!updated?.gmail,
