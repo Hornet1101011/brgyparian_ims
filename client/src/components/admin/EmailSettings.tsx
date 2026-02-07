@@ -147,8 +147,10 @@ const EmailSettings = ({ onConfigChange }: { onConfigChange?: (config: EmailConf
       }
 
       setTesting(true);
+      // Send current email config along with test email so we can test before saving
       const response = await adminAPI.post('/settings/email/test', {
-        testEmail
+        testEmail,
+        emailConfig: config  // Send the current frontend config, not just the test email
       });
 
       if (response.data?.success) {

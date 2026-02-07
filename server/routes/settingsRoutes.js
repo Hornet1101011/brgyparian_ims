@@ -1578,7 +1578,7 @@ router.patch('/email', requireAuth, isAdmin, async (req, res) => {
 // POST /api/settings/email/test - Test email configuration
 router.post('/email/test', requireAuth, isAdmin, async (req, res) => {
   try {
-    const { testEmail } = req.body;
+    const { testEmail, emailConfig } = req.body;
 
     if (!testEmail || !testEmail.includes('@')) {
       return res.status(400).json({
@@ -1588,9 +1588,15 @@ router.post('/email/test', requireAuth, isAdmin, async (req, res) => {
       });
     }
 
-    const settings = await SystemSetting.findOne().lean();
+    // Use emailConfig from request if provided (to test unsaved config), otherwise use database config
+    let configToTest = emailConfig;
+    
+    if (!configToTest) {
+      const settings = await SystemSetting.findOne().lean();
+      configToTest = settings?.smtp;
+    }
 
-    if (!settings || !settings.smtp || !settings.smtp.enabled) {
+    if (!configToTest || !configToTest.enabled) {
       return res.status(400).json({
         success: false,
         message: 'Email provider not configured or disabled',
@@ -1598,7 +1604,7 @@ router.post('/email/test', requireAuth, isAdmin, async (req, res) => {
       });
     }
 
-    if (!settings.smtp.provider) {
+    if (!configToTest.provider) {
       return res.status(400).json({
         success: false,
         message: 'No email provider selected',
@@ -1606,10 +1612,10 @@ router.post('/email/test', requireAuth, isAdmin, async (req, res) => {
       });
     }
 
-    console.log('[Settings] Sending test email using provider:', settings.smtp.provider);
+    console.log('[Settings] Sending test email using provider:', configToTest.provider);
 
     // Additional validation for custom SMTP provider
-    if (settings.smtp.provider === 'custom' && (!settings.smtp.host || !settings.smtp.port)) {
+    if (configToTest.provider === 'custom' && (!configToTest.host || !configToTest.port)) {
       return res.status(400).json({
         success: false,
         message: 'Custom SMTP configuration incomplete',
@@ -1617,18 +1623,18 @@ router.post('/email/test', requireAuth, isAdmin, async (req, res) => {
       });
     }
 
-    const result = await emailProviderHelper.sendTestEmail(settings.smtp, testEmail);
+    const result = await emailProviderHelper.sendTestEmail(configToTest, testEmail);
 
     if (!result.success) {
       return res.status(400).json({
         success: false,
-        message: `${settings.smtp.provider} test failed`,
+        message: `${configToTest.provider} test failed`,
         error: result.error,
         provider: result.provider
       });
     }
 
-    console.log('[Settings] Test email sent successfully via', settings.smtp.provider);
+    console.log('[Settings] Test email sent successfully via', configToTest.provider);
 
     res.json({
       success: true,
