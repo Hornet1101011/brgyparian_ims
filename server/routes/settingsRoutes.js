@@ -287,7 +287,7 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
     
     // Copy all simple fields (strings, booleans, numbers)
     for (const [key, value] of Object.entries(payload)) {
-      if (key === 'smtp' || key === 'emailSettings' || key === 'gmail') {
+      if (key === 'smtp' || key === 'emailSettings' || key === 'gmail' || key === 'email') {
         // Skip these for now, we'll handle them separately
         continue;
       }
@@ -298,6 +298,18 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
     if (payload.emailSettings) {
       updatePayload.emailSettings = payload.emailSettings;
       console.log('[Settings] Email settings updated:', Object.keys(payload.emailSettings));
+    }
+
+    // Handle email provider configuration
+    if (payload.email) {
+      updatePayload.email = payload.email;
+      console.log('[Settings] Email provider config updated:', {
+        provider: payload.email.provider,
+        enabled: payload.email.enabled,
+        fromName: payload.email.fromName,
+        fromEmail: payload.email.fromEmail,
+        keys: Object.keys(payload.email)
+      });
     }
     
     // Handle SMTP updates with proper nesting
@@ -440,7 +452,7 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
     
     // Copy simple fields
     for (const [key, value] of Object.entries(updatePayload)) {
-      if (key !== 'gmail') {
+      if (key !== 'gmail' && key !== 'email') {
         updateOps.$set[key] = value;
       }
     }
@@ -471,6 +483,21 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
         'gmail.password_in_ops': !!updateOps.$set['gmail.password']
       });
     }
+
+    // Explicitly set each email provider field to ensure Mongoose saves them properly
+    if (updatePayload.email) {
+      console.log('[Settings PATCH] Setting individual email provider fields:', {
+        'email.enabled': updatePayload.email.enabled,
+        'email.provider': updatePayload.email.provider,
+        'email.fromName': updatePayload.email.fromName,
+        'email.fromEmail': updatePayload.email.fromEmail,
+        'email_keys': Object.keys(updatePayload.email)
+      });
+      
+      updateOps.$set['email'] = updatePayload.email;
+      
+      console.log('[Settings PATCH] Email config set in updateOps');
+    }
     
     const updated = await SystemSetting.findOneAndUpdate({}, updateOps, { new: true, upsert: true, setDefaultsOnInsert: true });
     
@@ -484,6 +511,16 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
       passwordLength: updated?.gmail?.password ? updated.gmail.password.length : 0,
       gmailFields: updated?.gmail ? Object.keys(updated.gmail) : [],
       allGmailData: updated?.gmail ? JSON.stringify(updated.gmail, null, 2) : 'null'
+    });
+
+    console.log('[Settings PATCH] After save - Email in DB:', {
+      hasEmail: !!updated?.email,
+      emailProvider: updated?.email?.provider,
+      emailEnabled: updated?.email?.enabled,
+      emailFromName: updated?.email?.fromName,
+      emailFromEmail: updated?.email?.fromEmail,
+      emailFields: updated?.email ? Object.keys(updated.email) : [],
+      allEmailData: updated?.email ? JSON.stringify(updated.email, null, 2) : 'null'
     });
     const diff = { before, after: updated.toObject ? updated.toObject() : updated };
     await recordAudit(req.user?._id, 'patch_settings', diff, req.ip || req.headers['x-forwarded-for']);
