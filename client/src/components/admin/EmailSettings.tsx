@@ -51,7 +51,7 @@ interface Provider {
   fields: string[];
 }
 
-const EmailSettings = () => {
+const EmailSettings = ({ onConfigChange }: { onConfigChange?: (config: EmailConfig) => void }) => {
   const [config, setConfig] = useState({
     enabled: false,
     provider: 'custom' as const,
@@ -98,71 +98,63 @@ const EmailSettings = () => {
   };
 
   const handleConfigChange = (field: string, value: any) => {
-    setConfig(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
-
-  const handleSave = async () => {
-    try {
-      // Validate required fields based on provider
-      if (config.enabled) {
-        if (!config.fromName || !config.fromEmail) {
-          message.error('From name and email are required');
-          return;
-        }
-
-        switch (config.provider) {
-          case 'gmail':
-            if (!config.gmailAddress) {
-              message.error('Gmail address is required');
-              return;
-            }
-            break;
-          case 'mailtrap':
-            if (!config.user || !config.password) {
-              message.error('Mailtrap username and password are required');
-              return;
-            }
-            break;
-          case 'sendgrid':
-            if (!config.sendgridApiKey) {
-              message.error('SendGrid API key is required');
-              return;
-            }
-            break;
-          case 'aws-ses':
-            if (!config.awsAccessKeyId || !config.awsSecretAccessKey) {
-              message.error('AWS access key and secret key are required');
-              return;
-            }
-            break;
-          case 'custom':
-            if (!config.host || !config.port) {
-              message.error('Host and port are required for custom SMTP');
-              return;
-            }
-            break;
-        }
-      }
-
-      setSaving(true);
-      const response = await adminAPI.patch('/settings/email', config);
-
-      if (response.data?.success) {
-        message.success('Email settings saved successfully');
-        await loadEmailSettings();
-      }
-    } catch (err: any) {
-      console.error('Failed to save email settings:', err);
-      message.error(err.response?.data?.message || 'Failed to save email settings');
-    } finally {
-      setSaving(false);
+    const updatedConfig = { ...config, [field]: value };
+    setConfig(updatedConfig);
+    // Notify parent of config changes
+    if (onConfigChange) {
+      onConfigChange(updatedConfig);
     }
   };
 
+
+
+  const validateConfig = (): boolean => {
+    if (!config.enabled) return true;
+    if (!config.fromName || !config.fromEmail) {
+      message.error('From name and email are required');
+      return false;
+    }
+
+    switch (config.provider) {
+      case 'gmail':
+        if (!config.gmailAddress) {
+          message.error('Gmail address is required');
+          return false;
+        }
+        break;
+      case 'mailtrap':
+        if (!config.user || !config.password) {
+          message.error('Mailtrap username and password are required');
+          return false;
+        }
+        break;
+      case 'sendgrid':
+        if (!config.sendgridApiKey) {
+          message.error('SendGrid API key is required');
+          return false;
+        }
+        break;
+      case 'aws-ses':
+        if (!config.awsAccessKeyId || !config.awsSecretAccessKey) {
+          message.error('AWS access key and secret key are required');
+          return false;
+        }
+        break;
+      case 'custom':
+        if (!config.host || !config.port) {
+          message.error('Host and port are required for custom SMTP');
+          return false;
+        }
+        break;
+    }
+    return true;
+  };
+
   const handleTestEmail = async () => {
+    if (!validateConfig()) {
+      return;
+    }
+
     try {
       if (!testEmail.includes('@')) {
         message.error('Please enter a valid test email address');
@@ -472,19 +464,6 @@ const EmailSettings = () => {
           <Divider />
           <Typography variant="subtitle2">Provider Configuration</Typography>
           {renderProviderFields()}
-
-          {/* Action Buttons */}
-          <Box sx={{ display: 'flex', gap: 2, pt: 2 }}>
-            <Button
-              variant="contained"
-              onClick={handleSave}
-              disabled={saving}
-              sx={{ minWidth: 120 }}
-            >
-              {saving ? <CircularProgress size={24} /> : 'Save Settings'}
-            </Button>
-          </Box>
-
           {/* Test Email Section */}
           <Divider />
           <Typography variant="subtitle2">Test Configuration</Typography>
@@ -517,11 +496,7 @@ const EmailSettings = () => {
           <Alert severity="info">
             <strong>{config.provider.toUpperCase()} Configuration</strong>
             <br />
-            {config.provider === 'gmail' && 'Use Gmail App Passwords for 2FA-enabled accounts.'}
-            {config.provider === 'mailtrap' && 'Get credentials from your Mailtrap account dashboard.'}
-            {config.provider === 'sendgrid' && 'Create an API key in SendGrid account settings (not a regular key).'}
-            {config.provider === 'aws-ses' && 'Use AWS IAM credentials with SES permissions. Make sure to verify your sender email in AWS SES.'}
-            {config.provider === 'custom' && 'Enter your SMTP server details. Port 587 for TLS, 465 for SSL.'}
+            Email provider settings are saved with the main system settings using the Save button at the bottom right.
           </Alert>
         </Box>
       </CardContent>

@@ -135,8 +135,13 @@ const SystemSettings: FC = () => {
     retryAttempts: 3,
     retryDelayMinutes: 5,
   });
-  const [emailSettingsLoading, setEmailSettingsLoading] = useState(false);
-  const [savingEmailSettings, setSavingEmailSettings] = useState(false);
+  // Email provider configuration - captured from EmailSettings component
+  const [emailProviderConfig, setEmailProviderConfig] = useState<any>({
+    enabled: false,
+    provider: 'custom',
+    fromName: 'Barangay System',
+    fromEmail: ''
+  });
   // Gmail settings state - captured from GmailSettings component
   const [gmailSettings, setGmailSettings] = useState<any>({
     enabled: false,
@@ -310,12 +315,12 @@ const SystemSettings: FC = () => {
         }
       }
 
-      // Include emailSettings if present
-      if ((settings as any).emailSettings) {
-        // Clone and remove _id since MongoDB doesn't allow updating it
-        const emailSettings = { ...(settings as any).emailSettings };
-        delete emailSettings._id;
-        payload.emailSettings = emailSettings;
+      // Include email behavior settings
+      payload.emailSettings = emailSettings;
+
+      // Include email provider configuration
+      if (emailProviderConfig && Object.keys(emailProviderConfig).length > 0) {
+        payload.email = emailProviderConfig;
       }
 
       // Include Gmail settings if present or has passwords to save
@@ -446,60 +451,8 @@ const SystemSettings: FC = () => {
     }
   }
 
-  // Fetch email settings from backend
-  const fetchEmailSettings = async () => {
-    setEmailSettingsLoading(true);
-    try {
-      const response = await axiosInstance.get(`/settings/email`);
-      if (response?.data) {
-        setEmailSettings(response.data);
-      }
-    } catch (err: any) {
-      console.error('Failed to load email settings', err);
-      if (err?.response?.status === 401) {
-        // Not authenticated - settings will use defaults
-        console.log('User not authenticated, using default email settings');
-        return;
-      }
-      antdMessage.error('Failed to load email settings');
-    } finally {
-      setEmailSettingsLoading(false);
-    }
-  };
-
-  // Save email settings to backend
-  const saveEmailSettings = async () => {
-    setSavingEmailSettings(true);
-    try {
-      // Defensive: Remove _id before sending
-      const cleanEmailSettings = { ...emailSettings };
-      delete (cleanEmailSettings as any)._id;
-      
-      console.log('[SMTP Debug] Sending email settings:', JSON.stringify(cleanEmailSettings, null, 2));
-      const response = await axiosInstance.patch(`/settings/email`, cleanEmailSettings);
-      console.log('[SMTP Debug] Response from server:', JSON.stringify(response.data, null, 2));
-      antdMessage.success('Email settings saved successfully');
-    } catch (err: any) {
-      console.error('Failed to save email settings', err);
-      console.error('[SMTP Debug] Error response:', err?.response?.data);
-      if (err?.response?.status === 401) {
-        antdMessage.error('You must be logged in as an admin to change email settings');
-        return;
-      }
-      antdMessage.error('Failed to save email settings');
-    } finally {
-      setSavingEmailSettings(false);
-    }
-  };
-
-  // Load email settings on component mount
-  useEffect(() => {
-    fetchEmailSettings();
-  }, []);
-
-  // Combined save used by floating action button: save system settings first, then officials
+  // Combined save used by floating action button: save system settings and officials together
   const saveAll = async () => {
-    // prefer existing saving flags inside the individual handlers
     try {
       await handleSave();
     } catch (e) {
@@ -509,11 +462,6 @@ const SystemSettings: FC = () => {
       await handleManualSaveOfficials();
     } catch (e) {
       // manual save already reports errors
-    }
-    try {
-      await saveEmailSettings();
-    } catch (e) {
-      // save email settings already reports errors
     }
   }
 
@@ -660,82 +608,6 @@ const SystemSettings: FC = () => {
             </Box>
           </Paper>
 
-          {/* SMTP Settings Card */}
-          <Paper sx={{
-            p: 3,
-            borderRadius: 2,
-            boxShadow: '0 2px 12px rgba(15,23,42,0.08)',
-            border: '1px solid #e2e8f0',
-            background: '#ffffff',
-            borderTop: '4px solid #8b5cf6'
-          }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
-              <Box sx={{ width: 4, height: 28, background: '#8b5cf6', borderRadius: 1 }} />
-              <Typography variant="h6" sx={{ fontWeight: 600, color: '#0f172a', m: 0 }}>
-                Email Settings
-              </Typography>
-            </Box>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <StyledTextField
-                label="SMTP Host"
-                value={(settings as any).smtp?.host || ''}
-                onChange={(e) => setSettings((prev) => ({ ...(prev as any), smtp: { ...(prev as any).smtp, host: e.target.value } }) as SystemSettingsData)}
-                fullWidth
-              />
-              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-                <StyledTextField
-                  label="SMTP Port"
-                  type="number"
-                  value={(settings as any).smtp?.port || ''}
-                  onChange={(e) => setSettings((prev) => ({ ...(prev as any), smtp: { ...(prev as any).smtp, port: parseInt(e.target.value || '0') } }) as SystemSettingsData)}
-                />
-                <StyledTextField
-                  select
-                  label="Security Type"
-                  value={(settings as any).smtp?.securityType || 'tls'}
-                  onChange={(e) => {
-                    console.log('[SMTP Debug] Security Type changed to:', e.target.value);
-                    setSettings((prev) => {
-                      const newSettings = { 
-                        ...(prev as any), 
-                        smtp: { ...(prev as any).smtp, securityType: e.target.value } 
-                      } as SystemSettingsData;
-                      console.log('[SMTP Debug] Updated settings:', JSON.stringify(newSettings, null, 2));
-                      return newSettings;
-                    });
-                  }}
-                >
-                  <MenuItem value="ssl">SSL (Port 465)</MenuItem>
-                  <MenuItem value="tls">TLS/STARTTLS (Port 587)</MenuItem>
-                  <MenuItem value="none">None (Port 25)</MenuItem>
-                </StyledTextField>
-              </Box>
-              <StyledTextField
-                label="App Password"
-                type="password"
-                value={(settings as any).smtp?.appPassword || ''}
-                onChange={(e) => setSettings((prev) => ({ ...(prev as any), smtp: { ...(prev as any).smtp, appPassword: e.target.value } }) as SystemSettingsData)}
-                fullWidth
-                placeholder="Enter Gmail App Password (for accounts with 2FA enabled)"
-                helperText="For Gmail accounts with 2-factor authentication, use an App Password instead of your main password"
-              />
-              <StyledTextField
-                label="SMTP User"
-                value={(settings as any).smtp?.user || ''}
-                onChange={(e) => setSettings((prev) => ({ ...(prev as any), smtp: { ...(prev as any).smtp, user: e.target.value } }) as SystemSettingsData)}
-                fullWidth
-              />
-              <Box sx={{ display: 'flex', gap: 2 }}>
-                <Button variant="contained" size="small" onClick={() => setTestModalOpen(true)} sx={{ textTransform: 'none', fontWeight: 500 }}>
-                  Send Test Email
-                </Button>
-                <Button variant="outlined" size="small" onClick={() => setSettings((prev) => ({ ...(prev as any), smtp: { ...(prev as any).smtp, password: '', appPassword: '' } }) as SystemSettingsData)} sx={{ textTransform: 'none' }}>
-                  Clear Passwords
-                </Button>
-              </Box>
-            </Box>
-          </Paper>
-
           {/* Gmail Settings Component */}
           <GmailSettings 
             onGmailStatusChange={(enabled) => {
@@ -755,7 +627,10 @@ const SystemSettings: FC = () => {
           />
 
           {/* Email Provider Settings Component */}
-          <EmailSettings />
+          <EmailSettings onConfigChange={(config) => {
+            console.log('[SystemSettings] Email provider config changed:', config);
+            setEmailProviderConfig(config);
+          }} />
 
           {/* Email Behavior Control Card */}
           <Paper sx={{
@@ -776,211 +651,185 @@ const SystemSettings: FC = () => {
               Control which emails are sent automatically. Changes take effect immediately without restarting the application.
             </Typography>
 
-            {emailSettingsLoading ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-                <CircularProgress size={40} />
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {/* Master Switch */}
+              <Box sx={{ p: 2, backgroundColor: '#f0fdf4', borderRadius: 1, border: '1px solid #dcfce7' }}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={emailSettings.enabled}
+                      onChange={(e) => setEmailSettings({ ...emailSettings, enabled: e.target.checked })}
+                      disabled={saving}
+                    />
+                  }
+                  label={<Typography sx={{ fontWeight: 600, color: '#065f46' }}>Enable All Email Sending</Typography>}
+                />
+                <Typography variant="caption" sx={{ color: '#059669', display: 'block', ml: 4, mt: 1 }}>
+                  Master switch to disable all email types at once (emergency shutdown)
+                </Typography>
               </Box>
-            ) : (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                {/* Master Switch */}
-                <Box sx={{ p: 2, backgroundColor: '#f0fdf4', borderRadius: 1, border: '1px solid #dcfce7' }}>
+
+              <Divider />
+
+              {/* Email Type Controls */}
+              <Box>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#0f172a', mb: 2 }}>
+                  Email Type Controls
+                </Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                   <FormControlLabel
                     control={
                       <Switch
-                        checked={emailSettings.enabled}
-                        onChange={(e) => setEmailSettings({ ...emailSettings, enabled: e.target.checked })}
-                        disabled={savingEmailSettings}
+                        checked={emailSettings.enablePasswordResetEmails}
+                        onChange={(e) => setEmailSettings({ ...emailSettings, enablePasswordResetEmails: e.target.checked })}
+                        disabled={saving || !emailSettings.enabled}
                       />
                     }
-                    label={<Typography sx={{ fontWeight: 600, color: '#065f46' }}>Enable All Email Sending</Typography>}
+                    label={
+                      <Box>
+                        <Typography sx={{ fontWeight: 500, color: '#0f172a' }}>Password Reset Emails</Typography>
+                        <Typography variant="caption" sx={{ color: '#64748b' }}>Sent when users request password reset</Typography>
+                      </Box>
+                    }
                   />
-                  <Typography variant="caption" sx={{ color: '#059669', display: 'block', ml: 4, mt: 1 }}>
-                    Master switch to disable all email types at once (emergency shutdown)
-                  </Typography>
-                </Box>
-
-                <Divider />
-
-                {/* Email Type Controls */}
-                <Box>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#0f172a', mb: 2 }}>
-                    Email Type Controls
-                  </Typography>
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <FormControlLabel
-                      control={
-                        <Switch
-                          checked={emailSettings.enablePasswordResetEmails}
-                          onChange={(e) => setEmailSettings({ ...emailSettings, enablePasswordResetEmails: e.target.checked })}
-                          disabled={savingEmailSettings || !emailSettings.enabled}
-                        />
-                      }
-                      label={
-                        <Box>
-                          <Typography sx={{ fontWeight: 500, color: '#0f172a' }}>Password Reset Emails</Typography>
-                          <Typography variant="caption" sx={{ color: '#64748b' }}>Sent when users request password reset</Typography>
-                        </Box>
-                      }
-                    />
-                    <FormControlLabel
-                      control={
-                        <Switch
-                          checked={emailSettings.enableOtpEmails}
-                          onChange={(e) => setEmailSettings({ ...emailSettings, enableOtpEmails: e.target.checked })}
-                          disabled={savingEmailSettings || !emailSettings.enabled}
-                        />
-                      }
-                      label={
-                        <Box>
-                          <Typography sx={{ fontWeight: 500, color: '#0f172a' }}>OTP Emails</Typography>
-                          <Typography variant="caption" sx={{ color: '#64748b' }}>Sent for 2FA/login verification</Typography>
-                        </Box>
-                      }
-                    />
-                    <FormControlLabel
-                      control={
-                        <Switch
-                          checked={emailSettings.enableDocumentNotificationEmails}
-                          onChange={(e) => setEmailSettings({ ...emailSettings, enableDocumentNotificationEmails: e.target.checked })}
-                          disabled={savingEmailSettings || !emailSettings.enabled}
-                        />
-                      }
-                      label={
-                        <Box>
-                          <Typography sx={{ fontWeight: 500, color: '#0f172a' }}>Document Notifications</Typography>
-                          <Typography variant="caption" sx={{ color: '#64748b' }}>Sent when documents are approved/rejected</Typography>
-                        </Box>
-                      }
-                    />
-                    <FormControlLabel
-                      control={
-                        <Switch
-                          checked={emailSettings.enableAnnouncementEmails}
-                          onChange={(e) => setEmailSettings({ ...emailSettings, enableAnnouncementEmails: e.target.checked })}
-                          disabled={savingEmailSettings || !emailSettings.enabled}
-                        />
-                      }
-                      label={
-                        <Box>
-                          <Typography sx={{ fontWeight: 500, color: '#0f172a' }}>Announcements</Typography>
-                          <Typography variant="caption" sx={{ color: '#64748b' }}>Sent when admins post announcements to residents</Typography>
-                        </Box>
-                      }
-                    />
-                  </Box>
-                </Box>
-
-                <Divider />
-
-                {/* Announcement Settings */}
-                <Box>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#0f172a', mb: 2 }}>
-                    Announcement Configuration
-                  </Typography>
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <FormControlLabel
-                      control={
-                        <Switch
-                          checked={emailSettings.enableAnnouncementBcc}
-                          onChange={(e) => setEmailSettings({ ...emailSettings, enableAnnouncementBcc: e.target.checked })}
-                          disabled={savingEmailSettings || !emailSettings.enabled || !emailSettings.enableAnnouncementEmails}
-                        />
-                      }
-                      label={
-                        <Box>
-                          <Typography sx={{ fontWeight: 500, color: '#0f172a' }}>Use BCC for Privacy</Typography>
-                          <Typography variant="caption" sx={{ color: '#64748b' }}>
-                            When enabled: announcements sent via BCC (recipients can't see each other)<br/>
-                            When disabled: announcements sent individually
-                          </Typography>
-                        </Box>
-                      }
-                    />
-                    <Box sx={{ ml: 4 }}>
-                      <StyledTextField
-                        label="Recipients per Batch"
-                        type="number"
-                        value={emailSettings.recipientEmailsPerBatch}
-                        onChange={(e) => setEmailSettings({ ...emailSettings, recipientEmailsPerBatch: Math.max(1, parseInt(e.target.value || '100')) })}
-                        inputProps={{ min: 1 }}
-                        disabled={savingEmailSettings}
-                        sx={{ width: 180 }}
-                        helperText="Max recipients sent in each batch (for future use)"
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={emailSettings.enableOtpEmails}
+                        onChange={(e) => setEmailSettings({ ...emailSettings, enableOtpEmails: e.target.checked })}
+                        disabled={saving || !emailSettings.enabled}
                       />
-                    </Box>
-                  </Box>
-                </Box>
-
-                <Divider />
-
-                {/* Retry Policy */}
-                <Box>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#0f172a', mb: 2 }}>
-                    Retry Policy
-                  </Typography>
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <FormControlLabel
-                      control={
-                        <Switch
-                          checked={emailSettings.retryFailedEmails}
-                          onChange={(e) => setEmailSettings({ ...emailSettings, retryFailedEmails: e.target.checked })}
-                          disabled={savingEmailSettings}
-                        />
-                      }
-                      label={
-                        <Typography sx={{ fontWeight: 500, color: '#0f172a' }}>Retry Failed Emails</Typography>
-                      }
-                    />
-                    <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, ml: 4 }}>
-                      <StyledTextField
-                        label="Retry Attempts"
-                        type="number"
-                        value={emailSettings.retryAttempts}
-                        onChange={(e) => setEmailSettings({ ...emailSettings, retryAttempts: Math.max(0, parseInt(e.target.value || '0')) })}
-                        inputProps={{ min: 0 }}
-                        disabled={savingEmailSettings || !emailSettings.retryFailedEmails}
-                        helperText="Number of retry attempts"
+                    }
+                    label={
+                      <Box>
+                        <Typography sx={{ fontWeight: 500, color: '#0f172a' }}>OTP Emails</Typography>
+                        <Typography variant="caption" sx={{ color: '#64748b' }}>Sent for 2FA/login verification</Typography>
+                      </Box>
+                    }
+                  />
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={emailSettings.enableDocumentNotificationEmails}
+                        onChange={(e) => setEmailSettings({ ...emailSettings, enableDocumentNotificationEmails: e.target.checked })}
+                        disabled={saving || !emailSettings.enabled}
                       />
-                      <StyledTextField
-                        label="Retry Delay (minutes)"
-                        type="number"
-                        value={emailSettings.retryDelayMinutes}
-                        onChange={(e) => setEmailSettings({ ...emailSettings, retryDelayMinutes: Math.max(1, parseInt(e.target.value || '5')) })}
-                        inputProps={{ min: 1 }}
-                        disabled={savingEmailSettings || !emailSettings.retryFailedEmails}
-                        helperText="Wait time between retries"
+                    }
+                    label={
+                      <Box>
+                        <Typography sx={{ fontWeight: 500, color: '#0f172a' }}>Document Notifications</Typography>
+                        <Typography variant="caption" sx={{ color: '#64748b' }}>Sent when documents are approved/rejected</Typography>
+                      </Box>
+                    }
+                  />
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={emailSettings.enableAnnouncementEmails}
+                        onChange={(e) => setEmailSettings({ ...emailSettings, enableAnnouncementEmails: e.target.checked })}
+                        disabled={saving || !emailSettings.enabled}
                       />
-                    </Box>
-                  </Box>
+                    }
+                    label={
+                      <Box>
+                        <Typography sx={{ fontWeight: 500, color: '#0f172a' }}>Announcements</Typography>
+                        <Typography variant="caption" sx={{ color: '#64748b' }}>Sent when admins post announcements to residents</Typography>
+                      </Box>
+                    }
+                  />
                 </Box>
-
-                {/* Save Button */}
-                <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
-                  <Button
-                    variant="contained"
-                    onClick={saveEmailSettings}
-                    disabled={savingEmailSettings}
-                    sx={{ textTransform: 'none', fontWeight: 500 }}
-                  >
-                    {savingEmailSettings ? 'Saving...' : 'Save Email Settings'}
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    onClick={fetchEmailSettings}
-                    disabled={savingEmailSettings}
-                    sx={{ textTransform: 'none', fontWeight: 500 }}
-                  >
-                    Refresh
-                  </Button>
-                </Box>
-
-                <Alert severity="info" sx={{ mt: 2, borderRadius: 1 }}>
-                  <Typography variant="caption">
-                    <strong>Changes take effect immediately</strong> on the next email send without requiring a server restart.
-                  </Typography>
-                </Alert>
               </Box>
-            )}
+
+              <Divider />
+
+              {/* Announcement Settings */}
+              <Box>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#0f172a', mb: 2 }}>
+                  Announcement Configuration
+                </Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={emailSettings.enableAnnouncementBcc}
+                        onChange={(e) => setEmailSettings({ ...emailSettings, enableAnnouncementBcc: e.target.checked })}
+                        disabled={saving || !emailSettings.enabled || !emailSettings.enableAnnouncementEmails}
+                      />
+                    }
+                    label={
+                      <Box>
+                        <Typography sx={{ fontWeight: 500, color: '#0f172a' }}>Use BCC for Privacy</Typography>
+                        <Typography variant="caption" sx={{ color: '#64748b' }}>
+                          When enabled: announcements sent via BCC (recipients can't see each other)<br/>
+                          When disabled: announcements sent individually
+                        </Typography>
+                      </Box>
+                    }
+                  />
+                  <Box sx={{ ml: 4 }}>
+                    <StyledTextField
+                      label="Recipients per Batch"
+                      type="number"
+                      value={emailSettings.recipientEmailsPerBatch}
+                      onChange={(e) => setEmailSettings({ ...emailSettings, recipientEmailsPerBatch: Math.max(1, parseInt(e.target.value || '100')) })}
+                      inputProps={{ min: 1 }}
+                      disabled={saving}
+                      sx={{ width: 180 }}
+                      helperText="Max recipients sent in each batch"
+                    />
+                  </Box>
+                </Box>
+              </Box>
+
+              <Divider />
+
+              {/* Retry Policy */}
+              <Box>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#0f172a', mb: 2 }}>
+                  Retry Policy
+                </Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={emailSettings.retryFailedEmails}
+                        onChange={(e) => setEmailSettings({ ...emailSettings, retryFailedEmails: e.target.checked })}
+                        disabled={saving}
+                      />
+                    }
+                    label={
+                      <Typography sx={{ fontWeight: 500, color: '#0f172a' }}>Retry Failed Emails</Typography>
+                    }
+                  />
+                  <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, ml: 4 }}>
+                    <StyledTextField
+                      label="Retry Attempts"
+                      type="number"
+                      value={emailSettings.retryAttempts}
+                      onChange={(e) => setEmailSettings({ ...emailSettings, retryAttempts: Math.max(0, parseInt(e.target.value || '0')) })}
+                      inputProps={{ min: 0 }}
+                      disabled={saving || !emailSettings.retryFailedEmails}
+                      helperText="Number of retry attempts"
+                    />
+                    <StyledTextField
+                      label="Retry Delay (minutes)"
+                      type="number"
+                      value={emailSettings.retryDelayMinutes}
+                      onChange={(e) => setEmailSettings({ ...emailSettings, retryDelayMinutes: Math.max(1, parseInt(e.target.value || '5')) })}
+                      inputProps={{ min: 1 }}
+                      disabled={saving || !emailSettings.retryFailedEmails}
+                      helperText="Wait time between retries"
+                    />
+                  </Box>
+                </Box>
+              </Box>
+
+              <Alert severity="info" sx={{ mt: 2, borderRadius: 1 }}>
+                <Typography variant="caption">
+                  <strong>All email settings are saved</strong> with the main settings using the Save button at the bottom right.
+                </Typography>
+              </Alert>
+            </Box>
           </Paper>
 
           {/* System Configuration Card */}
