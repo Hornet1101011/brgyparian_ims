@@ -51,20 +51,20 @@ interface Provider {
   fields: string[];
 }
 
-const EmailSettings: React.FC = () => {
-  const [config, setConfig] = useState<EmailConfig>({
+const EmailSettings = () => {
+  const [config, setConfig] = useState({
     enabled: false,
-    provider: 'custom',
+    provider: 'custom' as const,
     fromName: 'Barangay System',
     fromEmail: ''
-  });
+  } as EmailConfig);
 
-  const [providers, setProviders] = useState<Provider[]>([]);
+  const [providers, setProviders] = useState([] as Provider[]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testEmail, setTestEmail] = useState('');
-  const [showPasswords, setShowPasswords] = useState<{ [key: string]: boolean }>({});
+  const [showPasswords, setShowPasswords] = useState({} as Record<string, boolean>);
 
   useEffect(() => {
     loadProviders();
