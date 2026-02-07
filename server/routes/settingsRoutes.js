@@ -463,7 +463,7 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
     
     // Copy simple fields
     for (const [key, value] of Object.entries(updatePayload)) {
-      if (key !== 'gmail' && key !== 'email') {
+      if (key !== 'gmail' && key !== 'email' && key !== 'smtp') {
         updateOps.$set[key] = value;
       }
     }
