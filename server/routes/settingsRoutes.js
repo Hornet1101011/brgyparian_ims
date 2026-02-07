@@ -494,9 +494,26 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
         'email_keys': Object.keys(updatePayload.email)
       });
       
-      updateOps.$set['email'] = updatePayload.email;
+      // Set individual email fields to ensure nested object is properly saved
+      updateOps.$set['email.enabled'] = updatePayload.email.enabled;
+      updateOps.$set['email.provider'] = updatePayload.email.provider;
+      updateOps.$set['email.fromName'] = updatePayload.email.fromName;
+      updateOps.$set['email.fromEmail'] = updatePayload.email.fromEmail;
+      updateOps.$set['email.host'] = updatePayload.email.host;
+      updateOps.$set['email.port'] = updatePayload.email.port;
+      updateOps.$set['email.secure'] = updatePayload.email.secure;
+      updateOps.$set['email.user'] = updatePayload.email.user;
+      updateOps.$set['email.password'] = updatePayload.email.password;
       
-      console.log('[Settings PATCH] Email config set in updateOps');
+      // Include provider-specific fields if present
+      if (updatePayload.email.gmailAddress) updateOps.$set['email.gmailAddress'] = updatePayload.email.gmailAddress;
+      if (updatePayload.email.gmailAppPassword) updateOps.$set['email.gmailAppPassword'] = updatePayload.email.gmailAppPassword;
+      if (updatePayload.email.sendgridApiKey) updateOps.$set['email.sendgridApiKey'] = updatePayload.email.sendgridApiKey;
+      if (updatePayload.email.awsAccessKeyId) updateOps.$set['email.awsAccessKeyId'] = updatePayload.email.awsAccessKeyId;
+      if (updatePayload.email.awsSecretAccessKey) updateOps.$set['email.awsSecretAccessKey'] = updatePayload.email.awsSecretAccessKey;
+      if (updatePayload.email.awsRegion) updateOps.$set['email.awsRegion'] = updatePayload.email.awsRegion;
+      
+      console.log('[Settings PATCH] Email config fields set in updateOps:', Object.keys(updateOps.$set).filter(k => k.startsWith('email.')));
     }
     
     const updated = await SystemSetting.findOneAndUpdate({}, updateOps, { new: true, upsert: true, setDefaultsOnInsert: true });
