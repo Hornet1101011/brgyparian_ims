@@ -1,12 +1,40 @@
 const mongoose = require('mongoose');
 
 const smtpSchema = new mongoose.Schema({
+  enabled: { type: Boolean, default: false },
+  provider: { 
+    type: String, 
+    enum: ['gmail', 'mailtrap', 'sendgrid', 'aws-ses', 'custom'], 
+    default: 'custom' 
+  },
+  // Common fields for all providers
   host: { type: String },
   port: { type: Number },
-  secure: { type: Boolean },
+  secure: { type: Boolean }, // TLS/SSL
   user: { type: String },
-  encryptedPassword: { type: String },
-  fromName: { type: String },
+  password: { type: String }, // Plain text password for SMTP
+  encryptedPassword: { type: String }, // Encrypted backup
+  fromName: { type: String, default: 'Barangay System' },
+  fromEmail: { type: String }, // Sender email address
+  
+  // Provider-specific fields
+  // Gmail
+  gmailAppPassword: { type: String },
+  gmailAddress: { type: String },
+  
+  // SendGrid
+  sendgridApiKey: { type: String },
+  
+  // AWS SES
+  awsAccessKeyId: { type: String },
+  awsSecretAccessKey: { type: String },
+  awsRegion: { type: String, default: 'us-east-1' },
+  
+  // Metadata
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now },
+  testEmailSent: { type: Date },
+  testEmailStatus: { type: String } // 'success', 'failed', 'pending'
 });
 
 const gmailSchema = new mongoose.Schema({
@@ -36,6 +64,9 @@ const systemSettingSchema = new mongoose.Schema({
   // Maximum number of accounts allowed per IP when the above is enabled
   maxAccountsPerIP: { type: Number, default: 1 },
   systemNotice: { type: String },
+  // Unified email/SMTP settings with support for multiple providers
+  email: { type: smtpSchema, default: {} },
+  // Keep smtp and gmail for backwards compatibility (deprecated)
   smtp: { type: smtpSchema, default: {} },
   gmail: { type: gmailSchema, default: {} },
 }, { timestamps: true });

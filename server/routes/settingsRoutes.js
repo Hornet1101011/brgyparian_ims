@@ -5,6 +5,7 @@ const isAdmin = require('../middleware/isAdmin');
 const { encryptText, decryptText } = require('../utils/cryptoHelper');
 const smtpHelper = require('../utils/smtpHelper');
 const gmailHelper = require('../utils/gmailHelper');
+const emailProviderHelper = require('../utils/emailProviderHelper');
 const SystemSetting = require('../models/SystemSetting');
 const PublicView = require('../models/PublicView');
 const AuditLog = require('../models/AuditLog');
@@ -1277,12 +1278,270 @@ router.post('/test-encryption', requireAuth, isAdmin, async (req, res) => {
   } catch (err) {
     console.error('[Test Encryption] Error:', err);
     return res.status(500).json({
+// ==================== EMAIL PROVIDER ENDPOINTS ====================
+
+// GET /api/settings/email/providers - Get available email providers
+router.get('/email/providers', requireAuth, isAdmin, async (req, res) => {
+  try {
+    const providers = emailProviderHelper.getAvailableProviders();
+    res.json({
+      success: true,
+      providers
+    });
+  } catch (err) {
+    console.error('[Settings] GET /email/providers error:', err);
+    res.status(500).json({
       success: false,
-      message: 'Encryption test failed',
-      error: err.message,
-      encryptionKeySet: !!process.env.SETTINGS_ENCRYPTION_KEY
+      message: 'Failed to get providers',
+      error: err.message
     });
   }
 });
+
+// GET /api/settings/email - Get current email configuration
+router.get('/email', requireAuth, isAdmin, async (req, res) => {
+  try {
+    const settings = await SystemSetting.findOne().lean();
+    
+    if (!settings || !settings.email) {
+      return res.json({
+        success: true,
+        email: {
+          enabled: false,
+          provider: 'custom',
+          fromName: 'Barangay System'
+        }
+      });
+    }
+
+    // Sanitize for client (remove passwords)
+    const sanitized = emailProviderHelper.sanitizeEmailConfig(settings.email);
+    
+    res.json({
+      success: true,
+      email: sanitized
+    });
+  } catch (err) {
+    console.error('[Settings] GET /email error:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get email settings',
+      error: err.message
+    });
+  }
+});
+
+// PATCH /api/settings/email - Update email configuration
+router.patch('/email', requireAuth, isAdmin, async (req, res) => {
+  try {
+    const {
+      enabled,
+      provider,
+      fromName,
+      fromEmail,
+      // Gmail fields
+      gmailAddress,
+      gmailAppPassword,
+      // Mailtrap fields
+      user,
+      password,
+      // SendGrid fields
+      sendgridApiKey,
+      // AWS SES fields
+      awsAccessKeyId,
+      awsSecretAccessKey,
+      awsRegion,
+      // Custom SMTP fields
+      host,
+      port,
+      secure
+    } = req.body;
+
+    console.log('[Settings] Email config update request:', {
+      enabled,
+      provider,
+      fromName,
+      fromEmail,
+      hasGmailAppPassword: !!gmailAppPassword,
+      hasPassword: !!password,
+      hasSendgridApiKey: !!sendgridApiKey,
+      hasAwsKeys: !!(awsAccessKeyId && awsSecretAccessKey)
+    });
+
+    // Validate provider
+    if (!provider || !emailProviderHelper.PROVIDER_CONFIGS[provider]) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid email provider',
+        error: `Provider must be one of: ${Object.keys(emailProviderHelper.PROVIDER_CONFIGS).join(', ')}`
+      });
+    }
+
+    // Validate provider-specific requirements
+    if (enabled) {
+      if (provider === 'gmail' && (!gmailAddress || !gmailAppPassword)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Gmail requires address and app password',
+          error: 'gmailAddress and gmailAppPassword are required'
+        });
+      }
+
+      if (provider === 'mailtrap' && (!user || !password)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Mailtrap requires username and password',
+          error: 'user and password are required'
+        });
+      }
+
+      if (provider === 'sendgrid' && !sendgridApiKey) {
+        return res.status(400).json({
+          success: false,
+          message: 'SendGrid requires API key',
+          error: 'sendgridApiKey is required'
+        });
+      }
+
+      if (provider === 'aws-ses' && (!awsAccessKeyId || !awsSecretAccessKey)) {
+        return res.status(400).json({
+          success: false,
+          message: 'AWS SES requires access key and secret key',
+          error: 'awsAccessKeyId and awsSecretAccessKey are required'
+        });
+      }
+
+      if (provider === 'custom' && (!host || !port)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Custom SMTP requires host and port',
+          error: 'host and port are required'
+        });
+      }
+    }
+
+    let settings = await SystemSetting.findOne();
+    if (!settings) {
+      settings = new SystemSetting();
+    }
+
+    // Build email config
+    const emailConfig = {
+      enabled,
+      provider,
+      fromName: fromName || 'Barangay System',
+      fromEmail: fromEmail || gmailAddress || user,
+      updatedAt: new Date()
+    };
+
+    // Add provider-specific fields
+    if (provider === 'gmail') {
+      emailConfig.gmailAddress = gmailAddress;
+      emailConfig.gmailAppPassword = gmailAppPassword;
+    } else if (provider === 'mailtrap') {
+      emailConfig.user = user;
+      emailConfig.password = password;
+    } else if (provider === 'sendgrid') {
+      emailConfig.sendgridApiKey = sendgridApiKey;
+    } else if (provider === 'aws-ses') {
+      emailConfig.awsAccessKeyId = awsAccessKeyId;
+      emailConfig.awsSecretAccessKey = awsSecretAccessKey;
+      emailConfig.awsRegion = awsRegion || 'us-east-1';
+    } else if (provider === 'custom') {
+      emailConfig.host = host;
+      emailConfig.port = port;
+      emailConfig.secure = !!secure;
+      emailConfig.user = user;
+      emailConfig.password = password;
+    }
+
+    settings.email = emailConfig;
+    await settings.save();
+
+    console.log('[Settings] Email configuration updated:', {
+      enabled,
+      provider,
+      fromName,
+      fromEmail
+    });
+
+    res.json({
+      success: true,
+      message: 'Email settings updated',
+      email: emailProviderHelper.sanitizeEmailConfig(settings.email)
+    });
+  } catch (err) {
+    console.error('[Settings] PATCH /email error:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update email settings',
+      error: err.message
+    });
+  }
+});
+
+// POST /api/settings/email/test - Test email configuration
+router.post('/email/test', requireAuth, isAdmin, async (req, res) => {
+  try {
+    const { testEmail } = req.body;
+
+    if (!testEmail || !testEmail.includes('@')) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid test email required',
+        error: 'testEmail must be a valid email address'
+      });
+    }
+
+    const settings = await SystemSetting.findOne().lean();
+
+    if (!settings || !settings.email || !settings.email.enabled) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email provider not configured or disabled',
+        error: 'Enable email and configure provider settings first'
+      });
+    }
+
+    if (!settings.email.provider) {
+      return res.status(400).json({
+        success: false,
+        message: 'No email provider selected',
+        error: 'Select an email provider in settings'
+      });
+    }
+
+    console.log('[Settings] Sending test email using provider:', settings.email.provider);
+
+    const result = await emailProviderHelper.sendTestEmail(settings.email, testEmail);
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        message: `${settings.email.provider} test failed`,
+        error: result.error,
+        provider: result.provider
+      });
+    }
+
+    console.log('[Settings] Test email sent successfully via', settings.email.provider);
+
+    res.json({
+      success: true,
+      message: 'Test email sent successfully',
+      provider: result.provider,
+      messageId: result.messageId
+    });
+  } catch (err) {
+    console.error('[Settings] POST /email/test error:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to send test email',
+      error: err.message
+    });
+  }
+});
+
+// ==================== END EMAIL PROVIDER ENDPOINTS ====================
 
 module.exports = router;
