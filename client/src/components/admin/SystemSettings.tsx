@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Box,
   Paper,
@@ -470,6 +470,26 @@ const SystemSettings: FC = () => {
     }
   }
 
+  // Memoized callbacks to prevent unnecessary re-renders
+  const handleGmailStatusChange = useCallback((enabled: boolean) => {
+    console.log('[SystemSettings] Gmail status changed:', enabled);
+  }, []);
+
+  const handleGmailSettingsChange = useCallback((gmailSettings: any) => {
+    console.log('[SystemSettings] Gmail settings changed:', {
+      enabled: gmailSettings.enabled,
+      gmailAddress: gmailSettings.gmailAddress,
+      hasAppPassword: !!gmailSettings.appPassword,
+      passwordLength: gmailSettings.appPassword?.length || 0
+    });
+    setGmailSettings(gmailSettings);
+  }, []);
+
+  const handleEmailConfigChange = useCallback((config: any) => {
+    console.log('[SystemSettings] Email provider config changed:', config);
+    setEmailProviderConfig(config);
+  }, []);
+
   // Track whether settings are different from the original copy loaded from server
   useEffect(() => {
     try {
@@ -615,27 +635,12 @@ const SystemSettings: FC = () => {
 
           {/* Gmail Settings Component */}
           <GmailSettings 
-            onGmailStatusChange={(enabled) => {
-              console.log('[SystemSettings] Gmail status changed:', enabled);
-              // Optional: You can add logic here to handle Gmail status changes
-              // For example, disable SMTP section when Gmail is enabled
-            }}
-            onSettingsChange={(gmailSettings) => {
-              console.log('[SystemSettings] Gmail settings changed:', {
-                enabled: gmailSettings.enabled,
-                gmailAddress: gmailSettings.gmailAddress,
-                hasAppPassword: !!gmailSettings.appPassword,
-                passwordLength: gmailSettings.appPassword?.length || 0
-              });
-              setGmailSettings(gmailSettings);
-            }}
+            onGmailStatusChange={handleGmailStatusChange}
+            onSettingsChange={handleGmailSettingsChange}
           />
 
           {/* Email Provider Settings Component */}
-          <EmailSettings onConfigChange={(config) => {
-            console.log('[SystemSettings] Email provider config changed:', config);
-            setEmailProviderConfig(config);
-          }} />
+          <EmailSettings onConfigChange={handleEmailConfigChange} />
 
           {/* Email Behavior Control Card */}
           <Paper sx={{
