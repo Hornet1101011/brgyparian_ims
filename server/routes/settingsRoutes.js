@@ -1278,6 +1278,13 @@ router.post('/test-encryption', requireAuth, isAdmin, async (req, res) => {
   } catch (err) {
     console.error('[Test Encryption] Error:', err);
     return res.status(500).json({
+      success: false,
+      message: 'Encryption test failed',
+      error: err.message
+    });
+  }
+});
+
 // ==================== EMAIL PROVIDER ENDPOINTS ====================
 
 // GET /api/settings/email/providers - Get available email providers

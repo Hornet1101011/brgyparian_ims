@@ -1,0 +1,532 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Box,
+  Card,
+  CardContent,
+  CardHeader,
+  TextField,
+  Button,
+  Select,
+  MenuItem,
+  FormControlLabel,
+  Checkbox,
+  Alert,
+  CircularProgress,
+  Grid,
+  FormHelperText,
+  Divider,
+  InputAdornment,
+  IconButton,
+  Typography
+} from '@mui/material';
+import { Visibility, VisibilityOff } from '@mui/icons-material';
+import { message } from 'antd';
+import { adminAPI } from '../../services/api';
+
+interface EmailConfig {
+  enabled: boolean;
+  provider: 'gmail' | 'mailtrap' | 'sendgrid' | 'aws-ses' | 'custom';
+  fromName: string;
+  fromEmail: string;
+  // Gmail
+  gmailAddress?: string;
+  // Mailtrap
+  user?: string;
+  password?: string;
+  // SendGrid
+  sendgridApiKey?: string;
+  // AWS SES
+  awsAccessKeyId?: string;
+  awsSecretAccessKey?: string;
+  awsRegion?: string;
+  // Custom SMTP
+  host?: string;
+  port?: number;
+  secure?: boolean;
+}
+
+interface Provider {
+  id: string;
+  name: string;
+  fields: string[];
+}
+
+const EmailSettings: React.FC = () => {
+  const [config, setConfig] = useState<EmailConfig>({
+    enabled: false,
+    provider: 'custom',
+    fromName: 'Barangay System',
+    fromEmail: ''
+  });
+
+  const [providers, setProviders] = useState<Provider[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testEmail, setTestEmail] = useState('');
+  const [showPasswords, setShowPasswords] = useState<{ [key: string]: boolean }>({});
+
+  useEffect(() => {
+    loadProviders();
+    loadEmailSettings();
+  }, []);
+
+  const loadProviders = async () => {
+    try {
+      const response = await adminAPI.get('/settings/email/providers');
+      if (response.data?.success) {
+        setProviders(response.data.providers);
+      }
+    } catch (err) {
+      console.error('Failed to load providers:', err);
+    }
+  };
+
+  const loadEmailSettings = async () => {
+    try {
+      setLoading(true);
+      const response = await adminAPI.get('/settings/email');
+      if (response.data?.success && response.data.email) {
+        setConfig(response.data.email);
+      }
+    } catch (err) {
+      console.error('Failed to load email settings:', err);
+      message.error('Failed to load email settings');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfigChange = (field: string, value: any) => {
+    setConfig(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleSave = async () => {
+    try {
+      // Validate required fields based on provider
+      if (config.enabled) {
+        if (!config.fromName || !config.fromEmail) {
+          message.error('From name and email are required');
+          return;
+        }
+
+        switch (config.provider) {
+          case 'gmail':
+            if (!config.gmailAddress) {
+              message.error('Gmail address is required');
+              return;
+            }
+            break;
+          case 'mailtrap':
+            if (!config.user || !config.password) {
+              message.error('Mailtrap username and password are required');
+              return;
+            }
+            break;
+          case 'sendgrid':
+            if (!config.sendgridApiKey) {
+              message.error('SendGrid API key is required');
+              return;
+            }
+            break;
+          case 'aws-ses':
+            if (!config.awsAccessKeyId || !config.awsSecretAccessKey) {
+              message.error('AWS access key and secret key are required');
+              return;
+            }
+            break;
+          case 'custom':
+            if (!config.host || !config.port) {
+              message.error('Host and port are required for custom SMTP');
+              return;
+            }
+            break;
+        }
+      }
+
+      setSaving(true);
+      const response = await adminAPI.patch('/settings/email', config);
+
+      if (response.data?.success) {
+        message.success('Email settings saved successfully');
+        await loadEmailSettings();
+      }
+    } catch (err: any) {
+      console.error('Failed to save email settings:', err);
+      message.error(err.response?.data?.message || 'Failed to save email settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTestEmail = async () => {
+    try {
+      if (!testEmail.includes('@')) {
+        message.error('Please enter a valid test email address');
+        return;
+      }
+
+      setTesting(true);
+      const response = await adminAPI.post('/settings/email/test', {
+        testEmail
+      });
+
+      if (response.data?.success) {
+        message.success(`Test email sent successfully to ${testEmail}`);
+        setTestEmail('');
+      }
+    } catch (err: any) {
+      console.error('Failed to send test email:', err);
+      message.error(err.response?.data?.message || 'Failed to send test email');
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const togglePasswordVisibility = (field: string) => {
+    setShowPasswords(prev => ({
+      ...prev,
+      [field]: !prev[field]
+    }));
+  };
+
+  if (loading) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  const renderProviderFields = () => {
+    const provider = config.provider;
+
+    switch (provider) {
+      case 'gmail':
+        return (
+          <Grid container spacing={2}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Gmail Address"
+                value={config.gmailAddress || ''}
+                onChange={(e) => handleConfigChange('gmailAddress', e.target.value)}
+                placeholder="example@gmail.com"
+                type="email"
+              />
+            </Grid>
+          </Grid>
+        );
+
+      case 'mailtrap':
+        return (
+          <Grid container spacing={2}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Mailtrap Username"
+                value={config.user || ''}
+                onChange={(e) => handleConfigChange('user', e.target.value)}
+                placeholder="Your Mailtrap username"
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Mailtrap Password"
+                type={showPasswords['mailtrap'] ? 'text' : 'password'}
+                value={config.password || ''}
+                onChange={(e) => handleConfigChange('password', e.target.value)}
+                placeholder="Your Mailtrap password"
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        onClick={() => togglePasswordVisibility('mailtrap')}
+                        edge="end"
+                      >
+                        {showPasswords['mailtrap'] ? <VisibilityOff /> : <Visibility />}
+                      </IconButton>
+                    </InputAdornment>
+                  )
+                }}
+              />
+            </Grid>
+          </Grid>
+        );
+
+      case 'sendgrid':
+        return (
+          <Grid container spacing={2}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="SendGrid API Key"
+                type={showPasswords['sendgrid'] ? 'text' : 'password'}
+                value={config.sendgridApiKey || ''}
+                onChange={(e) => handleConfigChange('sendgridApiKey', e.target.value)}
+                placeholder="Your SendGrid API key"
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        onClick={() => togglePasswordVisibility('sendgrid')}
+                        edge="end"
+                      >
+                        {showPasswords['sendgrid'] ? <VisibilityOff /> : <Visibility />}
+                      </IconButton>
+                    </InputAdornment>
+                  )
+                }}
+              />
+              <FormHelperText>Get your API key from SendGrid dashboard</FormHelperText>
+            </Grid>
+          </Grid>
+        );
+
+      case 'aws-ses':
+        return (
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="AWS Access Key ID"
+                value={config.awsAccessKeyId || ''}
+                onChange={(e) => handleConfigChange('awsAccessKeyId', e.target.value)}
+                placeholder="AKIA..."
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="AWS Region"
+                value={config.awsRegion || 'us-east-1'}
+                onChange={(e) => handleConfigChange('awsRegion', e.target.value)}
+                placeholder="us-east-1"
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="AWS Secret Access Key"
+                type={showPasswords['aws'] ? 'text' : 'password'}
+                value={config.awsSecretAccessKey || ''}
+                onChange={(e) => handleConfigChange('awsSecretAccessKey', e.target.value)}
+                placeholder="Your AWS secret key"
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        onClick={() => togglePasswordVisibility('aws')}
+                        edge="end"
+                      >
+                        {showPasswords['aws'] ? <VisibilityOff /> : <Visibility />}
+                      </IconButton>
+                    </InputAdornment>
+                  )
+                }}
+              />
+            </Grid>
+          </Grid>
+        );
+
+      case 'custom':
+        return (
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="SMTP Host"
+                value={config.host || ''}
+                onChange={(e) => handleConfigChange('host', e.target.value)}
+                placeholder="smtp.example.com"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="SMTP Port"
+                type="number"
+                value={config.port || 587}
+                onChange={(e) => handleConfigChange('port', parseInt(e.target.value) || 587)}
+                placeholder="587"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Username"
+                value={config.user || ''}
+                onChange={(e) => handleConfigChange('user', e.target.value)}
+                placeholder="SMTP username"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Password"
+                type={showPasswords['custom'] ? 'text' : 'password'}
+                value={config.password || ''}
+                onChange={(e) => handleConfigChange('password', e.target.value)}
+                placeholder="SMTP password"
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        onClick={() => togglePasswordVisibility('custom')}
+                        edge="end"
+                      >
+                        {showPasswords['custom'] ? <VisibilityOff /> : <Visibility />}
+                      </IconButton>
+                    </InputAdornment>
+                  )
+                }}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={config.secure || false}
+                    onChange={(e) => handleConfigChange('secure', e.target.checked)}
+                  />
+                }
+                label="Use TLS/SSL (secure connection)"
+              />
+            </Grid>
+          </Grid>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader title="Email Settings" subheader="Configure email provider and sender information" />
+      <CardContent>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {/* Enable/Disable */}
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={config.enabled}
+                onChange={(e) => handleConfigChange('enabled', e.target.checked)}
+              />
+            }
+            label="Enable Email Sending"
+          />
+
+          {config.enabled && (
+            <Alert severity="info">
+              Email sending is enabled. Make sure to test your configuration before relying on it.
+            </Alert>
+          )}
+
+          {/* Provider Selection */}
+          <TextField
+            select
+            label="Email Provider"
+            value={config.provider}
+            onChange={(e) => handleConfigChange('provider', e.target.value)}
+            fullWidth
+          >
+            {providers.map((p) => (
+              <MenuItem key={p.id} value={p.id}>
+                {p.name}
+              </MenuItem>
+            ))}
+          </TextField>
+
+          {/* Common Fields */}
+          <Divider />
+          <Typography variant="subtitle2">Sender Information</Typography>
+          
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="From Name"
+                value={config.fromName}
+                onChange={(e) => handleConfigChange('fromName', e.target.value)}
+                placeholder="Barangay System"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="From Email"
+                type="email"
+                value={config.fromEmail}
+                onChange={(e) => handleConfigChange('fromEmail', e.target.value)}
+                placeholder="noreply@example.com"
+              />
+            </Grid>
+          </Grid>
+
+          {/* Provider-Specific Fields */}
+          <Divider />
+          <Typography variant="subtitle2">Provider Configuration</Typography>
+          {renderProviderFields()}
+
+          {/* Action Buttons */}
+          <Box sx={{ display: 'flex', gap: 2, pt: 2 }}>
+            <Button
+              variant="contained"
+              onClick={handleSave}
+              disabled={saving}
+              sx={{ minWidth: 120 }}
+            >
+              {saving ? <CircularProgress size={24} /> : 'Save Settings'}
+            </Button>
+          </Box>
+
+          {/* Test Email Section */}
+          <Divider />
+          <Typography variant="subtitle2">Test Configuration</Typography>
+          
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Test Email Address"
+                type="email"
+                value={testEmail}
+                onChange={(e) => setTestEmail(e.target.value)}
+                placeholder="test@example.com"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <Button
+                variant="outlined"
+                onClick={handleTestEmail}
+                disabled={testing || !config.enabled}
+                fullWidth
+                sx={{ mt: 1 }}
+              >
+                {testing ? <CircularProgress size={24} /> : 'Send Test Email'}
+              </Button>
+            </Grid>
+          </Grid>
+
+          {/* Provider Info */}
+          <Alert severity="info">
+            <strong>{config.provider.toUpperCase()} Configuration</strong>
+            <br />
+            {config.provider === 'gmail' && 'Use Gmail App Passwords for 2FA-enabled accounts.'}
+            {config.provider === 'mailtrap' && 'Get credentials from your Mailtrap account dashboard.'}
+            {config.provider === 'sendgrid' && 'Create an API key in SendGrid account settings (not a regular key).'}
+            {config.provider === 'aws-ses' && 'Use AWS IAM credentials with SES permissions. Make sure to verify your sender email in AWS SES.'}
+            {config.provider === 'custom' && 'Enter your SMTP server details. Port 587 for TLS, 465 for SSL.'}
+          </Alert>
+        </Box>
+      </CardContent>
+    </Card>
+  );
+};
+
+export default EmailSettings;

@@ -19,6 +19,7 @@ import {
 } from '@mui/material';
 import TestEmailModal from '../TestEmailModal';
 import GmailSettings from './GmailSettings';
+import EmailSettings from './EmailSettings';
 import { adminAPI, axiosInstance, API_URL } from '../../services/api';
 import { UploadOutlined, UsergroupAddOutlined, DeleteOutlined } from '@ant-design/icons';
 import { Upload as AntdUpload, message as antdMessage } from 'antd';
@@ -752,6 +753,9 @@ const SystemSettings: FC = () => {
               setGmailSettings(gmailSettings);
             }}
           />
+
+          {/* Email Provider Settings Component */}
+          <EmailSettings />
 
           {/* Email Behavior Control Card */}
           <Paper sx={{
