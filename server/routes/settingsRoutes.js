@@ -1059,7 +1059,8 @@ router.patch('/gmail', requireAuth, isAdmin, async (req, res) => {
 // POST /api/settings/gmail/test - Test Gmail connection
 router.post('/gmail/test', requireAuth, isAdmin, async (req, res) => {
   try {
-    // Accept testEmail or use gmailAddress as fallback
+    // Only accept testEmail, fromEmail, senderName from request
+    // Passwords come ONLY from database (not from request body for security)
     const { testEmail, fromEmail, senderName } = req.body;
     
     console.log('[Settings] Gmail test request received:', {
@@ -1137,22 +1138,30 @@ router.post('/gmail/test', requireAuth, isAdmin, async (req, res) => {
     }
     
     if (!settings.gmail.appPassword && !settings.gmail.password) {
-      console.error('[Settings] No passwords configured - returning 400', {
+      console.error('[Settings] No passwords configured in database - returning 400', {
         hasAppPassword: !!settings.gmail.appPassword,
         hasPassword: !!settings.gmail.password
       });
       return res.status(400).json({ 
         success: false,
         message: 'Gmail password is not configured',
-        error: 'Gmail password has not been set (need app password or regular password)'
+        error: 'Gmail app password or regular password must be saved in settings first'
       });
     }
     
-    // Determine which password to use - prefer app password, fall back to regular password
-    const hasAppPassword = !!settings.gmail.appPassword;
-    const hasRegularPassword = !!settings.gmail.password;
+    // Use ONLY database passwords - prefer app password, then fall back to regular password
     const passwordToUse = settings.gmail.appPassword || settings.gmail.password;
-    const passwordType = hasAppPassword ? 'appPassword' : 'password';
+    const passwordType = settings.gmail.appPassword ? 'appPassword (from database)' : 'password (from database)';
+    
+    console.log('[Settings] Test Email Password Selection:', {
+      hasDbAppPassword: !!settings.gmail.appPassword,
+      dbAppPasswordLength: settings.gmail.appPassword?.length || 0,
+      hasDbPassword: !!settings.gmail.password,
+      dbPasswordLength: settings.gmail.password?.length || 0,
+      usingPasswordType: passwordType,
+      selectedPasswordLength: passwordToUse.length,
+      source: 'database only'
+    });
     
     console.log('[Settings] Test Email Password Selection:', {
       hasAppPassword,
