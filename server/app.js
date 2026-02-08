@@ -439,4 +439,14 @@ const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, async () => {
   console.log(`\nServer running on port ${PORT}`);
+  
+  // Start periodic email health check job (runs every hour)
+  try {
+    const emailHealthCheckJob = require('./jobs/emailHealthCheckJob');
+    const healthCheckIntervalMs = parseInt(process.env.EMAIL_HEALTH_CHECK_INTERVAL_MS || '3600000'); // 1 hour default
+    emailHealthCheckJob.startHealthCheckJob(healthCheckIntervalMs);
+    console.log('[Server] Email health check job started');
+  } catch (err) {
+    console.warn('[Server] Failed to start email health check job:', err.message);
+  }
 });

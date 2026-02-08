@@ -490,6 +490,78 @@ function sanitizeEmailConfig(config) {
 }
 
 /**
+ * Simulate sending an email without actually calling the provider
+ * Used for testing email configuration without risking real sends
+ * @param {Object} emailConfig - Email configuration
+ * @param {Object} emailOptions - Email options (to, subject, html, etc.)
+ * @param {boolean} logToDatabase - Whether to log to EmailLog collection
+ * @returns {Promise<Object>} - Result with simulated send details
+ */
+async function simulateSendEmail(emailConfig, emailOptions, logToDatabase = false) {
+  try {
+    if (!emailConfig || !emailConfig.provider) {
+      throw new Error('Email provider not configured');
+    }
+
+    if (!emailOptions || !emailOptions.to || !emailOptions.subject) {
+      throw new Error('Email recipient and subject are required');
+    }
+
+    const simulatedMessageId = `dry-run-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    console.log('[EmailProvider] DRY-RUN MODE: Simulating email send', {
+      provider: emailConfig.provider,
+      recipient: emailOptions.to,
+      subject: emailOptions.subject,
+      from: emailConfig.fromEmail || 'noreply@barangay.local',
+      simulatedMessageId,
+      htmlLength: emailOptions.html ? emailOptions.html.length : 0
+    });
+
+    // Log simulated email to database if requested
+    if (logToDatabase) {
+      try {
+        const { EmailLog } = require('../src/models/EmailLog');
+        const emailLog = new EmailLog({
+          recipient: emailOptions.to,
+          subject: emailOptions.subject,
+          status: 'sent', // Dry-run emails are marked as "sent"
+          messageId: simulatedMessageId,
+          emailType: emailOptions.emailType || 'generic',
+          bccRecipientsCount: emailOptions.bccRecipientsCount || 0,
+          dateSent: new Date(),
+          errorMessage: '[DRY-RUN MODE] Simulated email - not actually sent'
+        });
+        
+        await emailLog.save();
+        console.log('[EmailProvider] DRY-RUN: Logged simulated email to EmailLog collection', {
+          recipient: emailOptions.to,
+          messageId: simulatedMessageId
+        });
+      } catch (logErr) {
+        console.warn('[EmailProvider] DRY-RUN: Failed to log email to database:', logErr.message);
+      }
+    } else {
+      // Log to console if not logging to database
+      console.log('[EmailProvider] DRY-RUN: Email not logged to database (logToDatabase=false)');
+    }
+
+    return {
+      success: true,
+      isDryRun: true,
+      messageId: simulatedMessageId,
+      provider: emailConfig.provider,
+      recipient: emailOptions.to,
+      subject: emailOptions.subject,
+      mode: 'dry-run'
+    };
+  } catch (err) {
+    console.error('[EmailProvider] DRY-RUN simulation error:', err.message);
+    throw err;
+  }
+}
+
+/**
  * Get available provider options
  */
 function getAvailableProviders() {
@@ -500,13 +572,121 @@ function getAvailableProviders() {
   }));
 }
 
+/**
+ * Perform health check on email provider connectivity
+ * @param {Object} emailConfig - Email provider configuration
+ * @returns {Promise<Object>} Health check result with status, timestamp, and error if any
+ */
+async function performHealthCheck(emailConfig) {
+  const healthCheckStart = Date.now();
+  
+  try {
+    if (!emailConfig || !emailConfig.enabled || !emailConfig.provider) {
+      console.log('[EmailProvider] Health check skipped: email provider not configured');
+      return {
+        status: 'warning',
+        message: 'Email provider not configured',
+        provider: null,
+        checkDurationMs: Date.now() - healthCheckStart,
+        timestamp: new Date()
+      };
+    }
+
+    console.log('[EmailProvider] Starting health check for provider:', emailConfig.provider);
+
+    // Create transporter for connectivity test
+    const transporter = createEmailTransporter(emailConfig);
+    
+    // Verify connection with timeout
+    console.log('[EmailProvider] Verifying SMTP connection...');
+    const verifyPromise = transporter.verify();
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Health check timeout (30s)')), 30000)
+    );
+
+    try {
+      await Promise.race([verifyPromise, timeoutPromise]);
+    } catch (raceErr) {
+      throw raceErr;
+    }
+
+    console.log('[EmailProvider] Health check passed for provider:', emailConfig.provider);
+
+    return {
+      status: 'ok',
+      message: 'Email provider connectivity verified',
+      provider: emailConfig.provider,
+      checkDurationMs: Date.now() - healthCheckStart,
+      timestamp: new Date()
+    };
+  } catch (err) {
+    const errorMessage = err.message || String(err);
+    console.error('[EmailProvider] Health check failed:', {
+      provider: emailConfig?.provider,
+      error: errorMessage,
+      code: err.code,
+      command: err.command
+    });
+
+    return {
+      status: 'failed',
+      message: 'Email provider connectivity check failed',
+      provider: emailConfig?.provider,
+      error: errorMessage,
+      checkDurationMs: Date.now() - healthCheckStart,
+      timestamp: new Date()
+    };
+  }
+}
+
+/**
+ * Update health check status in database
+ * @param {string} healthStatus - 'ok', 'warning', or 'failed'
+ * @param {string} [error] - Optional error message
+ * @returns {Promise<Object>} Updated settings
+ */
+async function updateHealthCheckStatus(healthStatus, error = null) {
+  try {
+    const { SystemSetting } = require('../models/SystemSetting');
+    if (!SystemSetting) {
+      console.warn('[EmailProvider] SystemSetting model not available');
+      return null;
+    }
+
+    const update = {
+      'smtp.lastHealthCheckAt': new Date(),
+      'smtp.lastHealthStatus': healthStatus
+    };
+
+    if (error) {
+      update['smtp.lastHealthCheckError'] = error;
+    }
+
+    const settings = await SystemSetting.findOneAndUpdate({}, { $set: update }, { new: true });
+    
+    console.log('[EmailProvider] Health check status updated:', {
+      status: healthStatus,
+      timestamp: new Date().toISOString(),
+      hasError: !!error
+    });
+
+    return settings;
+  } catch (err) {
+    console.error('[EmailProvider] Failed to update health check status:', err.message);
+    return null;
+  }
+}
+
 module.exports = {
   createEmailTransporter,
   sendTestEmail,
+  simulateSendEmail,
   sanitizeEmailConfig,
   getAvailableProviders,
   getProviderConfig,
   encryptEmailPassword,
   decryptEmailPassword,
+  performHealthCheck,
+  updateHealthCheckStatus,
   PROVIDER_CONFIGS
 };

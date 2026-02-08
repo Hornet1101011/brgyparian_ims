@@ -34,7 +34,11 @@ const smtpSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
   testEmailSent: { type: Date },
-  testEmailStatus: { type: String } // 'success', 'failed', 'pending'
+  testEmailStatus: { type: String }, // 'success', 'failed', 'pending'
+  // Health check status
+  lastHealthCheckAt: { type: Date }, // Timestamp of last health check
+  lastHealthStatus: { type: String, enum: ['ok', 'warning', 'failed'], default: null }, // 'ok', 'warning', or 'failed'
+  lastHealthCheckError: { type: String } // Error message from last failed check
 });
 
 const gmailSchema = new mongoose.Schema({
@@ -64,11 +68,22 @@ const systemSettingSchema = new mongoose.Schema({
   // Maximum number of accounts allowed per IP when the above is enabled
   maxAccountsPerIP: { type: Number, default: 1 },
   systemNotice: { type: String },
+  // Email dry-run mode: simulate email sends without calling provider
+  // When enabled, emails are logged but not actually sent
+  dryRunMode: { type: Boolean, default: false },
   // Unified email/SMTP settings with support for multiple providers
   email: { type: smtpSchema, default: {} },
   // Keep smtp and gmail for backwards compatibility (deprecated)
   smtp: { type: smtpSchema, default: {} },
   gmail: { type: gmailSchema, default: {} },
+  
+  // Settings locking mechanism for concurrent edit prevention
+  settingsLock: {
+    isLocked: { type: Boolean, default: false },
+    lockedBy: { type: String }, // Admin user ID who acquired the lock
+    lockedAt: { type: Date }, // Timestamp when lock was acquired
+    lockOwnerName: { type: String }, // Display name of lock owner for UI
+  },
 }, { timestamps: true });
 
 // Prevent OverwriteModelError when this file is required multiple times (e.g. ts-node/nodemon)

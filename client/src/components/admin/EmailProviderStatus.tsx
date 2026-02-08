@@ -8,8 +8,9 @@ import {
   Grid,
   Divider,
   CircularProgress,
+  Button,
 } from '@mui/material';
-import { CheckCircle, Error, Warning, Info } from '@mui/icons-material';
+import { CheckCircle, Error, Warning, Info, Refresh } from '@mui/icons-material';
 
 interface EmailConfig {
   enabled: boolean;
@@ -27,17 +28,28 @@ interface EmailConfig {
   updatedAt?: string | Date;
 }
 
+interface HealthCheckStatus {
+  status: 'ok' | 'warning' | 'failed' | 'unknown';
+  provider?: string;
+  lastCheckAt?: string | Date;
+  lastError?: string;
+}
+
 interface EmailProviderStatusProps {
   emailConfig?: EmailConfig;
   emailSettings?: {
     enabled: boolean;
   };
+  healthStatus?: HealthCheckStatus;
+  onHealthCheckClick?: () => void;
   loading?: boolean;
 }
 
 const EmailProviderStatus: React.FC<EmailProviderStatusProps> = ({
   emailConfig,
   emailSettings,
+  healthStatus,
+  onHealthCheckClick,
   loading = false,
 }) => {
   // Validate provider configuration completeness
@@ -309,6 +321,96 @@ const EmailProviderStatus: React.FC<EmailProviderStatusProps> = ({
           </Grid>
 
           <Divider sx={{ my: 2 }} />
+
+          {/* Health Check Status */}
+          {healthStatus && (
+            <Box sx={{ mb: 3 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#0f172a' }}>
+                  Connectivity Health
+                </Typography>
+                <Button
+                  size="small"
+                  startIcon={<Refresh />}
+                  onClick={onHealthCheckClick}
+                  variant="outlined"
+                  sx={{ height: 28, fontSize: '0.75rem' }}
+                  disabled={!emailConfig?.enabled}
+                >
+                  Check Now
+                </Button>
+              </Box>
+              
+              <Box sx={{ p: 2, backgroundColor: '#f8fafc', borderRadius: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  {healthStatus.status === 'ok' && (
+                    <>
+                      <Box sx={{ width: 12, height: 12, backgroundColor: '#10b981', borderRadius: '50%' }} />
+                      <Box>
+                        <Typography variant="body2" sx={{ fontWeight: 600, color: '#10b981' }}>
+                          OK - Provider is operational
+                        </Typography>
+                        {healthStatus.lastCheckAt && (
+                          <Typography variant="caption" sx={{ color: '#64748b' }}>
+                            Last checked: {formatDate(healthStatus.lastCheckAt)}
+                          </Typography>
+                        )}
+                      </Box>
+                    </>
+                  )}
+                  {healthStatus.status === 'warning' && (
+                    <>
+                      <Box sx={{ width: 12, height: 12, backgroundColor: '#f59e0b', borderRadius: '50%' }} />
+                      <Box>
+                        <Typography variant="body2" sx={{ fontWeight: 600, color: '#f59e0b' }}>
+                          WARNING - Provider may have issues
+                        </Typography>
+                        {healthStatus.lastError && (
+                          <Typography variant="caption" sx={{ color: '#64748b' }}>
+                            {healthStatus.lastError}
+                          </Typography>
+                        )}
+                      </Box>
+                    </>
+                  )}
+                  {healthStatus.status === 'failed' && (
+                    <>
+                      <Box sx={{ width: 12, height: 12, backgroundColor: '#ef4444', borderRadius: '50%' }} />
+                      <Box>
+                        <Typography variant="body2" sx={{ fontWeight: 600, color: '#ef4444' }}>
+                          FAILED - Provider connectivity lost
+                        </Typography>
+                        {healthStatus.lastError && (
+                          <Typography variant="caption" sx={{ color: '#64748b' }}>
+                            Error: {healthStatus.lastError}
+                          </Typography>
+                        )}
+                        {healthStatus.lastCheckAt && (
+                          <Typography variant="caption" sx={{ color: '#64748b', display: 'block' }}>
+                            Last checked: {formatDate(healthStatus.lastCheckAt)}
+                          </Typography>
+                        )}
+                      </Box>
+                    </>
+                  )}
+                  {healthStatus.status === 'unknown' && (
+                    <>
+                      <Box sx={{ width: 12, height: 12, backgroundColor: '#94a3b8', borderRadius: '50%' }} />
+                      <Box>
+                        <Typography variant="body2" sx={{ fontWeight: 600, color: '#64748b' }}>
+                          UNKNOWN - Health check not performed
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: '#64748b' }}>
+                          Click "Check Now" to verify provider connectivity
+                        </Typography>
+                      </Box>
+                    </>
+                  )}
+                </Box>
+              </Box>
+              <Divider sx={{ my: 2 }} />
+            </Box>
+          )}
 
           {/* Configuration Status Details */}
           <Box sx={{ mt: 3 }}>

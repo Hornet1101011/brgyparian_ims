@@ -129,6 +129,27 @@ async function logEmail(recipient, subject, success, error, messageId, emailType
  * @returns {object} Nodemailer transporter
  * @throws {Error} If no credentials configured
  */
+async function isDryRunModeEnabled() {
+  try {
+    const SystemSettingModel = getSystemSettingModel();
+    if (!SystemSettingModel) {
+      return false; // Default to normal mode if settings not available
+    }
+    
+    const settings = await SystemSettingModel.findOne().lean();
+    return settings?.dryRunMode === true;
+  } catch (err) {
+    console.warn('[EmailService] Error checking dry-run mode:', err.message);
+    return false; // Default to normal mode if there's an error
+  }
+}
+
+/**
+ * Initialize and return a transporter based on settings
+ * Priority: Gmail (if enabled) > SMTP (from database) > Environment variables
+ * @returns {object} Nodemailer transporter
+ * @throws {Error} If no credentials configured
+ */
 async function getConfiguredTransporter() {
   // Clear cache to get fresh transporter
   gmailTransporter = null;
@@ -304,7 +325,9 @@ const emailTransporter = () => {
  */
 async function sendDocumentNotification(to, status, documentType, notes) {
   try {
-    const transporter = await getConfiguredTransporter();
+    // Check if dry-run mode is enabled
+    const dryRunEnabled = await isDryRunModeEnabled();
+    
     const SystemSettingModel = getSystemSettingModel();
     const settings = SystemSettingModel ? await SystemSettingModel.findOne().lean() : null;
     
@@ -331,17 +354,41 @@ async function sendDocumentNotification(to, status, documentType, notes) {
       <p>Thank you.</p>
     `;
 
-    const info = await transporter.sendMail({
-      from,
-      to,
-      subject,
-      html: body,
-    });
+    let info;
+    
+    if (dryRunEnabled) {
+      // Dry-run mode: simulate email send
+      const simulatedMessageId = `dry-run-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      console.log('[EmailService] DRY-RUN MODE: Simulating document notification', {
+        provider: settings?.smtp?.provider || 'custom',
+        recipient: to,
+        subject: subject,
+        status: status,
+        documentType: documentType,
+        simulatedMessageId
+      });
+      
+      info = {
+        messageId: simulatedMessageId,
+        isDryRun: true,
+        response: 'Simulated email (not sent)'
+      };
+    } else {
+      const transporter = await getConfiguredTransporter();
+      
+      info = await transporter.sendMail({
+        from,
+        to,
+        subject,
+        html: body,
+      });
 
-    console.log('[EmailService] Document notification sent:', info.messageId);
+      console.log('[EmailService] Document notification sent:', info.messageId);
+    }
     
     // Log the email
-    await logEmail(to, subject, true, null, info.messageId, 'document-notification');
+    const logMessage = dryRunEnabled ? `[DRY-RUN MODE] Simulated email - not actually sent` : null;
+    await logEmail(to, subject, true, logMessage, info.messageId, 'document-notification');
     
     return info;
   } catch (err) {
@@ -372,7 +419,9 @@ async function sendMail(to, subject, html, bcc, emailType) {
       return { messageId: 'skipped', response: 'Email sending disabled for this type' };
     }
 
-    const transporter = await getConfiguredTransporter();
+    // Check if dry-run mode is enabled
+    const dryRunEnabled = await isDryRunModeEnabled();
+    
     const SystemSettingModel = getSystemSettingModel();
     const settings = SystemSettingModel ? await SystemSettingModel.findOne().lean() : null;
     
@@ -402,17 +451,40 @@ async function sendMail(to, subject, html, bcc, emailType) {
       mailOptions.bcc = bcc;
     }
 
-    const info = await transporter.sendMail(mailOptions);
+    let info;
+    
+    if (dryRunEnabled) {
+      // Dry-run mode: simulate email send
+      const simulatedMessageId = `dry-run-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      console.log('[EmailService] DRY-RUN MODE: Simulating email', {
+        provider: settings?.smtp?.provider || 'custom',
+        recipient: to,
+        bccCount: bcc ? bcc.length : 0,
+        subject: subject,
+        emailType: emailType,
+        simulatedMessageId
+      });
+      
+      info = {
+        messageId: simulatedMessageId,
+        isDryRun: true,
+        response: 'Simulated email (not sent)'
+      };
+    } else {
+      const transporter = await getConfiguredTransporter();
+      info = await transporter.sendMail(mailOptions);
 
-    console.log('[EmailService] Email sent:', info.messageId, bcc ? `(BCC to ${bcc.length} recipients)` : '');
+      console.log('[EmailService] Email sent:', info.messageId, bcc ? `(BCC to ${bcc.length} recipients)` : '');
+    }
     
     // Log the email
+    const logMessage = dryRunEnabled ? `[DRY-RUN MODE] Simulated email - not actually sent` : null;
     if (bcc && bcc.length > 0) {
       // For BCC emails, log once with count
-      await logEmail(to, subject, true, null, info.messageId, emailType || 'generic', bcc.length);
+      await logEmail(to, subject, true, logMessage, info.messageId, emailType || 'generic', bcc.length);
     } else {
       // For regular emails, log individual recipient
-      await logEmail(to, subject, true, null, info.messageId, emailType || 'generic');
+      await logEmail(to, subject, true, logMessage, info.messageId, emailType || 'generic');
     }
     
     return info;
@@ -472,5 +544,6 @@ module.exports = {
   getGmailTransporter,
   logEmail,
   isEmailTypeEnabled,
+  isDryRunModeEnabled,
   getConfiguredTransporter,
 };

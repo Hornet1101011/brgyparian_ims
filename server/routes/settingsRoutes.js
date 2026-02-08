@@ -6,6 +6,7 @@ const { encryptText, decryptText } = require('../utils/cryptoHelper');
 const smtpHelper = require('../utils/smtpHelper');
 const gmailHelper = require('../utils/gmailHelper');
 const emailProviderHelper = require('../utils/emailProviderHelper');
+const settingsLockHelper = require('../utils/settingsLockHelper');
 const SystemSetting = require('../models/SystemSetting');
 const PublicView = require('../models/PublicView');
 const AuditLog = require('../models/AuditLog');
@@ -1068,6 +1069,118 @@ router.get('/email', requireAuth, isAdmin, async (req, res) => {
   }
 });
 
+// GET /api/settings/email/health - Get email provider health status
+router.get('/email/health', requireAuth, isAdmin, async (req, res) => {
+  try {
+    const settings = await SystemSetting.findOne().lean();
+    
+    if (!settings || !settings.smtp || !settings.smtp.enabled) {
+      return res.json({
+        status: 'warning',
+        message: 'Email provider not configured or disabled',
+        provider: null,
+        lastCheckAt: null,
+        lastStatus: null,
+        lastError: null,
+        needsCheck: true
+      });
+    }
+
+    const { smtp } = settings;
+    const healthStatus = {
+      status: smtp.lastHealthStatus || 'unknown',
+      message: getHealthStatusMessage(smtp.lastHealthStatus),
+      provider: smtp.provider,
+      lastCheckAt: smtp.lastHealthCheckAt,
+      lastError: smtp.lastHealthCheckError || null,
+      needsCheck: !smtp.lastHealthCheckAt || (Date.now() - smtp.lastHealthCheckAt.getTime()) > 3600000 // 1 hour
+    };
+
+    console.log('[Settings] Email health status retrieved:', {
+      provider: smtp.provider,
+      status: healthStatus.status,
+      lastCheckAt: smtp.lastHealthCheckAt,
+      needsCheck: healthStatus.needsCheck
+    });
+
+    return res.json(healthStatus);
+  } catch (err) {
+    console.error('GET /api/settings/email/health error:', err);
+    return res.status(500).json({
+      status: 'error',
+      message: 'Failed to retrieve email health status',
+      error: err.message
+    });
+  }
+});
+
+// Helper function to get human-readable health status message
+function getHealthStatusMessage(status) {
+  switch (status) {
+    case 'ok':
+      return 'Email provider is operational';
+    case 'warning':
+      return 'Email provider has warnings but may work';
+    case 'failed':
+      return 'Email provider connectivity check failed';
+    case 'unknown':
+      return 'Email provider health status not yet checked';
+    default:
+      return 'Unknown health status';
+  }
+}
+
+// POST /api/settings/email/health-check - Manually trigger health check
+router.post('/email/health-check', requireAuth, isAdmin, async (req, res) => {
+  try {
+    const settings = await SystemSetting.findOne();
+    
+    if (!settings || !settings.smtp || !settings.smtp.enabled) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email provider not configured or disabled',
+        status: 'warning'
+      });
+    }
+
+    console.log('[Settings] Triggering manual health check for provider:', settings.smtp.provider);
+
+    // Perform health check
+    const healthResult = await emailProviderHelper.performHealthCheck(settings.smtp);
+
+    // Update database with health status
+    await emailProviderHelper.updateHealthCheckStatus(
+      healthResult.status,
+      healthResult.error || null
+    );
+
+    console.log('[Settings] Health check completed:', {
+      provider: settings.smtp.provider,
+      status: healthResult.status,
+      durationMs: healthResult.checkDurationMs
+    });
+
+    return res.json({
+      success: healthResult.status === 'ok',
+      status: healthResult.status,
+      message: healthResult.message,
+      provider: healthResult.provider,
+      error: healthResult.error || null,
+      checkDurationMs: healthResult.checkDurationMs,
+      timestamp: healthResult.timestamp
+    });
+  } catch (err) {
+    console.error('[Settings] Manual health check error:', err);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to perform health check',
+      error: err.message,
+      status: 'failed'
+    });
+  }
+});
+
+
 // PATCH /api/settings/email - Update email settings (admin only)
 router.patch('/email', requireAuth, isAdmin, async (req, res) => {
   try {
@@ -1649,6 +1762,7 @@ router.patch('/email', requireAuth, isAdmin, async (req, res) => {
       provider,
       fromName,
       fromEmail,
+      dryRunMode,
       // Gmail fields
       gmailAddress,
       gmailAppPassword,
@@ -1827,6 +1941,11 @@ router.patch('/email', requireAuth, isAdmin, async (req, res) => {
     // SINGLE PROVIDER ENFORCEMENT: cleanEmailConfig contains ONLY selected provider's fields
     settings.smtp = cleanEmailConfig;
     
+    // Update dry-run mode if provided
+    if (typeof dryRunMode === 'boolean') {
+      settings.dryRunMode = dryRunMode;
+    }
+    
     // When provider changes, irrelevant fields are cleared:
     // - Old custom SMTP fields (host, port, user, password) NOT stored if now using Gmail
     // - Old Gmail fields (gmailAddress, gmailAppPassword) NOT stored if now using custom SMTP
@@ -1843,6 +1962,7 @@ router.patch('/email', requireAuth, isAdmin, async (req, res) => {
       provider,
       fromName,
       fromEmail,
+      dryRunMode: !!dryRunMode,
       smtpFieldUpdated: true,
       singleProviderEnforced: `Only ${provider} fields stored`,
       legacyFieldsPreserved: 'gmail and email fields not modified'
@@ -1851,7 +1971,8 @@ router.patch('/email', requireAuth, isAdmin, async (req, res) => {
     res.json({
       success: true,
       message: 'Email settings updated',
-      email: emailProviderHelper.sanitizeEmailConfig(settings.smtp)
+      email: emailProviderHelper.sanitizeEmailConfig(settings.smtp),
+      dryRunMode: settings.dryRunMode
     });
   } catch (err) {
     console.error('[Settings] PATCH /email error:', err);
@@ -2185,6 +2306,98 @@ function validateProviderConfig(config) {
 
   return null; // Validation passed
 }
+
+// ==================== SETTINGS LOCK ENDPOINTS ====================
+
+/**
+ * POST /api/settings/lock
+ * Acquire a lock on settings to prevent concurrent edits
+ */
+router.post('/lock', requireAuth, isAdmin, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const userName = req.user.firstName && req.user.lastName 
+      ? `${req.user.firstName} ${req.user.lastName}`
+      : req.user.email || 'Admin';
+
+    const result = await settingsLockHelper.acquireLock(userId, userName);
+    
+    if (!result.success) {
+      return res.status(409).json(result); // Conflict status for lock not acquired
+    }
+
+    return res.json(result);
+  } catch (err) {
+    console.error('POST /api/settings/lock error', err);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Error acquiring lock' 
+    });
+  }
+});
+
+/**
+ * DELETE /api/settings/lock
+ * Release a lock on settings
+ */
+router.delete('/lock', requireAuth, isAdmin, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const result = await settingsLockHelper.releaseLock(userId);
+    
+    return res.json(result);
+  } catch (err) {
+    console.error('DELETE /api/settings/lock error', err);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Error releasing lock' 
+    });
+  }
+});
+
+/**
+ * GET /api/settings/lock
+ * Get current lock status
+ */
+router.get('/lock', requireAuth, isAdmin, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const status = await settingsLockHelper.getLockStatus(userId);
+    
+    return res.json(status);
+  } catch (err) {
+    console.error('GET /api/settings/lock error', err);
+    return res.status(500).json({ 
+      isLocked: false,
+      message: 'Error checking lock status' 
+    });
+  }
+});
+
+/**
+ * POST /api/settings/lock/force-release
+ * Force release a lock (admin override, requires higher admin role)
+ */
+router.post('/lock/force-release', requireAuth, isAdmin, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    
+    // Optional: Check for super-admin role if you have one
+    // For now, allow any admin to force release with logging
+    
+    const result = await settingsLockHelper.forceReleaseLock(userId);
+    
+    return res.json(result);
+  } catch (err) {
+    console.error('POST /api/settings/lock/force-release error', err);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Error force-releasing lock' 
+    });
+  }
+});
+
+// ==================== END SETTINGS LOCK ENDPOINTS ====================
 
 // ==================== END EMAIL PROVIDER ENDPOINTS ====================
 

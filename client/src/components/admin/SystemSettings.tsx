@@ -36,6 +36,147 @@ import getOfficialPhotoSrc from '../../utils/officials';
 type FC<P> = React.FunctionComponent<P>;
 type ComponentProps<T> = T extends React.ComponentType<infer P> ? P : never;
 
+/**
+ * Utility functions for dirty state detection with deep comparison
+ */
+const DirtyStateUtils = {
+  /**
+   * Fields to ignore when comparing settings (passwords, timestamps)
+   */
+  IGNORED_FIELDS: [
+    'gmailAppPassword',
+    'password',
+    'encryptedPassword',
+    'appPassword',
+    'sendgridApiKey',
+    'awsSecretAccessKey',
+    'awsAccessKeyId',
+    'updatedAt',
+    'createdAt',
+    'testEmailSent',
+    'lastHealthCheckAt',
+  ],
+
+  /**
+   * Create a normalized copy of settings, removing sensitive fields
+   */
+  normalizeSettings(settings: any): any {
+    if (!settings) return null;
+    
+    const normalized = JSON.parse(JSON.stringify(settings));
+    
+    // Remove ignored fields recursively
+    const removeIgnoredFields = (obj: any) => {
+      if (!obj || typeof obj !== 'object') return obj;
+      
+      if (Array.isArray(obj)) {
+        return obj.map(removeIgnoredFields);
+      }
+      
+      const cleaned: any = {};
+      for (const key in obj) {
+        if (this.IGNORED_FIELDS.includes(key)) continue;
+        if (obj[key] && typeof obj[key] === 'object') {
+          cleaned[key] = removeIgnoredFields(obj[key]);
+        } else if (obj[key] !== undefined && obj[key] !== null) {
+          cleaned[key] = obj[key];
+        }
+      }
+      return cleaned;
+    };
+    
+    return removeIgnoredFields(normalized);
+  },
+
+  /**
+   * Deep compare two settings objects
+   */
+  deepEqual(obj1: any, obj2: any): boolean {
+    if (obj1 === obj2) return true;
+    if (!obj1 || !obj2) return obj1 === obj2;
+    if (typeof obj1 !== 'object' || typeof obj2 !== 'object') return obj1 === obj2;
+    
+    const keys1 = Object.keys(obj1);
+    const keys2 = Object.keys(obj2);
+    
+    if (keys1.length !== keys2.length) return false;
+    
+    for (const key of keys1) {
+      if (!keys2.includes(key)) return false;
+      if (!this.deepEqual(obj1[key], obj2[key])) return false;
+    }
+    
+    return true;
+  },
+
+  /**
+   * Check if general settings are dirty
+   */
+  isGeneralDirty(original: any, current: any): boolean {
+    const generalFields = [
+      'siteName',
+      'barangayName',
+      'barangayAddress',
+      'contactEmail',
+      'contactPhone',
+      'systemNotice',
+      'maintenanceMode',
+      'maintainanceMode',
+      'allowNewRegistrations',
+      'requireEmailVerification',
+      'enableVerifications',
+      'maxDocumentRequests',
+      'documentProcessingDays',
+      'allowMultipleAccountsPerIP',
+      'maxAccountsPerIP',
+    ];
+
+    for (const field of generalFields) {
+      if (original?.[field] !== current?.[field]) {
+        return true;
+      }
+    }
+    return false;
+  },
+
+  /**
+   * Check if email settings are dirty (excluding passwords/timestamps)
+   */
+  isEmailDirty(original: any, current: any): boolean {
+    const normalized1 = this.normalizeSettings(original);
+    const normalized2 = this.normalizeSettings(current);
+    return !this.deepEqual(normalized1, normalized2);
+  },
+
+  /**
+   * Check if officials are dirty
+   */
+  isOfficialsDirty(original: any[], current: any[]): boolean {
+    if (!original && !current) return false;
+    if (!original || !current) return true;
+    if (original.length !== current.length) return true;
+
+    // Normalize officials by removing temporary IDs and fields
+    const normalizeOfficial = (o: any) => {
+      const normalized = { ...o };
+      delete normalized._id;
+      delete normalized.__v;
+      delete normalized.photoUrl;
+      return normalized;
+    };
+
+    for (let i = 0; i < original.length; i++) {
+      if (!this.deepEqual(
+        normalizeOfficial(original[i]),
+        normalizeOfficial(current[i])
+      )) {
+        return true;
+      }
+    }
+    return false;
+  },
+};
+
 // Custom TextField wrapper with proper label spacing
 const StyledTextField: FC<ComponentProps<typeof TextField>> = (props) => (
   <TextField
@@ -80,6 +221,7 @@ interface EmailSettings {
   retryFailedEmails: boolean;
   retryAttempts: number;
   retryDelayMinutes: number;
+  dryRunMode?: boolean;
 }
 
 interface SystemSettingsData {
@@ -136,6 +278,7 @@ const SystemSettings: FC = () => {
     retryFailedEmails: true,
     retryAttempts: 3,
     retryDelayMinutes: 5,
+    dryRunMode: false,
   });
   // Email provider configuration - captured from EmailSettings component
   const [emailProviderConfig, setEmailProviderConfig] = useState<any>({
@@ -153,6 +296,9 @@ const SystemSettings: FC = () => {
     gmailAddress: '',
     gmailAppPassword: '',
   });
+  // Health check status state
+  const [healthStatus, setHealthStatus] = useState<any>(null);
+  const [loadingHealthStatus, setLoadingHealthStatus] = useState(false);
   // Officials state
   const [officials, setOfficials] = useState<Official[]>([]);
   const [officialsLoading, setOfficialsLoading] = useState(false);
@@ -166,17 +312,47 @@ const SystemSettings: FC = () => {
   const [highlightedIds, setHighlightedIds] = useState<string[]>([]);
   const highlightTimeouts = useRef<Record<string, number>>({});
   const originalSettingsRef = useRef<SystemSettingsData | null>(null);
-  const [, setDirty] = useState(false);
+  const originalEmailSettingsRef = useRef<EmailSettings | null>(null);
+  const originalEmailProviderConfigRef = useRef<any>(null);
+  const originalGmailSettingsRef = useRef<any>(null);
+  const originalOfficialsRef = useRef<Official[]>([]);
+
+  // Section-level dirty state tracking
+  const [dirtyGeneral, setDirtyGeneral] = useState(false);
+  const [dirtyEmail, setDirtyEmail] = useState(false);
+  const [dirtyOfficials, setDirtyOfficials] = useState(false);
+
+  // Settings lock state
+  const [lockStatus, setLockStatus] = useState<any>(null);
+  const [hasLock, setHasLock] = useState(false);
+  const lockRefreshIntervalRef = useRef<number | null>(null);
+  const lockTimeoutRef = useRef<number | null>(null);
 
   // helper to make MUI InputLabel shrink when the field has content or a non-empty value
   // (removed unused helper to silence lint)
 
   useEffect(() => {
     const ac = new AbortController();
-    fetchSettings(ac.signal);
+    const loadData = async () => {
+      await fetchSettings(ac.signal);
+      // Fetch health status after loading settings
+      try {
+        const response = await axiosInstance.get('/api/settings/email/health');
+        if (response.data) {
+          setHealthStatus(response.data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch email health status on load:', err);
+      }
+      // Acquire lock on component mount
+      await acquireLock();
+    };
+    loadData();
     // capture a snapshot of preview URLs now so cleanup uses a stable reference
     const currentPreviewUrls = previewUrlsRef.current;
     return () => {
+      // Release lock on component unmount
+      releaseLock();
       // cancel pending fetch
       try { ac.abort(); } catch (e) {}
       // revoke any created object URLs captured at effect execution time
@@ -185,6 +361,8 @@ const SystemSettings: FC = () => {
           try { URL.revokeObjectURL(u); } catch (e) {}
         });
       } catch (e) {}
+      // Stop lock refresh
+      stopLockRefresh();
     };
   }, []);
 
@@ -272,8 +450,12 @@ const SystemSettings: FC = () => {
           }
 
           setEmailProviderConfig(mappedConfig);
+          originalEmailProviderConfigRef.current = JSON.parse(JSON.stringify(mappedConfig));
+          
           // Also set gmailSettings state for Gmail-specific UI
           setGmailSettings(mappedConfig);
+          originalGmailSettingsRef.current = JSON.parse(JSON.stringify(mappedConfig));
+          
           console.log('[SystemSettings] Email config loaded from SMTP field:', {
             enabled: mappedConfig.enabled,
             provider: mappedConfig.provider,
@@ -291,14 +473,21 @@ const SystemSettings: FC = () => {
         const offs = await adminAPI.getOfficials();
         if (Array.isArray(offs)) {
           setOfficials(offs);
+          originalOfficialsRef.current = JSON.parse(JSON.stringify(offs));
         } else {
           const r = await axiosInstance.get(`/admin/officials`, { signal } as any);
-          if (r?.data) setOfficials(r.data);
+          if (r?.data) {
+            setOfficials(r.data);
+            originalOfficialsRef.current = JSON.parse(JSON.stringify(r.data));
+          }
         }
       } catch (err) {
         try {
           const r = await axiosInstance.get(`/admin/officials`, { signal } as any);
-          if (r?.data) setOfficials(r.data);
+          if (r?.data) {
+            setOfficials(r.data);
+            originalOfficialsRef.current = JSON.parse(JSON.stringify(r.data));
+          }
         } catch (err2) {
           console.warn('Failed to load officials via adminAPI and axiosInstance fallback', err, err2);
         }
@@ -314,6 +503,136 @@ const SystemSettings: FC = () => {
       antdMessage.error('Unexpected error while loading settings');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Fetch email health status
+  const fetchEmailHealthStatus = async () => {
+    try {
+      setLoadingHealthStatus(true);
+      const response = await axiosInstance.get('/api/settings/email/health');
+      if (response.data) {
+        setHealthStatus(response.data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch email health status:', err);
+      // Don't show error toast, just log it
+    } finally {
+      setLoadingHealthStatus(false);
+    }
+  };
+
+  // Trigger manual health check
+  const handleHealthCheckClick = async () => {
+    try {
+      setLoadingHealthStatus(true);
+      const response = await axiosInstance.post('/api/settings/email/health-check');
+      if (response.data) {
+        setHealthStatus(response.data);
+        if (response.data.success) {
+          antdMessage.success('Email provider health check passed!');
+        } else {
+          antdMessage.warning('Email provider health check failed');
+        }
+      }
+    } catch (err: any) {
+      console.error('Failed to perform health check:', err);
+      antdMessage.error('Failed to perform health check');
+    } finally {
+      setLoadingHealthStatus(false);
+    }
+  };
+
+  // Acquire lock on settings
+  const acquireLock = async () => {
+    try {
+      const response = await axiosInstance.post('/api/settings/lock');
+      if (response.data.success) {
+        setHasLock(true);
+        setLockStatus(response.data);
+        // Start periodic lock refresh to keep it alive
+        startLockRefresh();
+        console.log('[SystemSettings] Lock acquired successfully');
+        return true;
+      } else {
+        // Lock already held by someone else
+        setLockStatus(response.data);
+        antdMessage.warning(response.data.message || 'Settings are locked by another admin');
+        console.log('[SystemSettings] Failed to acquire lock:', response.data.message);
+        return false;
+      }
+    } catch (err: any) {
+      console.error('[SystemSettings] Error acquiring lock:', err);
+      antdMessage.error('Error acquiring settings lock');
+      return false;
+    }
+  };
+
+  // Release lock on settings
+  const releaseLock = async () => {
+    try {
+      // Clear lock refresh interval
+      if (lockRefreshIntervalRef.current) {
+        clearInterval(lockRefreshIntervalRef.current);
+        lockRefreshIntervalRef.current = null;
+      }
+      if (lockTimeoutRef.current) {
+        clearTimeout(lockTimeoutRef.current);
+        lockTimeoutRef.current = null;
+      }
+
+      const response = await axiosInstance.delete('/api/settings/lock');
+      if (response.data.success) {
+        setHasLock(false);
+        setLockStatus(null);
+        console.log('[SystemSettings] Lock released successfully');
+      }
+    } catch (err: any) {
+      console.error('[SystemSettings] Error releasing lock:', err);
+    }
+  };
+
+  // Get current lock status
+  const checkLockStatus = async () => {
+    try {
+      const response = await axiosInstance.get('/api/settings/lock');
+      setLockStatus(response.data);
+      
+      if (response.data.isLocked && !response.data.canEdit) {
+        // Lock is held by someone else
+        setHasLock(false);
+      } else if (response.data.isLocked && response.data.canEdit) {
+        // We still have the lock
+        setHasLock(true);
+      } else {
+        // No lock
+        setHasLock(false);
+      }
+    } catch (err: any) {
+      console.error('[SystemSettings] Error checking lock status:', err);
+    }
+  };
+
+  // Start periodic lock refresh
+  const startLockRefresh = () => {
+    // Refresh lock every 30 seconds to keep it alive
+    if (lockRefreshIntervalRef.current) {
+      clearInterval(lockRefreshIntervalRef.current);
+    }
+    lockRefreshIntervalRef.current = window.setInterval(() => {
+      checkLockStatus();
+    }, 30000); // 30 seconds
+  };
+
+  // Stop lock refresh
+  const stopLockRefresh = () => {
+    if (lockRefreshIntervalRef.current) {
+      clearInterval(lockRefreshIntervalRef.current);
+      lockRefreshIntervalRef.current = null;
+    }
+    if (lockTimeoutRef.current) {
+      clearTimeout(lockTimeoutRef.current);
+      lockTimeoutRef.current = null;
     }
   };
 
@@ -388,6 +707,11 @@ const SystemSettings: FC = () => {
 
       // Include email behavior settings
       payload.emailSettings = emailSettings;
+      
+      // Include dry-run mode
+      if (typeof emailSettings.dryRunMode !== 'undefined') {
+        payload.dryRunMode = emailSettings.dryRunMode;
+      }
 
       // UNIFIED EMAIL CONFIG with SINGLE PROVIDER ENFORCEMENT
       // Filter irrelevant fields: only send provider-specific fields for selected provider
@@ -411,9 +735,15 @@ const SystemSettings: FC = () => {
       console.log('[Settings Save] Full payload being sent:', JSON.stringify(payload, null, 2));
 
       await adminAPI.updateSystemSettings(payload);
-      // optimistic: update original copy and clear dirty flag
-      originalSettingsRef.current = payload;
-      setDirty(false);
+      // optimistic: update original copy and clear dirty flags
+      originalSettingsRef.current = JSON.parse(JSON.stringify(settings));
+      originalEmailProviderConfigRef.current = JSON.parse(JSON.stringify(emailProviderConfig));
+      originalGmailSettingsRef.current = JSON.parse(JSON.stringify(gmailSettings));
+      
+      // Reset dirty states for general and email sections
+      setDirtyGeneral(false);
+      setDirtyEmail(false);
+      
       setSuccess(true);
       
       // Clear sensitive passwords from state after successful save
@@ -433,6 +763,11 @@ const SystemSettings: FC = () => {
     } finally {
       setSaving(false);
       window.setTimeout(() => setSuccess(false), 2000);
+      // Keep lock after save, just refresh it
+      if (hasLock) {
+        stopLockRefresh();
+        startLockRefresh();
+      }
     }
   };
 
@@ -487,11 +822,20 @@ const SystemSettings: FC = () => {
       // replace list with refreshed items from server if possible
       try {
         const refreshed = await adminAPI.getOfficials();
-        if (Array.isArray(refreshed)) setOfficials(refreshed);
-        else setOfficials(updatedOfficials);
+        if (Array.isArray(refreshed)) {
+          setOfficials(refreshed);
+          originalOfficialsRef.current = JSON.parse(JSON.stringify(refreshed));
+        } else {
+          setOfficials(updatedOfficials);
+          originalOfficialsRef.current = JSON.parse(JSON.stringify(updatedOfficials));
+        }
       } catch (e) {
         setOfficials(updatedOfficials);
+        originalOfficialsRef.current = JSON.parse(JSON.stringify(updatedOfficials));
       }
+      
+      // Reset dirty state for officials section
+      setDirtyOfficials(false);
       antdMessage.success('Officials saved');
     } catch (err) {
       console.error('Manual save officials failed', err);
@@ -538,18 +882,69 @@ const SystemSettings: FC = () => {
     setEmailProviderConfig(config);
   }, []);
 
-  // Track whether settings are different from the original copy loaded from server
+  // Track general settings dirty state
   useEffect(() => {
     try {
       if (!originalSettingsRef.current) {
-        setDirty(false);
+        setDirtyGeneral(false);
         return;
       }
-      setDirty(JSON.stringify(originalSettingsRef.current) !== JSON.stringify(settings));
+      const isDirty = DirtyStateUtils.isGeneralDirty(originalSettingsRef.current, settings);
+      setDirtyGeneral(isDirty);
     } catch (e) {
-      setDirty(false);
+      console.error('Error checking general settings dirty state:', e);
+      setDirtyGeneral(false);
     }
-  }, [settings]);
+  }, [
+    settings.siteName,
+    settings.barangayName,
+    settings.barangayAddress,
+    settings.contactEmail,
+    settings.contactPhone,
+    settings.systemNotice,
+    settings.maintenanceMode,
+    settings.maintainanceMode,
+    settings.allowNewRegistrations,
+    settings.requireEmailVerification,
+    settings.enableVerifications,
+    settings.maxDocumentRequests,
+    settings.documentProcessingDays,
+    settings.allowMultipleAccountsPerIP,
+    settings.maxAccountsPerIP,
+  ]);
+
+  // Track email settings dirty state
+  useEffect(() => {
+    try {
+      if (!originalEmailProviderConfigRef.current) {
+        setDirtyEmail(false);
+        return;
+      }
+      const isDirty = DirtyStateUtils.isEmailDirty(
+        { ...originalEmailProviderConfigRef.current, ...emailSettings },
+        { ...emailProviderConfig, ...emailSettings }
+      );
+      setDirtyEmail(isDirty);
+    } catch (e) {
+      console.error('Error checking email settings dirty state:', e);
+      setDirtyEmail(false);
+    }
+  }, [emailSettings, emailProviderConfig]);
+
+  // Track officials dirty state
+  useEffect(() => {
+    try {
+      if (!originalOfficialsRef.current) {
+        setDirtyOfficials(false);
+        return;
+      }
+      const isDirty = DirtyStateUtils.isOfficialsDirty(originalOfficialsRef.current, officials);
+      setDirtyOfficials(isDirty);
+    } catch (e) {
+      console.error('Error checking officials dirty state:', e);
+      setDirtyOfficials(false);
+    }
+  }, [officials]);
 
   const handleDeleteOfficial = async (id?: string) => {
     if (!id) return;
@@ -583,6 +978,42 @@ const SystemSettings: FC = () => {
           Manage barangay information, officials, and system configuration
         </Typography>
       </Box>
+
+      {/* Lock Status Alert */}
+      {lockStatus?.isLocked && !lockStatus?.canEdit && (
+        <Alert 
+          severity="warning" 
+          sx={{ mb: 3 }}
+          action={
+            <Button 
+              size="small" 
+              onClick={() => releaseLock().then(() => checkLockStatus())}
+            >
+              Refresh
+            </Button>
+          }
+        >
+          <Box>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+              Settings Locked
+            </Typography>
+            <Typography variant="body2" sx={{ mt: 0.5 }}>
+              {lockStatus.lockOwner} is currently editing these settings.
+              {lockStatus.minutesRemaining && ` The lock will auto-release in ${lockStatus.minutesRemaining} minute${lockStatus.minutesRemaining !== 1 ? 's' : ''}.`}
+            </Typography>
+          </Box>
+        </Alert>
+      )}
+
+      {lockStatus?.hasLock && lockStatus?.lockExpired && (
+        <Alert 
+          severity="info" 
+          sx={{ mb: 3 }}
+          onClose={() => setLockStatus(null)}
+        >
+          Your previous lock has expired. You may make changes now, but another admin may also be editing.
+        </Alert>
+      )}
 
       {/* Settings Grid */}
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '2fr 1fr' }, gap: 3, mb: 6 }}>
@@ -703,6 +1134,8 @@ const SystemSettings: FC = () => {
           <EmailProviderStatus
             emailConfig={emailProviderConfig}
             emailSettings={emailSettings}
+            healthStatus={healthStatus}
+            onHealthCheckClick={handleHealthCheckClick}
             loading={false}
           />
 
@@ -896,6 +1329,39 @@ const SystemSettings: FC = () => {
                     />
                   </Box>
                 </Box>
+              </Box>
+
+              <Divider />
+
+              {/* Dry-Run Mode */}
+              <Box sx={{ p: 2, backgroundColor: '#fef3c7', borderRadius: 1, border: '1px solid #fcd34d' }}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={emailSettings.dryRunMode ?? false}
+                      onChange={(e) => setEmailSettings({ ...emailSettings, dryRunMode: e.target.checked })}
+                      disabled={saving}
+                      sx={{
+                        '& .MuiSwitch-switchBase.Mui-checked': {
+                          color: '#f59e0b',
+                        },
+                        '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                          backgroundColor: '#f59e0b',
+                        },
+                      }}
+                    />
+                  }
+                  label={
+                    <Box>
+                      <Typography sx={{ fontWeight: 600, color: '#92400e' }}>
+                        DRY RUN MODE - Emails Simulated (Not Sent)
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: '#b45309' }}>
+                        When enabled, emails are simulated and logged but NOT actually sent to recipients. Useful for testing email configuration safely in production.
+                      </Typography>
+                    </Box>
+                  }
+                />
               </Box>
 
               <Alert severity="info" sx={{ mt: 2, borderRadius: 1 }}>
@@ -1108,7 +1574,7 @@ const SystemSettings: FC = () => {
         <Button
           variant="contained"
           onClick={() => saveAll()}
-          disabled={saving || savingOfficials}
+          disabled={saving || savingOfficials || (!dirtyGeneral && !dirtyEmail && !dirtyOfficials)}
           sx={{
             width: 64,
             height: 64,
@@ -1131,6 +1597,7 @@ const SystemSettings: FC = () => {
             transition: 'all 0.3s ease'
           }}
           aria-label="Save Settings and Officials"
+          title={!dirtyGeneral && !dirtyEmail && !dirtyOfficials ? "No changes to save" : "Save changes"}
         >
           {(saving || savingOfficials) ? '...' : '✓'}
         </Button>
