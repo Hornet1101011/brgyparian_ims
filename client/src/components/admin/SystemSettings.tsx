@@ -316,6 +316,16 @@ const SystemSettings: FC = () => {
     mailtrap: false,
   });
   
+  // Track if password field has been edited by user (dirtied)
+  // Separate from passwordModified - indicates user interaction
+  // When true, includes password in health check and test email payloads
+  // When false, skips password in payloads (relies on DB or skips operation)
+  const [passwordDirty, setPasswordDirty] = useState({
+    custom: false,
+    gmail: false,
+    mailtrap: false,
+  });
+  
   // Explicit password state management - real passwords stored here
   // Maps provider to actual password string
   const [smtpPasswords, setSmtpPasswords] = useState({
@@ -681,12 +691,25 @@ const SystemSettings: FC = () => {
         ...validation.config,
       };
 
-      // For custom SMTP, use password from smtpPasswords state
-      if (validation.config.provider === 'custom' && smtpPasswords.custom) {
+      // Only include password if it has been dirtied (edited by user)
+      const provider = validation.config.provider;
+      const isPasswordDirty = passwordDirty[provider as keyof typeof passwordDirty];
+      
+      if (provider === 'custom' && isPasswordDirty && smtpPasswords.custom) {
         smtpPayload.password = smtpPasswords.custom;
-        console.log('[SystemSettings] Health check - Using password from smtpPasswords state', {
+        console.log('[SystemSettings] Health check - Including password (passwordDirty=true)', {
           hasPassword: !!smtpPasswords.custom,
-          passwordLength: smtpPasswords.custom.length
+          passwordLength: smtpPasswords.custom.length,
+          passwordDirty: isPasswordDirty
+        });
+      } else if (provider === 'custom' && !isPasswordDirty) {
+        console.log('[SystemSettings] Health check - Password NOT included (passwordDirty=false)');
+        delete smtpPayload.password;
+      } else if ((provider === 'gmail' || provider === 'mailtrap') && isPasswordDirty) {
+        console.log('[SystemSettings] Health check - Including password for provider', {
+          provider,
+          passwordDirty: isPasswordDirty,
+          passwordLength: smtpPayload.password?.length || 0
         });
       }
 
@@ -697,6 +720,7 @@ const SystemSettings: FC = () => {
         fromEmail: smtpPayload.fromEmail,
         hasPassword: !!smtpPayload.password,
         passwordLength: smtpPayload.password?.length || 0,
+        passwordDirty: isPasswordDirty,
         fieldsIncluded: Object.keys(smtpPayload),
         timestamp: new Date().toISOString()
       });
@@ -1265,6 +1289,12 @@ const SystemSettings: FC = () => {
         gmail: false,
         mailtrap: false,
       });
+      // Reset password dirty flag when provider changes
+      setPasswordDirty({
+        custom: false,
+        gmail: false,
+        mailtrap: false,
+      });
       // Reset passwords when provider changes
       setSmtpPasswords({
         custom: '',
@@ -1278,16 +1308,30 @@ const SystemSettings: FC = () => {
           ...prev,
           [emailConfig.provider]: true,
         }));
+        // Mark password as dirty when user edits it
+        setPasswordDirty((prev) => ({
+          ...prev,
+          [emailConfig.provider]: true,
+        }));
         // Store real password in smtpPasswords
         if (emailConfig.provider === 'custom' || emailConfig.provider === 'mailtrap') {
           setSmtpPasswords((prev) => ({
             ...prev,
             [emailConfig.provider]: config.password
           }));
+          console.log('[SystemSettings] Password field edited for', emailConfig.provider, {
+            passwordDirty: true,
+            passwordLength: config.password?.length || 0
+          });
         }
       }
       if (config.gmailAppPassword !== undefined && initializationCompleteRef.current) {
         setPasswordModified((prev) => ({
+          ...prev,
+          gmail: true,
+        }));
+        // Mark Gmail password as dirty when user edits it
+        setPasswordDirty((prev) => ({
           ...prev,
           gmail: true,
         }));
@@ -1296,6 +1340,10 @@ const SystemSettings: FC = () => {
           ...prev,
           gmail: config.gmailAppPassword
         }));
+        console.log('[SystemSettings] Gmail password field edited', {
+          passwordDirty: true,
+          passwordLength: config.gmailAppPassword?.length || 0
+        });
       }
       
       // Normalize SMTP secure flag based on port for custom SMTP
@@ -1573,6 +1621,7 @@ const SystemSettings: FC = () => {
               emailConfig={emailConfig}
               setEmailConfig={setEmailConfig}
               smtpPassword={smtpPasswords.custom}
+              passwordDirty={passwordDirty.custom}
             />
           )}
 

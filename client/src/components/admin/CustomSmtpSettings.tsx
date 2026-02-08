@@ -35,9 +35,10 @@ interface CustomSmtpSettingsProps {
   emailConfig: EmailConfig;
   setEmailConfig: (config: EmailConfig) => void;
   smtpPassword?: string;  // Real SMTP password from parent component
+  passwordDirty?: boolean;  // Tracks if password field has been edited by user
 }
 
-const CustomSmtpSettings = ({ emailConfig, setEmailConfig, smtpPassword = '' }: CustomSmtpSettingsProps) => {
+const CustomSmtpSettings = ({ emailConfig, setEmailConfig, smtpPassword = '', passwordDirty = false }: CustomSmtpSettingsProps) => {
   const [showPassword, setShowPassword] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testEmailAddress, setTestEmailAddress] = useState('');
@@ -66,6 +67,18 @@ const CustomSmtpSettings = ({ emailConfig, setEmailConfig, smtpPassword = '' }: 
 
   const handleTestSmtpConnection = async () => {
     try {
+      // Check if password has been dirtied (edited by user)
+      if (!passwordDirty) {
+        const errorMsg = 'Password must be entered before testing. Please type or change the password field.';
+        console.warn('[CustomSmtpSettings] Test blocked - password not dirty:', {
+          passwordDirty: passwordDirty,
+          hasPassword: !!smtpPassword,
+          passwordLength: smtpPassword?.length || 0
+        });
+        antdMessage.warning(errorMsg);
+        return;
+      }
+
       // EARLY ABORT: Check if password from parent is missing
       if (!smtpPassword || smtpPassword.trim() === '') {
         const errorMsg = 'SMTP password is missing or empty. Please enter a password and save settings first.';
@@ -172,6 +185,7 @@ const CustomSmtpSettings = ({ emailConfig, setEmailConfig, smtpPassword = '' }: 
           fromEmail: requestPayload.emailConfig.fromEmail
         },
         testEmail: requestPayload.testEmail,
+        passwordDirty: passwordDirty,
         validationPassed: true,
         timestamp: new Date().toISOString()
       });
