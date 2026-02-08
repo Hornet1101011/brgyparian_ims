@@ -598,7 +598,38 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
       if (updatePayload.smtp.port) updateOps.$set['smtp.port'] = updatePayload.smtp.port;
       if (updatePayload.smtp.secure !== undefined) updateOps.$set['smtp.secure'] = updatePayload.smtp.secure;
       if (updatePayload.smtp.user) updateOps.$set['smtp.user'] = updatePayload.smtp.user;
-      if (updatePayload.smtp.password) updateOps.$set['smtp.password'] = updatePayload.smtp.password;
+      
+      // REFACTORED PASSWORD LOGIC:
+      // - If password is present and not masked (e.g., not "********"), ALWAYS persist it
+      // - If password is masked, keep existing DB password unchanged
+      // - Only skip if explicitly undefined
+      const isMaskedPassword = (pwd) => {
+        // Check if password is masked format (multiple asterisks, typically "********")
+        return typeof pwd === 'string' && pwd.length > 0 && /^\*+$/.test(pwd);
+      };
+      
+      const hasPasswordField = updatePayload.smtp.password !== undefined && updatePayload.smtp.password !== null;
+      const passwordValue = updatePayload.smtp.password;
+      
+      if (hasPasswordField) {
+        if (isMaskedPassword(passwordValue)) {
+          // Password is masked - keep existing DB password
+          console.log('[Settings PATCH] Password field is masked - will preserve existing DB password');
+          // Don't add to updateOps, which keeps the existing value
+        } else {
+          // Password is real value (not masked) - ALWAYS persist it, even if empty
+          updateOps.$set['smtp.password'] = passwordValue;
+          console.log('[Settings PATCH] Password field is NOT masked - persisting new value', {
+            isEmptyString: passwordValue === '',
+            length: typeof passwordValue === 'string' ? passwordValue.length : 0,
+            willPersist: true
+          });
+        }
+      } else {
+        // Password is explicitly undefined - don't save anything (keeps existing)
+        console.log('[Settings PATCH] Password field is undefined - will not modify password in DB');
+      }
+      
       if (updatePayload.smtp.encryptedPassword) updateOps.$set['smtp.encryptedPassword'] = updatePayload.smtp.encryptedPassword;
       
       // Include provider-specific fields if present
@@ -656,6 +687,17 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
       emailFields: updated?.email ? Object.keys(updated.email) : [],
       allEmailData: updated?.email ? JSON.stringify(updated.email, null, 2) : 'null'
     });
+
+    // CONFIRM FINAL SAVED SMTP PASSWORD
+    console.log('[Settings PATCH] CONFIRMATION: Final saved SMTP password in DB:', {
+      hasSmtpPassword: !!updated?.smtp?.password,
+      smtpPasswordLength: updated?.smtp?.password ? updated.smtp.password.length : 0,
+      hasSmtpEncryptedPassword: !!updated?.smtp?.encryptedPassword,
+      smtpEncryptedPasswordLength: updated?.smtp?.encryptedPassword ? updated.smtp.encryptedPassword.length : 0,
+      passwordWasPersisted: !!(updated?.smtp?.password || updated?.smtp?.encryptedPassword),
+      smtpConfigured: !!updated?.smtp
+    });
+
     const diff = { before, after: updated.toObject ? updated.toObject() : updated };
     await recordAudit(req.user?._id, 'patch_settings', diff, req.ip || req.headers['x-forwarded-for']);
     
