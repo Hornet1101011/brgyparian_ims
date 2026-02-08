@@ -342,56 +342,24 @@ const SystemSettings: FC = () => {
           : {}),
       };
 
-      // Include SMTP settings if present
-      if (settings.smtp) {
-        // Clone and remove _id since MongoDB doesn't allow updating it
-        const smtpSettings = { ...settings.smtp };
-        delete smtpSettings._id;
-        
-        // Only include SMTP if password was set or changed
-        // If passwordSet is false, don't include SMTP to avoid validation errors
-        // (server requires password if user is specified)
-        if ((smtpSettings as any).passwordSet !== false) {
-          payload.smtp = smtpSettings;
-        }
-      }
-
       // Include email behavior settings
       payload.emailSettings = emailSettings;
 
-      // Include unified email configuration (emailProviderConfig contains the full config)
-      // This replaces the need for separate gmail/email handling
+      // UNIFIED EMAIL CONFIG: Send complete emailProviderConfig to /settings/email
+      // This is the ONLY path for saving email provider configuration
+      // All email configuration (Gmail, Custom SMTP, Mailtrap, SendGrid, AWS SES) goes here
       if (emailProviderConfig && Object.keys(emailProviderConfig).length > 0) {
-        // Send the complete emailConfig object to /settings/email endpoint
-        // Backend stores this in smtp field with all provider-specific fields intact
         payload.email = emailProviderConfig;
         
-        console.log('[Settings Save] Email provider config included in payload:', {
+        console.log('[Settings Save] Email provider config (unified):', {
           enabled: emailProviderConfig.enabled,
           provider: emailProviderConfig.provider,
           fromName: emailProviderConfig.fromName,
           fromEmail: emailProviderConfig.fromEmail,
-          gmailAddress: emailProviderConfig.gmailAddress || 'N/A',
+          hasGmailAddress: !!emailProviderConfig.gmailAddress,
           hasSmtpHost: !!emailProviderConfig.host,
-          hasPassword: emailProviderConfig.provider === 'gmail' 
-            ? !!emailProviderConfig.gmailAppPassword
-            : !!emailProviderConfig.password
+          hasPassword: !!emailProviderConfig.password
         });
-      }
-
-      // Gmail settings state now uses same data as emailProviderConfig
-      // Only send separate gmail payload if there's an app password to save (for backward compatibility)
-      if (gmailSettings && gmailSettings.gmailAppPassword) {
-        const gmailPayload: any = {
-          enabled: gmailSettings.enabled,
-          gmailAddress: gmailSettings.gmailAddress,
-          displayName: gmailSettings.fromName,
-          useAppPassword: true,
-          appPassword: gmailSettings.gmailAppPassword
-        };
-        
-        payload.gmail = gmailPayload;
-        console.log('[Settings Save] Gmail app password included in payload for encryption');
       }
 
       // Also remove _id from root payload if present

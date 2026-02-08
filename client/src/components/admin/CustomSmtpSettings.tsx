@@ -125,7 +125,7 @@ const CustomSmtpSettings = ({ emailConfig, setEmailConfig }: CustomSmtpSettingsP
   return (
     <Paper sx={{ p: 3, mb: 3 }}>
       <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: '#1f2937' }}>
-        📧 Custom SMTP Configuration
+        📧 Advanced SMTP Configuration
       </Typography>
 
       <Alert severity="info" sx={{ mb: 3 }}>
