@@ -675,18 +675,36 @@ const SystemSettings: FC = () => {
 
       setLoadingHealthStatus(true);
 
+      // Build smtp config payload with current state (unsaved settings)
+      // Use real password from smtpPasswords state (not masked value from emailConfig)
+      const smtpPayload: any = {
+        ...validation.config,
+      };
+
+      // For custom SMTP, use password from smtpPasswords state
+      if (validation.config.provider === 'custom' && smtpPasswords.custom) {
+        smtpPayload.password = smtpPasswords.custom;
+        console.log('[SystemSettings] Health check - Using password from smtpPasswords state', {
+          hasPassword: !!smtpPasswords.custom,
+          passwordLength: smtpPasswords.custom.length
+        });
+      }
+
       // Log exact payload being sent
-      console.log('[SystemSettings] Health check - Sending unsaved emailConfig:', {
-        provider: validation.config.provider,
-        fromName: validation.config.fromName,
-        fromEmail: validation.config.fromEmail,
-        fieldsIncluded: Object.keys(validation.config),
+      console.log('[SystemSettings] Health check - Sending unsaved smtp config:', {
+        provider: smtpPayload.provider,
+        fromName: smtpPayload.fromName,
+        fromEmail: smtpPayload.fromEmail,
+        hasPassword: !!smtpPayload.password,
+        passwordLength: smtpPayload.password?.length || 0,
+        fieldsIncluded: Object.keys(smtpPayload),
         timestamp: new Date().toISOString()
       });
 
-      // Send health check with current emailConfig in payload
+      // Send health check with current smtp config in payload (new API endpoint expects smtp parameter)
+      // Falls back to emailConfig for backward compatibility
       const response = await axiosInstance.post('/settings/email/health-check', {
-        emailConfig: validation.config
+        smtp: smtpPayload
       });
 
       if (response.data) {
@@ -696,11 +714,12 @@ const SystemSettings: FC = () => {
           success: response.data.success,
           status: response.data.status,
           provider: response.data.provider,
-          durationMs: response.data.checkDurationMs
+          durationMs: response.data.checkDurationMs,
+          configSource: response.data.configSource
         });
 
         if (response.data.success) {
-          antdMessage.success(`Health check passed! Provider ${validation.config.provider} is working correctly.`);
+          antdMessage.success(`Health check passed! Provider ${smtpPayload.provider} is working correctly.`);
         } else {
           antdMessage.warning(`Health check failed: ${response.data.message || 'Please check your configuration'}`);
         }
