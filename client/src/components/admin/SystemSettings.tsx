@@ -306,6 +306,16 @@ const SystemSettings: FC = () => {
     retryDelayMinutes: 5,
     dryRunMode: false,
   });
+  
+  // Track password modification for each provider
+  // When true, password will be sent in save payload
+  // When false, password from backend is preserved (not overwritten)
+  const [passwordModified, setPasswordModified] = useState({
+    custom: false,
+    gmail: false,
+    mailtrap: false,
+  });
+  
   // Health check status state
   const [healthStatus, setHealthStatus] = useState<any>(null);
   const [loadingHealthStatus, setLoadingHealthStatus] = useState(false);
@@ -562,21 +572,150 @@ const SystemSettings: FC = () => {
   };
 
   // Trigger manual health check
+  // Extract current emailConfig for health check (including unsaved changes)
+  const getEmailConfigForHealthCheck = (): { isValid: boolean; config?: any; error?: string } => {
+    // Don't validate if disabled - just return disabled config
+    if (!emailConfig.enabled) {
+      return {
+        isValid: false,
+        error: 'Email provider is currently disabled. Enable it first to perform a health check.'
+      };
+    }
+
+    // Validate provider-specific required fields
+    const errors: string[] = [];
+
+    if (!emailConfig.provider) {
+      errors.push('No email provider selected');
+    }
+
+    if (emailConfig.provider === 'custom') {
+      if (!emailConfig.host) errors.push('SMTP Host is required');
+      if (!emailConfig.port) errors.push('SMTP Port is required');
+      else if (emailConfig.port < 1 || emailConfig.port > 65535) errors.push('SMTP Port must be between 1 and 65535');
+      if (!emailConfig.user) errors.push('SMTP Username is required');
+      if (!emailConfig.password) errors.push('SMTP Password is required');
+      if (!emailConfig.fromEmail) errors.push('From Email is required');
+    } else if (emailConfig.provider === 'gmail') {
+      if (!emailConfig.gmailAppPassword) errors.push('Gmail App Password is required');
+      if (!emailConfig.fromEmail) errors.push('From Email is required');
+    } else if (emailConfig.provider === 'sendgrid') {
+      if (!emailConfig.sendgridApiKey) errors.push('SendGrid API Key is required');
+      if (!emailConfig.fromEmail) errors.push('From Email is required');
+    } else if (emailConfig.provider === 'aws-ses') {
+      if (!emailConfig.awsAccessKeyId) errors.push('AWS Access Key ID is required');
+      if (!emailConfig.awsSecretAccessKey) errors.push('AWS Secret Access Key is required');
+      if (!emailConfig.awsRegion) errors.push('AWS Region is required');
+      if (!emailConfig.fromEmail) errors.push('From Email is required');
+    } else if (emailConfig.provider === 'mailtrap') {
+      if (!emailConfig.user) errors.push('Mailtrap Username is required');
+      if (!emailConfig.password) errors.push('Mailtrap Password is required');
+      if (!emailConfig.fromEmail) errors.push('From Email is required');
+    }
+
+    if (errors.length > 0) {
+      return {
+        isValid: false,
+        error: `Email configuration incomplete:\n${errors.join('\n')}`
+      };
+    }
+
+    // Build clean config payload for health check
+    const configPayload: any = {
+      enabled: emailConfig.enabled,
+      provider: emailConfig.provider,
+      fromName: emailConfig.fromName,
+      fromEmail: emailConfig.fromEmail
+    };
+
+    // Include provider-specific fields
+    if (emailConfig.provider === 'custom') {
+      configPayload.host = emailConfig.host;
+      configPayload.port = emailConfig.port;
+      configPayload.user = emailConfig.user;
+      configPayload.password = emailConfig.password;
+      configPayload.secure = emailConfig.secure;
+    } else if (emailConfig.provider === 'gmail') {
+      configPayload.gmailAppPassword = emailConfig.gmailAppPassword;
+    } else if (emailConfig.provider === 'sendgrid') {
+      configPayload.sendgridApiKey = emailConfig.sendgridApiKey;
+    } else if (emailConfig.provider === 'aws-ses') {
+      configPayload.awsAccessKeyId = emailConfig.awsAccessKeyId;
+      configPayload.awsSecretAccessKey = emailConfig.awsSecretAccessKey;
+      configPayload.awsRegion = emailConfig.awsRegion;
+    } else if (emailConfig.provider === 'mailtrap') {
+      configPayload.user = emailConfig.user;
+      configPayload.password = emailConfig.password;
+    }
+
+    return {
+      isValid: true,
+      config: configPayload
+    };
+  };
+
   const handleHealthCheckClick = async () => {
     try {
+      // Extract and validate emailConfig from current state
+      const validation = getEmailConfigForHealthCheck();
+      
+      if (!validation.isValid) {
+        setError(validation.error || 'Email configuration is incomplete');
+        antdMessage.error(validation.error || 'Email configuration is incomplete');
+        return;
+      }
+
       setLoadingHealthStatus(true);
-      const response = await axiosInstance.post('/settings/email/health-check');
+
+      // Log exact payload being sent
+      console.log('[SystemSettings] Health check - Sending unsaved emailConfig:', {
+        provider: validation.config.provider,
+        fromName: validation.config.fromName,
+        fromEmail: validation.config.fromEmail,
+        fieldsIncluded: Object.keys(validation.config),
+        timestamp: new Date().toISOString()
+      });
+
+      // Send health check with current emailConfig in payload
+      const response = await axiosInstance.post('/settings/email/health-check', {
+        emailConfig: validation.config
+      });
+
       if (response.data) {
         setHealthStatus(response.data);
+        
+        console.log('[SystemSettings] Health check response:', {
+          success: response.data.success,
+          status: response.data.status,
+          provider: response.data.provider,
+          durationMs: response.data.checkDurationMs
+        });
+
         if (response.data.success) {
-          antdMessage.success('Email provider health check passed!');
+          antdMessage.success(`Health check passed! Provider ${validation.config.provider} is working correctly.`);
         } else {
-          antdMessage.warning('Email provider health check failed');
+          antdMessage.warning(`Health check failed: ${response.data.message || 'Please check your configuration'}`);
         }
       }
     } catch (err: any) {
-      console.error('Failed to perform health check:', err);
-      antdMessage.error('Failed to perform health check');
+      console.error('[SystemSettings] Health check error:', {
+        message: err.message,
+        status: err.response?.status,
+        data: err.response?.data
+      });
+      
+      let errorMessage = 'Failed to perform health check';
+      
+      // Handle 404 - endpoint not available
+      if (err.response?.status === 404) {
+        errorMessage = 'Email health check is not available on this server.';
+        console.error('[SystemSettings] Health check endpoint not found (404) - server may not support this feature');
+      } else {
+        errorMessage = err.response?.data?.message || err.message || errorMessage;
+      }
+      
+      setError(errorMessage);
+      antdMessage.error(errorMessage);
     } finally {
       setLoadingHealthStatus(false);
     }
@@ -868,7 +1007,17 @@ const SystemSettings: FC = () => {
 
       // UNIFIED EMAIL CONFIG with SINGLE PROVIDER ENFORCEMENT
       // Filter irrelevant fields: only send provider-specific fields for selected provider
+      // Only include password if it has been modified by user
       const filteredConfig = filterProviderConfig(emailConfig);
+      
+      // Handle password: only include if modified or if new (not in original)
+      if (!passwordModified[emailConfig.provider] && originalEmailConfigRef.current?.[emailConfig.provider]) {
+        // Password not modified and has been previously saved - omit it from payload
+        // This preserves the backend-stored password
+        if (filteredConfig.password) delete filteredConfig.password;
+        if (filteredConfig.gmailAppPassword) delete filteredConfig.gmailAppPassword;
+      }
+      
       payload.email = filteredConfig;
       
       console.log('[Settings Save] Unified email config (single provider enforced):', {
@@ -877,6 +1026,8 @@ const SystemSettings: FC = () => {
         fromName: filteredConfig.fromName,
         fromEmail: filteredConfig.fromEmail,
         fieldsIncluded: Object.keys(filteredConfig),
+        passwordIncluded: !!(filteredConfig.password || filteredConfig.gmailAppPassword),
+        passwordModified: passwordModified[emailConfig.provider],
         irrelevantFieldsFiltered: 'Only selected provider fields sent'
       });
 
@@ -890,24 +1041,18 @@ const SystemSettings: FC = () => {
       originalSettingsRef.current = JSON.parse(JSON.stringify(settings));
       originalEmailConfigRef.current = JSON.parse(JSON.stringify(emailConfig));
       
+      // Reset password modification flags after save - passwords are now stored on backend
+      setPasswordModified({
+        custom: false,
+        gmail: false,
+        mailtrap: false,
+      });
+      
       // Reset dirty states for general and email sections
       setDirtyGeneral(false);
       setDirtyEmail(false);
       
       setSuccess(true);
-      
-      // Clear sensitive passwords from state after successful save
-      if (emailConfig.gmailAppPassword || emailConfig.password) {
-        console.log('[Settings Save] Clearing passwords from state after successful save');
-        setEmailConfig((prev: any) => ({
-          ...prev,
-          gmailAppPassword: '',
-          password: '',
-          sendgridApiKey: '',
-          awsAccessKeyId: '',
-          awsSecretAccessKey: '',
-        }));
-      }
       
       antdMessage.success('Settings saved');
     } catch (err) {
@@ -1087,7 +1232,20 @@ const SystemSettings: FC = () => {
     if (config.provider && config.provider !== emailConfig.provider) {
       const resetConfig = createCleanProviderConfig(config.provider, config);
       setEmailConfig((prev: any) => ({ ...prev, ...resetConfig }));
+      // Reset password modified flag when provider changes
+      setPasswordModified({
+        custom: false,
+        gmail: false,
+        mailtrap: false,
+      });
     } else {
+      // Track password modification
+      if ((config.password !== undefined || config.gmailAppPassword !== undefined) && initializationCompleteRef.current) {
+        setPasswordModified((prev) => ({
+          ...prev,
+          [emailConfig.provider]: true,
+        }));
+      }
       setEmailConfig((prev: any) => ({ ...prev, ...config }));
     }
   }, [emailConfig.provider]);

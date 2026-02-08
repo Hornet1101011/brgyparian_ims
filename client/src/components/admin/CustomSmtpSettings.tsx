@@ -40,9 +40,8 @@ const CustomSmtpSettings = ({ emailConfig, setEmailConfig }: CustomSmtpSettingsP
   const [showPassword, setShowPassword] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testEmailAddress, setTestEmailAddress] = useState('');
-  const [passwordSavedBefore, setPasswordSavedBefore] = useState(
-    !!(emailConfig.user && emailConfig.host)
-  );
+  // Track if password has been modified by user (real password always stored in emailConfig.password)
+  const [passwordModified, setPasswordModified] = useState(false);
 
   // Clean irrelevant provider fields when provider changes away from custom
   // This enforces single provider: only custom SMTP fields are preserved
@@ -66,38 +65,105 @@ const CustomSmtpSettings = ({ emailConfig, setEmailConfig }: CustomSmtpSettingsP
 
   const handleTestSmtpConnection = async () => {
     try {
-      // Validate SMTP configuration
-      if (!emailConfig.host || !emailConfig.port) {
-        antdMessage.error('Please configure SMTP host and port first');
-        return;
+      // Comprehensive validation of all SMTP fields before making API call
+      const validationErrors: string[] = [];
+
+      // Validate SMTP host
+      if (!emailConfig.host || emailConfig.host.trim() === '') {
+        validationErrors.push('SMTP host is required');
       }
 
-      if (!emailConfig.user && emailConfig.password) {
-        antdMessage.error('SMTP username is required when password is set');
-        return;
+      // Validate SMTP port
+      if (!emailConfig.port || emailConfig.port < 1 || emailConfig.port > 65535) {
+        validationErrors.push('SMTP port must be between 1 and 65535');
+      }
+
+      // Validate username
+      if (!emailConfig.user || emailConfig.user.trim() === '') {
+        validationErrors.push('SMTP username is required');
+      }
+
+      // Validate password
+      if (!emailConfig.password || emailConfig.password.trim() === '') {
+        validationErrors.push('SMTP password is required');
+      }
+
+      // Validate from email
+      if (!emailConfig.fromEmail || emailConfig.fromEmail.trim() === '') {
+        validationErrors.push('From email address is required');
+      } else if (!emailConfig.fromEmail.includes('@')) {
+        validationErrors.push('From email address must be a valid email');
       }
 
       // Validate test email recipient
       const recipientEmail = testEmailAddress.trim() || emailConfig.fromEmail;
-      if (!recipientEmail.includes('@')) {
-        antdMessage.error('Please enter a valid email address for testing');
+      if (!recipientEmail || recipientEmail === '') {
+        validationErrors.push('Test email recipient is required');
+      } else if (!recipientEmail.includes('@')) {
+        validationErrors.push('Test email recipient must be a valid email address');
+      }
+
+      // If any validation errors, show them all and block the request
+      if (validationErrors.length > 0) {
+        const errorMessage = validationErrors.map((err, idx) => `${idx + 1}. ${err}`).join('\n');
+        console.log('[CustomSmtpSettings] Test email validation failed:\n' + errorMessage);
+        antdMessage.error(
+          <Box sx={{ whiteSpace: 'pre-wrap' }}>
+            <strong>Please fix the following issues before testing:</strong>
+            {'\n'}
+            {errorMessage}
+          </Box>
+        );
         return;
       }
 
-      console.log('[CustomSmtpSettings] Sending test email request:', {
-        testEmail: recipientEmail,
+      // Normalize SMTP secure flag based on port (override incorrect user input)
+      let normalizedSecure: boolean;
+      if (emailConfig.port === 465) {
+        normalizedSecure = true; // Port 465 uses SSL
+      } else if (emailConfig.port === 587) {
+        normalizedSecure = false; // Port 587 uses TLS
+      } else {
+        normalizedSecure = emailConfig.secure ?? false; // Default to false for other ports
+      }
+
+      console.log('[CustomSmtpSettings] Normalizing secure flag based on port:', {
+        port: emailConfig.port,
+        userConfiguredSecure: emailConfig.secure,
+        normalizedSecure: normalizedSecure,
+        explanation: emailConfig.port === 465 ? 'Port 465 = SSL (secure=true)' : 
+                     emailConfig.port === 587 ? 'Port 587 = TLS (secure=false)' : 'Using user preference'
+      });
+
+      // Build FULL SMTP configuration payload
+      const smtpConfig = {
+        provider: 'custom',
         smtpHost: emailConfig.host,
         smtpPort: emailConfig.port,
-        fromName: emailConfig.fromName,
-        hasPassword: !!emailConfig.password
+        username: emailConfig.user,
+        password: emailConfig.password, // Send actual password (already validated as non-empty)
+        secure: normalizedSecure,
+        fromName: emailConfig.fromName || 'Barangay System',
+        fromEmail: emailConfig.fromEmail,
+        testEmail: recipientEmail
+      };
+
+      console.log('[CustomSmtpSettings] Sending FULL test email request with unsaved SMTP config:', {
+        provider: smtpConfig.provider,
+        smtpHost: smtpConfig.smtpHost,
+        smtpPort: smtpConfig.smtpPort,
+        username: smtpConfig.username,
+        hasPassword: !!smtpConfig.password,
+        secure: smtpConfig.secure,
+        fromName: smtpConfig.fromName,
+        fromEmail: smtpConfig.fromEmail,
+        testEmail: smtpConfig.testEmail,
+        validationPassed: true,
+        timestamp: new Date().toISOString()
       });
 
       setTesting(true);
-      const response = await adminAPI.post('/settings/email/test', {
-        testEmail: recipientEmail,
-        senderName: emailConfig.fromName || 'Barangay System',
-        fromEmail: emailConfig.fromEmail,
-      });
+      const response = await adminAPI.post('/settings/email/test', smtpConfig);
 
       console.log('[CustomSmtpSettings] Test email response:', response.data);
 
@@ -261,18 +327,20 @@ const CustomSmtpSettings = ({ emailConfig, setEmailConfig }: CustomSmtpSettingsP
                   label="SMTP Password"
                   value={emailConfig.password || ''}
                   onChange={(e) => {
-                    handleConfigChange('password', e.target.value);
-                    if (e.target.value && emailConfig.user) {
-                      setPasswordSavedBefore(true);
-                    }
+                    const newPassword = e.target.value;
+                    handleConfigChange('password', newPassword);
+                    // Mark as modified so save knows to include password
+                    setPasswordModified(true);
                   }}
                   fullWidth
                   margin="normal"
                   type={showPassword ? 'text' : 'password'}
                   placeholder="••••••••••••"
                   helperText={
-                    passwordSavedBefore
-                      ? '✓ Password saved (enter new password to update)'
+                    passwordModified
+                      ? '✓ Password modified (will be saved)'
+                      : emailConfig.password
+                      ? '✓ Password stored (clear and re-enter to change)'
                       : 'SMTP authentication password'
                   }
                   size="small"

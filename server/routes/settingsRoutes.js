@@ -1131,33 +1131,67 @@ function getHealthStatusMessage(status) {
 }
 
 // POST /api/settings/email/health-check - Manually trigger health check
+// Can use emailConfig from payload (unsaved) or fallback to database settings
 router.post('/email/health-check', requireAuth, isAdmin, async (req, res) => {
   try {
-    const settings = await SystemSetting.findOne();
-    
-    if (!settings || !settings.smtp || !settings.smtp.enabled) {
-      return res.status(400).json({
-        success: false,
-        message: 'Email provider not configured or disabled',
-        status: 'warning'
-      });
+    const { emailConfig } = req.body;
+    let configToTest = null;
+
+    // Prefer emailConfig from payload (unsaved configuration) if provided
+    if (emailConfig) {
+      console.log('[Settings] Health check using provided emailConfig from payload');
+      
+      // Validate that emailConfig is enabled
+      if (!emailConfig.enabled) {
+        return res.status(400).json({
+          success: false,
+          message: 'Email provider is disabled',
+          status: 'warning'
+        });
+      }
+
+      configToTest = emailConfig;
+    } else {
+      // Fallback to database settings
+      console.log('[Settings] No emailConfig in payload, falling back to database settings');
+      const settings = await SystemSetting.findOne();
+      
+      if (!settings || !settings.smtp || !settings.smtp.enabled) {
+        return res.status(400).json({
+          success: false,
+          message: 'Email provider not configured or disabled',
+          status: 'warning'
+        });
+      }
+
+      configToTest = settings.smtp;
     }
 
-    console.log('[Settings] Triggering manual health check for provider:', settings.smtp.provider);
+    console.log('[Settings] Triggering manual health check for provider:', configToTest.provider);
+    console.log('[Settings] Health check payload:', {
+      provider: configToTest.provider,
+      fromEmail: configToTest.fromEmail,
+      // Log sanitized version of sensitive fields (just check if present)
+      hasAuthFields: !!(configToTest.user || configToTest.password || configToTest.gmailAppPassword || configToTest.sendgridApiKey || configToTest.accessKeyId),
+      fromName: configToTest.fromName
+    });
 
     // Perform health check
-    const healthResult = await emailProviderHelper.performHealthCheck(settings.smtp);
+    const healthResult = await emailProviderHelper.performHealthCheck(configToTest);
 
-    // Update database with health status
-    await emailProviderHelper.updateHealthCheckStatus(
-      healthResult.status,
-      healthResult.error || null
-    );
+    // Only update database if using database settings (not for unsaved configs)
+    if (!emailConfig && healthResult.status === 'ok') {
+      await emailProviderHelper.updateHealthCheckStatus(
+        healthResult.status,
+        healthResult.error || null
+      );
+    }
 
     console.log('[Settings] Health check completed:', {
-      provider: settings.smtp.provider,
+      provider: healthResult.provider,
       status: healthResult.status,
-      durationMs: healthResult.checkDurationMs
+      durationMs: healthResult.checkDurationMs,
+      fromPayload: !!emailConfig
     });
 
     return res.json({
@@ -2039,67 +2073,113 @@ router.post('/email/test', requireAuth, isAdmin, async (req, res) => {
       });
     }
 
-    // VALIDATION 2: Get config to test (prefer request payload, fallback to database)
-    let configToTest = emailConfig;
-    let configSource = 'request_payload';
-    
-    if (!configToTest) {
-      console.log('[Settings] POST /email/test - No emailConfig in payload, falling back to database settings');
-      const settings = await SystemSetting.findOne().lean();
-      configToTest = settings?.smtp;
-      configSource = 'database';
-    } else {
-      console.log('[Settings] POST /email/test - Using emailConfig from request payload, provider:', emailConfig?.provider);
-    }
-
-    // VALIDATION 3: Validate config exists and is enabled
-    if (!configToTest) {
-      console.error('[Settings] POST /email/test - No configuration found (source: ' + configSource + ')');
+    // VALIDATION 2: Require emailConfig in request payload (NO fallback to database)
+    // This ensures test requests use current unsaved configuration
+    if (!emailConfig) {
+      console.error('[Settings] POST /email/test - emailConfig is required in request body (no database fallback allowed)');
       return res.status(400).json({
         success: false,
-        message: 'Email provider not configured',
-        error: 'No email configuration found. Enable email and configure provider settings.',
-        configSource: configSource,
-        validationField: 'emailConfig'
+        message: 'Email configuration required',
+        error: 'emailConfig field is required in request body. Test email must include current configuration.',
+        validationField: 'emailConfig',
+        details: 'Send all SMTP fields: host, port, username, password, fromEmail, and provider'
       });
     }
 
-    if (!configToTest.enabled) {
-      console.error('[Settings] POST /email/test - Configuration disabled (source: ' + configSource + ')');
+    console.log('[Settings] POST /email/test - Using emailConfig from request payload, provider:', emailConfig?.provider);
+
+    // VALIDATION 3: Validate required SMTP fields for unsaved config testing
+    const requiredSmtpFields = ['host', 'port', 'username', 'password', 'fromEmail'];
+    const missingFields = requiredSmtpFields.filter(field => {
+      const value = emailConfig[field];
+      // Check for undefined, null, empty string, or zero (port 0 is invalid)
+      if (field === 'port') {
+        return !value || value < 1 || value > 65535;
+      }
+      return !value || (typeof value === 'string' && value.trim() === '');
+    });
+
+    if (missingFields.length > 0) {
+      console.error('[Settings] POST /email/test - Missing or invalid required SMTP fields:', {
+        missingFields: missingFields,
+        receivedFields: {
+          host: emailConfig.host,
+          port: emailConfig.port,
+          username: emailConfig.user || emailConfig.username,
+          password: !!emailConfig.password,
+          fromEmail: emailConfig.fromEmail,
+          provider: emailConfig.provider
+        }
+      });
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required SMTP configuration fields',
+        error: `The following required fields are missing or invalid: ${missingFields.join(', ')}`,
+        missingFields: missingFields,
+        validationField: 'smtp_config',
+        details: 'All of these fields are required: host, port (1-65535), username, password, fromEmail',
+        receivedConfig: {
+          host: emailConfig.host ? 'provided' : 'missing',
+          port: emailConfig.port ? `provided (${emailConfig.port})` : 'missing',
+          username: emailConfig.user || emailConfig.username ? 'provided' : 'missing',
+          password: emailConfig.password ? 'provided' : 'missing',
+          fromEmail: emailConfig.fromEmail ? 'provided' : 'missing'
+        }
+      });
+    }
+
+    // VALIDATION 4: Validate config is enabled (even though frontend validates)
+    if (emailConfig.enabled === false) {
+      console.error('[Settings] POST /email/test - Email configuration is disabled');
       return res.status(400).json({
         success: false,
         message: 'Email provider is disabled',
         error: 'Enable email configuration before testing.',
-        configSource: configSource,
         validationField: 'enabled'
       });
     }
 
-    // VALIDATION 4: Validate provider is selected
+    // Build config to test with normalized field names
+    let configToTest = {
+      ...emailConfig,
+      user: emailConfig.user || emailConfig.username,
+      enabled: true // Ensure enabled for testing
+    };
+
+    // VALIDATION 5: Validate config exists
+    if (!configToTest) {
+      console.error('[Settings] POST /email/test - No configuration found');
+      return res.status(400).json({
+        success: false,
+        message: 'Email provider not configured',
+        error: 'No valid email configuration provided.',
+        validationField: 'emailConfig'
+      });
+    }
+
+    // VALIDATION 6: Validate provider is selected
     if (!configToTest.provider) {
-      console.error('[Settings] POST /email/test - No provider selected (source: ' + configSource + ')', {
+      console.error('[Settings] POST /email/test - No provider selected', {
         hasHost: !!configToTest.host,
-        hasGmailAddress: !!configToTest.gmailAddress,
+        hasGmailAppPassword: !!configToTest.gmailAppPassword,
         hasApiKey: !!configToTest.sendgridApiKey,
         hasAwsKey: !!configToTest.awsAccessKeyId
       });
       return res.status(400).json({
         success: false,
         message: 'No email provider selected',
-        error: 'Select an email provider in settings',
-        validationField: 'provider',
-        configSource: configSource
+        error: 'provider field is required',
+        validationField: 'provider'
       });
     }
 
-    // VALIDATION 5: Validate provider-specific required fields
-    console.log('[Settings] POST /email/test - Validating provider:', configToTest.provider, '(source: ' + configSource + ')');
+    // VALIDATION 7: Validate provider-specific required fields
+    console.log('[Settings] POST /email/test - Validating provider-specific fields:', configToTest.provider);
     const validationError = validateProviderConfig(configToTest);
     if (validationError) {
       console.error('[Settings] POST /email/test - Provider validation failed for', configToTest.provider + ':', {
         error: validationError.error,
         missingFields: validationError.missingFields,
-        configSource: configSource,
         receivedFields: {
           provider: configToTest.provider,
           host: !!configToTest.host,
@@ -2107,7 +2187,6 @@ router.post('/email/test', requireAuth, isAdmin, async (req, res) => {
           user: !!configToTest.user,
           password: !!configToTest.password,
           secure: configToTest.secure,
-          gmailAddress: !!configToTest.gmailAddress,
           gmailAppPassword: !!configToTest.gmailAppPassword,
           sendgridApiKey: !!configToTest.sendgridApiKey,
           awsAccessKeyId: !!configToTest.awsAccessKeyId,
@@ -2124,12 +2203,11 @@ router.post('/email/test', requireAuth, isAdmin, async (req, res) => {
         missingFields: validationError.missingFields,
         validationField: 'provider_config',
         provider: configToTest.provider,
-        configSource: configSource,
         ...validationError
       });
     }
 
-    console.log('[Settings] POST /email/test - All validations passed. Sending test email using provider:', configToTest.provider, '(source: ' + configSource + ')');
+    console.log('[Settings] POST /email/test - All validations passed. Sending test email using provider:', configToTest.provider);
 
     const result = await emailProviderHelper.sendTestEmail(configToTest, testEmail);
 
@@ -2137,8 +2215,7 @@ router.post('/email/test', requireAuth, isAdmin, async (req, res) => {
       console.error('[Settings] POST /email/test - Provider failed to send test email:', {
         provider: configToTest.provider,
         error: result.error,
-        testEmail: testEmail,
-        configSource: configSource
+        testEmail: testEmail
       });
       return res.status(400).json({
         success: false,
@@ -2149,7 +2226,7 @@ router.post('/email/test', requireAuth, isAdmin, async (req, res) => {
       });
     }
 
-    console.log('[Settings] POST /email/test - Test email sent successfully via', configToTest.provider, '(source: ' + configSource + ')', {
+    console.log('[Settings] POST /email/test - Test email sent successfully via', configToTest.provider, {
       messageId: result.messageId,
       recipient: testEmail
     });
