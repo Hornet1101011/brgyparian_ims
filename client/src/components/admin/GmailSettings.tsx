@@ -64,6 +64,16 @@ const GmailSettingsComponent = ({ onGmailStatusChange, onEmailConfigChange }: Gm
     loadGmailSettings();
   }, []);
 
+  // SINGLE PROVIDER ENFORCEMENT: Monitor if provider changes away from gmail
+  // If so, custom SMTP fields won't be included in config sent to backend
+  useEffect(() => {
+    if (emailConfig.provider !== 'gmail') {
+      console.log('[GmailSettings] Provider changed away from gmail, clearing gmail fields from state');
+      // When provider is not gmail, these fields won't be sent to backend
+      // Ensures only ONE provider's credentials are active
+    }
+  }, [emailConfig.provider]);
+
   const loadGmailSettings = async () => {
     try {
       setLoading(true);

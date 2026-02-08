@@ -21,6 +21,7 @@ import TestEmailModal from '../TestEmailModal';
 import GmailSettings from './GmailSettings';
 import EmailSettings from './EmailSettings';
 import CustomSmtpSettings from './CustomSmtpSettings';
+import EmailProviderStatus from './EmailProviderStatus';
 import { adminAPI, axiosInstance, API_URL } from '../../services/api';
 import { UploadOutlined, UsergroupAddOutlined, DeleteOutlined } from '@ant-design/icons';
 import { Upload as AntdUpload, message as antdMessage } from 'antd';
@@ -322,6 +323,49 @@ const SystemSettings: FC = () => {
     try {
       setSaving(true);
       setError(null);
+      
+      // HELPER: Filter irrelevant provider fields to enforce single provider
+      // Only include fields for the selected provider, clear all others
+      const filterProviderConfig = (config: any) => {
+        if (!config || !config.provider) return config;
+        
+        const filtered: any = {
+          enabled: config.enabled,
+          provider: config.provider,
+          fromName: config.fromName,
+          fromEmail: config.fromEmail,
+          updatedAt: config.updatedAt
+        };
+        
+        // SINGLE PROVIDER ENFORCEMENT: Include ONLY selected provider's fields
+        if (config.provider === 'gmail') {
+          // Gmail: include only Gmail fields
+          if (config.gmailAddress) filtered.gmailAddress = config.gmailAddress;
+          if (config.gmailAppPassword) filtered.gmailAppPassword = config.gmailAppPassword;
+        } else if (config.provider === 'mailtrap') {
+          // Mailtrap: include only Mailtrap fields
+          if (config.user) filtered.user = config.user;
+          if (config.password) filtered.password = config.password;
+        } else if (config.provider === 'sendgrid') {
+          // SendGrid: include only SendGrid fields
+          if (config.sendgridApiKey) filtered.sendgridApiKey = config.sendgridApiKey;
+        } else if (config.provider === 'aws-ses') {
+          // AWS SES: include only AWS fields
+          if (config.awsAccessKeyId) filtered.awsAccessKeyId = config.awsAccessKeyId;
+          if (config.awsSecretAccessKey) filtered.awsSecretAccessKey = config.awsSecretAccessKey;
+          if (config.awsRegion) filtered.awsRegion = config.awsRegion;
+        } else if (config.provider === 'custom') {
+          // Custom SMTP: include only custom SMTP fields
+          if (config.host) filtered.host = config.host;
+          if (config.port) filtered.port = config.port;
+          if (config.user) filtered.user = config.user;
+          if (config.password) filtered.password = config.password;
+          if (config.secure !== undefined) filtered.secure = config.secure;
+        }
+        
+        return filtered;
+      };
+      
       // Normalize numeric fields and map client keys to server-side field names
       const payload: any = {
         siteName: settings.siteName,
@@ -345,20 +389,19 @@ const SystemSettings: FC = () => {
       // Include email behavior settings
       payload.emailSettings = emailSettings;
 
-      // UNIFIED EMAIL CONFIG: Send complete emailProviderConfig to /settings/email
-      // This is the ONLY path for saving email provider configuration
-      // All email configuration (Gmail, Custom SMTP, Mailtrap, SendGrid, AWS SES) goes here
+      // UNIFIED EMAIL CONFIG with SINGLE PROVIDER ENFORCEMENT
+      // Filter irrelevant fields: only send provider-specific fields for selected provider
       if (emailProviderConfig && Object.keys(emailProviderConfig).length > 0) {
-        payload.email = emailProviderConfig;
+        const filteredConfig = filterProviderConfig(emailProviderConfig);
+        payload.email = filteredConfig;
         
-        console.log('[Settings Save] Email provider config (unified):', {
-          enabled: emailProviderConfig.enabled,
-          provider: emailProviderConfig.provider,
-          fromName: emailProviderConfig.fromName,
-          fromEmail: emailProviderConfig.fromEmail,
-          hasGmailAddress: !!emailProviderConfig.gmailAddress,
-          hasSmtpHost: !!emailProviderConfig.host,
-          hasPassword: !!emailProviderConfig.password
+        console.log('[Settings Save] Email provider config (single provider enforced):', {
+          enabled: filteredConfig.enabled,
+          provider: filteredConfig.provider,
+          fromName: filteredConfig.fromName,
+          fromEmail: filteredConfig.fromEmail,
+          fieldsIncluded: Object.keys(filteredConfig),
+          irrelevantFieldsFiltered: 'Only selected provider fields sent'
         });
       }
 
@@ -655,6 +698,13 @@ const SystemSettings: FC = () => {
               onEmailConfigChange={handleGmailSettingsChange}
             />
           )}
+
+          {/* Email Provider Status Panel */}
+          <EmailProviderStatus
+            emailConfig={emailProviderConfig}
+            emailSettings={emailSettings}
+            loading={false}
+          />
 
           {/* Email Behavior Control Card */}
           <Paper sx={{

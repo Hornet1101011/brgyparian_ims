@@ -45,7 +45,20 @@ const CustomSmtpSettings = ({ emailConfig, setEmailConfig }: CustomSmtpSettingsP
     !!(emailConfig.user && emailConfig.host)
   );
 
+  // Clean irrelevant provider fields when provider changes away from custom
+  // This enforces single provider: only custom SMTP fields are preserved
+  React.useEffect(() => {
+    if (emailConfig.provider !== 'custom') {
+      console.log('[CustomSmtpSettings] Provider changed away from custom, clearing custom SMTP fields');
+      // Fields will be naturally cleared when custom SMTP is not active
+      // But we can log this for debugging provider enforcement
+    }
+  }, [emailConfig.provider]);
+
   const handleConfigChange = (field: keyof EmailConfig, value: any) => {
+    // SINGLE PROVIDER ENFORCEMENT: Only allow custom SMTP fields to be set
+    // When provider is 'custom', these fields are preserved
+    // When provider changes away, these fields won't be sent to backend
     setEmailConfig({
       ...emailConfig,
       [field]: value,

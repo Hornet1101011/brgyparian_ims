@@ -1550,6 +1550,28 @@ router.patch('/email', requireAuth, isAdmin, async (req, res) => {
       hasAwsKeys: !!(awsAccessKeyId && awsSecretAccessKey)
     });
 
+    // ENFORCE SINGLE PROVIDER: Detect if multiple providers configured in request
+    const multipleProviders = detectMultipleProviders(req.body);
+    const irrelevantProviders = multipleProviders.filter(p => p !== provider);
+    
+    if (irrelevantProviders.length > 0) {
+      console.warn('[Settings] PATCH /email rejected: Multiple providers detected', {
+        selectedProvider: provider,
+        detectedProviders: multipleProviders,
+        irrelevantProviders: irrelevantProviders
+      });
+      return res.status(400).json({
+        success: false,
+        message: 'Only one email provider can be configured at a time',
+        error: `Multiple providers detected: ${multipleProviders.join(', ')}. Configure only ${provider}.`,
+        detectedProviders: multipleProviders,
+        selectedProvider: provider,
+        irrelevantProviders: irrelevantProviders,
+        hint: `Remove credentials for: ${irrelevantProviders.join(', ')}`,
+        validationFailure: 'MULTIPLE_PROVIDERS_DETECTED'
+      });
+    }
+
     // Validate provider
     if (!provider || !emailProviderHelper.PROVIDER_CONFIGS[provider]) {
       return res.status(400).json({
@@ -1630,8 +1652,8 @@ router.patch('/email', requireAuth, isAdmin, async (req, res) => {
     }
 
     // Build email provider config for canonical smtp field
-    // IMPORTANT: This is the ONLY location where email provider config is stored
-    // Legacy fields (gmail, email) are NOT updated by this endpoint
+    // SINGLE PROVIDER ENFORCEMENT: Only include fields for the selected provider
+    // All other provider fields are intentionally excluded to enforce single provider
     const emailConfig = {
       enabled: !!enabled,
       provider,
@@ -1640,22 +1662,28 @@ router.patch('/email', requireAuth, isAdmin, async (req, res) => {
       updatedAt: new Date()
     };
 
-    // Add provider-specific fields to smtp object - only include defined values
+    // IMPORTANT: Add ONLY the selected provider's fields
+    // By not including fields for other providers, we enforce single provider enforcement
+    // Example: If changing from Custom SMTP to Gmail, old SMTP fields won't be stored
     if (provider === 'gmail') {
+      // Gmail provider: include ONLY Gmail fields (not custom SMTP, mailtrap, sendgrid, aws)
       if (gmailAddress) emailConfig.gmailAddress = gmailAddress;
       if (gmailAppPassword) emailConfig.gmailAppPassword = gmailAppPassword;
     } else if (provider === 'mailtrap') {
+      // Mailtrap provider: include ONLY Mailtrap fields (not custom SMTP, gmail, sendgrid, aws)
       if (user) emailConfig.user = user;
       if (password) emailConfig.password = password;
     } else if (provider === 'sendgrid') {
+      // SendGrid provider: include ONLY SendGrid fields (not custom SMTP, gmail, mailtrap, aws)
       if (sendgridApiKey) emailConfig.sendgridApiKey = sendgridApiKey;
     } else if (provider === 'aws-ses') {
+      // AWS SES provider: include ONLY AWS fields (not custom SMTP, gmail, mailtrap, sendgrid)
       if (awsAccessKeyId) emailConfig.awsAccessKeyId = awsAccessKeyId;
       if (awsSecretAccessKey) emailConfig.awsSecretAccessKey = awsSecretAccessKey;
       if (awsRegion) emailConfig.awsRegion = awsRegion;
       else emailConfig.awsRegion = 'us-east-1';
     } else if (provider === 'custom') {
-      // For custom SMTP, include all validated fields
+      // Custom SMTP provider: include ONLY custom SMTP fields (not gmail, mailtrap, sendgrid, aws)
       if (host) emailConfig.host = host;
       if (port) emailConfig.port = Number(port);
       if (user) emailConfig.user = user;
@@ -1668,21 +1696,28 @@ router.patch('/email', requireAuth, isAdmin, async (req, res) => {
     const cleanEmailConfig = removeUndefinedProperties(emailConfig);
     
     // STORE IN CANONICAL LOCATION: smtp field (not email or gmail)
+    // SINGLE PROVIDER ENFORCEMENT: cleanEmailConfig contains ONLY selected provider's fields
     settings.smtp = cleanEmailConfig;
     
+    // When provider changes, irrelevant fields are cleared:
+    // - Old custom SMTP fields (host, port, user, password) NOT stored if now using Gmail
+    // - Old Gmail fields (gmailAddress, gmailAppPassword) NOT stored if now using custom SMTP
+    // - Only ONE provider's credentials stored in smtp field at a time
+    //
     // NOTE: Legacy fields (gmail, email) are NOT cleared or updated here
     // This maintains backward compatibility in case of rollback
     // Old data in legacy fields will be ignored by all new code
     
     await settings.save();
 
-    console.log('[Settings] Email configuration updated in canonical smtp field:', {
+    console.log('[Settings] Email configuration updated in canonical smtp field (single provider enforced):', {
       enabled,
       provider,
       fromName,
       fromEmail,
       smtpFieldUpdated: true,
-      legacyFieldsPreserved: 'gmail and email fields not modified for backward compatibility'
+      singleProviderEnforced: `Only ${provider} fields stored`,
+      legacyFieldsPreserved: 'gmail and email fields not modified'
     });
 
     res.json({
@@ -1780,6 +1815,21 @@ router.post('/email/test', requireAuth, isAdmin, async (req, res) => {
     });
   }
 });
+
+/**
+ * Detect if multiple email providers are configured in a config object
+ * Returns array of detected providers - single provider enforcement
+ */
+function detectMultipleProviders(config) {
+  if (!config) return [];
+  const detectedProviders = [];
+  if (config.host || config.port) detectedProviders.push('custom');
+  if (config.gmailAddress || config.gmailAppPassword) detectedProviders.push('gmail');
+  if (config.user && config.password && !config.host && !config.gmailAddress) detectedProviders.push('mailtrap');
+  if (config.sendgridApiKey) detectedProviders.push('sendgrid');
+  if (config.awsAccessKeyId || config.awsSecretAccessKey) detectedProviders.push('aws-ses');
+  return detectedProviders;
+}
 
 /**
  * Remove undefined properties from an object
