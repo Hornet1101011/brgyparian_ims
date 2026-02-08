@@ -1191,46 +1191,104 @@ function getHealthStatusMessage(status) {
 }
 
 // POST /api/settings/email/health-check - Manually trigger health check
-// Can use emailConfig from payload (unsaved) or fallback to database settings
+// Accepts emailConfig OR smtp config in request body for testing unsaved settings
+// Priority: body.smtp > body.emailConfig > database (if both missing)
 router.post('/email/health-check', requireAuth, isAdmin, async (req, res) => {
   try {
-    const { emailConfig } = req.body;
+    const { emailConfig, smtp } = req.body;
     let configToTest = null;
+    let configSource = null;
 
-    // Prefer emailConfig from payload (unsaved configuration) if provided
-    if (emailConfig) {
-      console.log('[Settings] Health check using provided emailConfig from payload');
-      
-      // Validate that emailConfig is enabled
-      if (!emailConfig.enabled) {
+    // VALIDATION 1: Determine configuration source
+    // Priority: body.smtp > body.emailConfig > database fallback
+    if (smtp) {
+      // Use smtp from request body (highest priority)
+      console.log('[Settings] Health check using smtp config from request body');
+      configSource = 'request_body_smtp';
+      configToTest = smtp;
+
+      // VALIDATION 1a: Validate password from body.smtp.password
+      if (!smtp.password) {
+        console.error('[Settings] Health check - Missing password in body.smtp');
         return res.status(400).json({
           success: false,
-          message: 'Email provider is disabled',
-          status: 'warning'
+          message: 'Password is required',
+          error: 'smtp.password field is required in request body for health check',
+          validationField: 'smtp.password',
+          configSource: 'request_body_smtp',
+          status: 'failed'
         });
       }
 
+      if (typeof smtp.password !== 'string' || smtp.password.trim().length === 0) {
+        console.error('[Settings] Health check - Invalid password in body.smtp', {
+          passwordType: typeof smtp.password,
+          passwordLength: smtp.password?.length || 0
+        });
+        return res.status(400).json({
+          success: false,
+          message: 'Password must be a non-empty string',
+          error: 'smtp.password must be a valid non-empty string',
+          validationField: 'smtp.password',
+          configSource: 'request_body_smtp',
+          status: 'failed'
+        });
+      }
+
+      console.log('[Settings] Health check - SMTP password validated from request body', {
+        hasPassword: true,
+        passwordLength: smtp.password.length
+      });
+    } else if (emailConfig) {
+      // Use emailConfig from request body (second priority)
+      console.log('[Settings] Health check using emailConfig from request body');
+      configSource = 'request_body_emailConfig';
       configToTest = emailConfig;
     } else {
-      // Fallback to database settings
-      console.log('[Settings] No emailConfig in payload, falling back to database settings');
+      // Fall back to database (lowest priority)
+      console.log('[Settings] Health check - No smtp or emailConfig in request body, attempting DB fallback');
       const settings = await SystemSetting.findOne();
       
-      if (!settings || !settings.smtp || !settings.smtp.enabled) {
+      if (!settings || !settings.smtp) {
+        console.error('[Settings] Health check - No SMTP config in DB and no config in request body');
         return res.status(400).json({
           success: false,
-          message: 'Email provider not configured or disabled',
-          status: 'warning'
+          message: 'Email configuration required',
+          error: 'emailConfig or smtp field is required in request body, or SMTP must be configured in database',
+          validationField: 'configuration',
+          configSource: 'none',
+          status: 'failed',
+          details: 'Provide smtp or emailConfig in request body, or configure SMTP in settings'
         });
       }
 
+      console.log('[Settings] Health check - Using SMTP config from database');
+      configSource = 'database';
       configToTest = settings.smtp;
     }
+
+    // VALIDATION 2: Validate that emailConfig/smtp is enabled (for non-database sources)
+    if (configToTest.enabled === false && configSource !== 'database') {
+      console.error('[Settings] Health check - Configuration is disabled');
+      return res.status(400).json({
+        success: false,
+        message: 'Email provider is disabled',
+        error: 'Enable email configuration before performing health check',
+        status: 'warning',
+        configSource: configSource
+      });
+    }
+
+    console.log('[Settings] Health check - Configuration source:', {
+      source: configSource,
+      provider: configToTest.provider
+    });
 
     console.log('[Settings] Triggering manual health check for provider:', configToTest.provider);
     console.log('[Settings] Health check payload:', {
       provider: configToTest.provider,
       fromEmail: configToTest.fromEmail,
+      configSource: configSource,
       // Log sanitized version of sensitive fields (just check if present)
       hasAuthFields: !!(configToTest.user || configToTest.password || configToTest.gmailAppPassword || configToTest.sendgridApiKey || configToTest.accessKeyId),
       fromName: configToTest.fromName
@@ -1239,8 +1297,8 @@ router.post('/email/health-check', requireAuth, isAdmin, async (req, res) => {
     // Perform health check
     const healthResult = await emailProviderHelper.performHealthCheck(configToTest);
 
-    // Only update database if using database settings (not for unsaved configs)
-    if (!emailConfig && healthResult.status === 'ok') {
+    // Only update database if using database settings (not for unsaved configs from request body)
+    if (configSource === 'database' && healthResult.status === 'ok') {
       await emailProviderHelper.updateHealthCheckStatus(
         healthResult.status,
         healthResult.error || null
@@ -1251,7 +1309,8 @@ router.post('/email/health-check', requireAuth, isAdmin, async (req, res) => {
       provider: healthResult.provider,
       status: healthResult.status,
       durationMs: healthResult.checkDurationMs,
-      fromPayload: !!emailConfig
+      configSource: configSource,
+      fromPayload: configSource !== 'database'
     });
 
     return res.json({
@@ -1261,7 +1320,8 @@ router.post('/email/health-check', requireAuth, isAdmin, async (req, res) => {
       provider: healthResult.provider,
       error: healthResult.error || null,
       checkDurationMs: healthResult.checkDurationMs,
-      timestamp: healthResult.timestamp
+      timestamp: healthResult.timestamp,
+      configSource: configSource
     });
   } catch (err) {
     console.error('[Settings] Manual health check error:', err);
