@@ -29,29 +29,111 @@ router.use((req, res, next) => {
   next();
 });
 
-// Helper: filter smtp password presence
+/**
+ * UNIFIED EMAIL CONFIGURATION ARCHITECTURE
+ * ==========================================
+ * 
+ * Single Source of Truth: `smtp` field (renamed from SMTP-only to multi-provider storage)
+ * 
+ * All email providers (custom SMTP, Gmail, Mailtrap, SendGrid, AWS SES) store configuration in `smtp` field:
+ * 
+ * smtp: {
+ *   enabled: boolean,
+ *   provider: 'custom' | 'gmail' | 'mailtrap' | 'sendgrid' | 'aws-ses',
+ *   fromName: string,
+ *   fromEmail: string,
+ *   
+ *   // Custom SMTP fields
+ *   host?: string,
+ *   port?: number,
+ *   user?: string,
+ *   password?: string,    // Sensitive - always removed before sending to client
+ *   encryptedPassword?: string,
+ *   secure?: boolean,
+ *   
+ *   // Gmail fields
+ *   gmailAddress?: string,
+ *   gmailAppPassword?: string,  // Sensitive - always removed before sending to client
+ *   
+ *   // Mailtrap (uses generic user/password above)
+ *   
+ *   // SendGrid
+ *   sendgridApiKey?: string,    // Sensitive - always removed before sending to client
+ *   
+ *   // AWS SES
+ *   awsAccessKeyId?: string,    // Sensitive - always removed before sending to client
+ *   awsSecretAccessKey?: string,  // Sensitive - always removed before sending to client
+ *   awsRegion?: string,
+ *   
+ *   updatedAt?: Date
+ * }
+ * 
+ * BACKWARD COMPATIBILITY
+ * ======================
+ * 
+ * Legacy fields (maintained for migration purposes, READ-ONLY):
+ * - `gmail`: Deprecated, use `smtp` instead. Preserved during reads but ignored during writes.
+ * - `email`: Deprecated, use `smtp` instead. Preserved during reads but ignored during writes.
+ * 
+ * Migration Strategy:
+ * 1. New writes always go to `smtp` field
+ * 2. Reads from `gmail` or `email` are ignored (deprecated)
+ * 3. Old data in `gmail`/`email` fields is NOT automatically cleaned up (for rollback safety)
+ * 4. Admin should manually verify settings after upgrade
+ * 
+ * SANITIZATION POLICY
+ * ====================
+ * All sensitive credentials MUST be removed before sending to client:
+ * - password (any provider)
+ * - encryptedPassword
+ * - gmailAppPassword
+ * - sendgridApiKey
+ * - awsAccessKeyId
+ * - awsSecretAccessKey
+ */
+
+// Helper: Remove all sensitive credentials before sending to client
 function sanitizeForClient(setting) {
   const s = setting.toObject ? setting.toObject() : { ...setting };
+  
+  // CANONICAL SOURCE: Sanitize smtp field (all providers stored here)
   if (s.smtp) {
-    s.smtp = smtpHelper.sanitizeSMTPConfig(s.smtp);
+    const sanitized = { ...s.smtp };
+    // Remove ALL sensitive credential fields
+    delete sanitized.password;              // Custom SMTP password
+    delete sanitized.encryptedPassword;     // Custom SMTP encrypted password
+    delete sanitized.gmailAppPassword;      // Gmail app password
+    delete sanitized.sendgridApiKey;        // SendGrid API key
+    delete sanitized.awsAccessKeyId;        // AWS access key
+    delete sanitized.awsSecretAccessKey;    // AWS secret key
+    s.smtp = sanitized;
   }
-  // Sanitize Gmail settings - remove encrypted password before sending to client
-  if (s.gmail && s.gmail.encryptedPassword) {
+  
+  // LEGACY FIELDS (READ-ONLY, Deprecated): Kept for backward compatibility only
+  // These fields are no longer used for new writes, but preserved for old reads
+  if (s.gmail) {
+    // Keep only non-sensitive fields from legacy gmail object
     s.gmail = {
       enabled: s.gmail.enabled,
       gmailAddress: s.gmail.gmailAddress,
       displayName: s.gmail.displayName,
       useAppPassword: s.gmail.useAppPassword,
-      // Do NOT send encryptedPassword to client
+      // Explicitly DO NOT send: password, appPassword, encryptedPassword
     };
   }
-  // Sanitize email provider settings - mask password if present
-  if (s.email && s.email.password) {
-    s.email = {
-      ...s.email,
-      password: s.email.password ? '***MASKED***' : undefined
-    };
+  
+  if (s.email) {
+    // Keep only non-sensitive fields from legacy email object
+    const sanitizedEmail = { ...s.email };
+    // Remove all credential fields
+    delete sanitizedEmail.password;
+    delete sanitizedEmail.gmailAppPassword;
+    delete sanitizedEmail.sendgridApiKey;
+    delete sanitizedEmail.awsAccessKeyId;
+    delete sanitizedEmail.awsSecretAccessKey;
+    s.email = sanitizedEmail;
   }
+  
   return s;
 }
 
@@ -1394,6 +1476,8 @@ router.get('/email/providers', requireAuth, isAdmin, async (req, res) => {
 });
 
 // GET /api/settings/email - Get current email configuration
+// CANONICAL SOURCE: Reads from `smtp` field (all providers stored here)
+// Returns sanitized config with all sensitive credentials removed
 router.get('/email', requireAuth, isAdmin, async (req, res) => {
   try {
     const settings = await SystemSetting.findOne().lean();
@@ -1427,6 +1511,9 @@ router.get('/email', requireAuth, isAdmin, async (req, res) => {
 });
 
 // PATCH /api/settings/email - Update email configuration
+// CANONICAL DESTINATION: All providers stored in `smtp` field (multi-provider storage)
+// Single source of truth: smtp field contains enabled, provider, and ALL provider-specific credentials
+// Legacy fields (gmail, email) are deprecated and READ-ONLY (not updated by this endpoint)
 router.patch('/email', requireAuth, isAdmin, async (req, res) => {
   try {
     const {
@@ -1452,7 +1539,7 @@ router.patch('/email', requireAuth, isAdmin, async (req, res) => {
       secure
     } = req.body;
 
-    console.log('[Settings] Email config update request:', {
+    console.log('[Settings] Email config update request (storing in canonical smtp field):', {
       enabled,
       provider,
       fromName,
@@ -1542,7 +1629,9 @@ router.patch('/email', requireAuth, isAdmin, async (req, res) => {
       settings = new SystemSetting();
     }
 
-    // Build email config - only include defined, non-null values
+    // Build email provider config for canonical smtp field
+    // IMPORTANT: This is the ONLY location where email provider config is stored
+    // Legacy fields (gmail, email) are NOT updated by this endpoint
     const emailConfig = {
       enabled: !!enabled,
       provider,
@@ -1551,7 +1640,7 @@ router.patch('/email', requireAuth, isAdmin, async (req, res) => {
       updatedAt: new Date()
     };
 
-    // Add provider-specific fields - only include defined values
+    // Add provider-specific fields to smtp object - only include defined values
     if (provider === 'gmail') {
       if (gmailAddress) emailConfig.gmailAddress = gmailAddress;
       if (gmailAppPassword) emailConfig.gmailAppPassword = gmailAppPassword;
@@ -1575,15 +1664,25 @@ router.patch('/email', requireAuth, isAdmin, async (req, res) => {
     }
 
     // Remove any undefined properties before saving to MongoDB
+    // This ensures only defined fields are persisted
     const cleanEmailConfig = removeUndefinedProperties(emailConfig);
+    
+    // STORE IN CANONICAL LOCATION: smtp field (not email or gmail)
     settings.smtp = cleanEmailConfig;
+    
+    // NOTE: Legacy fields (gmail, email) are NOT cleared or updated here
+    // This maintains backward compatibility in case of rollback
+    // Old data in legacy fields will be ignored by all new code
+    
     await settings.save();
 
-    console.log('[Settings] Email configuration updated:', {
+    console.log('[Settings] Email configuration updated in canonical smtp field:', {
       enabled,
       provider,
       fromName,
-      fromEmail
+      fromEmail,
+      smtpFieldUpdated: true,
+      legacyFieldsPreserved: 'gmail and email fields not modified for backward compatibility'
     });
 
     res.json({
