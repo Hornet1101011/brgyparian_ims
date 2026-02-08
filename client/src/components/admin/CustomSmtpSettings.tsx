@@ -135,35 +135,52 @@ const CustomSmtpSettings = ({ emailConfig, setEmailConfig }: CustomSmtpSettingsP
                      emailConfig.port === 587 ? 'Port 587 = TLS (secure=false)' : 'Using user preference'
       });
 
-      // Build FULL SMTP configuration payload
-      const smtpConfig = {
-        provider: 'custom',
-        smtpHost: emailConfig.host,
-        smtpPort: emailConfig.port,
-        username: emailConfig.user,
-        password: emailConfig.password, // Send actual password (already validated as non-empty)
-        secure: normalizedSecure,
-        fromName: emailConfig.fromName || 'Barangay System',
-        fromEmail: emailConfig.fromEmail,
+      // Build request payload with emailConfig nested structure
+      // Normalize field names to match backend expectations
+      const requestPayload = {
+        emailConfig: {
+          provider: 'custom',
+          host: emailConfig.host,
+          port: emailConfig.port,
+          username: emailConfig.user,  // Normalize: user → username
+          password: emailConfig.password, // Send actual password (already validated as non-empty)
+          secure: normalizedSecure,
+          fromName: emailConfig.fromName || 'Barangay System',
+          fromEmail: emailConfig.fromEmail
+        },
         testEmail: recipientEmail
       };
 
       console.log('[CustomSmtpSettings] Sending FULL test email request with unsaved SMTP config:', {
-        provider: smtpConfig.provider,
-        smtpHost: smtpConfig.smtpHost,
-        smtpPort: smtpConfig.smtpPort,
-        username: smtpConfig.username,
-        hasPassword: !!smtpConfig.password,
-        secure: smtpConfig.secure,
-        fromName: smtpConfig.fromName,
-        fromEmail: smtpConfig.fromEmail,
-        testEmail: smtpConfig.testEmail,
+        emailConfig: {
+          provider: requestPayload.emailConfig.provider,
+          host: requestPayload.emailConfig.host,
+          port: requestPayload.emailConfig.port,
+          username: requestPayload.emailConfig.username,  // Normalized field name
+          hasPassword: !!requestPayload.emailConfig.password,
+          secure: requestPayload.emailConfig.secure,
+          fromName: requestPayload.emailConfig.fromName,
+          fromEmail: requestPayload.emailConfig.fromEmail
+        },
+        testEmail: requestPayload.testEmail,
         validationPassed: true,
         timestamp: new Date().toISOString()
       });
 
+      // Assert password is a non-empty string before sending API request
+      if (typeof requestPayload.emailConfig.password !== 'string' || requestPayload.emailConfig.password.trim() === '') {
+        const errorMsg = 'CRITICAL: Password assertion failed - password must be a non-empty string';
+        console.error('[CustomSmtpSettings] ' + errorMsg, {
+          passwordType: typeof requestPayload.emailConfig.password,
+          passwordValue: requestPayload.emailConfig.password,
+          isEmptyString: requestPayload.emailConfig.password === '',
+          isWhitespace: typeof requestPayload.emailConfig.password === 'string' && requestPayload.emailConfig.password.trim() === ''
+        });
+        throw new Error(errorMsg + '. Password was not properly stored in component state.');
+      }
+
       setTesting(true);
-      const response = await adminAPI.post('/settings/email/test', smtpConfig);
+      const response = await adminAPI.post('/settings/email/test', requestPayload);
 
       console.log('[CustomSmtpSettings] Test email response:', response.data);
 
