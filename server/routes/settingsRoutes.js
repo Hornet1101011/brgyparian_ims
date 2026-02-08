@@ -720,17 +720,63 @@ router.post('/test-smtp', requireAuth, isAdmin, async (req, res) => {
     const { to } = req.body || {};
     const settings = await SystemSetting.findOne().lean();
 
-    if (!settings || !settings.smtp || !settings.smtp.host) {
-      return res.status(400).json({ success: false, message: 'SMTP not configured' });
+    if (!settings) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'System settings not found',
+        error: 'No settings configured in database'
+      });
+    }
+
+    // CHECK 1: Verify email sending is not disabled
+    if (!settings.email || !settings.email.enabled) {
+      console.log('[SMTP Test] Email sending is disabled - rejecting test');
+      return res.status(400).json({ 
+        success: false,
+        provider: 'custom',
+        message: 'Email sending is currently disabled',
+        error: 'Master email sending switch is disabled. Enable "Email Sending" in Email Behavior Control.',
+        validationFailure: 'EMAIL_SENDING_DISABLED'
+      });
+    }
+
+    // CHECK 2: Verify Custom SMTP provider is configured
+    if (!settings.smtp || !settings.smtp.provider || settings.smtp.provider !== 'custom') {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Custom SMTP provider not selected',
+        error: 'Custom SMTP is not the active email provider. Select Custom SMTP in Email Settings first.'
+      });
+    }
+
+    // CHECK 3: Validate provider configuration completeness
+    const validation = validateProviderConfiguration('custom', settings.smtp);
+    if (!validation.isValid) {
+      console.log('[SMTP Test] Configuration validation failed:', validation);
+      return res.status(400).json({ 
+        success: false,
+        provider: 'custom',
+        message: 'Custom SMTP configuration incomplete',
+        error: `Missing required fields: ${validation.missingFields.join(', ')}`,
+        missingFields: validation.missingFields,
+        hint: validation.hint,
+        validationFailure: 'INCOMPLETE_PROVIDER_CONFIG'
+      });
     }
 
     // Default recipient: provided email > site contact email > admin email
     const recipient = to || settings.contactEmail || (req.user?.email) || null;
     if (!recipient) {
-      return res.status(400).json({ success: false, message: 'No recipient email provided' });
+      return res.status(400).json({ 
+        success: false,
+        provider: 'custom',
+        message: 'No recipient email provided',
+        error: 'Test email address is required. Provide contact email in System Settings or pass "to" field.'
+      });
     }
 
     try {
+      console.log('[SMTP Test] Starting test email send to:', recipient);
       const result = await smtpHelper.sendTestEmail(settings.smtp, {
         to: recipient,
         siteInfo: {
@@ -739,16 +785,51 @@ router.post('/test-smtp', requireAuth, isAdmin, async (req, res) => {
         }
       });
 
-      console.log('[SMTP Test] Success - sent to:', recipient);
-      return res.json(result);
+      console.log('[SMTP Test] Success - sent to:', recipient, 'MessageId:', result.messageId);
+      return res.json({
+        success: true,
+        provider: 'custom',
+        message: 'Test email sent successfully',
+        recipient,
+        messageId: result.messageId || null,
+        timestamp: new Date().toISOString()
+      });
     } catch (err) {
       const message = err.message || 'Failed to send test email';
-      console.error('[SMTP Test] Failed:', message);
-      return res.status(500).json({ success: false, message });
+      console.error('[SMTP Test] Failed:', message, err);
+      
+      // Provide provider-specific error hints
+      let hint = 'Custom SMTP Error: ';
+      if (message.includes('ENOTFOUND') || message.includes('EHOSTUNREACH')) {
+        hint += 'DNS resolution failed. Verify SMTP hostname is correct and DNS is accessible.';
+      } else if (message.includes('ECONNREFUSED')) {
+        hint += 'Connection refused. Verify SMTP port is correct (587 for TLS, 465 for SSL) and server is listening.';
+      } else if (message.includes('auth') || message.includes('AUTH') || message.includes('EAUTH')) {
+        hint += 'Authentication failed. Verify username and password are correct. Check if credentials have special characters that need URL encoding.';
+      } else if (message.includes('TLS') || message.includes('SSL') || message.includes('certificate')) {
+        hint += 'TLS/SSL error. Verify certificate validation settings or try different SMTP port. Some servers require secure=true, others secure=false.';
+      } else if (message.includes('timeout') || message.includes('ETIMEDOUT')) {
+        hint += 'Connection timeout. Verify SMTP server is online and network connectivity is good. Try increasing timeout or checking firewall rules.';
+      } else {
+        hint += 'Check SMTP server logs for detailed error information. Verify all credentials and settings are correct.';
+      }
+
+      return res.status(500).json({ 
+        success: false,
+        provider: 'custom',
+        message: 'Failed to send test email',
+        error: message,
+        hint,
+        recipient
+      });
     }
   } catch (err) {
     console.error('POST /api/settings/test-smtp error:', err.message);
-    return res.status(500).json({ success: false, message: 'Internal server error' });
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Internal server error',
+      error: err.message
+    });
   }
 });
 
@@ -1321,8 +1402,7 @@ router.post('/gmail/test', requireAuth, isAdmin, async (req, res) => {
     }
     
     // Use ONLY database passwords - prefer app password, then fall back to regular password
-    const passwordToUse = settings.gmail.appPassword || settings.gmail.password;
-    const passwordType = settings.gmail.appPassword ? 'appPassword (from database)' : 'password (from database)';
+    const passwordType = settings.gmail.appPassword ? 'appPassword' : 'password';
     
     console.log('[Settings] Test Email Password Selection:', {
       hasDbAppPassword: !!settings.gmail.appPassword,
@@ -1330,20 +1410,47 @@ router.post('/gmail/test', requireAuth, isAdmin, async (req, res) => {
       hasDbPassword: !!settings.gmail.password,
       dbPasswordLength: settings.gmail.password?.length || 0,
       usingPasswordType: passwordType,
-      selectedPasswordLength: passwordToUse.length,
       source: 'database only'
     });
     
-    console.log('[Settings] Test Email Password Selection:', {
-      hasAppPassword,
-      appPasswordLength: settings.gmail.appPassword?.length || 0,
-      hasRegularPassword,
-      regularPasswordLength: settings.gmail.password?.length || 0,
-      usingPasswordType: passwordType,
-      selectedPasswordLength: passwordToUse.length,
-      priority: 'appPassword > password'
-    });
-    
+    // CHECK: Verify email sending is not disabled
+    if (!settings.email || !settings.email.enabled) {
+      console.log('[Settings] Email sending is disabled - rejecting Gmail test');
+      return res.status(400).json({ 
+        success: false,
+        provider: 'gmail',
+        message: 'Email sending is currently disabled',
+        error: 'Master email sending switch is disabled. Enable "Email Sending" in Email Behavior Control.',
+        validationFailure: 'EMAIL_SENDING_DISABLED'
+      });
+    }
+
+    // CHECK: Verify Gmail provider is actually enabled and selected
+    if (!settings.smtp || !settings.smtp.provider || settings.smtp.provider !== 'gmail') {
+      console.log('[Settings] Gmail provider not active');
+      return res.status(400).json({ 
+        success: false,
+        provider: 'gmail',
+        message: 'Gmail provider is not the active email provider',
+        error: 'Gmail must be selected as the active provider in Email Settings to run this test.'
+      });
+    }
+
+    // CHECK: Validate Gmail configuration completeness
+    const validation = validateProviderConfiguration('gmail', settings.gmail);
+    if (!validation.isValid) {
+      console.log('[Settings] Gmail validation failed:', validation);
+      return res.status(400).json({ 
+        success: false,
+        provider: 'gmail',
+        message: 'Gmail configuration incomplete',
+        error: `Missing required fields: ${validation.missingFields.join(', ')}`,
+        missingFields: validation.missingFields,
+        hint: validation.hint,
+        validationFailure: 'INCOMPLETE_PROVIDER_CONFIG'
+      });
+    }
+
     const gmailConfig = {
       gmailAddress: fromEmail || settings.gmail.gmailAddress,
       displayName: senderName || settings.gmail.displayName || 'Barangay System',
@@ -1357,7 +1464,7 @@ router.post('/gmail/test', requireAuth, isAdmin, async (req, res) => {
       gmailAddress: gmailConfig.gmailAddress,
       displayName: gmailConfig.displayName,
       usingPasswordType: gmailConfig.passwordType,
-      passwordLength: gmailConfig.appPassword.length
+      passwordLength: gmailConfig.appPassword?.length || gmailConfig.password?.length || 0
     });
     
     const result = await gmailHelper.testGmailConnection(gmailConfig, testEmail);
@@ -1369,11 +1476,29 @@ router.post('/gmail/test', requireAuth, isAdmin, async (req, res) => {
         testEmail,
         gmailAddress: gmailConfig.gmailAddress
       });
+      
+      // Provide Gmail-specific error hints
+      let hint = 'Gmail Authentication Error: ';
+      if (result.error.includes('Invalid') || result.error.includes('invalid')) {
+        hint += 'Invalid Gmail address or App Password. Verify both are correct. App Password is 16 characters generated in Google Account Security.';
+      } else if (result.error.includes('auth') || result.error.includes('AUTH') || result.error.includes('credentials')) {
+        hint += 'Authentication credentials invalid. Ensure you are using a 16-character App Password, not your regular Gmail password. Enable 2FA in Google Account.';
+      } else if (result.error.includes('TLS') || result.error.includes('SSL')) {
+        hint += 'TLS/SSL connection issue. Verify Google SMTP port 587 is being used and TLS is enabled.';
+      } else if (result.error.includes('blocked') || result.error.includes('suspicious')) {
+        hint += 'Google blocked the login attempt. Check your Google Account for security notifications. May need to enable "Less secure app access" or verify login in browser.';
+      } else {
+        hint += 'Check Google Account security settings and ensure this application is authorized. Review Gmail/Google error messages in account activity.';
+      }
+
       return res.status(400).json({
         success: false,
+        provider: 'gmail',
         message: 'Gmail test failed',
         error: result.error,
-        details: result.details || 'Check server logs for more information'
+        hint,
+        details: result.details || 'Check Gmail security settings and authorization',
+        messageId: result.messageId || null
       });
     }
     
@@ -1387,8 +1512,11 @@ router.post('/gmail/test', requireAuth, isAdmin, async (req, res) => {
     
     return res.json({
       success: true,
+      provider: 'gmail',
       message: 'Test email sent successfully',
-      messageId: result.messageId,
+      recipient: testEmail,
+      messageId: result.messageId || null,
+      timestamp: new Date().toISOString(),
       passwordType // Inform client which password was used
     });
   } catch (err) {
@@ -1829,6 +1957,119 @@ function detectMultipleProviders(config) {
   if (config.sendgridApiKey) detectedProviders.push('sendgrid');
   if (config.awsAccessKeyId || config.awsSecretAccessKey) detectedProviders.push('aws-ses');
   return detectedProviders;
+}
+
+/**
+ * Validate provider configuration completeness
+ * Returns validation status with missing fields and provider-specific hints
+ */
+function validateProviderConfiguration(provider, config) {
+  if (!provider || !config) {
+    return {
+      isValid: false,
+      missingFields: ['provider'],
+      hint: 'No email provider selected. Configure a provider in Email Settings.'
+    };
+  }
+
+  const missingFields = [];
+  let hint = '';
+
+  switch (provider) {
+    case 'custom':
+      if (!config.host) missingFields.push('host');
+      if (!config.port) missingFields.push('port');
+      if (!config.user) missingFields.push('user');
+      if (!config.password) missingFields.push('password');
+
+      if (missingFields.length > 0) {
+        hint = 'Custom SMTP Configuration errors detected: ';
+        if (missingFields.includes('host')) hint += 'Check DNS/hostname, ';
+        if (missingFields.includes('port')) hint += 'Verify SMTP port (usually 587 or 465), ';
+        if (missingFields.includes('user')) hint += 'Provide authentication username, ';
+        if (missingFields.includes('password')) hint += 'Provide authentication password, ';
+        hint = hint.slice(0, -2) + '.';
+        hint += ' Use port 587 for TLS or 465 for SSL. Test TLS certificate validation if connection fails.';
+        return { isValid: false, missingFields, hint };
+      }
+
+      // Validate port is valid number
+      const portNum = Number(config.port);
+      if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
+        return {
+          isValid: false,
+          missingFields: ['port'],
+          hint: 'SMTP port must be a number between 1-65535. Common ports: 587 (TLS), 465 (SSL), 25 (unencrypted).'
+        };
+      }
+
+      return { isValid: true, missingFields: [], hint: '' };
+
+    case 'gmail':
+      if (!config.gmailAddress) missingFields.push('gmailAddress');
+      if (!config.gmailAppPassword) missingFields.push('gmailAppPassword');
+
+      if (missingFields.length > 0) {
+        hint = 'Gmail Configuration errors detected: ';
+        if (missingFields.includes('gmailAddress')) hint += 'Provide Gmail email address, ';
+        if (missingFields.includes('gmailAppPassword')) hint += 'Generate and provide 16-character App Password (not regular password), ';
+        hint = hint.slice(0, -2) + '.';
+        hint += ' App Passwords are created in Google Account Security settings with 2FA enabled. Never use your regular Gmail password.';
+        return { isValid: false, missingFields, hint };
+      }
+
+      return { isValid: true, missingFields: [], hint: '' };
+
+    case 'mailtrap':
+      if (!config.user) missingFields.push('user');
+      if (!config.password) missingFields.push('password');
+
+      if (missingFields.length > 0) {
+        hint = 'Mailtrap Configuration errors detected: ';
+        if (missingFields.includes('user')) hint += 'Provide Mailtrap username/token, ';
+        if (missingFields.includes('password')) hint += 'Provide Mailtrap password, ';
+        hint = hint.slice(0, -2) + '.';
+        hint += ' Get credentials from your Mailtrap account settings. Verify inbox and credentials are correct.';
+        return { isValid: false, missingFields, hint };
+      }
+
+      return { isValid: true, missingFields: [], hint: '' };
+
+    case 'sendgrid':
+      if (!config.sendgridApiKey) missingFields.push('sendgridApiKey');
+
+      if (missingFields.length > 0) {
+        return {
+          isValid: false,
+          missingFields,
+          hint: 'SendGrid API Key not configured. Generate API Key from SendGrid dashboard (API Keys section). Key should start with "SG.".'
+        };
+      }
+
+      return { isValid: true, missingFields: [], hint: '' };
+
+    case 'aws-ses':
+      if (!config.awsAccessKeyId) missingFields.push('awsAccessKeyId');
+      if (!config.awsSecretAccessKey) missingFields.push('awsSecretAccessKey');
+
+      if (missingFields.length > 0) {
+        hint = 'AWS SES Configuration errors detected: ';
+        if (missingFields.includes('awsAccessKeyId')) hint += 'Provide AWS Access Key ID, ';
+        if (missingFields.includes('awsSecretAccessKey')) hint += 'Provide AWS Secret Access Key, ';
+        hint = hint.slice(0, -2) + '.';
+        hint += ' Verify AWS SES is verified and not in sandbox mode. Check IAM permissions for SendEmail action.';
+        return { isValid: false, missingFields, hint };
+      }
+
+      return { isValid: true, missingFields: [], hint: '' };
+
+    default:
+      return {
+        isValid: false,
+        missingFields: [],
+        hint: `Unknown email provider type: "${provider}". Use: custom, gmail, mailtrap, sendgrid, or aws-ses.`
+      };
+  }
 }
 
 /**
