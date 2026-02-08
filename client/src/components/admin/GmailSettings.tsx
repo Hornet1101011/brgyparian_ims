@@ -15,29 +15,36 @@ import {
 import { message as antdMessage } from 'antd';
 import { adminAPI } from '../../services/api';
 
-interface GmailSettings {
+interface EmailConfig {
   enabled: boolean;
-  gmailAddress: string;
-  appPassword: string;
-  password: string;
-  displayName: string;
-  useAppPassword: boolean;
+  provider: 'custom' | 'gmail';
+  fromName: string;
+  fromEmail: string;
+  // Custom SMTP fields
+  host?: string;
+  port?: number;
+  user?: string;
+  password?: string;
+  secure?: boolean;
+  // Gmail fields
+  gmailAddress?: string;
+  gmailAppPassword?: string;
 }
 
 interface GmailSettingsProps {
   onGmailStatusChange?: (enabled: boolean) => void;
-  onSettingsChange?: (settings: GmailSettings) => void;
+  onEmailConfigChange?: (config: EmailConfig) => void;
 }
 
-const GmailSettingsComponent = ({ onGmailStatusChange, onSettingsChange }: GmailSettingsProps) => {
-  const [gmailSettings, setGmailSettings] = useState({
+const GmailSettingsComponent = ({ onGmailStatusChange, onEmailConfigChange }: GmailSettingsProps) => {
+  const [emailConfig, setEmailConfig] = useState<EmailConfig>({
     enabled: false,
+    provider: 'gmail',
+    fromName: 'Barangay System',
+    fromEmail: '',
     gmailAddress: '',
-    appPassword: '',
-    password: '',
-    displayName: '',
-    useAppPassword: true,
-  } as GmailSettings);
+    gmailAppPassword: '',
+  });
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -46,12 +53,12 @@ const GmailSettingsComponent = ({ onGmailStatusChange, onSettingsChange }: Gmail
   const [testEmailAddress, setTestEmailAddress] = useState('');
   const [passwordSavedBefore, setPasswordSavedBefore] = useState(false);
 
-  // Notify parent component whenever settings change
+  // Notify parent component whenever config changes
   useEffect(() => {
-    if (onSettingsChange) {
-      onSettingsChange(gmailSettings);
+    if (onEmailConfigChange) {
+      onEmailConfigChange(emailConfig);
     }
-  }, [gmailSettings, onSettingsChange]);
+  }, [emailConfig, onEmailConfigChange]);
 
   useEffect(() => {
     loadGmailSettings();
@@ -66,10 +73,13 @@ const GmailSettingsComponent = ({ onGmailStatusChange, onSettingsChange }: Gmail
         if (response.data.gmail.gmailAddress) {
           setPasswordSavedBefore(true);
         }
-        setGmailSettings({
-          ...response.data.gmail,
-          appPassword: '', // Always start with empty password for security
-          password: '', // Always start with empty password for security
+        setEmailConfig({
+          enabled: response.data.gmail.enabled || false,
+          provider: 'gmail',
+          fromName: response.data.gmail.displayName || 'Barangay System',
+          fromEmail: response.data.gmail.gmailAddress || '',
+          gmailAddress: response.data.gmail.gmailAddress || '',
+          gmailAppPassword: '', // Always start with empty password for security
         });
       }
     } catch (err) {
@@ -82,13 +92,13 @@ const GmailSettingsComponent = ({ onGmailStatusChange, onSettingsChange }: Gmail
   const handleSaveGmailSettings = async () => {
     try {
       // Validate inputs
-      if (gmailSettings.enabled) {
-        if (!gmailSettings.gmailAddress || !gmailSettings.gmailAddress.includes('@gmail.com')) {
+      if (emailConfig.enabled) {
+        if (!emailConfig.gmailAddress || !emailConfig.gmailAddress.includes('@gmail.com')) {
           antdMessage.error('Please enter a valid Gmail address');
           return;
         }
         // Only require password if it's new OR if no password was saved before
-        if (!gmailSettings.appPassword && !passwordSavedBefore) {
+        if (!emailConfig.gmailAppPassword && !passwordSavedBefore) {
           antdMessage.error('Please enter the Gmail app password');
           return;
         }
@@ -98,33 +108,33 @@ const GmailSettingsComponent = ({ onGmailStatusChange, onSettingsChange }: Gmail
       
       // Log what we're sending
       console.log('[GmailSettings] Saving Gmail settings:', {
-        enabled: gmailSettings.enabled,
-        gmailAddress: gmailSettings.gmailAddress,
-        displayName: gmailSettings.displayName,
-        hasPassword: !!gmailSettings.appPassword,
-        passwordLength: gmailSettings.appPassword?.length || 0
+        enabled: emailConfig.enabled,
+        gmailAddress: emailConfig.gmailAddress,
+        fromName: emailConfig.fromName,
+        hasPassword: !!emailConfig.gmailAppPassword,
+        passwordLength: emailConfig.gmailAppPassword?.length || 0
       });
       
-      const response = await adminAPI.patch('/settings/gmail', gmailSettings);
+      const response = await adminAPI.patch('/settings/gmail', emailConfig);
 
       console.log('[GmailSettings] Save response:', response.data);
 
       if (response.data?.gmail) {
         // Mark that password has been saved
-        if (gmailSettings.enabled && gmailSettings.gmailAddress) {
+        if (emailConfig.enabled && emailConfig.gmailAddress) {
           setPasswordSavedBefore(true);
         }
         // Clear the app password from state after successful save
         // The password is now encrypted and stored on server
-        setGmailSettings({
-          ...response.data.gmail,
-          appPassword: '', // Clear password from state for security
+        setEmailConfig({
+          ...emailConfig,
+          gmailAppPassword: '', // Clear password from state for security
         });
         antdMessage.success('Gmail settings updated successfully');
         
         // Notify parent about status change
         if (onGmailStatusChange) {
-          onGmailStatusChange(response.data.gmail.enabled);
+          onGmailStatusChange(emailConfig.enabled);
         }
       }
     } catch (err: any) {
@@ -139,18 +149,18 @@ const GmailSettingsComponent = ({ onGmailStatusChange, onSettingsChange }: Gmail
   const handleTestGmailConnection = async () => {
     try {
       // Validate Gmail configuration
-      if (!gmailSettings.gmailAddress || !gmailSettings.gmailAddress.includes('@gmail.com')) {
+      if (!emailConfig.gmailAddress || !emailConfig.gmailAddress.includes('@gmail.com')) {
         antdMessage.error('Please configure a valid Gmail address first');
         return;
       }
 
-      if (!gmailSettings.appPassword && !passwordSavedBefore) {
+      if (!emailConfig.gmailAppPassword && !passwordSavedBefore) {
         antdMessage.error('Please configure the app password first');
         return;
       }
 
       // Validate test email recipient
-      const recipientEmail = testEmailAddress.trim() || gmailSettings.gmailAddress;
+      const recipientEmail = testEmailAddress.trim() || emailConfig.gmailAddress;
       if (!recipientEmail.includes('@')) {
         antdMessage.error('Please enter a valid email address for testing');
         return;
@@ -158,17 +168,17 @@ const GmailSettingsComponent = ({ onGmailStatusChange, onSettingsChange }: Gmail
 
       console.log('[GmailSettings] Sending test email request:', {
         testEmail: recipientEmail,
-        gmailAddress: gmailSettings.gmailAddress,
-        displayName: gmailSettings.displayName,
+        gmailAddress: emailConfig.gmailAddress,
+        fromName: emailConfig.fromName,
         passwordSavedBefore,
-        hasPasswordInState: !!gmailSettings.appPassword
+        hasPasswordInState: !!emailConfig.gmailAppPassword
       });
 
       setTesting(true);
       const response = await adminAPI.post('/settings/gmail/test', {
         testEmail: recipientEmail,
-        senderName: gmailSettings.displayName || 'Barangay System',
-        fromEmail: gmailSettings.gmailAddress,
+        senderName: emailConfig.fromName || 'Barangay System',
+        fromEmail: emailConfig.gmailAddress,
       });
 
       console.log('[GmailSettings] Test email response:', response.data);
@@ -238,10 +248,10 @@ const GmailSettingsComponent = ({ onGmailStatusChange, onSettingsChange }: Gmail
         <FormControlLabel
           control={
             <Switch
-              checked={gmailSettings.enabled}
+              checked={emailConfig.enabled}
               onChange={(e) => {
-                setGmailSettings({
-                  ...gmailSettings,
+                setEmailConfig({
+                  ...emailConfig,
                   enabled: e.target.checked,
                 });
               }}
@@ -250,24 +260,25 @@ const GmailSettingsComponent = ({ onGmailStatusChange, onSettingsChange }: Gmail
           }
           label={
             <Typography sx={{ fontWeight: 500 }}>
-              {gmailSettings.enabled ? '✓ Gmail Enabled' : 'Enable Gmail'}
+              {emailConfig.enabled ? '✓ Gmail Enabled' : 'Enable Gmail'}
             </Typography>
           }
         />
       </Box>
 
-      {gmailSettings.enabled && (
+      {emailConfig.enabled && (
         <>
           <Divider sx={{ my: 2 }} />
 
           <Box sx={{ mt: 3 }}>
             <TextField
               label="Gmail Address"
-              value={gmailSettings.gmailAddress}
+              value={emailConfig.gmailAddress || ''}
               onChange={(e) =>
-                setGmailSettings({
-                  ...gmailSettings,
+                setEmailConfig({
+                  ...emailConfig,
                   gmailAddress: e.target.value,
+                  fromEmail: e.target.value,
                 })
               }
               fullWidth
@@ -280,11 +291,11 @@ const GmailSettingsComponent = ({ onGmailStatusChange, onSettingsChange }: Gmail
 
             <TextField
               label="App Password"
-              value={gmailSettings.appPassword}
+              value={emailConfig.gmailAppPassword || ''}
               onChange={(e) =>
-                setGmailSettings({
-                  ...gmailSettings,
-                  appPassword: e.target.value,
+                setEmailConfig({
+                  ...emailConfig,
+                  gmailAppPassword: e.target.value,
                 })
               }
               fullWidth
@@ -292,23 +303,6 @@ const GmailSettingsComponent = ({ onGmailStatusChange, onSettingsChange }: Gmail
               type={showPassword ? 'text' : 'password'}
               placeholder="xxxx xxxx xxxx xxxx"
               helperText={passwordSavedBefore ? '✓ Password saved (enter new password to update)' : '16-character app password (without spaces)'}
-              size="small"
-            />
-
-            <TextField
-              label="Gmail Password (Optional Fallback)"
-              value={gmailSettings.password}
-              onChange={(e) =>
-                setGmailSettings({
-                  ...gmailSettings,
-                  password: e.target.value,
-                })
-              }
-              fullWidth
-              margin="normal"
-              type={showPassword ? 'text' : 'password'}
-              placeholder="your-gmail-password"
-              helperText="Regular Gmail password - used only if app password is not available"
               size="small"
             />
 
@@ -326,11 +320,11 @@ const GmailSettingsComponent = ({ onGmailStatusChange, onSettingsChange }: Gmail
 
             <TextField
               label="Display Name"
-              value={gmailSettings.displayName}
+              value={emailConfig.fromName || ''}
               onChange={(e) =>
-                setGmailSettings({
-                  ...gmailSettings,
-                  displayName: e.target.value,
+                setEmailConfig({
+                  ...emailConfig,
+                  fromName: e.target.value,
                 })
               }
               fullWidth
@@ -378,7 +372,7 @@ const GmailSettingsComponent = ({ onGmailStatusChange, onSettingsChange }: Gmail
                 variant="outlined"
                 color="success"
                 onClick={handleTestGmailConnection}
-                disabled={!gmailSettings.gmailAddress || (!gmailSettings.appPassword && !passwordSavedBefore) || saving || testing}
+                disabled={!emailConfig.gmailAddress || (!emailConfig.gmailAppPassword && !passwordSavedBefore) || saving || testing}
                 sx={{ minWidth: 150 }}
               >
                 {testing ? (
@@ -399,7 +393,7 @@ const GmailSettingsComponent = ({ onGmailStatusChange, onSettingsChange }: Gmail
         </>
       )}
 
-      {!gmailSettings.enabled && (
+      {!emailConfig.enabled && (
         <Alert severity="success">Gmail is currently disabled. SMTP settings will be used for sending emails.</Alert>
       )}
     </Paper>

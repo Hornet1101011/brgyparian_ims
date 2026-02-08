@@ -1506,12 +1506,34 @@ router.patch('/email', requireAuth, isAdmin, async (req, res) => {
         });
       }
 
-      if (provider === 'custom' && (!host || !port)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Custom SMTP requires host and port',
-          error: 'host and port are required'
-        });
+      if (provider === 'custom') {
+        // Strict validation for custom SMTP
+        const missingFields = [];
+        
+        if (!host) missingFields.push('host');
+        if (!port) missingFields.push('port');
+        if (!user) missingFields.push('user');
+        if (!password) missingFields.push('password');
+        
+        if (missingFields.length > 0) {
+          return res.status(400).json({
+            success: false,
+            message: `Custom SMTP requires: ${missingFields.join(', ')}`,
+            error: `Missing required fields: ${missingFields.join(', ')}`,
+            missingFields: missingFields
+          });
+        }
+        
+        // Validate port is a valid number between 1 and 65535
+        const portNum = Number(port);
+        if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
+          return res.status(400).json({
+            success: false,
+            message: 'Invalid SMTP port',
+            error: 'SMTP port must be a number between 1 and 65535',
+            field: 'port'
+          });
+        }
       }
     }
 
@@ -1520,37 +1542,41 @@ router.patch('/email', requireAuth, isAdmin, async (req, res) => {
       settings = new SystemSetting();
     }
 
-    // Build email config
+    // Build email config - only include defined, non-null values
     const emailConfig = {
-      enabled,
+      enabled: !!enabled,
       provider,
       fromName: fromName || 'Barangay System',
       fromEmail: fromEmail || gmailAddress || user,
       updatedAt: new Date()
     };
 
-    // Add provider-specific fields
+    // Add provider-specific fields - only include defined values
     if (provider === 'gmail') {
-      emailConfig.gmailAddress = gmailAddress;
-      emailConfig.gmailAppPassword = gmailAppPassword;
+      if (gmailAddress) emailConfig.gmailAddress = gmailAddress;
+      if (gmailAppPassword) emailConfig.gmailAppPassword = gmailAppPassword;
     } else if (provider === 'mailtrap') {
-      emailConfig.user = user;
-      emailConfig.password = password;
+      if (user) emailConfig.user = user;
+      if (password) emailConfig.password = password;
     } else if (provider === 'sendgrid') {
-      emailConfig.sendgridApiKey = sendgridApiKey;
+      if (sendgridApiKey) emailConfig.sendgridApiKey = sendgridApiKey;
     } else if (provider === 'aws-ses') {
-      emailConfig.awsAccessKeyId = awsAccessKeyId;
-      emailConfig.awsSecretAccessKey = awsSecretAccessKey;
-      emailConfig.awsRegion = awsRegion || 'us-east-1';
+      if (awsAccessKeyId) emailConfig.awsAccessKeyId = awsAccessKeyId;
+      if (awsSecretAccessKey) emailConfig.awsSecretAccessKey = awsSecretAccessKey;
+      if (awsRegion) emailConfig.awsRegion = awsRegion;
+      else emailConfig.awsRegion = 'us-east-1';
     } else if (provider === 'custom') {
-      emailConfig.host = host;
-      emailConfig.port = port;
+      // For custom SMTP, include all validated fields
+      if (host) emailConfig.host = host;
+      if (port) emailConfig.port = Number(port);
+      if (user) emailConfig.user = user;
+      if (password) emailConfig.password = password;
       emailConfig.secure = !!secure;
-      emailConfig.user = user;
-      emailConfig.password = password;
     }
 
-    settings.smtp = emailConfig;
+    // Remove any undefined properties before saving to MongoDB
+    const cleanEmailConfig = removeUndefinedProperties(emailConfig);
+    settings.smtp = cleanEmailConfig;
     await settings.save();
 
     console.log('[Settings] Email configuration updated:', {
@@ -1580,6 +1606,7 @@ router.post('/email/test', requireAuth, isAdmin, async (req, res) => {
   try {
     const { testEmail, emailConfig } = req.body;
 
+    // Validate test email
     if (!testEmail || !testEmail.includes('@')) {
       return res.status(400).json({
         success: false,
@@ -1588,7 +1615,7 @@ router.post('/email/test', requireAuth, isAdmin, async (req, res) => {
       });
     }
 
-    // Use emailConfig from request if provided (to test unsaved config), otherwise use database config
+    // ALWAYS prefer emailConfig from request body, only fall back to database if not provided
     let configToTest = emailConfig;
     
     if (!configToTest) {
@@ -1596,6 +1623,7 @@ router.post('/email/test', requireAuth, isAdmin, async (req, res) => {
       configToTest = settings?.smtp;
     }
 
+    // Validate config exists and is enabled
     if (!configToTest || !configToTest.enabled) {
       return res.status(400).json({
         success: false,
@@ -1604,6 +1632,7 @@ router.post('/email/test', requireAuth, isAdmin, async (req, res) => {
       });
     }
 
+    // Validate provider is selected
     if (!configToTest.provider) {
       return res.status(400).json({
         success: false,
@@ -1612,16 +1641,17 @@ router.post('/email/test', requireAuth, isAdmin, async (req, res) => {
       });
     }
 
-    console.log('[Settings] Sending test email using provider:', configToTest.provider);
-
-    // Additional validation for custom SMTP provider
-    if (configToTest.provider === 'custom' && (!configToTest.host || !configToTest.port)) {
+    // Validate provider-specific required fields
+    const validationError = validateProviderConfig(configToTest);
+    if (validationError) {
       return res.status(400).json({
         success: false,
-        message: 'Custom SMTP configuration incomplete',
-        error: 'Host and port are required for custom SMTP'
+        message: `Invalid ${configToTest.provider} configuration`,
+        ...validationError
       });
     }
+
+    console.log('[Settings] Sending test email using provider:', configToTest.provider);
 
     const result = await emailProviderHelper.sendTestEmail(configToTest, testEmail);
 
@@ -1651,6 +1681,120 @@ router.post('/email/test', requireAuth, isAdmin, async (req, res) => {
     });
   }
 });
+
+/**
+ * Remove undefined properties from an object
+ * Recursively cleans the object to ensure no undefined values are saved to MongoDB
+ */
+function removeUndefinedProperties(obj) {
+  if (!obj || typeof obj !== 'object') {
+    return obj;
+  }
+
+  const cleaned = {};
+  for (const [key, value] of Object.entries(obj)) {
+    // Skip undefined and null values
+    if (value === undefined || value === null) {
+      continue;
+    }
+
+    // Recursively clean nested objects
+    if (typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
+      cleaned[key] = removeUndefinedProperties(value);
+    } else {
+      // Include all other values (including false, 0, '', etc.)
+      cleaned[key] = value;
+    }
+  }
+
+  return cleaned;
+}
+
+/**
+ * Validate provider-specific required fields
+ */
+function validateProviderConfig(config) {
+  const missingFields = [];
+
+  switch (config.provider) {
+    case 'custom':
+      if (!config.host) missingFields.push('host');
+      if (!config.port) missingFields.push('port');
+      if (!config.user) missingFields.push('user');
+      if (!config.password) missingFields.push('password');
+      
+      if (missingFields.length > 0) {
+        return {
+          error: `Missing required fields: ${missingFields.join(', ')}`,
+          missingFields: missingFields
+        };
+      }
+      
+      // Validate port is valid number in range
+      const portNum = Number(config.port);
+      if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
+        return {
+          error: 'Invalid SMTP port (must be 1-65535)',
+          field: 'port'
+        };
+      }
+      break;
+
+    case 'gmail':
+      if (!config.gmailAddress) missingFields.push('gmailAddress');
+      if (!config.gmailAppPassword) missingFields.push('gmailAppPassword');
+      
+      if (missingFields.length > 0) {
+        return {
+          error: `Missing required fields: ${missingFields.join(', ')}`,
+          missingFields: missingFields
+        };
+      }
+      break;
+
+    case 'mailtrap':
+      if (!config.user) missingFields.push('user');
+      if (!config.password) missingFields.push('password');
+      
+      if (missingFields.length > 0) {
+        return {
+          error: `Missing required fields: ${missingFields.join(', ')}`,
+          missingFields: missingFields
+        };
+      }
+      break;
+
+    case 'sendgrid':
+      if (!config.sendgridApiKey) missingFields.push('sendgridApiKey');
+      
+      if (missingFields.length > 0) {
+        return {
+          error: `Missing required fields: ${missingFields.join(', ')}`,
+          missingFields: missingFields
+        };
+      }
+      break;
+
+    case 'aws-ses':
+      if (!config.awsAccessKeyId) missingFields.push('awsAccessKeyId');
+      if (!config.awsSecretAccessKey) missingFields.push('awsSecretAccessKey');
+      
+      if (missingFields.length > 0) {
+        return {
+          error: `Missing required fields: ${missingFields.join(', ')}`,
+          missingFields: missingFields
+        };
+      }
+      break;
+
+    default:
+      return {
+        error: `Unknown provider: ${config.provider}`
+      };
+  }
+
+  return null; // Validation passed
+}
 
 // ==================== END EMAIL PROVIDER ENDPOINTS ====================
 

@@ -20,6 +20,7 @@ import {
 import TestEmailModal from '../TestEmailModal';
 import GmailSettings from './GmailSettings';
 import EmailSettings from './EmailSettings';
+import CustomSmtpSettings from './CustomSmtpSettings';
 import { adminAPI, axiosInstance, API_URL } from '../../services/api';
 import { UploadOutlined, UsergroupAddOutlined, DeleteOutlined } from '@ant-design/icons';
 import { Upload as AntdUpload, message as antdMessage } from 'antd';
@@ -142,13 +143,14 @@ const SystemSettings: FC = () => {
     fromName: 'Barangay System',
     fromEmail: ''
   });
-  // Gmail settings state - captured from GmailSettings component
+  // Gmail settings state - now unified emailConfig captured from GmailSettings component
   const [gmailSettings, setGmailSettings] = useState<any>({
     enabled: false,
+    provider: 'gmail',
+    fromName: 'Barangay System',
+    fromEmail: '',
     gmailAddress: '',
-    appPassword: '',
-    displayName: '',
-    useAppPassword: true,
+    gmailAppPassword: '',
   });
   // Officials state
   const [officials, setOfficials] = useState<Official[]>([]);
@@ -241,10 +243,44 @@ const SystemSettings: FC = () => {
       if (sys) {
         setSettings(sys);
         originalSettingsRef.current = sys;
-        // Load email provider config from system settings (stored in smtp field)
+        
+        // Map backend SMTP settings to unified emailConfig state
         if ((sys as any).smtp) {
-          setEmailProviderConfig((sys as any).smtp);
-          console.log('[SystemSettings] Email provider config loaded from SMTP field:', (sys as any).smtp);
+          const smtpData = (sys as any).smtp;
+          const mappedConfig: any = {
+            enabled: smtpData.enabled !== false,
+            provider: smtpData.provider || 'custom',
+            fromName: smtpData.fromName || 'Barangay System',
+            fromEmail: smtpData.fromEmail || '',
+          };
+
+          // Map provider-specific fields based on provider type
+          if (smtpData.provider === 'gmail' || smtpData.gmailAddress) {
+            mappedConfig.provider = 'gmail';
+            mappedConfig.gmailAddress = smtpData.gmailAddress || '';
+            // Note: gmailAppPassword is never populated from backend for security
+            mappedConfig.gmailAppPassword = '';
+          } else {
+            // Custom SMTP fields
+            mappedConfig.host = smtpData.host || '';
+            mappedConfig.port = smtpData.port || 587;
+            mappedConfig.user = smtpData.user || '';
+            // Note: password is never populated from backend for security
+            mappedConfig.password = '';
+            mappedConfig.secure = smtpData.secure || false;
+          }
+
+          setEmailProviderConfig(mappedConfig);
+          // Also set gmailSettings state for Gmail-specific UI
+          setGmailSettings(mappedConfig);
+          console.log('[SystemSettings] Email config loaded from SMTP field:', {
+            enabled: mappedConfig.enabled,
+            provider: mappedConfig.provider,
+            fromName: mappedConfig.fromName,
+            fromEmail: mappedConfig.fromEmail,
+            gmailAddress: mappedConfig.gmailAddress || 'N/A',
+            hasSmtpHost: !!mappedConfig.host
+          });
         }
       }
 
@@ -323,39 +359,39 @@ const SystemSettings: FC = () => {
       // Include email behavior settings
       payload.emailSettings = emailSettings;
 
-      // Include email provider configuration (stored in smtp field on backend)
+      // Include unified email configuration (emailProviderConfig contains the full config)
+      // This replaces the need for separate gmail/email handling
       if (emailProviderConfig && Object.keys(emailProviderConfig).length > 0) {
+        // Send the complete emailConfig object to /settings/email endpoint
+        // Backend stores this in smtp field with all provider-specific fields intact
         payload.email = emailProviderConfig;
+        
+        console.log('[Settings Save] Email provider config included in payload:', {
+          enabled: emailProviderConfig.enabled,
+          provider: emailProviderConfig.provider,
+          fromName: emailProviderConfig.fromName,
+          fromEmail: emailProviderConfig.fromEmail,
+          gmailAddress: emailProviderConfig.gmailAddress || 'N/A',
+          hasSmtpHost: !!emailProviderConfig.host,
+          hasPassword: emailProviderConfig.provider === 'gmail' 
+            ? !!emailProviderConfig.gmailAppPassword
+            : !!emailProviderConfig.password
+        });
       }
 
-      // Include Gmail settings if present or has passwords to save
-      if (gmailSettings && (gmailSettings.enabled || gmailSettings.appPassword || gmailSettings.password)) {
+      // Gmail settings state now uses same data as emailProviderConfig
+      // Only send separate gmail payload if there's an app password to save (for backward compatibility)
+      if (gmailSettings && gmailSettings.gmailAppPassword) {
         const gmailPayload: any = {
           enabled: gmailSettings.enabled,
           gmailAddress: gmailSettings.gmailAddress,
-          displayName: gmailSettings.displayName,
-          useAppPassword: gmailSettings.useAppPassword !== false,
+          displayName: gmailSettings.fromName,
+          useAppPassword: true,
+          appPassword: gmailSettings.gmailAppPassword
         };
         
-        // Include app password if provided
-        if (gmailSettings.appPassword && gmailSettings.appPassword.trim()) {
-          gmailPayload.appPassword = gmailSettings.appPassword;
-        }
-        
-        // Include regular password if provided
-        if (gmailSettings.password && gmailSettings.password.trim()) {
-          gmailPayload.password = gmailSettings.password;
-        }
-        
         payload.gmail = gmailPayload;
-        console.log('[Settings Save] Gmail settings included in payload:', {
-          enabled: gmailPayload.enabled,
-          gmailAddress: gmailPayload.gmailAddress,
-          hasAppPassword: !!gmailPayload.appPassword,
-          appPasswordLength: gmailPayload.appPassword?.length || 0,
-          hasPassword: !!gmailPayload.password,
-          passwordLength: gmailPayload.password?.length || 0
-        });
+        console.log('[Settings Save] Gmail app password included in payload for encryption');
       }
 
       // Also remove _id from root payload if present
@@ -370,12 +406,11 @@ const SystemSettings: FC = () => {
       setSuccess(true);
       
       // Clear sensitive passwords from state after successful save
-      if (gmailSettings.appPassword || gmailSettings.password) {
+      if (gmailSettings.gmailAppPassword) {
         console.log('[Settings Save] Clearing passwords from state after successful save');
         setGmailSettings((prev: any) => ({
           ...prev,
-          appPassword: '', // Clear app password from state
-          password: '' // Clear regular password from state
+          gmailAppPassword: '' // Clear app password from state
         }));
       }
       
@@ -475,14 +510,16 @@ const SystemSettings: FC = () => {
     console.log('[SystemSettings] Gmail status changed:', enabled);
   }, []);
 
-  const handleGmailSettingsChange = useCallback((gmailSettings: any) => {
-    console.log('[SystemSettings] Gmail settings changed:', {
-      enabled: gmailSettings.enabled,
-      gmailAddress: gmailSettings.gmailAddress,
-      hasAppPassword: !!gmailSettings.appPassword,
-      passwordLength: gmailSettings.appPassword?.length || 0
+  const handleGmailSettingsChange = useCallback((emailConfig: any) => {
+    console.log('[SystemSettings] Email config changed:', {
+      enabled: emailConfig.enabled,
+      provider: emailConfig.provider,
+      gmailAddress: emailConfig.gmailAddress,
+      fromName: emailConfig.fromName,
+      hasPassword: !!emailConfig.gmailAppPassword,
+      passwordLength: emailConfig.gmailAppPassword?.length || 0
     });
-    setGmailSettings(gmailSettings);
+    setGmailSettings(emailConfig);
   }, []);
 
   const handleEmailConfigChange = useCallback((config: any) => {
@@ -633,14 +670,23 @@ const SystemSettings: FC = () => {
             </Box>
           </Paper>
 
-          {/* Gmail Settings Component */}
-          <GmailSettings 
-            onGmailStatusChange={handleGmailStatusChange}
-            onSettingsChange={handleGmailSettingsChange}
-          />
-
-          {/* Email Provider Settings Component */}
+          {/* Email Provider Selection Component */}
           <EmailSettings onConfigChange={handleEmailConfigChange} />
+
+          {/* Unified Email Configuration - Conditional Rendering Based on Provider */}
+          {emailProviderConfig?.provider === 'custom' && (
+            <CustomSmtpSettings 
+              emailConfig={emailProviderConfig}
+              setEmailConfig={setEmailProviderConfig}
+            />
+          )}
+
+          {emailProviderConfig?.provider === 'gmail' && (
+            <GmailSettings 
+              onGmailStatusChange={handleGmailStatusChange}
+              onEmailConfigChange={handleGmailSettingsChange}
+            />
+          )}
 
           {/* Email Behavior Control Card */}
           <Paper sx={{

@@ -243,16 +243,33 @@ function createCustomSmtpTransporter(config) {
     throw new Error('Custom SMTP requires host and port');
   }
 
+  // Validate port is a number
+  const portNum = Number(config.port);
+  if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
+    throw new Error(`Invalid SMTP port: must be a number between 1 and 65535, got ${config.port}`);
+  }
+
   console.log(`[EmailProvider] Custom SMTP: Creating transporter for ${config.host}:${config.port}`);
+
+  // DEBUG: Log SMTP configuration details (passwords masked)
+  console.log('[EmailProvider] DEBUG: Custom SMTP Configuration:', {
+    provider: 'custom',
+    host: config.host,
+    port: portNum,
+    secure: typeof config.secure === 'boolean' ? config.secure : false,
+    username: config.user ? `${config.user.substring(0, 3)}***` : '(none)',
+    hasPassword: !!config.password
+  });
 
   const transportConfig = {
     host: config.host,
-    port: config.port,
-    secure: !!config.secure,
+    port: portNum,
+    secure: typeof config.secure === 'boolean' ? config.secure : false,
     connectionTimeout: 10000,
     socketTimeout: 10000
   };
 
+  // Add authentication if credentials provided
   if (config.user && config.password) {
     transportConfig.auth = {
       user: config.user,
@@ -277,12 +294,51 @@ async function sendTestEmail(emailConfig, testEmail) {
 
     console.log(`[EmailProvider] Sending test email to ${testEmail} using ${emailConfig.provider}`);
 
+    // DEBUG: Log email configuration being tested
+    console.log('[EmailProvider] DEBUG: Email config for test:', {
+      provider: emailConfig.provider,
+      enabled: emailConfig.enabled,
+      fromName: emailConfig.fromName,
+      fromEmail: emailConfig.fromEmail,
+      ...(emailConfig.provider === 'custom' && {
+        host: emailConfig.host,
+        port: emailConfig.port,
+        secure: emailConfig.secure,
+        username: emailConfig.user ? `${emailConfig.user.substring(0, 3)}***` : '(none)',
+        hasPassword: !!emailConfig.password
+      }),
+      ...(emailConfig.provider === 'gmail' && {
+        gmailAddress: emailConfig.gmailAddress,
+        hasAppPassword: !!emailConfig.gmailAppPassword
+      })
+    });
+
     const transporter = createEmailTransporter(emailConfig);
     
-    // Verify connection
+    // Verify SMTP connection before sending
     console.log('[EmailProvider] Verifying SMTP connection...');
-    await transporter.verify();
-    console.log('[EmailProvider] SMTP connection verified');
+    try {
+      await transporter.verify();
+      console.log('[EmailProvider] SMTP connection verified successfully');
+      console.log('[EmailProvider] DEBUG: Verification successful for provider:', emailConfig.provider);
+    } catch (verifyErr) {
+      console.error('[EmailProvider] SMTP verification failed:', verifyErr.message);
+      
+      // Return detailed verification error
+      const verificationError = {
+        success: false,
+        error: `SMTP verification failed: ${verifyErr.message}`,
+        verificationDetails: {
+          message: verifyErr.message,
+          code: verifyErr.code,
+          command: verifyErr.command
+        },
+        provider: emailConfig.provider,
+        hint: getSmtpVerificationHint(emailConfig.provider, verifyErr)
+      };
+      
+      return verificationError;
+    }
     
     const fromName = emailConfig.fromName || 'Barangay System';
     const fromEmail = emailConfig.fromEmail || emailConfig.gmailAddress || emailConfig.user;
@@ -312,6 +368,13 @@ async function sendTestEmail(emailConfig, testEmail) {
     });
 
     console.log('[EmailProvider] Test email sent successfully:', result.messageId);
+    console.log('[EmailProvider] DEBUG: Test email delivery details:', {
+      provider: emailConfig.provider,
+      recipient: testEmail,
+      messageId: result.messageId,
+      timestamp: new Date().toISOString()
+    });
+    
     return { 
       success: true, 
       messageId: result.messageId,
@@ -319,6 +382,13 @@ async function sendTestEmail(emailConfig, testEmail) {
     };
   } catch (err) {
     console.error('[EmailProvider] Test email failed:', err.message);
+    console.error('[EmailProvider] DEBUG: Test email error details:', {
+      provider: emailConfig.provider,
+      error: err.message,
+      errorCode: err.code,
+      timestamp: new Date().toISOString()
+    });
+    
     return {
       success: false,
       error: err.message,
@@ -328,29 +398,92 @@ async function sendTestEmail(emailConfig, testEmail) {
 }
 
 /**
+ * Get helpful error message for SMTP verification failures
+ */
+function getSmtpVerificationHint(provider, error) {
+  if (provider === 'custom') {
+    const msg = error.message.toLowerCase();
+    if (msg.includes('econnrefused') || msg.includes('refused')) {
+      return 'Cannot connect to SMTP server. Check host and port are correct.';
+    }
+    if (msg.includes('timeout')) {
+      return 'Connection timeout. SMTP server is not responding. Check firewall rules.';
+    }
+    if (msg.includes('auth') || msg.includes('invalid credentials')) {
+      return 'Authentication failed. Check username and password.';
+    }
+    if (msg.includes('tls') || msg.includes('ssl')) {
+      return 'TLS/SSL error. Try toggling the "Secure (TLS/SSL)" setting.';
+    }
+    return 'Check SMTP configuration: host, port, credentials, and TLS setting.';
+  }
+  
+  if (provider === 'gmail') {
+    return 'Check Gmail address and app password are correct. Enable "Less secure app access" if needed.';
+  }
+  
+  if (provider === 'mailtrap') {
+    return 'Check Mailtrap username and password are correct.';
+  }
+  
+  if (provider === 'sendgrid') {
+    return 'Check SendGrid API key is correct and valid.';
+  }
+  
+  if (provider === 'aws-ses') {
+    return 'Check AWS access key, secret key, and region are correct.';
+  }
+  
+  return 'Check provider credentials and configuration.';
+}
+
+/**
  * Sanitize email config for client (remove sensitive data)
  */
 function sanitizeEmailConfig(config) {
-  if (!config) return null;
+  if (!config) {
+    return {
+      enabled: false,
+      provider: 'custom',
+      fromName: 'Barangay System',
+      fromEmail: '',
+      // Provider-specific defaults
+      host: '',
+      port: 587,
+      user: '',
+      gmailAddress: '',
+      awsRegion: '',
+      sendgridApiKey: '',
+      mailtrapKey: ''
+    };
+  }
   
   const sanitized = {
-    enabled: config.enabled,
-    provider: config.provider,
-    fromName: config.fromName,
-    fromEmail: config.fromEmail
+    enabled: config.enabled || false,
+    provider: config.provider || 'custom',
+    fromName: config.fromName || 'Barangay System',
+    fromEmail: config.fromEmail || ''
   };
 
-  // Only show non-sensitive info for display
+  // Add provider-specific fields - all non-sensitive fields
+  // NOTE: Passwords/API keys/secrets are EXCLUDED for security
+  
   if (config.provider === 'gmail') {
-    sanitized.gmailAddress = config.gmailAddress;
+    sanitized.gmailAddress = config.gmailAddress || '';
   } else if (config.provider === 'mailtrap') {
-    sanitized.user = config.user;
+    sanitized.user = config.user || '';
+    // mailtrapKey is sensitive - excluded
+  } else if (config.provider === 'sendgrid') {
+    // sendgridApiKey is sensitive - excluded
   } else if (config.provider === 'aws-ses') {
-    sanitized.awsRegion = config.awsRegion;
+    sanitized.awsRegion = config.awsRegion || '';
+    // awsAccessKeyId and awsSecretAccessKey are sensitive - excluded
   } else if (config.provider === 'custom') {
-    sanitized.host = config.host;
-    sanitized.port = config.port;
-    sanitized.user = config.user;
+    sanitized.host = config.host || '';
+    sanitized.port = config.port || 587;
+    sanitized.user = config.user || '';
+    sanitized.secure = typeof config.secure === 'boolean' ? config.secure : false;
+    // password is sensitive - excluded
   }
 
   return sanitized;
