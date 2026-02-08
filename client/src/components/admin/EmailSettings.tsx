@@ -22,7 +22,7 @@ interface EmailConfig {
   fromName: string;
   fromEmail: string;
   // Gmail
-  gmailAddress?: string;
+  gmailAppPassword?: string;
   // Mailtrap
   user?: string;
   password?: string;

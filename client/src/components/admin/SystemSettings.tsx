@@ -266,9 +266,35 @@ const SystemSettings: FC = () => {
   const [, setSuccess] = useState(false);
   const [, setError] = useState<string | null>(null);
   const [testModalOpen, setTestModalOpen] = useState(false);
-  // Email settings state
-  const [emailSettings, setEmailSettings] = useState<EmailSettings>({
-    enabled: true,
+  
+  // Unified email configuration - single source of truth for all email settings
+  // Combines provider config + email behaviors in one object
+  const [emailConfig, setEmailConfig] = useState<any>({
+    // Email provider configuration
+    enabled: false,
+    provider: 'custom', // 'custom', 'gmail', 'mailtrap', 'sendgrid', 'aws-ses'
+    fromName: 'Barangay System',
+    fromEmail: '',
+    
+    // Custom SMTP fields
+    host: '',
+    port: 587,
+    user: '',
+    password: '',
+    secure: false,
+    
+    // Gmail fields
+    gmailAppPassword: '',
+    
+    // SendGrid fields
+    sendgridApiKey: '',
+    
+    // AWS SES fields
+    awsAccessKeyId: '',
+    awsSecretAccessKey: '',
+    awsRegion: 'us-east-1',
+    
+    // Email behaviors
     enablePasswordResetEmails: true,
     enableOtpEmails: true,
     enableDocumentNotificationEmails: true,
@@ -279,22 +305,6 @@ const SystemSettings: FC = () => {
     retryAttempts: 3,
     retryDelayMinutes: 5,
     dryRunMode: false,
-  });
-  // Email provider configuration - captured from EmailSettings component
-  const [emailProviderConfig, setEmailProviderConfig] = useState<any>({
-    enabled: false,
-    provider: 'custom',
-    fromName: 'Barangay System',
-    fromEmail: ''
-  });
-  // Gmail settings state - now unified emailConfig captured from GmailSettings component
-  const [gmailSettings, setGmailSettings] = useState<any>({
-    enabled: false,
-    provider: 'gmail',
-    fromName: 'Barangay System',
-    fromEmail: '',
-    gmailAddress: '',
-    gmailAppPassword: '',
   });
   // Health check status state
   const [healthStatus, setHealthStatus] = useState<any>(null);
@@ -312,10 +322,11 @@ const SystemSettings: FC = () => {
   const [highlightedIds, setHighlightedIds] = useState<string[]>([]);
   const highlightTimeouts = useRef<Record<string, number>>({});
   const originalSettingsRef = useRef<SystemSettingsData | null>(null);
-  const originalEmailSettingsRef = useRef<EmailSettings | null>(null);
-  const originalEmailProviderConfigRef = useRef<any>(null);
-  const originalGmailSettingsRef = useRef<any>(null);
+  const originalEmailConfigRef = useRef<any>(null);
   const originalOfficialsRef = useRef<Official[]>([]);
+  
+  // Initialization guard to prevent duplicate loading
+  const initializationCompleteRef = useRef(false);
 
   // Section-level dirty state tracking
   const [dirtyGeneral, setDirtyGeneral] = useState(false);
@@ -332,22 +343,39 @@ const SystemSettings: FC = () => {
   // (removed unused helper to silence lint)
 
   useEffect(() => {
+    // Guard against re-initialization: only run once on mount
+    if (initializationCompleteRef.current) return;
+    
     const ac = new AbortController();
     const loadData = async () => {
-      await fetchSettings(ac.signal);
-      // Fetch health status after loading settings
       try {
-        const response = await axiosInstance.get('/api/settings/email/health');
-        if (response.data) {
-          setHealthStatus(response.data);
+        // Load settings and email config
+        await fetchSettings(ac.signal);
+        
+        // Fetch health status after loading settings
+        try {
+          const response = await axiosInstance.get('/settings/email/health');
+          if (response.data) {
+            setHealthStatus(response.data);
+          }
+        } catch (err) {
+          console.error('Failed to fetch email health status on load:', err);
         }
+        
+        // Mark initialization as complete
+        initializationCompleteRef.current = true;
       } catch (err) {
-        console.error('Failed to fetch email health status on load:', err);
+        if ((err as any)?.name !== 'CanceledError' && (err as any)?.name !== 'AbortError') {
+          console.error('Error during initial load:', err);
+        }
       }
+      
       // Acquire lock on component mount
       await acquireLock();
     };
+    
     loadData();
+    
     // capture a snapshot of preview URLs now so cleanup uses a stable reference
     const currentPreviewUrls = previewUrlsRef.current;
     return () => {
@@ -423,46 +451,57 @@ const SystemSettings: FC = () => {
         setSettings(sys);
         originalSettingsRef.current = sys;
         
-        // Map backend SMTP settings to unified emailConfig state
+        // Load unified email configuration from SMTP field
+        // Single source of truth: all providers use the 'smtp' field on the server
         if ((sys as any).smtp) {
           const smtpData = (sys as any).smtp;
-          const mappedConfig: any = {
+          const unifiedConfig: any = {
+            // Provider config
             enabled: smtpData.enabled !== false,
             provider: smtpData.provider || 'custom',
             fromName: smtpData.fromName || 'Barangay System',
             fromEmail: smtpData.fromEmail || '',
+            
+            // Custom SMTP fields
+            host: smtpData.host || '',
+            port: smtpData.port || 587,
+            user: smtpData.user || '',
+            password: '', // Never populate from backend for security
+            secure: smtpData.secure || false,
+            
+            // Gmail fields
+            gmailAppPassword: '', // Never populate from backend for security
+            
+            // SendGrid fields
+            sendgridApiKey: '', // Never populate from backend for security
+            
+            // AWS SES fields
+            awsAccessKeyId: '', // Never populate from backend for security
+            awsSecretAccessKey: '', // Never populate from backend for security
+            awsRegion: smtpData.awsRegion || 'us-east-1',
+            
+            // Email behaviors - merge from emailSettings if available
+            enablePasswordResetEmails: (sys as any).emailSettings?.enablePasswordResetEmails ?? true,
+            enableOtpEmails: (sys as any).emailSettings?.enableOtpEmails ?? true,
+            enableDocumentNotificationEmails: (sys as any).emailSettings?.enableDocumentNotificationEmails ?? true,
+            enableAnnouncementEmails: (sys as any).emailSettings?.enableAnnouncementEmails ?? true,
+            enableAnnouncementBcc: (sys as any).emailSettings?.enableAnnouncementBcc ?? true,
+            recipientEmailsPerBatch: (sys as any).emailSettings?.recipientEmailsPerBatch ?? 100,
+            retryFailedEmails: (sys as any).emailSettings?.retryFailedEmails ?? true,
+            retryAttempts: (sys as any).emailSettings?.retryAttempts ?? 3,
+            retryDelayMinutes: (sys as any).emailSettings?.retryDelayMinutes ?? 5,
+            dryRunMode: (sys as any).emailSettings?.dryRunMode ?? false,
           };
 
-          // Map provider-specific fields based on provider type
-          if (smtpData.provider === 'gmail' || smtpData.gmailAddress) {
-            mappedConfig.provider = 'gmail';
-            mappedConfig.gmailAddress = smtpData.gmailAddress || '';
-            // Note: gmailAppPassword is never populated from backend for security
-            mappedConfig.gmailAppPassword = '';
-          } else {
-            // Custom SMTP fields
-            mappedConfig.host = smtpData.host || '';
-            mappedConfig.port = smtpData.port || 587;
-            mappedConfig.user = smtpData.user || '';
-            // Note: password is never populated from backend for security
-            mappedConfig.password = '';
-            mappedConfig.secure = smtpData.secure || false;
-          }
-
-          setEmailProviderConfig(mappedConfig);
-          originalEmailProviderConfigRef.current = JSON.parse(JSON.stringify(mappedConfig));
+          setEmailConfig(unifiedConfig);
+          originalEmailConfigRef.current = JSON.parse(JSON.stringify(unifiedConfig));
           
-          // Also set gmailSettings state for Gmail-specific UI
-          setGmailSettings(mappedConfig);
-          originalGmailSettingsRef.current = JSON.parse(JSON.stringify(mappedConfig));
-          
-          console.log('[SystemSettings] Email config loaded from SMTP field:', {
-            enabled: mappedConfig.enabled,
-            provider: mappedConfig.provider,
-            fromName: mappedConfig.fromName,
-            fromEmail: mappedConfig.fromEmail,
-            gmailAddress: mappedConfig.gmailAddress || 'N/A',
-            hasSmtpHost: !!mappedConfig.host
+          console.log('[SystemSettings] Unified email config loaded:', {
+            provider: unifiedConfig.provider,
+            enabled: unifiedConfig.enabled,
+            fromName: unifiedConfig.fromName,
+            fromEmail: unifiedConfig.fromEmail,
+            dryRunMode: unifiedConfig.dryRunMode,
           });
         }
       }
@@ -510,7 +549,7 @@ const SystemSettings: FC = () => {
   const fetchEmailHealthStatus = async () => {
     try {
       setLoadingHealthStatus(true);
-      const response = await axiosInstance.get('/api/settings/email/health');
+      const response = await axiosInstance.get('/settings/email/health');
       if (response.data) {
         setHealthStatus(response.data);
       }
@@ -526,7 +565,7 @@ const SystemSettings: FC = () => {
   const handleHealthCheckClick = async () => {
     try {
       setLoadingHealthStatus(true);
-      const response = await axiosInstance.post('/api/settings/email/health-check');
+      const response = await axiosInstance.post('/settings/email/health-check');
       if (response.data) {
         setHealthStatus(response.data);
         if (response.data.success) {
@@ -546,7 +585,7 @@ const SystemSettings: FC = () => {
   // Acquire lock on settings
   const acquireLock = async () => {
     try {
-      const response = await axiosInstance.post('/api/settings/lock');
+      const response = await axiosInstance.post('/settings/lock');
       if (response.data.success) {
         setHasLock(true);
         setLockStatus(response.data);
@@ -581,7 +620,7 @@ const SystemSettings: FC = () => {
         lockTimeoutRef.current = null;
       }
 
-      const response = await axiosInstance.delete('/api/settings/lock');
+      const response = await axiosInstance.delete('/settings/lock');
       if (response.data.success) {
         setHasLock(false);
         setLockStatus(null);
@@ -595,7 +634,7 @@ const SystemSettings: FC = () => {
   // Get current lock status
   const checkLockStatus = async () => {
     try {
-      const response = await axiosInstance.get('/api/settings/lock');
+      const response = await axiosInstance.get('/settings/lock');
       setLockStatus(response.data);
       
       if (response.data.isLocked && !response.data.canEdit) {
@@ -638,8 +677,115 @@ const SystemSettings: FC = () => {
 
   // Save system settings (used by Save Changes button)
   // Internal save implementation (performs actual API call)
+  // Validate email configuration before saving
+  const validateEmailConfig = (): { isValid: boolean; errors: string[] } => {
+    const errors: string[] = [];
+
+    // Only validate if email is enabled
+    if (!emailConfig.enabled) {
+      return { isValid: true, errors: [] };
+    }
+
+    // Validate provider-specific required fields
+    if (emailConfig.provider === 'custom') {
+      // Custom SMTP: require host, port, user, password, fromEmail
+      if (!emailConfig.host || emailConfig.host.trim() === '') {
+        errors.push('SMTP Host is required');
+      }
+
+      if (!emailConfig.port) {
+        errors.push('SMTP Port is required');
+      } else if (emailConfig.port < 1 || emailConfig.port > 65535) {
+        errors.push('SMTP Port must be between 1 and 65535');
+      }
+
+      if (!emailConfig.user || emailConfig.user.trim() === '') {
+        errors.push('SMTP Username is required');
+      }
+
+      if (!emailConfig.password || emailConfig.password.trim() === '') {
+        errors.push('SMTP Password is required');
+      }
+
+      if (!emailConfig.fromEmail || emailConfig.fromEmail.trim() === '') {
+        errors.push('From Email is required');
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailConfig.fromEmail)) {
+        errors.push('From Email must be a valid email address');
+      }
+    } else if (emailConfig.provider === 'gmail') {
+      // Gmail: require gmailAppPassword and fromEmail (uses fromEmail as sender)
+      if (!emailConfig.gmailAppPassword || emailConfig.gmailAppPassword.trim() === '') {
+        errors.push('Gmail App Password is required');
+      }
+
+      if (!emailConfig.fromEmail || emailConfig.fromEmail.trim() === '') {
+        errors.push('From Email is required');
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailConfig.fromEmail)) {
+        errors.push('From Email must be a valid email address');
+      }
+    } else if (emailConfig.provider === 'sendgrid') {
+      // SendGrid: require sendgridApiKey, fromEmail
+      if (!emailConfig.sendgridApiKey || emailConfig.sendgridApiKey.trim() === '') {
+        errors.push('SendGrid API Key is required');
+      }
+
+      if (!emailConfig.fromEmail || emailConfig.fromEmail.trim() === '') {
+        errors.push('From Email is required');
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailConfig.fromEmail)) {
+        errors.push('From Email must be a valid email address');
+      }
+    } else if (emailConfig.provider === 'aws-ses') {
+      // AWS SES: require awsAccessKeyId, awsSecretAccessKey, awsRegion, fromEmail
+      if (!emailConfig.awsAccessKeyId || emailConfig.awsAccessKeyId.trim() === '') {
+        errors.push('AWS Access Key ID is required');
+      }
+
+      if (!emailConfig.awsSecretAccessKey || emailConfig.awsSecretAccessKey.trim() === '') {
+        errors.push('AWS Secret Access Key is required');
+      }
+
+      if (!emailConfig.awsRegion || emailConfig.awsRegion.trim() === '') {
+        errors.push('AWS Region is required');
+      }
+
+      if (!emailConfig.fromEmail || emailConfig.fromEmail.trim() === '') {
+        errors.push('From Email is required');
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailConfig.fromEmail)) {
+        errors.push('From Email must be a valid email address');
+      }
+    } else if (emailConfig.provider === 'mailtrap') {
+      // Mailtrap: require user, password, fromEmail
+      if (!emailConfig.user || emailConfig.user.trim() === '') {
+        errors.push('Mailtrap Username is required');
+      }
+
+      if (!emailConfig.password || emailConfig.password.trim() === '') {
+        errors.push('Mailtrap Password is required');
+      }
+
+      if (!emailConfig.fromEmail || emailConfig.fromEmail.trim() === '') {
+        errors.push('From Email is required');
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailConfig.fromEmail)) {
+        errors.push('From Email must be a valid email address');
+      }
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  };
+
   const performSave = async () => {
     try {
+      // Validate email configuration BEFORE making API call
+      const validation = validateEmailConfig();
+      if (!validation.isValid) {
+        setError(`Email Configuration Validation Failed:\n${validation.errors.join('\n')}`);
+        setSaving(false);
+        return;
+      }
+
       setSaving(true);
       setError(null);
       
@@ -658,8 +804,7 @@ const SystemSettings: FC = () => {
         
         // SINGLE PROVIDER ENFORCEMENT: Include ONLY selected provider's fields
         if (config.provider === 'gmail') {
-          // Gmail: include only Gmail fields
-          if (config.gmailAddress) filtered.gmailAddress = config.gmailAddress;
+          // Gmail: include only Gmail app password field
           if (config.gmailAppPassword) filtered.gmailAppPassword = config.gmailAppPassword;
         } else if (config.provider === 'mailtrap') {
           // Mailtrap: include only Mailtrap fields
@@ -674,12 +819,13 @@ const SystemSettings: FC = () => {
           if (config.awsSecretAccessKey) filtered.awsSecretAccessKey = config.awsSecretAccessKey;
           if (config.awsRegion) filtered.awsRegion = config.awsRegion;
         } else if (config.provider === 'custom') {
-          // Custom SMTP: include only custom SMTP fields
+          // Custom SMTP: include only custom SMTP fields, exclude Gmail/other provider fields
           if (config.host) filtered.host = config.host;
           if (config.port) filtered.port = config.port;
           if (config.user) filtered.user = config.user;
           if (config.password) filtered.password = config.password;
           if (config.secure !== undefined) filtered.secure = config.secure;
+          // Explicitly exclude gmailAddress and gmailAppPassword for custom SMTP
         }
         
         return filtered;
@@ -706,28 +852,33 @@ const SystemSettings: FC = () => {
       };
 
       // Include email behavior settings
-      payload.emailSettings = emailSettings;
-      
-      // Include dry-run mode
-      if (typeof emailSettings.dryRunMode !== 'undefined') {
-        payload.dryRunMode = emailSettings.dryRunMode;
-      }
+      payload.emailSettings = {
+        enabled: emailConfig.enabled,
+        enablePasswordResetEmails: emailConfig.enablePasswordResetEmails,
+        enableOtpEmails: emailConfig.enableOtpEmails,
+        enableDocumentNotificationEmails: emailConfig.enableDocumentNotificationEmails,
+        enableAnnouncementEmails: emailConfig.enableAnnouncementEmails,
+        enableAnnouncementBcc: emailConfig.enableAnnouncementBcc,
+        recipientEmailsPerBatch: emailConfig.recipientEmailsPerBatch,
+        retryFailedEmails: emailConfig.retryFailedEmails,
+        retryAttempts: emailConfig.retryAttempts,
+        retryDelayMinutes: emailConfig.retryDelayMinutes,
+        dryRunMode: emailConfig.dryRunMode,
+      };
 
       // UNIFIED EMAIL CONFIG with SINGLE PROVIDER ENFORCEMENT
       // Filter irrelevant fields: only send provider-specific fields for selected provider
-      if (emailProviderConfig && Object.keys(emailProviderConfig).length > 0) {
-        const filteredConfig = filterProviderConfig(emailProviderConfig);
-        payload.email = filteredConfig;
-        
-        console.log('[Settings Save] Email provider config (single provider enforced):', {
-          enabled: filteredConfig.enabled,
-          provider: filteredConfig.provider,
-          fromName: filteredConfig.fromName,
-          fromEmail: filteredConfig.fromEmail,
-          fieldsIncluded: Object.keys(filteredConfig),
-          irrelevantFieldsFiltered: 'Only selected provider fields sent'
-        });
-      }
+      const filteredConfig = filterProviderConfig(emailConfig);
+      payload.email = filteredConfig;
+      
+      console.log('[Settings Save] Unified email config (single provider enforced):', {
+        enabled: filteredConfig.enabled,
+        provider: filteredConfig.provider,
+        fromName: filteredConfig.fromName,
+        fromEmail: filteredConfig.fromEmail,
+        fieldsIncluded: Object.keys(filteredConfig),
+        irrelevantFieldsFiltered: 'Only selected provider fields sent'
+      });
 
       // Also remove _id from root payload if present
       delete (payload as any)._id;
@@ -737,8 +888,7 @@ const SystemSettings: FC = () => {
       await adminAPI.updateSystemSettings(payload);
       // optimistic: update original copy and clear dirty flags
       originalSettingsRef.current = JSON.parse(JSON.stringify(settings));
-      originalEmailProviderConfigRef.current = JSON.parse(JSON.stringify(emailProviderConfig));
-      originalGmailSettingsRef.current = JSON.parse(JSON.stringify(gmailSettings));
+      originalEmailConfigRef.current = JSON.parse(JSON.stringify(emailConfig));
       
       // Reset dirty states for general and email sections
       setDirtyGeneral(false);
@@ -747,11 +897,15 @@ const SystemSettings: FC = () => {
       setSuccess(true);
       
       // Clear sensitive passwords from state after successful save
-      if (gmailSettings.gmailAppPassword) {
+      if (emailConfig.gmailAppPassword || emailConfig.password) {
         console.log('[Settings Save] Clearing passwords from state after successful save');
-        setGmailSettings((prev: any) => ({
+        setEmailConfig((prev: any) => ({
           ...prev,
-          gmailAppPassword: '' // Clear app password from state
+          gmailAppPassword: '',
+          password: '',
+          sendgridApiKey: '',
+          awsAccessKeyId: '',
+          awsSecretAccessKey: '',
         }));
       }
       
@@ -862,29 +1016,91 @@ const SystemSettings: FC = () => {
 
   // Memoized callbacks to prevent unnecessary re-renders
   const handleGmailStatusChange = useCallback((enabled: boolean) => {
+    // Only update if initialization is complete
+    if (!initializationCompleteRef.current) return;
     console.log('[SystemSettings] Gmail status changed:', enabled);
+    setEmailConfig((prev: any) => ({ ...prev, enabled }));
   }, []);
 
-  const handleGmailSettingsChange = useCallback((emailConfig: any) => {
-    console.log('[SystemSettings] Email config changed:', {
-      enabled: emailConfig.enabled,
-      provider: emailConfig.provider,
-      gmailAddress: emailConfig.gmailAddress,
-      fromName: emailConfig.fromName,
-      hasPassword: !!emailConfig.gmailAppPassword,
-      passwordLength: emailConfig.gmailAppPassword?.length || 0
+  const handleGmailSettingsChange = useCallback((updatedConfig: any) => {
+    // Only update if initialization is complete
+    if (!initializationCompleteRef.current) return;
+    console.log('[SystemSettings] Gmail config changed:', {
+      enabled: updatedConfig.enabled,
+      provider: updatedConfig.provider,
+      fromName: updatedConfig.fromName,
+      fromEmail: updatedConfig.fromEmail,
     });
-    setGmailSettings(emailConfig);
+    setEmailConfig((prev: any) => ({ ...prev, ...updatedConfig }));
   }, []);
+
+  // Create clean config when provider changes - only include fields for selected provider
+  const createCleanProviderConfig = (provider: string, baseConfig: any): any => {
+    const cleaned: any = {
+      enabled: baseConfig.enabled !== undefined ? baseConfig.enabled : emailConfig.enabled,
+      provider,
+      fromName: baseConfig.fromName || emailConfig.fromName,
+      fromEmail: baseConfig.fromEmail || emailConfig.fromEmail,
+    };
+
+    // Include only the fields relevant to the selected provider
+    if (provider === 'custom') {
+      cleaned.host = emailConfig.host || '';
+      cleaned.port = emailConfig.port || 587;
+      cleaned.user = emailConfig.user || '';
+      cleaned.password = emailConfig.password || '';
+      cleaned.secure = emailConfig.secure !== undefined ? emailConfig.secure : false;
+    } else if (provider === 'gmail') {
+      cleaned.gmailAppPassword = emailConfig.gmailAppPassword || '';
+    } else if (provider === 'sendgrid') {
+      cleaned.sendgridApiKey = emailConfig.sendgridApiKey || '';
+    } else if (provider === 'aws-ses') {
+      cleaned.awsAccessKeyId = emailConfig.awsAccessKeyId || '';
+      cleaned.awsSecretAccessKey = emailConfig.awsSecretAccessKey || '';
+      cleaned.awsRegion = emailConfig.awsRegion || 'us-east-1';
+    } else if (provider === 'mailtrap') {
+      cleaned.user = emailConfig.user || '';
+      cleaned.password = emailConfig.password || '';
+    }
+
+    // Preserve email behavior settings across provider changes
+    cleaned.enablePasswordResetEmails = emailConfig.enablePasswordResetEmails;
+    cleaned.enableOtpEmails = emailConfig.enableOtpEmails;
+    cleaned.enableDocumentNotificationEmails = emailConfig.enableDocumentNotificationEmails;
+    cleaned.enableAnnouncementEmails = emailConfig.enableAnnouncementEmails;
+    cleaned.enableAnnouncementBcc = emailConfig.enableAnnouncementBcc;
+    cleaned.recipientEmailsPerBatch = emailConfig.recipientEmailsPerBatch;
+    cleaned.retryFailedEmails = emailConfig.retryFailedEmails;
+    cleaned.retryAttempts = emailConfig.retryAttempts;
+    cleaned.retryDelayMinutes = emailConfig.retryDelayMinutes;
+    cleaned.dryRunMode = emailConfig.dryRunMode;
+
+    return cleaned;
+  };
 
   const handleEmailConfigChange = useCallback((config: any) => {
-    console.log('[SystemSettings] Email provider config changed:', config);
-    setEmailProviderConfig(config);
-  }, []);
+    // Only update if initialization is complete
+    if (!initializationCompleteRef.current) return;
+    console.log('[SystemSettings] Email config changed:', config);
+    
+    // If provider changed, reset all unrelated provider-specific fields
+    if (config.provider && config.provider !== emailConfig.provider) {
+      const resetConfig = createCleanProviderConfig(config.provider, config);
+      setEmailConfig((prev: any) => ({ ...prev, ...resetConfig }));
+    } else {
+      setEmailConfig((prev: any) => ({ ...prev, ...config }));
+    }
+  }, [emailConfig.provider]);
 
   // Track general settings dirty state
+  // Only track changes AFTER initialization is complete to avoid false dirty state on mount
   useEffect(() => {
     try {
+      // Don't update dirty state until initialization is complete
+      if (!initializationCompleteRef.current) {
+        return;
+      }
+      
       if (!originalSettingsRef.current) {
         setDirtyGeneral(false);
         return;
@@ -914,26 +1130,39 @@ const SystemSettings: FC = () => {
   ]);
 
   // Track email settings dirty state
+  // Only track changes AFTER initialization is complete to avoid false dirty state on mount
   useEffect(() => {
     try {
-      if (!originalEmailProviderConfigRef.current) {
+      // Don't update dirty state until initialization is complete
+      if (!initializationCompleteRef.current) {
+        return;
+      }
+      
+      if (!originalEmailConfigRef.current) {
         setDirtyEmail(false);
         return;
       }
+      
       const isDirty = DirtyStateUtils.isEmailDirty(
-        { ...originalEmailProviderConfigRef.current, ...emailSettings },
-        { ...emailProviderConfig, ...emailSettings }
+        originalEmailConfigRef.current,
+        emailConfig
       );
       setDirtyEmail(isDirty);
     } catch (e) {
       console.error('Error checking email settings dirty state:', e);
       setDirtyEmail(false);
     }
-  }, [emailSettings, emailProviderConfig]);
+  }, [emailConfig]);
 
   // Track officials dirty state
+  // Only track changes AFTER initialization is complete to avoid false dirty state on mount
   useEffect(() => {
     try {
+      // Don't update dirty state until initialization is complete
+      if (!initializationCompleteRef.current) {
+        return;
+      }
+      
       if (!originalOfficialsRef.current) {
         setDirtyOfficials(false);
         return;
@@ -1116,14 +1345,14 @@ const SystemSettings: FC = () => {
           <EmailSettings onConfigChange={handleEmailConfigChange} />
 
           {/* Unified Email Configuration - Conditional Rendering Based on Provider */}
-          {emailProviderConfig?.provider === 'custom' && (
+          {emailConfig?.provider === 'custom' && (
             <CustomSmtpSettings 
-              emailConfig={emailProviderConfig}
-              setEmailConfig={setEmailProviderConfig}
+              emailConfig={emailConfig}
+              setEmailConfig={setEmailConfig}
             />
           )}
 
-          {emailProviderConfig?.provider === 'gmail' && (
+          {emailConfig?.provider === 'gmail' && (
             <GmailSettings 
               onGmailStatusChange={handleGmailStatusChange}
               onEmailConfigChange={handleGmailSettingsChange}
@@ -1132,8 +1361,7 @@ const SystemSettings: FC = () => {
 
           {/* Email Provider Status Panel */}
           <EmailProviderStatus
-            emailConfig={emailProviderConfig}
-            emailSettings={emailSettings}
+            emailConfig={emailConfig}
             healthStatus={healthStatus}
             onHealthCheckClick={handleHealthCheckClick}
             loading={false}
@@ -1164,8 +1392,8 @@ const SystemSettings: FC = () => {
                 <FormControlLabel
                   control={
                     <Switch
-                      checked={emailSettings.enabled}
-                      onChange={(e) => setEmailSettings({ ...emailSettings, enabled: e.target.checked })}
+                      checked={emailConfig.enabled}
+                      onChange={(e) => setEmailConfig({ ...emailConfig, enabled: e.target.checked })}
                       disabled={saving}
                     />
                   }
@@ -1187,9 +1415,9 @@ const SystemSettings: FC = () => {
                   <FormControlLabel
                     control={
                       <Switch
-                        checked={emailSettings.enablePasswordResetEmails}
-                        onChange={(e) => setEmailSettings({ ...emailSettings, enablePasswordResetEmails: e.target.checked })}
-                        disabled={saving || !emailSettings.enabled}
+                        checked={emailConfig.enablePasswordResetEmails}
+                        onChange={(e) => setEmailConfig({ ...emailConfig, enablePasswordResetEmails: e.target.checked })}
+                        disabled={saving || !emailConfig.enabled}
                       />
                     }
                     label={
@@ -1202,9 +1430,9 @@ const SystemSettings: FC = () => {
                   <FormControlLabel
                     control={
                       <Switch
-                        checked={emailSettings.enableOtpEmails}
-                        onChange={(e) => setEmailSettings({ ...emailSettings, enableOtpEmails: e.target.checked })}
-                        disabled={saving || !emailSettings.enabled}
+                        checked={emailConfig.enableOtpEmails}
+                        onChange={(e) => setEmailConfig({ ...emailConfig, enableOtpEmails: e.target.checked })}
+                        disabled={saving || !emailConfig.enabled}
                       />
                     }
                     label={
@@ -1217,9 +1445,9 @@ const SystemSettings: FC = () => {
                   <FormControlLabel
                     control={
                       <Switch
-                        checked={emailSettings.enableDocumentNotificationEmails}
-                        onChange={(e) => setEmailSettings({ ...emailSettings, enableDocumentNotificationEmails: e.target.checked })}
-                        disabled={saving || !emailSettings.enabled}
+                        checked={emailConfig.enableDocumentNotificationEmails}
+                        onChange={(e) => setEmailConfig({ ...emailConfig, enableDocumentNotificationEmails: e.target.checked })}
+                        disabled={saving || !emailConfig.enabled}
                       />
                     }
                     label={
@@ -1232,9 +1460,9 @@ const SystemSettings: FC = () => {
                   <FormControlLabel
                     control={
                       <Switch
-                        checked={emailSettings.enableAnnouncementEmails}
-                        onChange={(e) => setEmailSettings({ ...emailSettings, enableAnnouncementEmails: e.target.checked })}
-                        disabled={saving || !emailSettings.enabled}
+                        checked={emailConfig.enableAnnouncementEmails}
+                        onChange={(e) => setEmailConfig({ ...emailConfig, enableAnnouncementEmails: e.target.checked })}
+                        disabled={saving || !emailConfig.enabled}
                       />
                     }
                     label={
@@ -1258,9 +1486,9 @@ const SystemSettings: FC = () => {
                   <FormControlLabel
                     control={
                       <Switch
-                        checked={emailSettings.enableAnnouncementBcc}
-                        onChange={(e) => setEmailSettings({ ...emailSettings, enableAnnouncementBcc: e.target.checked })}
-                        disabled={saving || !emailSettings.enabled || !emailSettings.enableAnnouncementEmails}
+                        checked={emailConfig.enableAnnouncementBcc}
+                        onChange={(e) => setEmailConfig({ ...emailConfig, enableAnnouncementBcc: e.target.checked })}
+                        disabled={saving || !emailConfig.enabled || !emailConfig.enableAnnouncementEmails}
                       />
                     }
                     label={
@@ -1277,8 +1505,8 @@ const SystemSettings: FC = () => {
                     <StyledTextField
                       label="Recipients per Batch"
                       type="number"
-                      value={emailSettings.recipientEmailsPerBatch}
-                      onChange={(e) => setEmailSettings({ ...emailSettings, recipientEmailsPerBatch: Math.max(1, parseInt(e.target.value || '100')) })}
+                      value={emailConfig.recipientEmailsPerBatch}
+                      onChange={(e) => setEmailConfig({ ...emailConfig, recipientEmailsPerBatch: Math.max(1, parseInt(e.target.value || '100')) })}
                       inputProps={{ min: 1 }}
                       disabled={saving}
                       sx={{ width: 180 }}
@@ -1299,8 +1527,8 @@ const SystemSettings: FC = () => {
                   <FormControlLabel
                     control={
                       <Switch
-                        checked={emailSettings.retryFailedEmails}
-                        onChange={(e) => setEmailSettings({ ...emailSettings, retryFailedEmails: e.target.checked })}
+                        checked={emailConfig.retryFailedEmails}
+                        onChange={(e) => setEmailConfig({ ...emailConfig, retryFailedEmails: e.target.checked })}
                         disabled={saving}
                       />
                     }
@@ -1312,19 +1540,19 @@ const SystemSettings: FC = () => {
                     <StyledTextField
                       label="Retry Attempts"
                       type="number"
-                      value={emailSettings.retryAttempts}
-                      onChange={(e) => setEmailSettings({ ...emailSettings, retryAttempts: Math.max(0, parseInt(e.target.value || '0')) })}
+                      value={emailConfig.retryAttempts}
+                      onChange={(e) => setEmailConfig({ ...emailConfig, retryAttempts: Math.max(0, parseInt(e.target.value || '0')) })}
                       inputProps={{ min: 0 }}
-                      disabled={saving || !emailSettings.retryFailedEmails}
+                      disabled={saving || !emailConfig.retryFailedEmails}
                       helperText="Number of retry attempts"
                     />
                     <StyledTextField
                       label="Retry Delay (minutes)"
                       type="number"
-                      value={emailSettings.retryDelayMinutes}
-                      onChange={(e) => setEmailSettings({ ...emailSettings, retryDelayMinutes: Math.max(1, parseInt(e.target.value || '5')) })}
+                      value={emailConfig.retryDelayMinutes}
+                      onChange={(e) => setEmailConfig({ ...emailConfig, retryDelayMinutes: Math.max(1, parseInt(e.target.value || '5')) })}
                       inputProps={{ min: 1 }}
-                      disabled={saving || !emailSettings.retryFailedEmails}
+                      disabled={saving || !emailConfig.retryFailedEmails}
                       helperText="Wait time between retries"
                     />
                   </Box>
@@ -1338,8 +1566,8 @@ const SystemSettings: FC = () => {
                 <FormControlLabel
                   control={
                     <Switch
-                      checked={emailSettings.dryRunMode ?? false}
-                      onChange={(e) => setEmailSettings({ ...emailSettings, dryRunMode: e.target.checked })}
+                      checked={emailConfig.dryRunMode ?? false}
+                      onChange={(e) => setEmailConfig({ ...emailConfig, dryRunMode: e.target.checked })}
                       disabled={saving}
                       sx={{
                         '& .MuiSwitch-switchBase.Mui-checked': {
@@ -1562,7 +1790,12 @@ const SystemSettings: FC = () => {
         </Box>
       </Box>
 
-      <TestEmailModal open={testModalOpen} onClose={() => setTestModalOpen(false)} contactEmail={settings.contactEmail} />
+      <TestEmailModal 
+        open={testModalOpen} 
+        onClose={() => setTestModalOpen(false)} 
+        contactEmail={settings.contactEmail}
+        emailConfig={emailConfig}
+      />
 
       {/* Floating Save Button */}
       <Box sx={{

@@ -6,9 +6,10 @@ interface Props {
   open: boolean;
   onClose: () => void;
   contactEmail?: string;
+  emailConfig?: any; // Optional full email config for complete payload
 }
 
-const TestEmailModal: React.FC<Props> = ({ open, onClose, contactEmail }) => {
+const TestEmailModal: React.FC<Props> = ({ open, onClose, contactEmail, emailConfig }) => {
   const [to, setTo] = useState(contactEmail || '');
   const [sending, setSending] = useState(false);
 
@@ -37,7 +38,8 @@ const TestEmailModal: React.FC<Props> = ({ open, onClose, contactEmail }) => {
         // couldn't fetch settings; continue and let testSmtp surface server message
       }
 
-      const res = await adminAPI.testSmtp(to);
+      // Pass emailConfig if available (for complete payload with all SMTP fields)
+      const res = await adminAPI.testSmtp(to, emailConfig);
       const message = res && res.message ? res.message : 'Test email sent successfully';
       setSnackMessage(message);
       setSnackSeverity('success');

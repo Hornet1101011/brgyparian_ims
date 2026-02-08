@@ -1927,10 +1927,37 @@ router.patch('/email', requireAuth, isAdmin, async (req, res) => {
     } else if (provider === 'custom') {
       // Custom SMTP provider: include ONLY custom SMTP fields (not gmail, mailtrap, sendgrid, aws)
       if (host) emailConfig.host = host;
-      if (port) emailConfig.port = Number(port);
+      if (port) {
+        emailConfig.port = Number(port);
+        
+        // AUTO-NORMALIZE: Set secure flag based on port if not explicitly provided
+        // Port 465 = Implicit SSL/TLS (secure=true)
+        // Port 587 = STARTTLS (secure=false)
+        // Port 25 = Plain SMTP (secure=false)
+        if (typeof secure !== 'boolean') {
+          if (emailConfig.port === 465) {
+            emailConfig.secure = true;
+            console.log('[Settings] PATCH /email - Auto-set secure=true for port 465 (SSL/TLS implicit)');
+          } else if (emailConfig.port === 587) {
+            emailConfig.secure = false;
+            console.log('[Settings] PATCH /email - Auto-set secure=false for port 587 (STARTTLS)');
+          } else {
+            emailConfig.secure = false;
+            console.log('[Settings] PATCH /email - Auto-set secure=false for port ' + emailConfig.port + ' (default)');
+          }
+        } else {
+          emailConfig.secure = secure;
+          
+          // Warn if using non-standard configuration
+          if (emailConfig.port === 465 && !secure) {
+            console.warn('[Settings] PATCH /email - Warning: port 465 typically requires secure=true');
+          } else if (emailConfig.port === 587 && secure) {
+            console.warn('[Settings] PATCH /email - Warning: port 587 typically requires secure=false');
+          }
+        }
+      }
       if (user) emailConfig.user = user;
       if (password) emailConfig.password = password;
-      emailConfig.secure = !!secure;
     }
 
     // Remove any undefined properties before saving to MongoDB
@@ -1985,78 +2012,161 @@ router.patch('/email', requireAuth, isAdmin, async (req, res) => {
 });
 
 // POST /api/settings/email/test - Test email configuration
+// Accepts emailConfig payload with all provider-specific fields for validation and testing
 router.post('/email/test', requireAuth, isAdmin, async (req, res) => {
   try {
     const { testEmail, emailConfig } = req.body;
 
-    // Validate test email
-    if (!testEmail || !testEmail.includes('@')) {
+    // VALIDATION 1: Validate test email format
+    if (!testEmail) {
+      console.error('[Settings] POST /email/test - Missing testEmail in payload');
       return res.status(400).json({
         success: false,
         message: 'Valid test email required',
-        error: 'testEmail must be a valid email address'
+        error: 'testEmail field is required',
+        validationField: 'testEmail'
       });
     }
 
-    // ALWAYS prefer emailConfig from request body, only fall back to database if not provided
-    let configToTest = emailConfig;
-    
-    if (!configToTest) {
-      const settings = await SystemSetting.findOne().lean();
-      configToTest = settings?.smtp;
-    }
-
-    // Validate config exists and is enabled
-    if (!configToTest || !configToTest.enabled) {
+    if (!testEmail.includes('@')) {
+      console.error('[Settings] POST /email/test - Invalid testEmail format:', testEmail);
       return res.status(400).json({
         success: false,
-        message: 'Email provider not configured or disabled',
-        error: 'Enable email and configure provider settings first'
+        message: 'Valid test email required',
+        error: 'testEmail must be a valid email address',
+        validationField: 'testEmail',
+        receivedValue: testEmail
       });
     }
 
-    // Validate provider is selected
+    // VALIDATION 2: Get config to test (prefer request payload, fallback to database)
+    let configToTest = emailConfig;
+    let configSource = 'request_payload';
+    
+    if (!configToTest) {
+      console.log('[Settings] POST /email/test - No emailConfig in payload, falling back to database settings');
+      const settings = await SystemSetting.findOne().lean();
+      configToTest = settings?.smtp;
+      configSource = 'database';
+    } else {
+      console.log('[Settings] POST /email/test - Using emailConfig from request payload, provider:', emailConfig?.provider);
+    }
+
+    // VALIDATION 3: Validate config exists and is enabled
+    if (!configToTest) {
+      console.error('[Settings] POST /email/test - No configuration found (source: ' + configSource + ')');
+      return res.status(400).json({
+        success: false,
+        message: 'Email provider not configured',
+        error: 'No email configuration found. Enable email and configure provider settings.',
+        configSource: configSource,
+        validationField: 'emailConfig'
+      });
+    }
+
+    if (!configToTest.enabled) {
+      console.error('[Settings] POST /email/test - Configuration disabled (source: ' + configSource + ')');
+      return res.status(400).json({
+        success: false,
+        message: 'Email provider is disabled',
+        error: 'Enable email configuration before testing.',
+        configSource: configSource,
+        validationField: 'enabled'
+      });
+    }
+
+    // VALIDATION 4: Validate provider is selected
     if (!configToTest.provider) {
+      console.error('[Settings] POST /email/test - No provider selected (source: ' + configSource + ')', {
+        hasHost: !!configToTest.host,
+        hasGmailAddress: !!configToTest.gmailAddress,
+        hasApiKey: !!configToTest.sendgridApiKey,
+        hasAwsKey: !!configToTest.awsAccessKeyId
+      });
       return res.status(400).json({
         success: false,
         message: 'No email provider selected',
-        error: 'Select an email provider in settings'
+        error: 'Select an email provider in settings',
+        validationField: 'provider',
+        configSource: configSource
       });
     }
 
-    // Validate provider-specific required fields
+    // VALIDATION 5: Validate provider-specific required fields
+    console.log('[Settings] POST /email/test - Validating provider:', configToTest.provider, '(source: ' + configSource + ')');
     const validationError = validateProviderConfig(configToTest);
     if (validationError) {
+      console.error('[Settings] POST /email/test - Provider validation failed for', configToTest.provider + ':', {
+        error: validationError.error,
+        missingFields: validationError.missingFields,
+        configSource: configSource,
+        receivedFields: {
+          provider: configToTest.provider,
+          host: !!configToTest.host,
+          port: configToTest.port,
+          user: !!configToTest.user,
+          password: !!configToTest.password,
+          secure: configToTest.secure,
+          gmailAddress: !!configToTest.gmailAddress,
+          gmailAppPassword: !!configToTest.gmailAppPassword,
+          sendgridApiKey: !!configToTest.sendgridApiKey,
+          awsAccessKeyId: !!configToTest.awsAccessKeyId,
+          awsSecretAccessKey: !!configToTest.awsSecretAccessKey,
+          awsRegion: configToTest.awsRegion,
+          fromName: configToTest.fromName,
+          fromEmail: configToTest.fromEmail
+        }
+      });
       return res.status(400).json({
         success: false,
         message: `Invalid ${configToTest.provider} configuration`,
+        error: validationError.error,
+        missingFields: validationError.missingFields,
+        validationField: 'provider_config',
+        provider: configToTest.provider,
+        configSource: configSource,
         ...validationError
       });
     }
 
-    console.log('[Settings] Sending test email using provider:', configToTest.provider);
+    console.log('[Settings] POST /email/test - All validations passed. Sending test email using provider:', configToTest.provider, '(source: ' + configSource + ')');
 
     const result = await emailProviderHelper.sendTestEmail(configToTest, testEmail);
 
     if (!result.success) {
+      console.error('[Settings] POST /email/test - Provider failed to send test email:', {
+        provider: configToTest.provider,
+        error: result.error,
+        testEmail: testEmail,
+        configSource: configSource
+      });
       return res.status(400).json({
         success: false,
         message: `${configToTest.provider} test failed`,
         error: result.error,
-        provider: result.provider
+        provider: result.provider,
+        hint: result.hint
       });
     }
 
-    console.log('[Settings] Test email sent successfully via', configToTest.provider);
+    console.log('[Settings] POST /email/test - Test email sent successfully via', configToTest.provider, '(source: ' + configSource + ')', {
+      messageId: result.messageId,
+      recipient: testEmail
+    });
 
     res.json({
       success: true,
       message: 'Test email sent successfully',
       provider: result.provider,
-      messageId: result.messageId
+      messageId: result.messageId,
+      testEmail: testEmail
     });
   } catch (err) {
-    console.error('[Settings] POST /email/test error:', err);
+    console.error('[Settings] POST /email/test unexpected error:', {
+      message: err.message,
+      stack: err.stack,
+      requestBody: req.body
+    });
     res.status(500).json({
       success: false,
       message: 'Failed to send test email',

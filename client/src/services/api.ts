@@ -662,9 +662,41 @@ const admin: AdminAPI = {
     }
   },
 
-  // Send test SMTP email using current system SMTP settings (server-side will decrypt)
-  testSmtp: async (to: string) => {
-    const response = await axiosInstance.post('/admin/settings/test-smtp', { to });
+  // Send test SMTP email - accepts either full emailConfig or testEmail + optional config
+  // Sends to /email/test endpoint which validates provider-specific required fields
+  testSmtp: async (testEmail: string, emailConfig?: any) => {
+    // If emailConfig provided, use new endpoint with full payload
+    if (emailConfig) {
+      const payload = {
+        testEmail,
+        emailConfig: {
+          provider: emailConfig.provider,
+          enabled: emailConfig.enabled,
+          fromName: emailConfig.fromName,
+          fromEmail: emailConfig.fromEmail,
+          // Custom SMTP fields
+          host: emailConfig.host,
+          port: emailConfig.port,
+          user: emailConfig.user,
+          password: emailConfig.password,
+          secure: emailConfig.secure,
+          // Gmail fields
+          gmailAddress: emailConfig.gmailAddress,
+          gmailAppPassword: emailConfig.gmailAppPassword,
+          // SendGrid fields
+          sendgridApiKey: emailConfig.sendgridApiKey,
+          // AWS SES fields
+          awsAccessKeyId: emailConfig.awsAccessKeyId,
+          awsSecretAccessKey: emailConfig.awsSecretAccessKey,
+          awsRegion: emailConfig.awsRegion,
+        }
+      };
+      const response = await axiosInstance.post('/admin/settings/email/test', payload);
+      return response.data;
+    }
+    
+    // Fallback to old endpoint with just testEmail (uses database settings)
+    const response = await axiosInstance.post('/admin/settings/test-smtp', { to: testEmail });
     return response.data;
   },
 

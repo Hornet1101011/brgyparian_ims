@@ -20,7 +20,6 @@ interface EmailConfig {
   host?: string;
   port?: number;
   user?: string;
-  gmailAddress?: string;
   gmailAppPassword?: string;
   sendgridApiKey?: string;
   awsAccessKeyId?: string;
@@ -82,7 +81,6 @@ const EmailProviderStatus: React.FC<EmailProviderStatusProps> = ({
         break;
 
       case 'gmail':
-        if (!emailConfig.gmailAddress) missingFields.push('gmailAddress');
         if (!emailConfig.gmailAppPassword) missingFields.push('gmailAppPassword');
         break;
 
@@ -541,18 +539,18 @@ const EmailProviderStatus: React.FC<EmailProviderStatusProps> = ({
                   <Grid container spacing={2}>
                     <Grid item xs={12} sm={6}>
                       <Typography variant="caption" sx={{ color: '#64748b', fontWeight: 600 }}>
-                        GMAIL ADDRESS
+                        FROM EMAIL
                       </Typography>
                       <Typography
                         variant="body2"
                         sx={{
-                          color: emailConfig.gmailAddress ? '#0f172a' : '#cbd5e1',
+                          color: emailConfig.fromEmail ? '#0f172a' : '#cbd5e1',
                           mt: 0.5,
                           fontFamily: 'monospace',
                           fontSize: '0.75rem',
                         }}
                       >
-                        {emailConfig.gmailAddress || '—'}
+                        {emailConfig.fromEmail || '—'}
                       </Typography>
                     </Grid>
                     <Grid item xs={12} sm={6}>

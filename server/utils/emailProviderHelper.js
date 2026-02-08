@@ -107,6 +107,109 @@ function encryptEmailPassword(password) {
  * @param {Object} emailConfig - Email configuration from database
  * @returns {Object} - Nodemailer transporter
  */
+/**
+ * Normalize SMTP configuration
+ * - Automatically sets secure flag based on port (465=SSL, 587=TLS)
+ * - Converts port to number
+ * - Validates port range
+ * @param {Object} config - Raw SMTP config
+ * @returns {Object} - Normalized config
+ */
+function normalizeSmtpConfig(config) {
+  if (!config || config.provider !== 'custom') {
+    return config;
+  }
+
+  const normalized = { ...config };
+  
+  // Convert port to number
+  if (config.port) {
+    const portNum = Number(config.port);
+    if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
+      throw new Error(`Invalid SMTP port: must be a number between 1 and 65535, got ${config.port}`);
+    }
+    normalized.port = portNum;
+  }
+
+  // Auto-set secure flag based on port if not explicitly set
+  if (normalized.port && typeof config.secure !== 'boolean') {
+    // Port 465 = Implicit TLS (secure=true)
+    // Port 587 = STARTTLS (secure=false)
+    // Port 25 = Plain SMTP (secure=false)
+    if (normalized.port === 465) {
+      normalized.secure = true;
+      console.log(`[EmailProvider] SMTP: Auto-set secure=true for port ${normalized.port} (SSL/TLS implicit)`);
+    } else if (normalized.port === 587) {
+      normalized.secure = false;
+      console.log(`[EmailProvider] SMTP: Auto-set secure=false for port ${normalized.port} (STARTTLS)`);
+    } else {
+      // Default to false for other ports (25, 2525, etc.)
+      normalized.secure = false;
+      console.log(`[EmailProvider] SMTP: Auto-set secure=false for port ${normalized.port} (default)`);
+    }
+  } else if (normalized.port && typeof config.secure === 'boolean') {
+    // Explicit secure setting provided - validate against common port conventions
+    const isStandardSslPort = normalized.port === 465;
+    const isStandardTlsPort = normalized.port === 587;
+    
+    if (isStandardSslPort && !config.secure) {
+      console.warn(`[EmailProvider] SMTP: Warning - port ${normalized.port} typically uses secure=true, but secure=${config.secure} was explicitly set`);
+    } else if (isStandardTlsPort && config.secure) {
+      console.warn(`[EmailProvider] SMTP: Warning - port ${normalized.port} typically uses secure=false, but secure=${config.secure} was explicitly set`);
+    }
+    normalized.secure = config.secure;
+  } else {
+    // No port info or no secure flag - default to false
+    normalized.secure = typeof config.secure === 'boolean' ? config.secure : false;
+  }
+
+  return normalized;
+}
+
+/**
+ * Validate Custom SMTP configuration
+ * @param {Object} config - SMTP config to validate
+ * @returns {Object} - { isValid: boolean, error?: string, missingFields?: string[] }
+ */
+function validateCustomSmtpConfig(config) {
+  const errors = [];
+
+  if (!config.host) {
+    errors.push('host');
+  }
+
+  if (!config.port) {
+    errors.push('port');
+  } else {
+    const portNum = Number(config.port);
+    if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
+      return {
+        isValid: false,
+        error: `Invalid SMTP port: must be between 1 and 65535, got ${config.port}`,
+        invalidField: 'port'
+      };
+    }
+  }
+
+  if (!config.user) {
+    errors.push('user');
+  }
+
+  if (!config.password) {
+    errors.push('password');
+  }
+
+  if (errors.length > 0) {
+    return {
+      isValid: false,
+      error: `Missing required fields: ${errors.join(', ')}`,
+      missingFields: errors
+    };
+  }
+
+  return { isValid: true };
+}
+
 function createEmailTransporter(emailConfig) {
   if (!emailConfig || !emailConfig.provider) {
     throw new Error('Email provider not configured');
@@ -243,37 +346,40 @@ function createCustomSmtpTransporter(config) {
     throw new Error('Custom SMTP requires host and port');
   }
 
-  // Validate port is a number
-  const portNum = Number(config.port);
-  if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
-    throw new Error(`Invalid SMTP port: must be a number between 1 and 65535, got ${config.port}`);
+  // Normalize configuration (auto-set secure flag based on port)
+  const normalized = normalizeSmtpConfig(config);
+
+  // Validate normalized config
+  const validation = validateCustomSmtpConfig(normalized);
+  if (!validation.isValid) {
+    throw new Error(validation.error);
   }
 
-  console.log(`[EmailProvider] Custom SMTP: Creating transporter for ${config.host}:${config.port}`);
+  console.log(`[EmailProvider] Custom SMTP: Creating transporter for ${normalized.host}:${normalized.port} (secure=${normalized.secure})`);
 
   // DEBUG: Log SMTP configuration details (passwords masked)
   console.log('[EmailProvider] DEBUG: Custom SMTP Configuration:', {
     provider: 'custom',
-    host: config.host,
-    port: portNum,
-    secure: typeof config.secure === 'boolean' ? config.secure : false,
-    username: config.user ? `${config.user.substring(0, 3)}***` : '(none)',
-    hasPassword: !!config.password
+    host: normalized.host,
+    port: normalized.port,
+    secure: normalized.secure,
+    username: normalized.user ? `${normalized.user.substring(0, 3)}***` : '(none)',
+    hasPassword: !!normalized.password
   });
 
   const transportConfig = {
-    host: config.host,
-    port: portNum,
-    secure: typeof config.secure === 'boolean' ? config.secure : false,
+    host: normalized.host,
+    port: normalized.port,
+    secure: normalized.secure,
     connectionTimeout: 10000,
     socketTimeout: 10000
   };
 
   // Add authentication if credentials provided
-  if (config.user && config.password) {
+  if (normalized.user && normalized.password) {
     transportConfig.auth = {
-      user: config.user,
-      pass: config.password
+      user: normalized.user,
+      pass: normalized.password
     };
   }
 
@@ -292,35 +398,51 @@ async function sendTestEmail(emailConfig, testEmail) {
       throw new Error('Valid test email required');
     }
 
-    console.log(`[EmailProvider] Sending test email to ${testEmail} using ${emailConfig.provider}`);
+    // Normalize custom SMTP configuration (auto-set secure flag based on port)
+    let normalizedConfig = emailConfig;
+    if (emailConfig.provider === 'custom') {
+      try {
+        normalizedConfig = normalizeSmtpConfig(emailConfig);
+        console.log('[EmailProvider] SMTP config normalized for test:', {
+          port: normalizedConfig.port,
+          secure: normalizedConfig.secure,
+          autoNormalized: normalizedConfig.secure !== emailConfig.secure
+        });
+      } catch (normalizeErr) {
+        console.error('[EmailProvider] Failed to normalize SMTP config:', normalizeErr.message);
+        throw new Error(`SMTP config normalization failed: ${normalizeErr.message}`);
+      }
+    }
+
+    console.log(`[EmailProvider] Sending test email to ${testEmail} using ${normalizedConfig.provider}`);
 
     // DEBUG: Log email configuration being tested
     console.log('[EmailProvider] DEBUG: Email config for test:', {
-      provider: emailConfig.provider,
-      enabled: emailConfig.enabled,
-      fromName: emailConfig.fromName,
-      fromEmail: emailConfig.fromEmail,
-      ...(emailConfig.provider === 'custom' && {
-        host: emailConfig.host,
-        port: emailConfig.port,
-        secure: emailConfig.secure,
-        username: emailConfig.user ? `${emailConfig.user.substring(0, 3)}***` : '(none)',
-        hasPassword: !!emailConfig.password
+      provider: normalizedConfig.provider,
+      enabled: normalizedConfig.enabled,
+      fromName: normalizedConfig.fromName,
+      fromEmail: normalizedConfig.fromEmail,
+      ...(normalizedConfig.provider === 'custom' && {
+        host: normalizedConfig.host,
+        port: normalizedConfig.port,
+        secure: normalizedConfig.secure,
+        username: normalizedConfig.user ? `${normalizedConfig.user.substring(0, 3)}***` : '(none)',
+        hasPassword: !!normalizedConfig.password
       }),
-      ...(emailConfig.provider === 'gmail' && {
-        gmailAddress: emailConfig.gmailAddress,
-        hasAppPassword: !!emailConfig.gmailAppPassword
+      ...(normalizedConfig.provider === 'gmail' && {
+        gmailAddress: normalizedConfig.gmailAddress,
+        hasAppPassword: !!normalizedConfig.gmailAppPassword
       })
     });
 
-    const transporter = createEmailTransporter(emailConfig);
+    const transporter = createEmailTransporter(normalizedConfig);
     
     // Verify SMTP connection before sending
     console.log('[EmailProvider] Verifying SMTP connection...');
     try {
       await transporter.verify();
       console.log('[EmailProvider] SMTP connection verified successfully');
-      console.log('[EmailProvider] DEBUG: Verification successful for provider:', emailConfig.provider);
+      console.log('[EmailProvider] DEBUG: Verification successful for provider:', normalizedConfig.provider);
     } catch (verifyErr) {
       console.error('[EmailProvider] SMTP verification failed:', verifyErr.message);
       
@@ -333,15 +455,15 @@ async function sendTestEmail(emailConfig, testEmail) {
           code: verifyErr.code,
           command: verifyErr.command
         },
-        provider: emailConfig.provider,
-        hint: getSmtpVerificationHint(emailConfig.provider, verifyErr)
+        provider: normalizedConfig.provider,
+        hint: getSmtpVerificationHint(normalizedConfig.provider, verifyErr)
       };
       
       return verificationError;
     }
     
-    const fromName = emailConfig.fromName || 'Barangay System';
-    const fromEmail = emailConfig.fromEmail || emailConfig.gmailAddress || emailConfig.user;
+    const fromName = normalizedConfig.fromName || 'Barangay System';
+    const fromEmail = normalizedConfig.fromEmail || normalizedConfig.gmailAddress || normalizedConfig.user;
     const from = `${fromName} <${fromEmail}>`;
 
     const html = `
@@ -349,7 +471,7 @@ async function sendTestEmail(emailConfig, testEmail) {
         <body style="font-family: Arial, sans-serif; color: #333;">
           <h2>Email Configuration Test</h2>
           <p>This is a test email to verify your email provider configuration.</p>
-          <p><strong>Provider:</strong> ${emailConfig.provider.toUpperCase()}</p>
+          <p><strong>Provider:</strong> ${normalizedConfig.provider.toUpperCase()}</p>
           <p>If you received this, your email setup is working correctly!</p>
           <hr>
           <p style="color: #999; font-size: 12px;">
@@ -363,13 +485,13 @@ async function sendTestEmail(emailConfig, testEmail) {
     const result = await transporter.sendMail({
       from,
       to: testEmail,
-      subject: `Email Configuration Test - ${emailConfig.provider.toUpperCase()}`,
+      subject: `Email Configuration Test - ${normalizedConfig.provider.toUpperCase()}`,
       html
     });
 
     console.log('[EmailProvider] Test email sent successfully:', result.messageId);
     console.log('[EmailProvider] DEBUG: Test email delivery details:', {
-      provider: emailConfig.provider,
+      provider: normalizedConfig.provider,
       recipient: testEmail,
       messageId: result.messageId,
       timestamp: new Date().toISOString()
@@ -688,5 +810,7 @@ module.exports = {
   decryptEmailPassword,
   performHealthCheck,
   updateHealthCheckStatus,
+  normalizeSmtpConfig,
+  validateCustomSmtpConfig,
   PROVIDER_CONFIGS
 };

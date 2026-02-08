@@ -28,7 +28,6 @@ interface EmailConfig {
   user?: string;
   password?: string;
   secure?: boolean;
-  gmailAddress?: string;
   gmailAppPassword?: string;
 }
 
