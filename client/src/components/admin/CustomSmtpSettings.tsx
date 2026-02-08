@@ -34,9 +34,10 @@ interface EmailConfig {
 interface CustomSmtpSettingsProps {
   emailConfig: EmailConfig;
   setEmailConfig: (config: EmailConfig) => void;
+  smtpPassword?: string;  // Real SMTP password from parent component
 }
 
-const CustomSmtpSettings = ({ emailConfig, setEmailConfig }: CustomSmtpSettingsProps) => {
+const CustomSmtpSettings = ({ emailConfig, setEmailConfig, smtpPassword = '' }: CustomSmtpSettingsProps) => {
   const [showPassword, setShowPassword] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testEmailAddress, setTestEmailAddress] = useState('');
@@ -65,6 +66,18 @@ const CustomSmtpSettings = ({ emailConfig, setEmailConfig }: CustomSmtpSettingsP
 
   const handleTestSmtpConnection = async () => {
     try {
+      // EARLY ABORT: Check if password from parent is missing
+      if (!smtpPassword || smtpPassword.trim() === '') {
+        const errorMsg = 'SMTP password is missing or empty. Please enter a password and save settings first.';
+        console.error('[CustomSmtpSettings] Early abort - Password missing from parent:', {
+          smtpPassword: smtpPassword,
+          isEmpty: !smtpPassword || smtpPassword.trim() === '',
+          source: 'parent_component'
+        });
+        antdMessage.error(errorMsg);
+        return;
+      }
+
       // Comprehensive validation of all SMTP fields before making API call
       const validationErrors: string[] = [];
 
@@ -81,11 +94,6 @@ const CustomSmtpSettings = ({ emailConfig, setEmailConfig }: CustomSmtpSettingsP
       // Validate username
       if (!emailConfig.user || emailConfig.user.trim() === '') {
         validationErrors.push('SMTP username is required');
-      }
-
-      // Validate password
-      if (!emailConfig.password || emailConfig.password.trim() === '') {
-        validationErrors.push('SMTP password is required');
       }
 
       // Validate from email
@@ -117,39 +125,40 @@ const CustomSmtpSettings = ({ emailConfig, setEmailConfig }: CustomSmtpSettingsP
         return;
       }
 
-      // Normalize SMTP secure flag based on port (override incorrect user input)
-      let normalizedSecure: boolean;
-      if (emailConfig.port === 465) {
-        normalizedSecure = true; // Port 465 uses SSL
-      } else if (emailConfig.port === 587) {
-        normalizedSecure = false; // Port 587 uses TLS
-      } else {
-        normalizedSecure = emailConfig.secure ?? false; // Default to false for other ports
+      // ASSERTION: Validate password type and length before building payload
+      if (typeof smtpPassword !== 'string' || smtpPassword.length === 0) {
+        const errorMsg = 'ASSERTION FAILED: Password must be a non-empty string';
+        console.error('[CustomSmtpSettings] Password assertion failed before payload build:', {
+          assertion: 'typeof password === "string" && password.length > 0',
+          passwordType: typeof smtpPassword,
+          passwordLength: smtpPassword?.length || 0,
+          passwordIsString: typeof smtpPassword === 'string',
+          passwordIsNonEmpty: smtpPassword?.length > 0,
+          source: 'parent_component'
+        });
+        throw new Error(errorMsg + '. Cannot build email config for test.');
       }
 
-      console.log('[CustomSmtpSettings] Normalizing secure flag based on port:', {
-        port: emailConfig.port,
-        userConfiguredSecure: emailConfig.secure,
-        normalizedSecure: normalizedSecure,
-        explanation: emailConfig.port === 465 ? 'Port 465 = SSL (secure=true)' : 
-                     emailConfig.port === 587 ? 'Port 587 = TLS (secure=false)' : 'Using user preference'
-      });
-
       // Build request payload with emailConfig nested structure
-      // Normalize field names to match backend expectations
+      // Match backend DTO exactly - no extra fields, precise order
       const requestPayload = {
         emailConfig: {
           provider: 'custom',
           host: emailConfig.host,
           port: emailConfig.port,
           username: emailConfig.user,  // Normalize: user → username
-          password: emailConfig.password, // Send actual password (already validated as non-empty)
-          secure: normalizedSecure,
-          fromName: emailConfig.fromName || 'Barangay System',
-          fromEmail: emailConfig.fromEmail
+          password: smtpPassword,  // Real password from parent component
+          secure: emailConfig.secure,  // Already normalized by parent based on port
+          fromEmail: emailConfig.fromEmail,
+          fromName: emailConfig.fromName  // Optional field - only include if defined
         },
         testEmail: recipientEmail
       };
+      
+      // Remove undefined optional fields to match backend DTO exactly
+      if (!requestPayload.emailConfig.fromName) {
+        delete requestPayload.emailConfig.fromName;
+      }
 
       console.log('[CustomSmtpSettings] Sending FULL test email request with unsaved SMTP config:', {
         emailConfig: {
@@ -167,16 +176,17 @@ const CustomSmtpSettings = ({ emailConfig, setEmailConfig }: CustomSmtpSettingsP
         timestamp: new Date().toISOString()
       });
 
-      // Assert password is a non-empty string before sending API request
-      if (typeof requestPayload.emailConfig.password !== 'string' || requestPayload.emailConfig.password.trim() === '') {
-        const errorMsg = 'CRITICAL: Password assertion failed - password must be a non-empty string';
+      // Assert password from parent component is a non-empty string before sending API request
+      if (typeof smtpPassword !== 'string' || smtpPassword.trim() === '') {
+        const errorMsg = 'CRITICAL: Password assertion failed - password must be a non-empty string from parent component';
         console.error('[CustomSmtpSettings] ' + errorMsg, {
-          passwordType: typeof requestPayload.emailConfig.password,
-          passwordValue: requestPayload.emailConfig.password,
-          isEmptyString: requestPayload.emailConfig.password === '',
-          isWhitespace: typeof requestPayload.emailConfig.password === 'string' && requestPayload.emailConfig.password.trim() === ''
+          passwordType: typeof smtpPassword,
+          passwordLength: smtpPassword?.length || 0,
+          isEmptyString: smtpPassword === '',
+          isWhitespace: typeof smtpPassword === 'string' && smtpPassword.trim() === '',
+          source: 'parent_component'
         });
-        throw new Error(errorMsg + '. Password was not properly stored in component state.');
+        throw new Error(errorMsg + '. Password not properly managed by parent.');
       }
 
       setTesting(true);
@@ -342,7 +352,7 @@ const CustomSmtpSettings = ({ emailConfig, setEmailConfig }: CustomSmtpSettingsP
               <Grid item xs={12} sm={6}>
                 <TextField
                   label="SMTP Password"
-                  value={emailConfig.password || ''}
+                  value={smtpPassword || ''}
                   onChange={(e) => {
                     const newPassword = e.target.value;
                     handleConfigChange('password', newPassword);
@@ -354,11 +364,9 @@ const CustomSmtpSettings = ({ emailConfig, setEmailConfig }: CustomSmtpSettingsP
                   type={showPassword ? 'text' : 'password'}
                   placeholder="••••••••••••"
                   helperText={
-                    passwordModified
-                      ? '✓ Password modified (will be saved)'
-                      : emailConfig.password
+                    smtpPassword
                       ? '✓ Password stored (clear and re-enter to change)'
-                      : 'SMTP authentication password'
+                      : 'SMTP authentication password (enters will be masked for security)'
                   }
                   size="small"
                   InputProps={{

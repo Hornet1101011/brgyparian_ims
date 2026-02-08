@@ -316,6 +316,14 @@ const SystemSettings: FC = () => {
     mailtrap: false,
   });
   
+  // Explicit password state management - real passwords stored here
+  // Maps provider to actual password string
+  const [smtpPasswords, setSmtpPasswords] = useState({
+    custom: '',  // Real SMTP password for custom provider
+    gmail: '',   // Real Gmail app password
+    mailtrap: ''  // Real Mailtrap password
+  });
+  
   // Health check status state
   const [healthStatus, setHealthStatus] = useState<any>(null);
   const [loadingHealthStatus, setLoadingHealthStatus] = useState(false);
@@ -1238,15 +1246,53 @@ const SystemSettings: FC = () => {
         gmail: false,
         mailtrap: false,
       });
+      // Reset passwords when provider changes
+      setSmtpPasswords({
+        custom: '',
+        gmail: '',
+        mailtrap: ''
+      });
     } else {
-      // Track password modification
-      if ((config.password !== undefined || config.gmailAppPassword !== undefined) && initializationCompleteRef.current) {
+      // Track password modification and update password state
+      if (config.password !== undefined && initializationCompleteRef.current) {
         setPasswordModified((prev) => ({
           ...prev,
           [emailConfig.provider]: true,
         }));
+        // Store real password in smtpPasswords
+        if (emailConfig.provider === 'custom' || emailConfig.provider === 'mailtrap') {
+          setSmtpPasswords((prev) => ({
+            ...prev,
+            [emailConfig.provider]: config.password
+          }));
+        }
       }
-      setEmailConfig((prev: any) => ({ ...prev, ...config }));
+      if (config.gmailAppPassword !== undefined && initializationCompleteRef.current) {
+        setPasswordModified((prev) => ({
+          ...prev,
+          gmail: true,
+        }));
+        // Store real Gmail app password
+        setSmtpPasswords((prev) => ({
+          ...prev,
+          gmail: config.gmailAppPassword
+        }));
+      }
+      
+      // Normalize SMTP secure flag based on port for custom SMTP
+      // This ensures consistent behavior across test, save, and health check
+      let configToSet = { ...config };
+      if (emailConfig.provider === 'custom' && config.port !== undefined) {
+        if (config.port === 465) {
+          configToSet.secure = true;  // Port 465 uses SSL
+          console.log('[SystemSettings] Normalized secure flag: port 465 → secure = true');
+        } else if (config.port === 587) {
+          configToSet.secure = false;  // Port 587 uses TLS
+          console.log('[SystemSettings] Normalized secure flag: port 587 → secure = false');
+        }
+      }
+      
+      setEmailConfig((prev: any) => ({ ...prev, ...configToSet }));
     }
   }, [emailConfig.provider]);
 
@@ -1507,6 +1553,7 @@ const SystemSettings: FC = () => {
             <CustomSmtpSettings 
               emailConfig={emailConfig}
               setEmailConfig={setEmailConfig}
+              smtpPassword={smtpPasswords.custom}
             />
           )}
 
