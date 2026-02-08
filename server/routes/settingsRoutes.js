@@ -643,12 +643,30 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
       console.log('[Settings PATCH] SMTP config fields set in updateOps:', Object.keys(updateOps.$set).filter(k => k.startsWith('smtp.')));
     }
     
+    // SAFEGUARD: Ensure smtp.password is never accidentally deleted
+    // Only delete if explicitly marked for deletion (value === undefined in $unset)
+    // Do NOT delete when falsy (empty string, 0, false, etc.)
+    if (updateOps.$unset) {
+      if (updateOps.$unset['smtp.password'] !== undefined) {
+        console.warn('[Settings PATCH] SECURITY WARNING: Attempted to unset smtp.password - BLOCKING!');
+        delete updateOps.$unset['smtp.password'];
+      }
+    }
+    
+    // Verify smtp.password is NOT being set to null/undefined in $set
+    if (updateOps.$set['smtp.password'] === null || updateOps.$set['smtp.password'] === undefined) {
+      console.warn('[Settings PATCH] SECURITY WARNING: Attempted to set smtp.password to null/undefined - REMOVING from $set!');
+      delete updateOps.$set['smtp.password'];
+    }
+    
     // Log the COMPLETE updateOps.$set before MongoDB operation to verify smtp fields are included
     const smtpFieldsInOps = Object.keys(updateOps.$set).filter(k => k.startsWith('smtp.'));
     console.log('[Settings PATCH] COMPLETE updateOps before MongoDB update:', {
       totalFields: Object.keys(updateOps.$set).length,
       smtpFieldCount: smtpFieldsInOps.length,
       smtpFieldsPresent: smtpFieldsInOps,
+      'smtp.password_in_ops': !!updateOps.$set['smtp.password'],
+      'smtp.password_being_deleted': !!updateOps.$unset?.['smtp.password'],
       sampleSmtpValues: {
         'smtp.enabled': updateOps.$set['smtp.enabled'],
         'smtp.provider': updateOps.$set['smtp.provider'],
