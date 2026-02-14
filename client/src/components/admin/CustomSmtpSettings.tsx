@@ -13,6 +13,10 @@ import {
   Grid,
   InputAdornment,
   IconButton,
+  MenuItem,
+  Select,
+  FormControl,
+  InputLabel,
 } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { message as antdMessage } from 'antd';
@@ -41,6 +45,7 @@ interface CustomSmtpSettingsProps {
 
 const CustomSmtpSettings = ({ emailConfig, setEmailConfig, smtpPasswordProp = '', passwordDirty = false, hasBackendPassword = false }: CustomSmtpSettingsProps) => {
   const [showPassword, setShowPassword] = useState(false);
+  const [smtpPasswordVisible, setSmtpPasswordVisible] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testEmailAddress, setTestEmailAddress] = useState('');
   // Track if password has been modified by user (real password always stored in emailConfig.password)
@@ -49,6 +54,43 @@ const CustomSmtpSettings = ({ emailConfig, setEmailConfig, smtpPasswordProp = ''
   const [smtpPassword, setSmtpPassword] = useState('');
   // Track if user has edited the password field
   const [smtpPasswordDirty, setSmtpPasswordDirty] = useState(false);
+  
+  // Provider selection state
+  const [selectedProvider, setSelectedProvider] = useState<'mailtrap' | 'sendgrid' | 'gmail'>('mailtrap');
+  
+  // Provider-specific configuration state
+  const [mailtrapConfig, setMailtrapConfig] = useState({
+    host: '',
+    port: 2525,
+    secure: true,
+    user: '',
+    password: '',
+    fromEmail: '',
+    fromName: 'Barangay System'
+  });
+
+  const [sendgridConfig, setSendgridConfig] = useState({
+    apiKey: '',
+    fromEmail: '',
+    fromName: 'Barangay System'
+  });
+
+  const [gmailConfig, setGmailConfig] = useState({
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: true,
+    user: '',
+    password: '',
+    fromEmail: '',
+    fromName: 'Barangay System'
+  });
+  
+  // Track if any provider password is dirty
+  const [providerPasswordDirty, setProviderPasswordDirty] = useState({
+    mailtrap: false,
+    sendgrid: false,
+    gmail: false
+  });
 
   // Clean irrelevant provider fields when provider changes away from custom
   // This enforces single provider: only custom SMTP fields are preserved
@@ -288,185 +330,429 @@ const CustomSmtpSettings = ({ emailConfig, setEmailConfig, smtpPasswordProp = ''
         <>
           <Divider sx={{ my: 2 }} />
 
-          <Box sx={{ mt: 3 }}>
-            {/* Sender Information */}
-            <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600, color: '#374151' }}>
-              Sender Information
-            </Typography>
-
-            <Grid container spacing={2} sx={{ mb: 3 }}>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="From Name"
-                  value={emailConfig.fromName || ''}
-                  onChange={(e) => handleConfigChange('fromName', e.target.value)}
-                  fullWidth
-                  margin="normal"
-                  placeholder="e.g., Barangay System"
-                  helperText="How the sender name appears in emails"
-                  size="small"
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="From Email"
-                  value={emailConfig.fromEmail || ''}
-                  onChange={(e) => handleConfigChange('fromEmail', e.target.value)}
-                  fullWidth
-                  margin="normal"
-                  type="email"
-                  placeholder="noreply@example.com"
-                  helperText="Email address that sends the emails"
-                  size="small"
-                />
-              </Grid>
-            </Grid>
-
-            <Divider sx={{ my: 3 }} />
-
-            {/* SMTP Server Configuration */}
-            <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600, color: '#374151' }}>
-              SMTP Server Settings
-            </Typography>
-
-            <Grid container spacing={2} sx={{ mb: 3 }}>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="SMTP Host"
-                  value={emailConfig.host || ''}
-                  onChange={(e) => handleConfigChange('host', e.target.value)}
-                  fullWidth
-                  margin="normal"
-                  placeholder="smtp.gmail.com"
-                  helperText="SMTP server address"
-                  size="small"
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="SMTP Port"
-                  value={emailConfig.port || 587}
-                  onChange={(e) => handleConfigChange('port', parseInt(e.target.value) || 587)}
-                  fullWidth
-                  margin="normal"
-                  type="number"
-                  placeholder="587"
-                  helperText="Typical: 587 (TLS) or 465 (SSL)"
-                  size="small"
-                />
-              </Grid>
-            </Grid>
-
-            <Grid container spacing={2} sx={{ mb: 3 }}>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="SMTP Username"
-                  value={emailConfig.user || ''}
-                  onChange={(e) => handleConfigChange('user', e.target.value)}
-                  fullWidth
-                  margin="normal"
-                  placeholder="username or email"
-                  helperText="SMTP authentication username"
-                  size="small"
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="SMTP Password"
-                  value={smtpPassword}
-                  onChange={(e) => {
-                    setSmtpPassword(e.target.value);
-                    setSmtpPasswordDirty(true);
-                  }}
-                  fullWidth
-                  margin="normal"
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="••••••••••••"
-                  helperText={
-                    smtpPassword
-                      ? '✓ Password entered (will be sent with test/health-check)'
-                      : hasBackendPassword
-                      ? 'Password is saved. Re-enter to change.'
-                      : 'SMTP authentication password (enters will be masked for security)'
-                  }
-                  size="small"
-                  InputProps={{
-                    endAdornment: (
-                      <InputAdornment position="end">
-                        <IconButton
-                          onClick={() => setShowPassword(!showPassword)}
-                          edge="end"
-                          size="small"
-                        >
-                          {showPassword ? <VisibilityOff /> : <Visibility />}
-                        </IconButton>
-                      </InputAdornment>
-                    )
-                  }}
-                />
-              </Grid>
-            </Grid>
-
-            {/* Security Settings */}
-            <Box sx={{ mb: 3, p: 2, backgroundColor: '#f3f4f6', borderRadius: 1 }}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={emailConfig.secure || false}
-                    onChange={(e) => handleConfigChange('secure', e.target.checked)}
-                    color="primary"
-                  />
-                }
-                label={
-                  <Box>
-                    <Typography sx={{ fontWeight: 500 }}>
-                      {emailConfig.secure ? '✓ TLS/SSL Enabled' : 'Enable TLS/SSL'}
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: '#6b7280' }}>
-                      Use TLS (port 587) or SSL (port 465) for secure connection
-                    </Typography>
-                  </Box>
-                }
-              />
-            </Box>
-
-            <Divider sx={{ my: 3 }} />
-
-            {/* Test Email Configuration */}
-            <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600, color: '#374151' }}>
-              📨 Test SMTP Configuration
-            </Typography>
-
-            <TextField
-              label="Test Email Recipient"
-              value={testEmailAddress}
-              onChange={(e) => setTestEmailAddress(e.target.value)}
-              fullWidth
-              margin="normal"
-              type="email"
-              placeholder="Leave blank to send to From Email"
-              helperText="Enter an email address where you want to receive the test email"
-              size="small"
-            />
-
-            <Box sx={{ mt: 3, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-              <Button
-                variant="outlined"
-                color="success"
-                onClick={handleTestSmtpConnection}
-                disabled={!emailConfig.host || !emailConfig.port || testing}
-                sx={{ minWidth: 150 }}
+          {/* Email Provider Selector */}
+          <Box sx={{ mt: 3, mb: 3 }}>
+            <FormControl fullWidth>
+              <InputLabel>Email Provider</InputLabel>
+              <Select
+                value={selectedProvider}
+                label="Email Provider"
+                onChange={(e) => {
+                  const newProvider = e.target.value as 'mailtrap' | 'sendgrid' | 'gmail';
+                  setSelectedProvider(newProvider);
+                  console.log('[CustomSmtpSettings] Provider changed to:', newProvider);
+                }}
+                size="small"
               >
-                {testing ? (
-                  <>
-                    <CircularProgress size={16} sx={{ mr: 1 }} /> Sending Test...
-                  </>
-                ) : (
-                  '📧 Send Test Email'
-                )}
-              </Button>
-            </Box>
+                <MenuItem value="mailtrap">Mailtrap</MenuItem>
+                <MenuItem value="sendgrid">SendGrid</MenuItem>
+                <MenuItem value="gmail">Gmail</MenuItem>
+              </Select>
+            </FormControl>
           </Box>
+
+          {/* MAILTRAP Configuration Form */}
+          {selectedProvider === 'mailtrap' && (
+            <Box sx={{ mt: 3 }}>
+              <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600, color: '#374151' }}>
+                Sender Information
+              </Typography>
+
+              <Grid container spacing={2} sx={{ mb: 3 }}>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="From Name"
+                    value={mailtrapConfig.fromName || ''}
+                    onChange={(e) => setMailtrapConfig({ ...mailtrapConfig, fromName: e.target.value })}
+                    fullWidth
+                    margin="normal"
+                    placeholder="e.g., Barangay System"
+                    helperText="How the sender name appears in emails"
+                    size="small"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="From Email"
+                    value={mailtrapConfig.fromEmail || ''}
+                    onChange={(e) => setMailtrapConfig({ ...mailtrapConfig, fromEmail: e.target.value })}
+                    fullWidth
+                    margin="normal"
+                    type="email"
+                    placeholder="noreply@example.com"
+                    helperText="Email address that sends the emails"
+                    size="small"
+                  />
+                </Grid>
+              </Grid>
+
+              <Divider sx={{ my: 3 }} />
+
+              <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600, color: '#374151' }}>
+                SMTP Server Settings
+              </Typography>
+
+              <Grid container spacing={2} sx={{ mb: 3 }}>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="SMTP Host"
+                    value={mailtrapConfig.host || ''}
+                    onChange={(e) => setMailtrapConfig({ ...mailtrapConfig, host: e.target.value })}
+                    fullWidth
+                    margin="normal"
+                    placeholder="smtp.mailtrap.io"
+                    helperText="SMTP server address"
+                    size="small"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="SMTP Port"
+                    value={mailtrapConfig.port || 2525}
+                    onChange={(e) => setMailtrapConfig({ ...mailtrapConfig, port: parseInt(e.target.value) || 2525 })}
+                    fullWidth
+                    margin="normal"
+                    type="number"
+                    placeholder="2525"
+                    helperText="Typical: 2525 (unencrypted) or 465 (SSL)"
+                    size="small"
+                  />
+                </Grid>
+              </Grid>
+
+              <Grid container spacing={2} sx={{ mb: 3 }}>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="SMTP Username"
+                    value={mailtrapConfig.user || ''}
+                    onChange={(e) => setMailtrapConfig({ ...mailtrapConfig, user: e.target.value })}
+                    fullWidth
+                    margin="normal"
+                    placeholder="your-username"
+                    helperText="Mailtrap username"
+                    size="small"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="SMTP Password"
+                    type={smtpPasswordVisible ? 'text' : 'password'}
+                    value={mailtrapConfig.password || ''}
+                    onChange={(e) => {
+                      setMailtrapConfig({ ...mailtrapConfig, password: e.target.value });
+                      setProviderPasswordDirty({ ...providerPasswordDirty, mailtrap: true });
+                    }}
+                    fullWidth
+                    margin="normal"
+                    placeholder="••••••••"
+                    helperText="Your Mailtrap password"
+                    size="small"
+                    InputProps={{
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton
+                            onClick={() => setSmtpPasswordVisible(!smtpPasswordVisible)}
+                            edge="end"
+                            size="small"
+                          >
+                            {smtpPasswordVisible ? <VisibilityOff /> : <Visibility />}
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                </Grid>
+              </Grid>
+
+              <Box sx={{ mb: 3, p: 2, backgroundColor: '#f3f4f6', borderRadius: 1 }}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={mailtrapConfig.secure !== false}
+                      onChange={(e) => setMailtrapConfig({ ...mailtrapConfig, secure: e.target.checked })}
+                      color="primary"
+                    />
+                  }
+                  label={
+                    <Box>
+                      <Typography sx={{ fontWeight: 500 }}>
+                        {mailtrapConfig.secure !== false ? '✓ TLS/SSL Enabled' : 'Enable TLS/SSL'}
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: '#6b7280' }}>
+                        Mailtrap: Use port 465 (SSL) or 2525 (non-TLS)
+                      </Typography>
+                    </Box>
+                  }
+                />
+              </Box>
+
+              <Divider sx={{ my: 3 }} />
+
+              <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600, color: '#374151' }}>
+                📨 Test Mailtrap Configuration
+              </Typography>
+
+              <TextField
+                label="Test Email Recipient"
+                value={testEmailAddress}
+                onChange={(e) => setTestEmailAddress(e.target.value)}
+                fullWidth
+                margin="normal"
+                type="email"
+                placeholder="Leave blank to send to From Email"
+                helperText="Enter an email address where you want to receive the test email"
+                size="small"
+              />
+
+              <Box sx={{ mt: 3, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                <Button
+                  variant="outlined"
+                  color="success"
+                  onClick={handleTestSmtpConnection}
+                  disabled={!mailtrapConfig.host || !mailtrapConfig.port || testing}
+                  sx={{ minWidth: 150 }}
+                >
+                  {testing ? (
+                    <>
+                      <CircularProgress size={16} sx={{ mr: 1 }} /> Sending Test...
+                    </>
+                  ) : (
+                    '📧 Send Test Email'
+                  )}
+                </Button>
+              </Box>
+            </Box>
+          )}
+
+          {/* SENDGRID Configuration Form */}
+          {selectedProvider === 'sendgrid' && (
+            <Box sx={{ mt: 3 }}>
+              <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600, color: '#374151' }}>
+                Sender Information
+              </Typography>
+
+              <Grid container spacing={2} sx={{ mb: 3 }}>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="From Name"
+                    value={sendgridConfig.fromName || ''}
+                    onChange={(e) => setSendgridConfig({ ...sendgridConfig, fromName: e.target.value })}
+                    fullWidth
+                    margin="normal"
+                    placeholder="e.g., Barangay System"
+                    helperText="How the sender name appears in emails"
+                    size="small"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="From Email"
+                    value={sendgridConfig.fromEmail || ''}
+                    onChange={(e) => setSendgridConfig({ ...sendgridConfig, fromEmail: e.target.value })}
+                    fullWidth
+                    margin="normal"
+                    type="email"
+                    placeholder="noreply@example.com"
+                    helperText="Email address that sends the emails"
+                    size="small"
+                  />
+                </Grid>
+              </Grid>
+
+              <Divider sx={{ my: 3 }} />
+
+              <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600, color: '#374151' }}>
+                SendGrid API Configuration
+              </Typography>
+
+              <TextField
+                label="SendGrid API Key"
+                type={smtpPasswordVisible ? 'text' : 'password'}
+                value={sendgridConfig.apiKey || ''}
+                onChange={(e) => {
+                  setSendgridConfig({ ...sendgridConfig, apiKey: e.target.value });
+                  setProviderPasswordDirty({ ...providerPasswordDirty, sendgrid: true });
+                }}
+                fullWidth
+                margin="normal"
+                placeholder="SG.xxxxxxxxxx"
+                helperText="Your SendGrid API key (starts with 'SG.')"
+                size="small"
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        onClick={() => setSmtpPasswordVisible(!smtpPasswordVisible)}
+                        edge="end"
+                        size="small"
+                      >
+                        {smtpPasswordVisible ? <VisibilityOff /> : <Visibility />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
+              />
+
+              <Divider sx={{ my: 3 }} />
+
+              <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600, color: '#374151' }}>
+                📨 Test SendGrid Configuration
+              </Typography>
+
+              <TextField
+                label="Test Email Recipient"
+                value={testEmailAddress}
+                onChange={(e) => setTestEmailAddress(e.target.value)}
+                fullWidth
+                margin="normal"
+                type="email"
+                placeholder="Leave blank to send to From Email"
+                helperText="Enter an email address where you want to receive the test email"
+                size="small"
+              />
+
+              <Box sx={{ mt: 3, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                <Button
+                  variant="outlined"
+                  color="success"
+                  onClick={handleTestSmtpConnection}
+                  disabled={!sendgridConfig.apiKey || !sendgridConfig.fromEmail || testing}
+                  sx={{ minWidth: 150 }}
+                >
+                  {testing ? (
+                    <>
+                      <CircularProgress size={16} sx={{ mr: 1 }} /> Sending Test...
+                    </>
+                  ) : (
+                    '📧 Send Test Email'
+                  )}
+                </Button>
+              </Box>
+            </Box>
+          )}
+
+          {/* GMAIL Configuration Form */}
+          {selectedProvider === 'gmail' && (
+            <Box sx={{ mt: 3 }}>
+              <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600, color: '#374151' }}>
+                Gmail Account Information
+              </Typography>
+
+              <Alert severity="info" sx={{ mb: 3 }}>
+                💡 <strong>Gmail Setup:</strong> You need to enable 2-factor authentication on your Gmail account and generate an app password. <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer">Generate app password here</a>
+              </Alert>
+
+              <Grid container spacing={2} sx={{ mb: 3 }}>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="Gmail Address"
+                    type="email"
+                    value={gmailConfig.user || ''}
+                    onChange={(e) => setGmailConfig({ ...gmailConfig, user: e.target.value })}
+                    fullWidth
+                    margin="normal"
+                    placeholder="your-email@gmail.com"
+                    helperText="Your Gmail address"
+                    size="small"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="From Name"
+                    value={gmailConfig.fromName || ''}
+                    onChange={(e) => setGmailConfig({ ...gmailConfig, fromName: e.target.value })}
+                    fullWidth
+                    margin="normal"
+                    placeholder="e.g., Barangay System"
+                    helperText="How the sender name appears in emails"
+                    size="small"
+                  />
+                </Grid>
+              </Grid>
+
+              <TextField
+                label="From Email"
+                type="email"
+                value={gmailConfig.fromEmail || gmailConfig.user || ''}
+                onChange={(e) => setGmailConfig({ ...gmailConfig, fromEmail: e.target.value })}
+                fullWidth
+                margin="normal"
+                placeholder="your-email@gmail.com"
+                helperText="Sending email address (usually your Gmail address)"
+                size="small"
+              />
+
+              <Divider sx={{ my: 3 }} />
+
+              <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600, color: '#374151' }}>
+                Gmail App Password
+              </Typography>
+
+              <TextField
+                label="App Password"
+                type={smtpPasswordVisible ? 'text' : 'password'}
+                value={gmailConfig.password || ''}
+                onChange={(e) => {
+                  setGmailConfig({ ...gmailConfig, password: e.target.value });
+                  setProviderPasswordDirty({ ...providerPasswordDirty, gmail: true });
+                }}
+                fullWidth
+                margin="normal"
+                placeholder="••••••••••••••••"
+                helperText="The 16-character app password from Google Account"
+                size="small"
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        onClick={() => setSmtpPasswordVisible(!smtpPasswordVisible)}
+                        edge="end"
+                        size="small"
+                      >
+                        {smtpPasswordVisible ? <VisibilityOff /> : <Visibility />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
+              />
+
+              <Divider sx={{ my: 3 }} />
+
+              <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600, color: '#374151' }}>
+                📨 Test Gmail Configuration
+              </Typography>
+
+              <TextField
+                label="Test Email Recipient"
+                value={testEmailAddress}
+                onChange={(e) => setTestEmailAddress(e.target.value)}
+                fullWidth
+                margin="normal"
+                type="email"
+                placeholder="Leave blank to send to From Email"
+                helperText="Enter an email address where you want to receive the test email"
+                size="small"
+              />
+
+              <Box sx={{ mt: 3, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                <Button
+                  variant="outlined"
+                  color="success"
+                  onClick={handleTestSmtpConnection}
+                  disabled={!gmailConfig.user || !gmailConfig.password || !gmailConfig.fromEmail || testing}
+                  sx={{ minWidth: 150 }}
+                >
+                  {testing ? (
+                    <>
+                      <CircularProgress size={16} sx={{ mr: 1 }} /> Sending Test...
+                    </>
+                  ) : (
+                    '📧 Send Test Email'
+                  )}
+                </Button>
+              </Box>
+            </Box>
+          )}
 
           <Alert severity="warning" sx={{ mt: 3 }}>
             ⚠️ <strong>Important:</strong> Store SMTP credentials securely. These settings are

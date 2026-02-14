@@ -1,45 +1,84 @@
 const mongoose = require('mongoose');
 
-const smtpSchema = new mongoose.Schema({
-  enabled: { type: Boolean, default: false },
-  provider: { 
-    type: String, 
-    enum: ['gmail', 'mailtrap', 'sendgrid', 'aws-ses', 'custom'], 
-    default: 'custom' 
-  },
-  // Common fields for all providers
+// Mailtrap provider schema
+const mailtrapSchema = new mongoose.Schema({
   host: { type: String },
   port: { type: Number },
   secure: { type: Boolean }, // TLS/SSL
   user: { type: String },
   password: { type: String }, // Plain text password for SMTP
-  encryptedPassword: { type: String }, // Encrypted backup
   fromName: { type: String, default: 'Barangay System' },
   fromEmail: { type: String }, // Sender email address
-  
-  // Provider-specific fields
-  // Gmail
-  gmailAppPassword: { type: String },
-  gmailAddress: { type: String },
-  
-  // SendGrid
-  sendgridApiKey: { type: String },
-  
-  // AWS SES
-  awsAccessKeyId: { type: String },
-  awsSecretAccessKey: { type: String },
-  awsRegion: { type: String, default: 'us-east-1' },
-  
-  // Metadata
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
+}, { _id: false });
+
+// SendGrid provider schema
+const sendgridSchema = new mongoose.Schema({
+  apiKey: { type: String }, // SendGrid API key
+  fromName: { type: String, default: 'Barangay System' },
+  fromEmail: { type: String }, // Sender email address
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now },
+}, { _id: false });
+
+// Gmail provider schema
+const gmailProviderSchema = new mongoose.Schema({
+  host: { type: String },
+  port: { type: Number },
+  secure: { type: Boolean }, // TLS/SSL
+  user: { type: String },
+  password: { type: String }, // Gmail app password
+  fromName: { type: String, default: 'Barangay System' },
+  fromEmail: { type: String }, // Sender email address
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now },
+}, { _id: false });
+
+// Unified SMTP configuration with support for multiple providers
+const smtpSchema = new mongoose.Schema({
+  // Active provider selection
+  activeProvider: { 
+    type: String, 
+    enum: ['mailtrap', 'sendgrid', 'gmail'], 
+    default: 'mailtrap'
+  },
+  enabled: { type: Boolean, default: false },
+  
+  // Provider-specific configurations
+  mailtrap: { type: mailtrapSchema, default: {} },
+  sendgrid: { type: sendgridSchema, default: {} },
+  gmail: { type: gmailProviderSchema, default: {} },
+  
+  // Metadata
   testEmailSent: { type: Date },
   testEmailStatus: { type: String }, // 'success', 'failed', 'pending'
   // Health check status
   lastHealthCheckAt: { type: Date }, // Timestamp of last health check
   lastHealthStatus: { type: String, enum: ['ok', 'warning', 'failed'], default: null }, // 'ok', 'warning', or 'failed'
-  lastHealthCheckError: { type: String } // Error message from last failed check
-});
+  lastHealthCheckError: { type: String }, // Error message from last failed check
+  
+  // Deprecated fields (kept for backward compatibility with old format)
+  provider: { 
+    type: String, 
+    enum: ['gmail', 'mailtrap', 'sendgrid', 'aws-ses', 'custom'], 
+    default: null // Will be null for new installations
+  },
+  host: { type: String },
+  port: { type: Number },
+  secure: { type: Boolean },
+  user: { type: String },
+  password: { type: String },
+  encryptedPassword: { type: String },
+  fromName: { type: String },
+  fromEmail: { type: String },
+  gmailAppPassword: { type: String },
+  gmailAddress: { type: String },
+  sendgridApiKey: { type: String },
+  awsAccessKeyId: { type: String },
+  awsSecretAccessKey: { type: String },
+  awsRegion: { type: String, default: 'us-east-1' },
+}, { _id: false });
 
 const gmailSchema = new mongoose.Schema({
   enabled: { type: Boolean, default: false },
