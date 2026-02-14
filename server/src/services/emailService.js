@@ -1,13 +1,4 @@
-const nodemailer = require('nodemailer');
-const gmailHelper = require('../../../utils/gmailHelper');
-
-/**
- * Gmail SMTP Transporter
- * Uses environment variables BIMS_EMAIL and BIMS_EMAIL_PASSWORD or Gmail config
- * This transporter is reusable across the entire application
- */
-
-let gmailTransporter = null;
+const sgMail = require('@sendgrid/mail');
 let EmailLog = null;
 let SystemSetting = null;
 
@@ -38,38 +29,21 @@ async function isEmailTypeEnabled(emailType) {
     const SystemSettingModel = getSystemSettingModel();
     if (!SystemSettingModel) {
       console.warn('[EmailService] SystemSetting model not available, allowing email');
-      return true; // Fail open - allow email if settings can't be read
+      return true;
     }
 
     const settings = await SystemSettingModel.findOne();
-    if (!settings || !settings.emailSettings) {
-      console.warn('[EmailService] No email settings found, allowing email');
-      return true; // Fail open
-    }
-
-    // Check global enable flag
-    if (!settings.emailSettings.enabled) {
-      console.log('[EmailService] Global email sending disabled');
+    if (!settings || !settings.email?.enabled) {
+      console.log('[EmailService] Email is disabled in system settings');
       return false;
     }
 
-    // Check specific email type flags
-    switch (emailType) {
-      case 'password-reset':
-        return settings.emailSettings.enablePasswordResetEmails !== false;
-      case 'otp':
-        return settings.emailSettings.enableOtpEmails !== false;
-      case 'document-notification':
-        return settings.emailSettings.enableDocumentNotificationEmails !== false;
-      case 'announcement':
-        return settings.emailSettings.enableAnnouncementEmails !== false;
-      default:
-        // For generic emails or unknown types, check if global is enabled
-        return settings.emailSettings.enabled !== false;
-    }
+    // Currently all email types use the same enabled flag for SendGrid
+    // Can be extended later if needed
+    return true;
   } catch (err) {
-    console.error('[EmailService] Error checking email settings:', err.message);
-    return true; // Fail open - allow email if there's an error
+    console.error('[EmailService] Error checking email type enabled:', err.message);
+    return true; // Fail open
   }
 }
 
@@ -133,115 +107,14 @@ async function isDryRunModeEnabled() {
   try {
     const SystemSettingModel = getSystemSettingModel();
     if (!SystemSettingModel) {
-      return false; // Default to normal mode if settings not available
+      return false;
     }
     
     const settings = await SystemSettingModel.findOne().lean();
     return settings?.dryRunMode === true;
   } catch (err) {
     console.warn('[EmailService] Error checking dry-run mode:', err.message);
-    return false; // Default to normal mode if there's an error
-  }
-}
-
-/**
- * Initialize and return a transporter based on settings
- * Priority: Gmail (if enabled) > SMTP (from database) > Environment variables
- * @returns {object} Nodemailer transporter
- * @throws {Error} If no credentials configured
- */
-async function getConfiguredTransporter() {
-  // Clear cache to get fresh transporter
-  gmailTransporter = null;
-
-  try {
-    // First, check if Gmail is enabled
-    const SystemSettingModel = getSystemSettingModel();
-    const settings = SystemSettingModel ? await SystemSettingModel.findOne().lean() : null;
-    
-    if (settings?.gmail?.enabled && settings.gmail.gmailAddress) {
-      try {
-        console.log('[EmailService] Creating transporter using Gmail configuration');
-        gmailTransporter = gmailHelper.createGmailTransporter(settings.gmail);
-        return gmailTransporter;
-      } catch (err) {
-        console.error('[EmailService] Failed to create Gmail transporter:', err.message);
-        console.log('[EmailService] Falling back to SMTP or environment variables');
-      }
-    }
-    
-    // Try SMTP from database
-    if (settings?.smtp?.host && settings.smtp.port && settings.smtp.user) {
-      const decryptedPassword = settings.smtp.appPassword || settings.smtp.encryptedPassword;
-      
-      if (decryptedPassword) {
-        console.log(`[EmailService] Creating transporter from database SMTP settings (${settings.smtp.host}:${settings.smtp.port})`);
-
-        gmailTransporter = nodemailer.createTransport({
-          host: settings.smtp.host,
-          port: settings.smtp.port,
-          secure: settings.smtp.secure === true,
-          auth: {
-            user: settings.smtp.user,
-            pass: decryptedPassword,
-          },
-          tls: {
-            rejectUnauthorized: false,
-          },
-        });
-
-        return gmailTransporter;
-      } else {
-        console.warn('[EmailService] SMTP settings found in database but no password configured, falling back to environment variables');
-      }
-    }
-  } catch (err) {
-    console.warn('[EmailService] Failed to load settings from database, falling back to environment variables:', err.message);
-  }
-
-  // Fallback to environment variables
-  const email = process.env.BIMS_EMAIL || process.env.SMTP_USER;
-  const password = process.env.BIMS_EMAIL_PASSWORD || process.env.SMTP_PASSWORD;
-  const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const smtpPort = parseInt(process.env.SMTP_PORT || '465');
-  const smtpSecure = process.env.SMTP_SECURITY === 'SSL' ? true : (smtpPort === 465 ? true : false);
-
-  if (!email || !password) {
-    const error = new Error(
-      'Missing email credentials. Please configure Gmail or SMTP settings in admin settings or set BIMS_EMAIL and BIMS_EMAIL_PASSWORD environment variables.'
-    );
-    console.error('[EmailService] ' + error.message);
-    throw error;
-  }
-
-  try {
-    gmailTransporter = nodemailer.createTransport({
-      host: smtpHost,
-      port: smtpPort,
-      secure: smtpSecure,
-      auth: {
-        user: email,
-        pass: password,
-      },
-      connectionTimeout: 30000,
-      socketTimeout: 30000,
-      greetingTimeout: 30000,
-      pool: {
-        maxConnections: 5,
-        maxMessages: 100,
-        rateDelta: 1000,
-        rateLimit: 14,
-      },
-      tls: {
-        rejectUnauthorized: false,
-      },
-    });
-
-    console.log('[EmailService] SMTP transporter initialized successfully', `(${smtpHost}:${smtpPort})`);
-    return gmailTransporter;
-  } catch (err) {
-    console.error('[EmailService] Failed to initialize transporter:', err);
-    throw err;
+    return false;
   }
 }
 
@@ -252,298 +125,284 @@ async function getConfiguredTransporter() {
  * @throws {Error} If Gmail credentials are missing
  */
 function getGmailTransporter() {
-  if (gmailTransporter) {
-    return gmailTransporter;
-  }
+  throw new Error('[EmailService] getGmailTransporter is no longer supported. Use SendGrid exclusively.');
+}
 
-  // Support both BIMS_EMAIL/BIMS_EMAIL_PASSWORD and SMTP_USER/SMTP_PASSWORD
-  const email = process.env.BIMS_EMAIL || process.env.SMTP_USER;
-  const password = process.env.BIMS_EMAIL_PASSWORD || process.env.SMTP_PASSWORD;
-  const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const smtpPort = parseInt(process.env.SMTP_PORT || '465');
-  const smtpSecure = process.env.SMTP_SECURITY === 'SSL' ? true : (smtpPort === 465 ? true : false);
-
-  if (!email || !password) {
-    const error = new Error(
-      'Missing email credentials. Please configure SMTP settings in admin settings or set BIMS_EMAIL and BIMS_EMAIL_PASSWORD environment variables.'
-    );
-    console.error('[EmailService] ' + error.message);
-    throw error;
-  }
-
+/**
+ * Load SendGrid configuration from SystemSettings
+ * @returns {Promise<{apiKey: string, fromEmail: string, fromName: string}>}
+ * @throws {Error} If configuration is invalid
+ */
+async function loadSendGridConfig() {
   try {
-    gmailTransporter = nodemailer.createTransport({
-      host: smtpHost,
-      port: smtpPort,
-      secure: smtpSecure,
-      auth: {
-        user: email,
-        pass: password,
-      },
-      connectionTimeout: 30000,
-      socketTimeout: 30000,
-      greetingTimeout: 30000,
-      pool: {
-        maxConnections: 5,
-        maxMessages: 100,
-        rateDelta: 1000,
-        rateLimit: 14,
-      },
-      tls: {
-        rejectUnauthorized: false,
-      },
+    const SystemSettingModel = getSystemSettingModel();
+    if (!SystemSettingModel) {
+      throw new Error('SystemSetting model not available');
+    }
+
+    const settings = await SystemSettingModel.findOne().lean();
+    
+    if (!settings) {
+      throw new Error('No system settings found in database');
+    }
+
+    // Check if email is enabled
+    if (!settings.email?.enabled) {
+      throw new Error('Email is currently disabled in system settings');
+    }
+
+    // Verify SendGrid configuration exists
+    const sendgridConfig = settings.email?.sendgrid;
+    if (!sendgridConfig) {
+      throw new Error('SendGrid configuration not found in system settings');
+    }
+
+    // Verify API key exists
+    if (!sendgridConfig.apiKey || sendgridConfig.apiKey.trim() === '') {
+      throw new Error('SendGrid API key is not configured');
+    }
+
+    // Verify from email is configured
+    if (!sendgridConfig.fromEmail || sendgridConfig.fromEmail.trim() === '') {
+      throw new Error('SendGrid from email is not configured');
+    }
+
+    console.log('[EmailService] SendGrid config loaded:', {
+      provider: 'sendgrid',
+      fromEmail: sendgridConfig.fromEmail,
+      fromName: sendgridConfig.fromName,
+      hasApiKey: !!sendgridConfig.apiKey,
     });
 
-    console.log('[EmailService] SMTP transporter initialized successfully', `(${smtpHost}:${smtpPort})`);
-    return gmailTransporter;
+    return {
+      apiKey: sendgridConfig.apiKey,
+      fromEmail: sendgridConfig.fromEmail,
+      fromName: sendgridConfig.fromName || 'Barangay System',
+    };
   } catch (err) {
-    console.error('[EmailService] Failed to initialize Gmail transporter:', err);
+    console.error('[EmailService] Failed to load SendGrid configuration:', err.message);
     throw err;
   }
 }
 
 /**
- * Export the reusable Gmail transporter
- * Can be imported and used directly: const { emailTransporter } = require('./emailService')
- * @returns {object} Nodemailer transporter
- */
-const emailTransporter = () => {
-  try {
-    return getGmailTransporter();
-  } catch (err) {
-    console.error('[EmailService] Error in emailTransporter:', err);
-    throw err;
-  }
-};
-
-/**
- * Send a document approval/rejection notification
+ * Send email using SendGrid
  * @param {string} to - Recipient email address
- * @param {string} status - 'approved' or 'rejected'
- * @param {string} documentType - Type of document
- * @param {string} [notes] - Optional notes for rejection
- */
-async function sendDocumentNotification(to, status, documentType, notes) {
-  try {
-    // Check if dry-run mode is enabled
-    const dryRunEnabled = await isDryRunModeEnabled();
-    
-    const SystemSettingModel = getSystemSettingModel();
-    const settings = SystemSettingModel ? await SystemSettingModel.findOne().lean() : null;
-    
-    // Determine sender based on whether Gmail or SMTP is active
-    let fromEmail;
-    let fromName;
-    
-    if (settings?.gmail?.enabled && settings.gmail.gmailAddress) {
-      fromEmail = settings.gmail.gmailAddress;
-      fromName = settings.gmail.displayName || 'Barangay System';
-    } else {
-      fromEmail = settings?.smtp?.user || process.env.BIMS_EMAIL;
-      fromName = settings?.smtp?.fromName || 'Barangay System';
-    }
-    
-    const from = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
-
-    const subject = `Your document request has been ${status}`;
-    const body = `
-      <p>Dear user,</p>
-      <p>Your request for <strong>${documentType}</strong> has been <strong>${status}</strong>.</p>
-      ${notes ? `<p>Notes: ${notes}</p>` : ''}
-      <p>If you have questions, please contact support.</p>
-      <p>Thank you.</p>
-    `;
-
-    let info;
-    
-    if (dryRunEnabled) {
-      // Dry-run mode: simulate email send
-      const simulatedMessageId = `dry-run-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      console.log('[EmailService] DRY-RUN MODE: Simulating document notification', {
-        provider: settings?.smtp?.provider || 'custom',
-        recipient: to,
-        subject: subject,
-        status: status,
-        documentType: documentType,
-        simulatedMessageId
-      });
-      
-      info = {
-        messageId: simulatedMessageId,
-        isDryRun: true,
-        response: 'Simulated email (not sent)'
-      };
-    } else {
-      const transporter = await getConfiguredTransporter();
-      
-      info = await transporter.sendMail({
-        from,
-        to,
-        subject,
-        html: body,
-      });
-
-      console.log('[EmailService] Document notification sent:', info.messageId);
-    }
-    
-    // Log the email
-    const logMessage = dryRunEnabled ? `[DRY-RUN MODE] Simulated email - not actually sent` : null;
-    await logEmail(to, subject, true, logMessage, info.messageId, 'document-notification');
-    
-    return info;
-  } catch (err) {
-    console.error('[EmailService] Failed to send document notification:', err);
-    
-    // Log the failure
-    await logEmail(to, `Your document request has been ${status}`, false, err.message || String(err), null, 'document-notification');
-    
-    throw err;
-  }
-}
-
-/**
- * Send a generic email
- * @param {string} to - Primary recipient email address
  * @param {string} subject - Email subject
  * @param {string} html - HTML email content
+ * @param {string} [text] - Plain text email content
  * @param {string[]} [bcc] - Optional BCC recipients array
- * @param {string} [emailType] - Type of email for logging (password-reset, otp, announcement, generic)
+ * @param {string} [emailType] - Type of email for logging
+ * @returns {Promise<{messageId: string}>}
+ * @throws {Error} If email sending fails
  */
-async function sendMail(to, subject, html, bcc, emailType) {
+async function sendEmail({ to, subject, html, text, bcc, emailType }) {
+  const startTime = Date.now();
+  
   try {
+    console.log('[EmailService] Starting email send process:', {
+      recipient: to,
+      subject,
+      emailType,
+      timestamp: new Date().toISOString(),
+    });
+
     // Check if this email type is enabled
     const enabled = await isEmailTypeEnabled(emailType);
     if (!enabled) {
-      console.log(`[EmailService] Skipped: Email type "${emailType}" disabled in settings`);
-      await logEmail(to, subject, true, 'Skipped: Email type disabled', 'skipped', emailType, bcc ? bcc.length : 0);
-      return { messageId: 'skipped', response: 'Email sending disabled for this type' };
+      console.log(`[EmailService] Skipped: Email type "${emailType}" disabled`);
+      await logEmail(to, subject, true, 'Email type disabled', 'skipped', emailType, bcc?.length || 0);
+      return { messageId: 'skipped' };
     }
 
     // Check if dry-run mode is enabled
     const dryRunEnabled = await isDryRunModeEnabled();
-    
-    const SystemSettingModel = getSystemSettingModel();
-    const settings = SystemSettingModel ? await SystemSettingModel.findOne().lean() : null;
-    
-    // Determine sender based on whether Gmail or SMTP is active
-    let fromEmail;
-    let fromName;
-    
-    if (settings?.gmail?.enabled && settings.gmail.gmailAddress) {
-      fromEmail = settings.gmail.gmailAddress;
-      fromName = settings.gmail.displayName || 'Barangay System';
-    } else {
-      fromEmail = settings?.smtp?.user || process.env.BIMS_EMAIL;
-      fromName = settings?.smtp?.fromName || 'Barangay System';
+    if (dryRunEnabled) {
+      const simulatedMessageId = `dry-run-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      console.log('[EmailService] DRY-RUN MODE: Simulating email send', {
+        recipient: to,
+        subject,
+        emailType,
+        simulatedMessageId,
+        duration: `${Date.now() - startTime}ms`,
+      });
+      
+      await logEmail(to, subject, true, 'DRY-RUN MODE: simulated send', simulatedMessageId, emailType, bcc?.length || 0);
+      return { messageId: simulatedMessageId, isDryRun: true };
     }
-    
-    const from = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
 
-    const mailOptions = {
-      from,
+    // Load SendGrid configuration from database
+    const config = await loadSendGridConfig();
+    
+    // Initialize SendGrid with API key
+    sgMail.setApiKey(config.apiKey);
+
+    // Build message
+    const message = {
       to,
+      from: {
+        email: config.fromEmail,
+        name: config.fromName,
+      },
       subject,
+      text: text || null,
       html,
     };
 
     // Add BCC if provided
     if (bcc && Array.isArray(bcc) && bcc.length > 0) {
-      mailOptions.bcc = bcc;
+      message.bcc = bcc;
+      console.log(`[EmailService] Adding ${bcc.length} BCC recipients`);
     }
 
-    let info;
-    
-    if (dryRunEnabled) {
-      // Dry-run mode: simulate email send
-      const simulatedMessageId = `dry-run-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      console.log('[EmailService] DRY-RUN MODE: Simulating email', {
-        provider: settings?.smtp?.provider || 'custom',
-        recipient: to,
-        bccCount: bcc ? bcc.length : 0,
-        subject: subject,
-        emailType: emailType,
-        simulatedMessageId
-      });
-      
-      info = {
-        messageId: simulatedMessageId,
-        isDryRun: true,
-        response: 'Simulated email (not sent)'
-      };
-    } else {
-      const transporter = await getConfiguredTransporter();
-      info = await transporter.sendMail(mailOptions);
+    console.log('[EmailService] Sending email via SendGrid:', {
+      recipient: to,
+      from: `${config.fromName} <${config.fromEmail}>`,
+      subject,
+      hasHtml: !!html,
+      hasText: !!text,
+      bccCount: bcc?.length || 0,
+    });
 
-      console.log('[EmailService] Email sent:', info.messageId, bcc ? `(BCC to ${bcc.length} recipients)` : '');
-    }
+    // Send email
+    const response = await sgMail.send(message);
     
-    // Log the email
-    const logMessage = dryRunEnabled ? `[DRY-RUN MODE] Simulated email - not actually sent` : null;
-    if (bcc && bcc.length > 0) {
-      // For BCC emails, log once with count
-      await logEmail(to, subject, true, logMessage, info.messageId, emailType || 'generic', bcc.length);
-    } else {
-      // For regular emails, log individual recipient
-      await logEmail(to, subject, true, logMessage, info.messageId, emailType || 'generic');
-    }
+    // Extract message ID from response
+    const messageId = response[0]?.headers?.['x-message-id'] || `sendgrid-${Date.now()}`;
     
-    return info;
+    console.log('[EmailService] Email sent successfully via SendGrid:', {
+      messageId,
+      recipient: to,
+      subject,
+      statusCode: response[0]?.statusCode,
+      duration: `${Date.now() - startTime}ms`,
+    });
+
+    // Log the successful send
+    await logEmail(to, subject, true, null, messageId, emailType, bcc?.length || 0);
+
+    return { messageId };
   } catch (err) {
-    console.error('[EmailService] Failed to send email:', err);
-    
+    console.error('[EmailService] Failed to send email via SendGrid:', {
+      recipient: to,
+      subject,
+      error: err.message,
+      code: err.code,
+      duration: `${Date.now() - startTime}ms`,
+    });
+
     // Log the failure
-    if (bcc && bcc.length > 0) {
-      await logEmail(to, subject, false, err.message || String(err), null, emailType || 'generic', bcc.length);
-    } else {
-      await logEmail(to, subject, false, err.message || String(err), null, emailType || 'generic');
-    }
-    
+    await logEmail(to, subject, false, err.message, null, emailType, bcc?.length || 0);
+
     throw err;
   }
 }
 
 /**
- * Test the Gmail SMTP connection
- * @returns {Promise<object>} Test result with success status and details
+ * Send document notification email
+ * @param {string} to - Recipient email
+ * @param {string} status - 'approved' or 'rejected'
+ * @param {string} documentType - Type of document
+ * @param {string} [notes] - Optional notes
+ * @returns {Promise<{messageId: string}>}
  */
-async function testSmtpConnection() {
+async function sendDocumentNotification(to, status, documentType, notes) {
+  const subject = `Your document request has been ${status}`;
+  const html = `
+    <p>Dear user,</p>
+    <p>Your request for <strong>${documentType}</strong> has been <strong>${status}</strong>.</p>
+    ${notes ? `<p>Notes: ${notes}</p>` : ''}
+    <p>If you have questions, please contact support.</p>
+    <p>Thank you.</p>
+  `;
+
+  return sendEmail({
+    to,
+    subject,
+    html,
+    emailType: 'document-notification',
+  });
+}
+
+/**
+ * Send generic email (alias for sendEmail for backward compatibility)
+ * @param {string} to - Recipient email
+ * @param {string} subject - Email subject
+ * @param {string} html - HTML content
+ * @param {string[]} [bcc] - BCC recipients
+ * @param {string} [emailType] - Email type
+ * @returns {Promise<{messageId: string}>}
+ */
+async function sendMail(to, subject, html, bcc, emailType) {
+  return sendEmail({
+    to,
+    subject,
+    html,
+    bcc,
+    emailType: emailType || 'generic',
+  });
+}
+
+/**
+ * Test SendGrid connection and configuration
+ * @returns {Promise<{success: boolean, message: string, error?: string}>}
+ */
+async function testSendGridConnection() {
   try {
-    const transporter = getGmailTransporter();
-    await transporter.verify();
+    console.log('[EmailService] Testing SendGrid configuration...');
+
+    // Load configuration
+    const config = await loadSendGridConfig();
+
+    // Initialize SendGrid
+    sgMail.setApiKey(config.apiKey);
+
+    // Test by sending a test email to the configured from address
+    const testMessage = {
+      to: config.fromEmail,
+      from: {
+        email: config.fromEmail,
+        name: config.fromName,
+      },
+      subject: 'SendGrid Connection Test',
+      text: 'This is a test email to verify SendGrid is properly configured.',
+      html: '<p>This is a test email to verify SendGrid is properly configured.</p>',
+    };
+
+    const response = await sgMail.send(testMessage);
 
     const result = {
       success: true,
-      message: 'Gmail SMTP connection successful',
+      message: 'SendGrid connection successful',
       config: {
-        host: 'smtp.gmail.com',
-        port: 465,
-        secure: true,
-        user: process.env.BIMS_EMAIL,
+        provider: 'sendgrid',
+        fromEmail: config.fromEmail,
+        fromName: config.fromName,
+        statusCode: response[0]?.statusCode,
       },
     };
 
-    console.log('[EmailService] SMTP connection test passed');
+    console.log('[EmailService] SendGrid test passed:', result);
     return result;
   } catch (err) {
     const result = {
       success: false,
-      message: 'Gmail SMTP connection failed',
+      message: 'SendGrid connection failed',
       error: err.message,
     };
 
-    console.error('[EmailService] SMTP connection test failed:', err);
+    console.error('[EmailService] SendGrid test failed:', result);
     return result;
   }
 }
 
 module.exports = {
-  emailTransporter,
-  sendDocumentNotification,
+  sendEmail,
   sendMail,
-  testSmtpConnection,
-  getGmailTransporter,
-  logEmail,
+  sendDocumentNotification,
+  testSendGridConnection,
   isEmailTypeEnabled,
   isDryRunModeEnabled,
-  getConfiguredTransporter,
+  logEmail,
+  loadSendGridConfig,
 };

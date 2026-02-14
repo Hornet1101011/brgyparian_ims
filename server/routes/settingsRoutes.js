@@ -390,16 +390,78 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
       console.log('[Settings] Email settings updated:', Object.keys(payload.emailSettings));
     }
 
-    // Handle email provider configuration (saved to smtp field which works reliably)
+    // Handle SENDGRID-ONLY email provider configuration
     if (payload.email) {
-      // Store email provider config in smtp field (which persists correctly)
-      updatePayload.smtp = payload.email;
-      console.log('[Settings] Email provider config updated (saving to smtp field):', {
-        provider: payload.email.provider,
-        enabled: payload.email.enabled,
-        fromName: payload.email.fromName,
-        fromEmail: payload.email.fromEmail,
-        keys: Object.keys(payload.email)
+      const emailData = { ...payload.email };
+      
+      console.log('[Settings PATCH - SendGrid] Email config received:', {
+        enabled: emailData.enabled,
+        provider: emailData.provider,
+        fromEmail: emailData.fromEmail,
+        fromName: emailData.fromName,
+        hasSendgridConfig: !!emailData.sendgrid,
+        sendgridKeys: emailData.sendgrid ? Object.keys(emailData.sendgrid) : []
+      });
+      
+      // Helper to detect masked values (e.g., "********")
+      const isMaskedValue = (val) => {
+        return typeof val === 'string' && val.length > 0 && /^\*+$/.test(val);
+      };
+      
+      // Build the email config update
+      updatePayload.email = {
+        enabled: emailData.enabled === true,
+        provider: 'sendgrid',
+        sendgrid: {}
+      };
+      
+      // Handle fromEmail and fromName
+      if (emailData.fromEmail) {
+        updatePayload.email.fromEmail = emailData.fromEmail;
+        console.log('[Settings PATCH - SendGrid] fromEmail:', emailData.fromEmail);
+      }
+      if (emailData.fromName) {
+        updatePayload.email.fromName = emailData.fromName;
+        console.log('[Settings PATCH - SendGrid] fromName:', emailData.fromName);
+      }
+      
+      // Handle SendGrid-specific configuration
+      if (emailData.sendgrid) {
+        const sgConfig = emailData.sendgrid;
+        
+        // Handle API key - preserve existing if masked
+        if (sgConfig.apiKey !== undefined) {
+          if (isMaskedValue(sgConfig.apiKey)) {
+            console.log('[Settings PATCH - SendGrid] API key is masked - preserving existing value');
+            // Don't set it, will preserve DB value
+          } else if (sgConfig.apiKey && sgConfig.apiKey.length > 0) {
+            updatePayload.email.sendgrid.apiKey = sgConfig.apiKey;
+            console.log('[Settings PATCH - SendGrid] API key updated:', {
+              length: sgConfig.apiKey.length,
+              preview: sgConfig.apiKey.substring(0, 8) + '...'
+            });
+          } else {
+            console.log('[Settings PATCH - SendGrid] API key is empty - preserving existing value');
+          }
+        }
+        
+        // Save fromEmail and fromName in sendgrid nested object if provided
+        if (sgConfig.fromEmail) {
+          updatePayload.email.sendgrid.fromEmail = sgConfig.fromEmail;
+          console.log('[Settings PATCH - SendGrid] sendgrid.fromEmail:', sgConfig.fromEmail);
+        }
+        if (sgConfig.fromName) {
+          updatePayload.email.sendgrid.fromName = sgConfig.fromName;
+          console.log('[Settings PATCH - SendGrid] sendgrid.fromName:', sgConfig.fromName);
+        }
+      }
+      
+      console.log('[Settings PATCH - SendGrid] Final email config to save:', {
+        enabled: updatePayload.email.enabled,
+        provider: updatePayload.email.provider,
+        fromEmail: updatePayload.email.fromEmail,
+        fromName: updatePayload.email.fromName,
+        sendgridKeys: Object.keys(updatePayload.email.sendgrid)
       });
     }
     
@@ -758,6 +820,86 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
       
       console.log('[Settings PATCH] SMTP config fields set in updateOps:', Object.keys(updateOps.$set).filter(k => k.startsWith('smtp.')));
     }
+
+    // Handle SENDGRID-ONLY email configuration with $set operator
+    if (updatePayload.email) {
+      const emailCfg = updatePayload.email;
+      
+      console.log('[Settings PATCH - SendGrid] Building email update operations:', {
+        'email.enabled': emailCfg.enabled,
+        'email.provider': emailCfg.provider,
+        'email.fromEmail': emailCfg.fromEmail,
+        'email.fromName': emailCfg.fromName,
+        'email.sendgrid_keys': emailCfg.sendgrid ? Object.keys(emailCfg.sendgrid) : []
+      });
+      
+      // Set email top-level fields
+      updateOps.$set['email.enabled'] = emailCfg.enabled;
+      updateOps.$set['email.provider'] = emailCfg.provider || 'sendgrid';
+      
+      // Set fromEmail and fromName at both email and sendgrid levels for clarity
+      if (emailCfg.fromEmail) {
+        updateOps.$set['email.fromEmail'] = emailCfg.fromEmail;
+        console.log('[Settings PATCH - SendGrid] Set email.fromEmail:', emailCfg.fromEmail);
+      }
+      if (emailCfg.fromName) {
+        updateOps.$set['email.fromName'] = emailCfg.fromName;
+        console.log('[Settings PATCH - SendGrid] Set email.fromName:', emailCfg.fromName);
+      }
+      
+      // Set SendGrid configuration in nested sendgrid object
+      if (emailCfg.sendgrid) {
+        const sgCfg = emailCfg.sendgrid;
+        
+        // Helper to detect masked values
+        const isMaskedSendGrid = (val) => {
+          return typeof val === 'string' && val.length > 0 && /^\*+$/.test(val);
+        };
+        
+        // Handle API key - preserve existing if masked or empty
+        if (sgCfg.apiKey !== undefined) {
+          if (isMaskedSendGrid(sgCfg.apiKey)) {
+            console.log('[Settings PATCH - SendGrid] apiKey is masked - preserving existing value from DB');
+            // Don't add to updateOps, preserves existing value
+          } else if (sgCfg.apiKey && sgCfg.apiKey.length > 0) {
+            updateOps.$set['email.sendgrid.apiKey'] = sgCfg.apiKey;
+            console.log('[Settings PATCH - SendGrid] Set email.sendgrid.apiKey:', {
+              length: sgCfg.apiKey.length,
+              preview: sgCfg.apiKey.substring(0, 8) + '...'
+            });
+          } else {
+            console.log('[Settings PATCH - SendGrid] apiKey is empty - preserving existing value from DB');
+          }
+        }
+        
+        // Handle fromEmail in sendgrid object
+        if (sgCfg.fromEmail) {
+          updateOps.$set['email.sendgrid.fromEmail'] = sgCfg.fromEmail;
+          console.log('[Settings PATCH - SendGrid] Set email.sendgrid.fromEmail:', sgCfg.fromEmail);
+        }
+        
+        // Handle fromName in sendgrid object
+        if (sgCfg.fromName) {
+          updateOps.$set['email.sendgrid.fromName'] = sgCfg.fromName;
+          console.log('[Settings PATCH - SendGrid] Set email.sendgrid.fromName:', sgCfg.fromName);
+        }
+      }
+      
+      // Add timestamp for audit
+      updateOps.$set['email.updatedAt'] = new Date();
+      console.log('[Settings PATCH - SendGrid] Set email.updatedAt:', updateOps.$set['email.updatedAt']);
+      
+      const emailFieldsInOps = Object.keys(updateOps.$set).filter(k => k.startsWith('email.'));
+      console.log('[Settings PATCH - SendGrid] Email config fields set in updateOps:', {
+        count: emailFieldsInOps.length,
+        fields: emailFieldsInOps,
+        summary: {
+          'email.enabled': updateOps.$set['email.enabled'],
+          'email.provider': updateOps.$set['email.provider'],
+          'email.sendgrid.apiKey_exists': !!updateOps.$set['email.sendgrid.apiKey']
+        }
+      });
+    }
     
     // SAFEGUARD: Ensure smtp.password is never accidentally deleted
     // Only delete if explicitly marked for deletion (value === undefined in $unset)
@@ -821,6 +963,23 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
       emailFields: updated?.email ? Object.keys(updated.email) : [],
       allEmailData: updated?.email ? JSON.stringify(updated.email, null, 2) : 'null'
     });
+
+    // CONFIRM SENDGRID CONFIGURATION SAVED
+    if (updated?.email) {
+      console.log('[Settings PATCH - SendGrid] CONFIRMATION: Final saved SendGrid config in DB:', {
+        enabled: updated.email.enabled,
+        provider: updated.email.provider,
+        fromEmail: updated.email.fromEmail,
+        fromName: updated.email.fromName,
+        sendgridConfigExists: !!updated.email.sendgrid,
+        hasSendgridApiKey: !!updated.email.sendgrid?.apiKey,
+        apiKeyLength: updated.email.sendgrid?.apiKey ? updated.email.sendgrid.apiKey.length : 0,
+        sendgridFromEmail: updated.email.sendgrid?.fromEmail,
+        sendgridFromName: updated.email.sendgrid?.fromName,
+        updatedAt: updated.email.updatedAt,
+        allEmailData: JSON.stringify(updated.email, null, 2)
+      });
+    }
 
     // CONFIRM FINAL SAVED SMTP PASSWORD
     console.log('[Settings PATCH] CONFIRMATION: Final saved SMTP password in DB:', {

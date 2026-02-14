@@ -1,6 +1,5 @@
 // @ts-nocheck
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useEmailSettings, defaultEmailState, type EmailState } from '../../hooks/useEmailSettings';
 import {
   Box,
   Paper,
@@ -11,19 +10,12 @@ import {
   Switch,
   Divider,
   Alert,
-  CircularProgress,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  MenuItem,
 } from '@mui/material';
-import TestEmailModal from '../TestEmailModal';
-import GmailSettings from './GmailSettings';
-import EmailSettings from './EmailSettings';
-import CustomSmtpSettings from './CustomSmtpSettings';
-import EmailProviderStatus from './EmailProviderStatus';
-import EmailSettingsSection from './EmailSettingsSection';
+import SendGridSettings from './SendGridSettings';
 import { adminAPI, axiosInstance, API_URL } from '../../services/api';
 import { UploadOutlined, UsergroupAddOutlined, DeleteOutlined } from '@ant-design/icons';
 import { Upload as AntdUpload, message as antdMessage } from 'antd';
@@ -33,33 +25,43 @@ import OfficialsReorder from './OfficialsReorder';
 // framer-motion removed to avoid dependency conflicts; use CSS transitions for preview
 import defaultSystemSettings from '../../config/defaultSystemSettings';
 import getOfficialPhotoSrc from '../../utils/officials';
-import { mapSettingsToDto, getPayloadSummaryForLogging } from '../../utils/settingsDtoMapper';
 
 // Create type aliases for React types that work in React 18
 type FC<P> = React.FunctionComponent<P>;
 type ComponentProps<T> = T extends React.ComponentType<infer P> ? P : never;
 
+interface SystemSettingsData {
+  siteName: string;
+  barangayName: string;
+  barangayAddress: string;
+  contactEmail: string;
+  contactPhone: string;
+  maintenanceMode: boolean;
+  allowNewRegistrations: boolean;
+  requireEmailVerification: boolean;
+  enableVerifications?: boolean;
+  maxDocumentRequests: number;
+  documentProcessingDays: number;
+  // new rate-limiting settings
+  allowMultipleAccountsPerIP?: boolean;
+  maxAccountsPerIP?: number;
+  systemNotice: string;
+}
+
+interface Official {
+  _id?: string;
+  name: string;
+  title: string;
+  term: string;
+  photoUrl?: string;
+  photoPath?: string;
+  previewUrl?: string; // client-side temporary preview for selected file
+}
+
 /**
  * Utility functions for dirty state detection with deep comparison
  */
 const DirtyStateUtils = {
-  /**
-   * Fields to ignore when comparing settings (passwords, timestamps)
-   */
-  IGNORED_FIELDS: [
-    'gmailAppPassword',
-    'password',
-    'encryptedPassword',
-    'appPassword',
-    'sendgridApiKey',
-    'awsSecretAccessKey',
-    'awsAccessKeyId',
-    'updatedAt',
-    'createdAt',
-    'testEmailSent',
-    'lastHealthCheckAt',
-  ],
-
   /**
    * Create a normalized copy of settings, removing sensitive fields
    */
@@ -78,7 +80,8 @@ const DirtyStateUtils = {
       
       const cleaned: any = {};
       for (const key in obj) {
-        if (this.IGNORED_FIELDS.includes(key)) continue;
+        // Skip API key from comparison
+        if (key === 'apiKey') continue;
         if (obj[key] && typeof obj[key] === 'object') {
           cleaned[key] = removeIgnoredFields(obj[key]);
         } else if (obj[key] !== undefined && obj[key] !== null) {
@@ -212,54 +215,6 @@ const StyledTextField: FC<ComponentProps<typeof TextField>> = (props) => (
   />
 );
 
-interface EmailSettings {
-  enabled: boolean;
-  enablePasswordResetEmails: boolean;
-  enableOtpEmails: boolean;
-  enableDocumentNotificationEmails: boolean;
-  enableAnnouncementEmails: boolean;
-  enableAnnouncementBcc: boolean;
-  recipientEmailsPerBatch: number;
-  retryFailedEmails: boolean;
-  retryAttempts: number;
-  retryDelayMinutes: number;
-  dryRunMode?: boolean;
-}
-
-interface SystemSettingsData {
-  siteName: string;
-  barangayName: string;
-  barangayAddress: string;
-  contactEmail: string;
-  contactPhone: string;
-  maintenanceMode: boolean;
-  allowNewRegistrations: boolean;
-  requireEmailVerification: boolean;
-  enableVerifications?: boolean;
-  maxDocumentRequests: number;
-  documentProcessingDays: number;
-  // new rate-limiting settings
-  allowMultipleAccountsPerIP?: boolean;
-  maxAccountsPerIP?: number;
-  systemNotice: string;
-  smtp?: {
-    host?: string;
-    port?: number;
-    user?: string;
-    password?: string;
-  };
-}
-
-interface Official {
-  _id?: string;
-  name: string;
-  title: string;
-  term: string;
-  photoUrl?: string;
-  photoPath?: string;
-  previewUrl?: string; // client-side temporary preview for selected file
-}
-
 const SystemSettings: FC = () => {
   const [settings, setSettings] = useState<SystemSettingsData>(() => ({ ...defaultSystemSettings } as SystemSettingsData));
   const [loading, setLoading] = useState(true);
@@ -267,50 +222,36 @@ const SystemSettings: FC = () => {
   const [confirmDisableOpen, setConfirmDisableOpen] = useState(false);
   const [, setSuccess] = useState(false);
   const [, setError] = useState<string | null>(null);
-  const [testModalOpen, setTestModalOpen] = useState(false);
   
-  // Unified email settings using custom hook
-  // Consolidates emailConfig, passwordModified, passwordDirty, smtpPasswords, backendHasPassword into single state
-  // with proper handling of provider-specific fields and password dirty tracking
-  const {
-    emailState,
-    setEmailState,
-    updateField,
-    updateFields,
-    togglePasswordVisibility,
-    markPasswordDirty,
-    setBackendHasPassword: setEmailBackendHasPassword,
-    resetPasswordStates,
-    resetAllPasswordStates,
-    getPassword,
-    getPasswords,
-    clearNonProviderFields,
-    createCleanProviderConfig,
-  } = useEmailSettings(defaultEmailState);
-
-  // Extract convenient references to email state for use throughout component
-  const emailConfig = emailState;
-  const setEmailConfig = setEmailState;
-  const passwordModified = emailState.passwordDirty;
-  const backendHasPassword = emailState.backendHasPassword;
+  // SendGrid email configuration state
+  interface SendGridConfig {
+    enabled: boolean;
+    apiKey: string;
+    fromEmail: string;
+    fromName: string;
+  }
   
-  // Health check status state
-  const [healthStatus, setHealthStatus] = useState<any>(null);
-  const [loadingHealthStatus, setLoadingHealthStatus] = useState(false);
+  const [sendgridConfig, setSendgridConfig] = useState<SendGridConfig>({
+    enabled: false,
+    apiKey: '',
+    fromEmail: '',
+    fromName: 'Barangay System',
+  });
+  const [hasBackendApiKey, setHasBackendApiKey] = useState(false);
+  
   // Officials state
   const [officials, setOfficials] = useState<Official[]>([]);
   const [officialsLoading, setOfficialsLoading] = useState(false);
   const [savingOfficials, setSavingOfficials] = useState(false);
   const [manualSaveError, setManualSaveError] = useState<string | null>(null);
   const autoSaveTimers = useRef<Record<string, number>>({});
-  // officialSaveStatus state removed (not referenced)
   const previewUrlsRef = useRef<Record<string, string>>({});
   const previewContainerRef = useRef<HTMLDivElement | null>(null);
   const prevOfficialsCountRef = useRef(0);
   const [highlightedIds, setHighlightedIds] = useState<string[]>([]);
   const highlightTimeouts = useRef<Record<string, number>>({});
   const originalSettingsRef = useRef<SystemSettingsData | null>(null);
-  const originalEmailConfigRef = useRef<EmailState | null>(null);
+  const originalSendgridConfigRef = useRef<SendGridConfig | null>(null);
   const originalOfficialsRef = useRef<Official[]>([]);
   
   // Initialization guard to prevent duplicate loading
@@ -318,7 +259,7 @@ const SystemSettings: FC = () => {
 
   // Section-level dirty state tracking
   const [dirtyGeneral, setDirtyGeneral] = useState(false);
-  const [dirtyEmail, setDirtyEmail] = useState(false);
+  const [dirtySendGrid, setDirtySendGrid] = useState(false);
   const [dirtyOfficials, setDirtyOfficials] = useState(false);
 
   // Settings lock state
@@ -326,9 +267,6 @@ const SystemSettings: FC = () => {
   const [hasLock, setHasLock] = useState(false);
   const lockRefreshIntervalRef = useRef<number | null>(null);
   const lockTimeoutRef = useRef<number | null>(null);
-
-  // helper to make MUI InputLabel shrink when the field has content or a non-empty value
-  // (removed unused helper to silence lint)
 
   useEffect(() => {
     // Guard against re-initialization: only run once on mount
@@ -339,16 +277,6 @@ const SystemSettings: FC = () => {
       try {
         // Load settings and email config
         await fetchSettings(ac.signal);
-        
-        // Fetch health status after loading settings
-        try {
-          const response = await axiosInstance.get('/settings/email/health');
-          if (response.data) {
-            setHealthStatus(response.data);
-          }
-        } catch (err) {
-          console.error('Failed to fetch email health status on load:', err);
-        }
         
         // Mark initialization as complete
         initializationCompleteRef.current = true;
@@ -446,68 +374,29 @@ const SystemSettings: FC = () => {
         setSettings(sys);
         originalSettingsRef.current = sys;
         
-        // Load unified email configuration from SMTP field
-        // Single source of truth: all providers use the 'smtp' field on the server
-        if ((sys as any).smtp) {
-          const smtpData = (sys as any).smtp;
+        // Load SendGrid configuration
+        if ((sys as any).email?.sendgrid) {
+          const sendgridData = (sys as any).email.sendgrid;
           
-          // Check if backend has saved passwords (even if not displayed)
-          const hasBackendCustomPassword = !!(smtpData.password && smtpData.password.trim().length > 0);
+          // Check if backend has saved API key
+          const hasBackendKey = !!(sendgridData.apiKey && sendgridData.apiKey.trim().length > 0);
           
-          const unifiedConfig: any = {
-            // Provider config
-            enabled: smtpData.enabled !== false,
-            provider: smtpData.provider || 'custom',
-            fromName: smtpData.fromName || 'Barangay System',
-            fromEmail: smtpData.fromEmail || '',
-            
-            // Custom SMTP fields
-            host: smtpData.host || '',
-            port: smtpData.port || 587,
-            user: smtpData.user || '',
-            password: '', // Never populate from backend for security
-            secure: smtpData.secure || false,
-            
-            // Gmail fields
-            gmailAppPassword: '', // Never populate from backend for security
-            
-            // SendGrid fields
-            sendgridApiKey: '', // Never populate from backend for security
-            
-            // AWS SES fields
-            awsAccessKeyId: '', // Never populate from backend for security
-            awsSecretAccessKey: '', // Never populate from backend for security
-            awsRegion: smtpData.awsRegion || 'us-east-1',
-            
-            // Email behaviors - merge from emailSettings if available
-            enablePasswordResetEmails: (sys as any).emailSettings?.enablePasswordResetEmails ?? true,
-            enableOtpEmails: (sys as any).emailSettings?.enableOtpEmails ?? true,
-            enableDocumentNotificationEmails: (sys as any).emailSettings?.enableDocumentNotificationEmails ?? true,
-            enableAnnouncementEmails: (sys as any).emailSettings?.enableAnnouncementEmails ?? true,
-            enableAnnouncementBcc: (sys as any).emailSettings?.enableAnnouncementBcc ?? true,
-            recipientEmailsPerBatch: (sys as any).emailSettings?.recipientEmailsPerBatch ?? 100,
-            retryFailedEmails: (sys as any).emailSettings?.retryFailedEmails ?? true,
-            retryAttempts: (sys as any).emailSettings?.retryAttempts ?? 3,
-            retryDelayMinutes: (sys as any).emailSettings?.retryDelayMinutes ?? 5,
-            dryRunMode: (sys as any).emailSettings?.dryRunMode ?? false,
+          const sendgridConfig: SendGridConfig = {
+            enabled: sendgridData.enabled !== false,
+            apiKey: '', // Never populate from backend for security
+            fromEmail: sendgridData.fromEmail || '',
+            fromName: sendgridData.fromName || 'Barangay System',
           };
 
-          setEmailConfig(unifiedConfig);
-          originalEmailConfigRef.current = JSON.parse(JSON.stringify(unifiedConfig));
+          setSendgridConfig(sendgridConfig);
+          originalSendgridConfigRef.current = JSON.parse(JSON.stringify(sendgridConfig));
+          setHasBackendApiKey(hasBackendKey);
           
-          // Set backendHasPassword flag - password is saved if it exists in backend
-          setEmailBackendHasPassword(prev => ({
-            ...prev,
-            custom: hasBackendCustomPassword
-          }));
-          
-          console.log('[SystemSettings] Unified email config loaded:', {
-            provider: unifiedConfig.provider,
-            enabled: unifiedConfig.enabled,
-            fromName: unifiedConfig.fromName,
-            fromEmail: unifiedConfig.fromEmail,
-            dryRunMode: unifiedConfig.dryRunMode,
-            hasBackendPassword: hasBackendCustomPassword
+          console.log('[SystemSettings] SendGrid email config loaded:', {
+            enabled: sendgridConfig.enabled,
+            fromName: sendgridConfig.fromName,
+            fromEmail: sendgridConfig.fromEmail,
+            hasBackendApiKey: hasBackendKey
           });
         }
       }
@@ -554,199 +443,12 @@ const SystemSettings: FC = () => {
   // Fetch email health status
   const fetchEmailHealthStatus = async () => {
     try {
-      setLoadingHealthStatus(true);
       const response = await axiosInstance.get('/settings/email/health');
       if (response.data) {
-        setHealthStatus(response.data);
+        console.log('[SystemSettings] Email health status:', response.data);
       }
     } catch (err) {
       console.error('Failed to fetch email health status:', err);
-      // Don't show error toast, just log it
-    } finally {
-      setLoadingHealthStatus(false);
-    }
-  };
-
-  // Trigger manual health check
-  // Extract current emailConfig for health check (including unsaved changes)
-  const getEmailConfigForHealthCheck = (): { isValid: boolean; config?: any; error?: string } => {
-    // Don't validate if disabled - just return disabled config
-    if (!emailConfig.enabled) {
-      return {
-        isValid: false,
-        error: 'Email provider is currently disabled. Enable it first to perform a health check.'
-      };
-    }
-
-    // Validate provider-specific required fields
-    const errors: string[] = [];
-
-    if (!emailConfig.provider) {
-      errors.push('No email provider selected');
-    }
-
-    if (emailConfig.provider === 'custom') {
-      if (!emailConfig.host) errors.push('SMTP Host is required');
-      if (!emailConfig.port) errors.push('SMTP Port is required');
-      else if (emailConfig.port < 1 || emailConfig.port > 65535) errors.push('SMTP Port must be between 1 and 65535');
-      if (!emailConfig.user) errors.push('SMTP Username is required');
-      if (!emailConfig.password) errors.push('SMTP Password is required');
-      if (!emailConfig.fromEmail) errors.push('From Email is required');
-    } else if (emailConfig.provider === 'gmail') {
-      if (!emailConfig.gmailAppPassword) errors.push('Gmail App Password is required');
-      if (!emailConfig.fromEmail) errors.push('From Email is required');
-    } else if (emailConfig.provider === 'sendgrid') {
-      if (!emailConfig.sendgridApiKey) errors.push('SendGrid API Key is required');
-      if (!emailConfig.fromEmail) errors.push('From Email is required');
-    } else if (emailConfig.provider === 'aws-ses') {
-      if (!emailConfig.awsAccessKeyId) errors.push('AWS Access Key ID is required');
-      if (!emailConfig.awsSecretAccessKey) errors.push('AWS Secret Access Key is required');
-      if (!emailConfig.awsRegion) errors.push('AWS Region is required');
-      if (!emailConfig.fromEmail) errors.push('From Email is required');
-    } else if (emailConfig.provider === 'mailtrap') {
-      if (!emailConfig.user) errors.push('Mailtrap Username is required');
-      if (!emailConfig.password) errors.push('Mailtrap Password is required');
-      if (!emailConfig.fromEmail) errors.push('From Email is required');
-    }
-
-    if (errors.length > 0) {
-      return {
-        isValid: false,
-        error: `Email configuration incomplete:\n${errors.join('\n')}`
-      };
-    }
-
-    // Build clean config payload for health check
-    const configPayload: any = {
-      enabled: emailConfig.enabled,
-      provider: emailConfig.provider,
-      fromName: emailConfig.fromName,
-      fromEmail: emailConfig.fromEmail
-    };
-
-    // Include provider-specific fields
-    if (emailConfig.provider === 'custom') {
-      configPayload.host = emailConfig.host;
-      configPayload.port = emailConfig.port;
-      configPayload.user = emailConfig.user;
-      configPayload.password = emailConfig.password;
-      configPayload.secure = emailConfig.secure;
-    } else if (emailConfig.provider === 'gmail') {
-      configPayload.gmailAppPassword = emailConfig.gmailAppPassword;
-    } else if (emailConfig.provider === 'sendgrid') {
-      configPayload.sendgridApiKey = emailConfig.sendgridApiKey;
-    } else if (emailConfig.provider === 'aws-ses') {
-      configPayload.awsAccessKeyId = emailConfig.awsAccessKeyId;
-      configPayload.awsSecretAccessKey = emailConfig.awsSecretAccessKey;
-      configPayload.awsRegion = emailConfig.awsRegion;
-    } else if (emailConfig.provider === 'mailtrap') {
-      configPayload.user = emailConfig.user;
-      configPayload.password = emailConfig.password;
-    }
-
-    return {
-      isValid: true,
-      config: configPayload
-    };
-  };
-
-  const handleHealthCheckClick = async () => {
-    try {
-      // Extract and validate emailConfig from current state
-      const validation = getEmailConfigForHealthCheck();
-      
-      if (!validation.isValid) {
-        setError(validation.error || 'Email configuration is incomplete');
-        antdMessage.error(validation.error || 'Email configuration is incomplete');
-        return;
-      }
-
-      setLoadingHealthStatus(true);
-
-      // Build smtp config payload with current state (unsaved settings)
-      // Use real password from smtpPasswords state (not masked value from emailConfig)
-      const smtpPayload: any = {
-        ...validation.config,
-      };
-
-      // Only include password if it has been dirtied (edited by user)
-      const provider = validation.config.provider;
-      const isPasswordDirty = passwordDirty[provider as keyof typeof passwordDirty];
-      
-      if (provider === 'custom' && isPasswordDirty && smtpPasswords.custom) {
-        smtpPayload.password = smtpPasswords.custom;
-        console.log('[SystemSettings] Health check - Including password (passwordDirty=true)', {
-          hasPassword: !!smtpPasswords.custom,
-          passwordLength: smtpPasswords.custom.length,
-          passwordDirty: isPasswordDirty
-        });
-      } else if (provider === 'custom' && !isPasswordDirty) {
-        console.log('[SystemSettings] Health check - Password NOT included (passwordDirty=false)');
-        delete smtpPayload.password;
-      } else if ((provider === 'gmail' || provider === 'mailtrap') && isPasswordDirty) {
-        console.log('[SystemSettings] Health check - Including password for provider', {
-          provider,
-          passwordDirty: isPasswordDirty,
-          passwordLength: smtpPayload.password?.length || 0
-        });
-      }
-
-      // Log exact payload being sent
-      console.log('[SystemSettings] Health check - Sending unsaved smtp config:', {
-        provider: smtpPayload.provider,
-        fromName: smtpPayload.fromName,
-        fromEmail: smtpPayload.fromEmail,
-        hasPassword: !!smtpPayload.password,
-        passwordLength: smtpPayload.password?.length || 0,
-        passwordDirty: isPasswordDirty,
-        fieldsIncluded: Object.keys(smtpPayload),
-        timestamp: new Date().toISOString()
-      });
-
-      // Send health check with current smtp config in payload (new API endpoint expects smtp parameter)
-      // Falls back to emailConfig for backward compatibility
-      const response = await axiosInstance.post('/settings/email/health-check', {
-        smtp: smtpPayload
-      });
-
-      if (response.data) {
-        setHealthStatus(response.data);
-        
-        console.log('[SystemSettings] Health check response:', {
-          success: response.data.success,
-          status: response.data.status,
-          provider: response.data.provider,
-          durationMs: response.data.checkDurationMs,
-          configSource: response.data.configSource
-        });
-
-        if (response.data.success) {
-          antdMessage.success(`Health check passed! Provider ${smtpPayload.provider} is working correctly.`);
-        } else {
-          antdMessage.warning(`Health check failed: ${response.data.message || 'Please check your configuration'}`);
-        }
-      }
-    } catch (err: any) {
-      console.error('[SystemSettings] Health check error:', {
-        message: err.message,
-        status: err.response?.status,
-        data: err.response?.data
-      });
-      
-      let errorMessage = 'Failed to perform health check';
-      
-      // Handle 404 - endpoint not available
-      if (err.response?.status === 404) {
-        errorMessage = 'Email health check is not available on this server.';
-        console.error('[SystemSettings] Health check endpoint not found (404) - server may not support this feature');
-      } else {
-        errorMessage = err.response?.data?.message || err.message || errorMessage;
-      }
-      
-      setError(errorMessage);
-      antdMessage.error(errorMessage);
-    } finally {
-      setLoadingHealthStatus(false);
     }
   };
 
@@ -845,158 +547,51 @@ const SystemSettings: FC = () => {
 
   // Save system settings (used by Save Changes button)
   // Internal save implementation (performs actual API call)
-  // Validate email configuration before saving
-  const validateEmailConfig = (): { isValid: boolean; errors: string[] } => {
-    const errors: string[] = [];
-
-    // Only validate if email is enabled
-    if (!emailConfig.enabled) {
-      return { isValid: true, errors: [] };
-    }
-
-    // Validate provider-specific required fields
-    if (emailConfig.provider === 'custom') {
-      // Custom SMTP: require host, port, user, password, fromEmail
-      if (!emailConfig.host || emailConfig.host.trim() === '') {
-        errors.push('SMTP Host is required');
-      }
-
-      if (!emailConfig.port) {
-        errors.push('SMTP Port is required');
-      } else if (emailConfig.port < 1 || emailConfig.port > 65535) {
-        errors.push('SMTP Port must be between 1 and 65535');
-      }
-
-      if (!emailConfig.user || emailConfig.user.trim() === '') {
-        errors.push('SMTP Username is required');
-      }
-
-      if (!emailConfig.password || emailConfig.password.trim() === '') {
-        errors.push('SMTP Password is required');
-      }
-
-      if (!emailConfig.fromEmail || emailConfig.fromEmail.trim() === '') {
-        errors.push('From Email is required');
-      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailConfig.fromEmail)) {
-        errors.push('From Email must be a valid email address');
-      }
-    } else if (emailConfig.provider === 'gmail') {
-      // Gmail: require gmailAppPassword and fromEmail (uses fromEmail as sender)
-      if (!emailConfig.gmailAppPassword || emailConfig.gmailAppPassword.trim() === '') {
-        errors.push('Gmail App Password is required');
-      }
-
-      if (!emailConfig.fromEmail || emailConfig.fromEmail.trim() === '') {
-        errors.push('From Email is required');
-      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailConfig.fromEmail)) {
-        errors.push('From Email must be a valid email address');
-      }
-    } else if (emailConfig.provider === 'sendgrid') {
-      // SendGrid: require sendgridApiKey, fromEmail
-      if (!emailConfig.sendgridApiKey || emailConfig.sendgridApiKey.trim() === '') {
-        errors.push('SendGrid API Key is required');
-      }
-
-      if (!emailConfig.fromEmail || emailConfig.fromEmail.trim() === '') {
-        errors.push('From Email is required');
-      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailConfig.fromEmail)) {
-        errors.push('From Email must be a valid email address');
-      }
-    } else if (emailConfig.provider === 'aws-ses') {
-      // AWS SES: require awsAccessKeyId, awsSecretAccessKey, awsRegion, fromEmail
-      if (!emailConfig.awsAccessKeyId || emailConfig.awsAccessKeyId.trim() === '') {
-        errors.push('AWS Access Key ID is required');
-      }
-
-      if (!emailConfig.awsSecretAccessKey || emailConfig.awsSecretAccessKey.trim() === '') {
-        errors.push('AWS Secret Access Key is required');
-      }
-
-      if (!emailConfig.awsRegion || emailConfig.awsRegion.trim() === '') {
-        errors.push('AWS Region is required');
-      }
-
-      if (!emailConfig.fromEmail || emailConfig.fromEmail.trim() === '') {
-        errors.push('From Email is required');
-      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailConfig.fromEmail)) {
-        errors.push('From Email must be a valid email address');
-      }
-    } else if (emailConfig.provider === 'mailtrap') {
-      // Mailtrap: require user, password, fromEmail
-      if (!emailConfig.user || emailConfig.user.trim() === '') {
-        errors.push('Mailtrap Username is required');
-      }
-
-      if (!emailConfig.password || emailConfig.password.trim() === '') {
-        errors.push('Mailtrap Password is required');
-      }
-
-      if (!emailConfig.fromEmail || emailConfig.fromEmail.trim() === '') {
-        errors.push('From Email is required');
-      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailConfig.fromEmail)) {
-        errors.push('From Email must be a valid email address');
-      }
-    }
-
-    return {
-      isValid: errors.length === 0,
-      errors
-    };
-  };
-
   const performSave = async () => {
     try {
-      // Validate email configuration BEFORE making API call
-      const validation = validateEmailConfig();
-      if (!validation.isValid) {
-        setError(`Email Configuration Validation Failed:\n${validation.errors.join('\n')}`);
-        setSaving(false);
-        return;
-      }
-
       setSaving(true);
       setError(null);
       
-      // Use mapping layer to transform frontend state to API payload format
-      // This handles:
-      // - Field name transformations (e.g., allowNewRegistrations → allowRegistrations)
-      // - Type normalization (e.g., strings → numbers)
-      // - Backend compatibility (e.g., maintenanceMode)
-      // - Email provider field filtering
-      // - Password handling based on modification state
-      const hadPreviouslySavedPassword: Record<string, boolean> = {
-        custom: !!(originalEmailConfigRef.current?.custom?.password),
-        gmail: !!(originalEmailConfigRef.current?.gmail?.gmailAppPassword),
-        mailtrap: !!(originalEmailConfigRef.current?.mailtrap?.password),
+      // Build payload with general settings and SendGrid email configuration
+      const payload: any = {
+        siteName: settings.siteName,
+        barangayName: settings.barangayName,
+        barangayAddress: settings.barangayAddress,
+        contactEmail: settings.contactEmail,
+        contactPhone: settings.contactPhone,
+        maintenanceMode: settings.maintenanceMode,
+        allowNewRegistrations: settings.allowNewRegistrations,
+        requireEmailVerification: settings.requireEmailVerification,
+        enableVerifications: settings.enableVerifications,
+        maxDocumentRequests: settings.maxDocumentRequests,
+        documentProcessingDays: settings.documentProcessingDays,
+        allowMultipleAccountsPerIP: settings.allowMultipleAccountsPerIP,
+        maxAccountsPerIP: settings.maxAccountsPerIP,
+        systemNotice: settings.systemNotice,
       };
 
-      const payload = mapSettingsToDto(
-        settings as any,
-        emailConfig,
-        passwordModified,
-        hadPreviouslySavedPassword
-      );
+      // Add unified SendGrid email configuration under 'email' field
+      payload.email = {
+        enabled: sendgridConfig.enabled,
+        provider: 'sendgrid',
+        sendgrid: {
+          apiKey: sendgridConfig.apiKey,
+          fromEmail: sendgridConfig.fromEmail,
+          fromName: sendgridConfig.fromName,
+        }
+      };
 
-      // Log payload summary without sensitive data
-      const payloadSummary = getPayloadSummaryForLogging(payload);
-      console.log('[Settings Save] Payload summary:', payloadSummary);
-      console.log('[Settings Save] Full payload being sent:', JSON.stringify(payload, null, 2));
+      console.log('[Settings Save] Payload:', JSON.stringify(payload, null, 2));
 
       await adminAPI.updateSystemSettings(payload);
+      
       // optimistic: update original copy and clear dirty flags
       originalSettingsRef.current = JSON.parse(JSON.stringify(settings));
-      originalEmailConfigRef.current = JSON.parse(JSON.stringify(emailConfig));
+      originalSendgridConfigRef.current = JSON.parse(JSON.stringify(sendgridConfig));
       
-      // Reset password modification flags after save - passwords are now stored on backend
-      setPasswordModified({
-        custom: false,
-        gmail: false,
-        mailtrap: false,
-      });
-      
-      // Reset dirty states for general and email sections
+      // Reset dirty states
       setDirtyGeneral(false);
-      setDirtyEmail(false);
+      setDirtySendGrid(false);
       
       setSuccess(true);
       
@@ -1105,114 +700,21 @@ const SystemSettings: FC = () => {
     }
   }
 
-  // Memoized callbacks to prevent unnecessary re-renders
-  const handleGmailStatusChange = useCallback((enabled: boolean) => {
+  // Memoized callback for SendGrid configuration save
+  const handleSendGridSave = useCallback(async (config: any) => {
     // Only update if initialization is complete
     if (!initializationCompleteRef.current) return;
-    console.log('[SystemSettings] Gmail status changed:', enabled);
-    setEmailConfig((prev: any) => ({ ...prev, enabled }));
-  }, []);
-
-  const handleGmailSettingsChange = useCallback((updatedConfig: any) => {
-    // Only update if initialization is complete
-    if (!initializationCompleteRef.current) return;
-    console.log('[SystemSettings] Gmail config changed:', {
-      enabled: updatedConfig.enabled,
-      provider: updatedConfig.provider,
-      fromName: updatedConfig.fromName,
-      fromEmail: updatedConfig.fromEmail,
-    });
-    setEmailConfig((prev: any) => ({ ...prev, ...updatedConfig }));
-  }, []);
-
-  const handleEmailConfigChange = useCallback((config: any) => {
-    // Only update if initialization is complete
-    if (!initializationCompleteRef.current) return;
-    console.log('[SystemSettings] Email config changed:', config);
     
-    // If provider changed, reset all unrelated provider-specific fields
-    if (config.provider && config.provider !== emailConfig.provider) {
-      const resetConfig = createCleanProviderConfig(config.provider, config);
-      setEmailConfig((prev: any) => ({ ...prev, ...resetConfig }));
-      // Reset password modified flag when provider changes
-      setPasswordModified({
-        custom: false,
-        gmail: false,
-        mailtrap: false,
-      });
-      // Reset password dirty flag when provider changes
-      setPasswordDirty({
-        custom: false,
-        gmail: false,
-        mailtrap: false,
-      });
-      // Reset passwords when provider changes
-      setSmtpPasswords({
-        custom: '',
-        gmail: '',
-        mailtrap: ''
-      });
-    } else {
-      // Track password modification and update password state
-      if (config.password !== undefined && initializationCompleteRef.current) {
-        setPasswordModified((prev) => ({
-          ...prev,
-          [emailConfig.provider]: true,
-        }));
-        // Mark password as dirty when user edits it
-        setPasswordDirty((prev) => ({
-          ...prev,
-          [emailConfig.provider]: true,
-        }));
-        // Store real password in smtpPasswords
-        if (emailConfig.provider === 'custom' || emailConfig.provider === 'mailtrap') {
-          setSmtpPasswords((prev) => ({
-            ...prev,
-            [emailConfig.provider]: config.password
-          }));
-          console.log('[SystemSettings] Password field edited for', emailConfig.provider, {
-            passwordDirty: true,
-            passwordLength: config.password?.length || 0
-          });
-        }
-      }
-      if (config.gmailAppPassword !== undefined && initializationCompleteRef.current) {
-        setPasswordModified((prev) => ({
-          ...prev,
-          gmail: true,
-        }));
-        // Mark Gmail password as dirty when user edits it
-        setPasswordDirty((prev) => ({
-          ...prev,
-          gmail: true,
-        }));
-        // Store real Gmail app password
-        setSmtpPasswords((prev) => ({
-          ...prev,
-          gmail: config.gmailAppPassword
-        }));
-        console.log('[SystemSettings] Gmail password field edited', {
-          passwordDirty: true,
-          passwordLength: config.gmailAppPassword?.length || 0
-        });
-      }
-      
-      // Normalize SMTP secure flag based on port for custom SMTP
-      // This ensures consistent behavior across test, save, and health check
-      let configToSet = { ...config };
-      if (emailConfig.provider === 'custom' && config.port !== undefined) {
-        if (config.port === 465) {
-          configToSet.secure = true;  // Port 465 uses SSL
-          console.log('[SystemSettings] Normalized secure flag: port 465 → secure = true');
-        } else if (config.port === 587) {
-          configToSet.secure = false;  // Port 587 uses TLS
-          console.log('[SystemSettings] Normalized secure flag: port 587 → secure = false');
-        }
-      }
-      
-      setEmailConfig((prev: any) => ({ ...prev, ...configToSet }));
-    }
-  }, [emailConfig.provider]);
+    console.log('[SystemSettings] SendGrid config saved:', {
+      enabled: config.enabled,
+      fromName: config.fromName,
+      fromEmail: config.fromEmail,
+      hasApiKey: !!config.apiKey,
+    });
+    
+    setSendgridConfig(config);
+    setDirtySendGrid(true);
+  }, []);
 
   // Track general settings dirty state
   // Only track changes AFTER initialization is complete to avoid false dirty state on mount
@@ -1259,21 +761,21 @@ const SystemSettings: FC = () => {
         return;
       }
       
-      if (!originalEmailConfigRef.current) {
-        setDirtyEmail(false);
+      if (!originalSendgridConfigRef.current) {
+        setDirtySendGrid(false);
         return;
       }
       
       const isDirty = DirtyStateUtils.isEmailDirty(
-        originalEmailConfigRef.current,
-        emailConfig
+        originalSendgridConfigRef.current,
+        sendgridConfig
       );
-      setDirtyEmail(isDirty);
+      setDirtySendGrid(isDirty);
     } catch (e) {
       console.error('Error checking email settings dirty state:', e);
-      setDirtyEmail(false);
+      setDirtySendGrid(false);
     }
-  }, [emailConfig]);
+  }, [sendgridConfig]);
 
   // Track officials dirty state
   // Only track changes AFTER initialization is complete to avoid false dirty state on mount
@@ -1462,15 +964,11 @@ const SystemSettings: FC = () => {
             </Box>
           </Paper>
 
-          {/* Email Settings Section - Extracted Component */}
-          <EmailSettingsSection
-            emailState={emailState}
-            healthStatus={healthStatus}
-            loadingHealthStatus={loadingHealthStatus}
-            saving={saving}
-            onHealthCheckClick={handleHealthCheckClick}
-            onUpdateConfig={handleEmailConfigChange}
-            backendHasPassword={backendHasPassword}
+          {/* Email Settings Section - SendGrid Configuration */}
+          <SendGridSettings
+            config={sendgridConfig}
+            onSave={handleSendGridSave}
+            hasBackendApiKey={hasBackendApiKey}
           />
 
           {/* System Configuration Card */}
@@ -1663,13 +1161,6 @@ const SystemSettings: FC = () => {
         </Box>
       </Box>
 
-      <TestEmailModal 
-        open={testModalOpen} 
-        onClose={() => setTestModalOpen(false)} 
-        contactEmail={settings.contactEmail}
-        emailConfig={emailConfig}
-      />
-
       {/* Floating Save Button */}
       <Box sx={{
         position: 'fixed',
@@ -1680,7 +1171,7 @@ const SystemSettings: FC = () => {
         <Button
           variant="contained"
           onClick={() => saveAll()}
-          disabled={saving || savingOfficials || (!dirtyGeneral && !dirtyEmail && !dirtyOfficials)}
+          disabled={saving || savingOfficials || (!dirtyGeneral && !dirtySendGrid && !dirtyOfficials)}
           sx={{
             width: 64,
             height: 64,
@@ -1703,7 +1194,7 @@ const SystemSettings: FC = () => {
             transition: 'all 0.3s ease'
           }}
           aria-label="Save Settings and Officials"
-          title={!dirtyGeneral && !dirtyEmail && !dirtyOfficials ? "No changes to save" : "Save changes"}
+          title={!dirtyGeneral && !dirtySendGrid && !dirtyOfficials ? "No changes to save" : "Save changes"}
         >
           {(saving || savingOfficials) ? '...' : '✓'}
         </Button>
