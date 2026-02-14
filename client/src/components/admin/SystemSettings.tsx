@@ -496,7 +496,7 @@ const SystemSettings: FC = () => {
           originalEmailConfigRef.current = JSON.parse(JSON.stringify(unifiedConfig));
           
           // Set backendHasPassword flag - password is saved if it exists in backend
-          setBackendHasPassword(prev => ({
+          setEmailBackendHasPassword(prev => ({
             ...prev,
             custom: hasBackendCustomPassword
           }));
