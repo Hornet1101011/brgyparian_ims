@@ -292,7 +292,7 @@ const SystemSettings: FC = () => {
   const emailConfig = emailState;
   const setEmailConfig = setEmailState;
   const passwordModified = emailState.passwordDirty;
-  const backendHasPassword = emailState.smtpPasswords;
+  const backendHasPassword = emailState.backendHasPassword;
   
   // Health check status state
   const [healthStatus, setHealthStatus] = useState<any>(null);
