@@ -21,6 +21,7 @@ import {
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { message as antdMessage } from 'antd';
 import { adminAPI } from '../../services/api';
+import EmailProviderManager from '../../utils/EmailProviderManager';
 
 interface EmailConfig {
   enabled: boolean;
@@ -139,42 +140,29 @@ const CustomSmtpSettings = ({ emailConfig, setEmailConfig, smtpPasswordProp = ''
         return;
       }
 
-      // Reject masked or placeholder values (no "****" patterns)
-      if (/^\*+$/.test(smtpPassword)) {
+      // Check if password is masked using EmailProviderManager utility
+      if (EmailProviderManager.isMaskedPassword(smtpPassword)) {
         const errorMsg = 'Password appears to be masked or placeholder. Please enter the actual password.';
         console.error('[CustomSmtpSettings] Test blocked - masked password detected:', {
           smtpPasswordDirty: smtpPasswordDirty,
-          isMasked: /^\*+$/.test(smtpPassword),
+          isMasked: EmailProviderManager.isMaskedPassword(smtpPassword),
           passwordPattern: smtpPassword.substring(0, 5) + '...'
         });
         antdMessage.error(errorMsg);
         return;
       }
 
-      // Comprehensive validation of all SMTP fields before making API call
-      const validationErrors: string[] = [];
-
-      // Validate SMTP host
-      if (!emailConfig.host || emailConfig.host.trim() === '') {
-        validationErrors.push('SMTP host is required');
-      }
-
-      // Validate SMTP port
-      if (!emailConfig.port || emailConfig.port < 1 || emailConfig.port > 65535) {
-        validationErrors.push('SMTP port must be between 1 and 65535');
-      }
-
-      // Validate username
-      if (!emailConfig.user || emailConfig.user.trim() === '') {
-        validationErrors.push('SMTP username is required');
-      }
-
-      // Validate from email
-      if (!emailConfig.fromEmail || emailConfig.fromEmail.trim() === '') {
-        validationErrors.push('From email address is required');
-      } else if (!emailConfig.fromEmail.includes('@')) {
-        validationErrors.push('From email address must be a valid email');
-      }
+      // Use EmailProviderManager to validate SMTP configuration
+      const validationErrors = EmailProviderManager.validateConfig(
+        {
+          host: emailConfig.host,
+          port: emailConfig.port,
+          user: emailConfig.user,
+          password: smtpPassword,
+          fromEmail: emailConfig.fromEmail
+        },
+        'custom'
+      );
 
       // Validate test email recipient
       const recipientEmail = testEmailAddress.trim() || emailConfig.fromEmail;
@@ -186,7 +174,7 @@ const CustomSmtpSettings = ({ emailConfig, setEmailConfig, smtpPasswordProp = ''
 
       // If any validation errors, show them all and block the request
       if (validationErrors.length > 0) {
-        const errorMessage = validationErrors.map((err, idx) => `${idx + 1}. ${err}`).join('\n');
+        const errorMessage = EmailProviderManager.formatValidationErrors(validationErrors);
         console.log('[CustomSmtpSettings] Test email validation failed:\n' + errorMessage);
         antdMessage.error(
           <Box sx={{ whiteSpace: 'pre-wrap' }}>
@@ -214,25 +202,34 @@ const CustomSmtpSettings = ({ emailConfig, setEmailConfig, smtpPasswordProp = ''
 
       // Build request payload with emailConfig nested structure
       // Match backend DTO exactly - no extra fields, precise order
-      const requestPayload = {
-        emailConfig: {
+      // Use EmailProviderManager to normalize configuration
+      const normalizedConfig = EmailProviderManager.normalizeConfig(
+        {
           provider: 'custom',
           host: emailConfig.host,
           port: emailConfig.port,
-          username: emailConfig.user,  // Normalize: user → username
-          // Include password ONLY if smtpPasswordDirty is true
-          ...(smtpPasswordDirty && { password: smtpPassword }),
-          secure: emailConfig.secure,  // Already normalized by parent based on port
+          user: emailConfig.user,
+          password: smtpPasswordDirty ? smtpPassword : undefined,
+          secure: emailConfig.secure,
           fromEmail: emailConfig.fromEmail,
-          fromName: emailConfig.fromName  // Optional field - only include if defined
+          fromName: emailConfig.fromName
+        },
+        'custom'
+      );
+
+      const requestPayload = {
+        emailConfig: {
+          provider: normalizedConfig.provider,
+          host: normalizedConfig.host,
+          port: normalizedConfig.port,
+          username: normalizedConfig.username,  // Normalized by EmailProviderManager
+          ...(normalizedConfig.password && { password: normalizedConfig.password }),
+          secure: normalizedConfig.secure,  // Automatically calculated based on port
+          fromEmail: normalizedConfig.fromEmail,
+          ...(normalizedConfig.fromName && { fromName: normalizedConfig.fromName })
         },
         testEmail: recipientEmail
       };
-      
-      // Remove undefined optional fields to match backend DTO exactly
-      if (!requestPayload.emailConfig.fromName) {
-        delete requestPayload.emailConfig.fromName;
-      }
 
       console.log('[CustomSmtpSettings] Sending test email request with SMTP config:', {
         emailConfig: {
@@ -409,7 +406,12 @@ const CustomSmtpSettings = ({ emailConfig, setEmailConfig, smtpPasswordProp = ''
                   <TextField
                     label="SMTP Port"
                     value={mailtrapConfig.port || 2525}
-                    onChange={(e) => setMailtrapConfig({ ...mailtrapConfig, port: parseInt(e.target.value) || 2525 })}
+                    onChange={(e) => {
+                      const port = parseInt(e.target.value) || 2525;
+                      // Automatically calculate secure flag based on port using EmailProviderManager
+                      const secure = EmailProviderManager.calculateSecureFromPort(port, 'mailtrap');
+                      setMailtrapConfig({ ...mailtrapConfig, port, secure });
+                    }}
                     fullWidth
                     margin="normal"
                     type="number"
