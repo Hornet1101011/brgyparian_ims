@@ -33,6 +33,7 @@ import OfficialsReorder from './OfficialsReorder';
 // framer-motion removed to avoid dependency conflicts; use CSS transitions for preview
 import defaultSystemSettings from '../../config/defaultSystemSettings';
 import getOfficialPhotoSrc from '../../utils/officials';
+import { mapSettingsToDto, getPayloadSummaryForLogging } from '../../utils/settingsDtoMapper';
 
 // Create type aliases for React types that work in React 18
 type FC<P> = React.FunctionComponent<P>;
@@ -123,7 +124,6 @@ const DirtyStateUtils = {
       'contactPhone',
       'systemNotice',
       'maintenanceMode',
-      'maintainanceMode',
       'allowNewRegistrations',
       'requireEmailVerification',
       'enableVerifications',
@@ -232,7 +232,7 @@ interface SystemSettingsData {
   barangayAddress: string;
   contactEmail: string;
   contactPhone: string;
-  maintainanceMode: boolean;
+  maintenanceMode: boolean;
   allowNewRegistrations: boolean;
   requireEmailVerification: boolean;
   enableVerifications?: boolean;
@@ -430,6 +430,13 @@ const SystemSettings: FC = () => {
         }
       }
       if (sys) {
+        // Normalize backend response: map 'maintenanceMode' to internal 'maintenanceMode'
+        // (Some old data might still use the misspelled 'maintainanceMode')
+        (sys as any).maintenanceMode =
+          (sys as any).maintenanceMode ??
+          (sys as any).maintainanceMode ??
+          false;
+
         setSettings(sys);
         originalSettingsRef.current = sys;
         
@@ -944,112 +951,29 @@ const SystemSettings: FC = () => {
       setSaving(true);
       setError(null);
       
-      // HELPER: Filter irrelevant provider fields to enforce single provider
-      // Only include fields for the selected provider, clear all others
-      const filterProviderConfig = (config: any) => {
-        if (!config || !config.provider) return config;
-        
-        const filtered: any = {
-          enabled: config.enabled,
-          provider: config.provider,
-          fromName: config.fromName,
-          fromEmail: config.fromEmail,
-          updatedAt: config.updatedAt
-        };
-        
-        // SINGLE PROVIDER ENFORCEMENT: Include ONLY selected provider's fields
-        if (config.provider === 'gmail') {
-          // Gmail: include only Gmail app password field
-          if (config.gmailAppPassword) filtered.gmailAppPassword = config.gmailAppPassword;
-        } else if (config.provider === 'mailtrap') {
-          // Mailtrap: include only Mailtrap fields
-          if (config.user) filtered.user = config.user;
-          if (config.password) filtered.password = config.password;
-        } else if (config.provider === 'sendgrid') {
-          // SendGrid: include only SendGrid fields
-          if (config.sendgridApiKey) filtered.sendgridApiKey = config.sendgridApiKey;
-        } else if (config.provider === 'aws-ses') {
-          // AWS SES: include only AWS fields
-          if (config.awsAccessKeyId) filtered.awsAccessKeyId = config.awsAccessKeyId;
-          if (config.awsSecretAccessKey) filtered.awsSecretAccessKey = config.awsSecretAccessKey;
-          if (config.awsRegion) filtered.awsRegion = config.awsRegion;
-        } else if (config.provider === 'custom') {
-          // Custom SMTP: include only custom SMTP fields, exclude Gmail/other provider fields
-          if (config.host) filtered.host = config.host;
-          if (config.port) filtered.port = config.port;
-          if (config.user) filtered.user = config.user;
-          if (config.password) filtered.password = config.password;
-          if (config.secure !== undefined) filtered.secure = config.secure;
-          // Explicitly exclude gmailAddress and gmailAppPassword for custom SMTP
-        }
-        
-        return filtered;
-      };
-      
-      // Normalize numeric fields and map client keys to server-side field names
-      const payload: any = {
-        siteName: settings.siteName,
-        barangayName: settings.barangayName,
-        barangayAddress: settings.barangayAddress,
-        contactEmail: settings.contactEmail,
-        contactPhone: settings.contactPhone,
-        systemNotice: settings.systemNotice,
-        // compatibility: server uses 'maintenanceMode' while client uses 'maintainanceMode' (typo)
-        maintenanceMode: (settings as any).maintainanceMode,
-        // server expects allowRegistrations and maxDocumentRequestsPerUser
-        allowRegistrations: (settings as any).allowNewRegistrations,
-        maxDocumentRequestsPerUser: Number((settings as any).maxDocumentRequests) || 1,
-        documentProcessingDays: Number(settings.documentProcessingDays) || 1,
-        enableVerifications: (settings as any).enableVerifications,
-        ...(typeof (settings as any).maxAccountsPerIP !== 'undefined'
-          ? { maxAccountsPerIP: Number((settings as any).maxAccountsPerIP) || 1 }
-          : {}),
+      // Use mapping layer to transform frontend state to API payload format
+      // This handles:
+      // - Field name transformations (e.g., allowNewRegistrations → allowRegistrations)
+      // - Type normalization (e.g., strings → numbers)
+      // - Backend compatibility (e.g., maintenanceMode)
+      // - Email provider field filtering
+      // - Password handling based on modification state
+      const hadPreviouslySavedPassword: Record<string, boolean> = {
+        custom: !!(originalEmailConfigRef.current?.custom?.password),
+        gmail: !!(originalEmailConfigRef.current?.gmail?.gmailAppPassword),
+        mailtrap: !!(originalEmailConfigRef.current?.mailtrap?.password),
       };
 
-      // Include email behavior settings
-      payload.emailSettings = {
-        enabled: emailConfig.enabled,
-        enablePasswordResetEmails: emailConfig.enablePasswordResetEmails,
-        enableOtpEmails: emailConfig.enableOtpEmails,
-        enableDocumentNotificationEmails: emailConfig.enableDocumentNotificationEmails,
-        enableAnnouncementEmails: emailConfig.enableAnnouncementEmails,
-        enableAnnouncementBcc: emailConfig.enableAnnouncementBcc,
-        recipientEmailsPerBatch: emailConfig.recipientEmailsPerBatch,
-        retryFailedEmails: emailConfig.retryFailedEmails,
-        retryAttempts: emailConfig.retryAttempts,
-        retryDelayMinutes: emailConfig.retryDelayMinutes,
-        dryRunMode: emailConfig.dryRunMode,
-      };
+      const payload = mapSettingsToDto(
+        settings as any,
+        emailConfig,
+        passwordModified,
+        hadPreviouslySavedPassword
+      );
 
-      // UNIFIED EMAIL CONFIG with SINGLE PROVIDER ENFORCEMENT
-      // Filter irrelevant fields: only send provider-specific fields for selected provider
-      // Only include password if it has been modified by user
-      const filteredConfig = filterProviderConfig(emailConfig);
-      
-      // Handle password: only include if modified or if new (not in original)
-      if (!passwordModified[emailConfig.provider] && originalEmailConfigRef.current?.[emailConfig.provider]) {
-        // Password not modified and has been previously saved - omit it from payload
-        // This preserves the backend-stored password
-        if (filteredConfig.password) delete filteredConfig.password;
-        if (filteredConfig.gmailAppPassword) delete filteredConfig.gmailAppPassword;
-      }
-      
-      payload.email = filteredConfig;
-      
-      console.log('[Settings Save] Unified email config (single provider enforced):', {
-        enabled: filteredConfig.enabled,
-        provider: filteredConfig.provider,
-        fromName: filteredConfig.fromName,
-        fromEmail: filteredConfig.fromEmail,
-        fieldsIncluded: Object.keys(filteredConfig),
-        passwordIncluded: !!(filteredConfig.password || filteredConfig.gmailAppPassword),
-        passwordModified: passwordModified[emailConfig.provider],
-        irrelevantFieldsFiltered: 'Only selected provider fields sent'
-      });
-
-      // Also remove _id from root payload if present
-      delete (payload as any)._id;
-
+      // Log payload summary without sensitive data
+      const payloadSummary = getPayloadSummaryForLogging(payload);
+      console.log('[Settings Save] Payload summary:', payloadSummary);
       console.log('[Settings Save] Full payload being sent:', JSON.stringify(payload, null, 2));
 
       await adminAPI.updateSystemSettings(payload);
@@ -1311,7 +1235,6 @@ const SystemSettings: FC = () => {
     settings.contactPhone,
     settings.systemNotice,
     settings.maintenanceMode,
-    settings.maintainanceMode,
     settings.allowNewRegistrations,
     settings.requireEmailVerification,
     settings.enableVerifications,
@@ -1563,8 +1486,8 @@ const SystemSettings: FC = () => {
               <FormControlLabel
                 control={
                   <Switch
-                    checked={settings.maintainanceMode ?? false}
-                    onChange={(e) => setSettings({ ...settings, maintainanceMode: e.target.checked })}
+                    checked={settings.maintenanceMode ?? false}
+                    onChange={(e) => setSettings({ ...settings, maintenanceMode: e.target.checked })}
                   />
                 }
                 label={<Typography sx={{ fontWeight: 500, color: '#0f172a' }}>Maintenance Mode</Typography>}
