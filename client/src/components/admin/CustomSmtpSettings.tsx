@@ -34,16 +34,21 @@ interface EmailConfig {
 interface CustomSmtpSettingsProps {
   emailConfig: EmailConfig;
   setEmailConfig: (config: EmailConfig) => void;
-  smtpPassword?: string;  // Real SMTP password from parent component
+  smtpPasswordProp?: string;  // Real SMTP password from parent component
   passwordDirty?: boolean;  // Tracks if password field has been edited by user
+  hasBackendPassword?: boolean;  // Whether backend has a saved password (even if not shown in UI)
 }
 
-const CustomSmtpSettings = ({ emailConfig, setEmailConfig, smtpPassword = '', passwordDirty = false }: CustomSmtpSettingsProps) => {
+const CustomSmtpSettings = ({ emailConfig, setEmailConfig, smtpPasswordProp = '', passwordDirty = false, hasBackendPassword = false }: CustomSmtpSettingsProps) => {
   const [showPassword, setShowPassword] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testEmailAddress, setTestEmailAddress] = useState('');
   // Track if password has been modified by user (real password always stored in emailConfig.password)
   const [passwordModified, setPasswordModified] = useState(false);
+  // Local state for password input field - updates on every user keystroke
+  const [smtpPassword, setSmtpPassword] = useState('');
+  // Track if user has edited the password field
+  const [smtpPasswordDirty, setSmtpPasswordDirty] = useState(false);
 
   // Clean irrelevant provider fields when provider changes away from custom
   // This enforces single provider: only custom SMTP fields are preserved
@@ -67,11 +72,12 @@ const CustomSmtpSettings = ({ emailConfig, setEmailConfig, smtpPassword = '', pa
 
   const handleTestSmtpConnection = async () => {
     try {
-      // Check if password has been dirtied (edited by user)
-      if (!passwordDirty) {
-        const errorMsg = 'Password must be entered before testing. Please type or change the password field.';
-        console.warn('[CustomSmtpSettings] Test blocked - password not dirty:', {
-          passwordDirty: passwordDirty,
+      // STRICT PASSWORD VALIDATION
+      // Require smtpPasswordDirty === true (user must have typed in field)
+      if (!smtpPasswordDirty) {
+        const errorMsg = 'Password must be entered before testing. Please type in the password field.';
+        console.warn('[CustomSmtpSettings] Test blocked - password field not edited by user:', {
+          smtpPasswordDirty: smtpPasswordDirty,
           hasPassword: !!smtpPassword,
           passwordLength: smtpPassword?.length || 0
         });
@@ -79,13 +85,25 @@ const CustomSmtpSettings = ({ emailConfig, setEmailConfig, smtpPassword = '', pa
         return;
       }
 
-      // EARLY ABORT: Check if password from parent is missing
-      if (!smtpPassword || smtpPassword.trim() === '') {
-        const errorMsg = 'SMTP password is missing or empty. Please enter a password and save settings first.';
-        console.error('[CustomSmtpSettings] Early abort - Password missing from parent:', {
-          smtpPassword: smtpPassword,
-          isEmpty: !smtpPassword || smtpPassword.trim() === '',
-          source: 'parent_component'
+      // Require smtpPassword.length > 0 (password must not be empty)
+      if (!smtpPassword || smtpPassword.length === 0) {
+        const errorMsg = 'SMTP password cannot be empty. Please enter a password.';
+        console.error('[CustomSmtpSettings] Test blocked - password is empty:', {
+          smtpPasswordDirty: smtpPasswordDirty,
+          passwordLength: smtpPassword?.length || 0,
+          isEmpty: true
+        });
+        antdMessage.error(errorMsg);
+        return;
+      }
+
+      // Reject masked or placeholder values (no "****" patterns)
+      if (/^\*+$/.test(smtpPassword)) {
+        const errorMsg = 'Password appears to be masked or placeholder. Please enter the actual password.';
+        console.error('[CustomSmtpSettings] Test blocked - masked password detected:', {
+          smtpPasswordDirty: smtpPasswordDirty,
+          isMasked: /^\*+$/.test(smtpPassword),
+          passwordPattern: smtpPassword.substring(0, 5) + '...'
         });
         antdMessage.error(errorMsg);
         return;
@@ -147,7 +165,7 @@ const CustomSmtpSettings = ({ emailConfig, setEmailConfig, smtpPassword = '', pa
           passwordLength: smtpPassword?.length || 0,
           passwordIsString: typeof smtpPassword === 'string',
           passwordIsNonEmpty: smtpPassword?.length > 0,
-          source: 'parent_component'
+          source: 'local_state'
         });
         throw new Error(errorMsg + '. Cannot build email config for test.');
       }
@@ -160,7 +178,8 @@ const CustomSmtpSettings = ({ emailConfig, setEmailConfig, smtpPassword = '', pa
           host: emailConfig.host,
           port: emailConfig.port,
           username: emailConfig.user,  // Normalize: user → username
-          password: smtpPassword,  // Real password from parent component
+          // Include password ONLY if smtpPasswordDirty is true
+          ...(smtpPasswordDirty && { password: smtpPassword }),
           secure: emailConfig.secure,  // Already normalized by parent based on port
           fromEmail: emailConfig.fromEmail,
           fromName: emailConfig.fromName  // Optional field - only include if defined
@@ -173,35 +192,23 @@ const CustomSmtpSettings = ({ emailConfig, setEmailConfig, smtpPassword = '', pa
         delete requestPayload.emailConfig.fromName;
       }
 
-      console.log('[CustomSmtpSettings] Sending FULL test email request with unsaved SMTP config:', {
+      console.log('[CustomSmtpSettings] Sending test email request with SMTP config:', {
         emailConfig: {
           provider: requestPayload.emailConfig.provider,
           host: requestPayload.emailConfig.host,
           port: requestPayload.emailConfig.port,
           username: requestPayload.emailConfig.username,  // Normalized field name
           hasPassword: !!requestPayload.emailConfig.password,
+          passwordIncluded: smtpPasswordDirty,
           secure: requestPayload.emailConfig.secure,
           fromName: requestPayload.emailConfig.fromName,
           fromEmail: requestPayload.emailConfig.fromEmail
         },
         testEmail: requestPayload.testEmail,
-        passwordDirty: passwordDirty,
+        smtpPasswordDirty: smtpPasswordDirty,
         validationPassed: true,
         timestamp: new Date().toISOString()
       });
-
-      // Assert password from parent component is a non-empty string before sending API request
-      if (typeof smtpPassword !== 'string' || smtpPassword.trim() === '') {
-        const errorMsg = 'CRITICAL: Password assertion failed - password must be a non-empty string from parent component';
-        console.error('[CustomSmtpSettings] ' + errorMsg, {
-          passwordType: typeof smtpPassword,
-          passwordLength: smtpPassword?.length || 0,
-          isEmptyString: smtpPassword === '',
-          isWhitespace: typeof smtpPassword === 'string' && smtpPassword.trim() === '',
-          source: 'parent_component'
-        });
-        throw new Error(errorMsg + '. Password not properly managed by parent.');
-      }
 
       setTesting(true);
       const response = await adminAPI.post('/settings/email/test', requestPayload);
@@ -366,12 +373,10 @@ const CustomSmtpSettings = ({ emailConfig, setEmailConfig, smtpPassword = '', pa
               <Grid item xs={12} sm={6}>
                 <TextField
                   label="SMTP Password"
-                  value={smtpPassword || ''}
+                  value={smtpPassword}
                   onChange={(e) => {
-                    const newPassword = e.target.value;
-                    handleConfigChange('password', newPassword);
-                    // Mark as modified so save knows to include password
-                    setPasswordModified(true);
+                    setSmtpPassword(e.target.value);
+                    setSmtpPasswordDirty(true);
                   }}
                   fullWidth
                   margin="normal"
@@ -379,7 +384,9 @@ const CustomSmtpSettings = ({ emailConfig, setEmailConfig, smtpPassword = '', pa
                   placeholder="••••••••••••"
                   helperText={
                     smtpPassword
-                      ? '✓ Password stored (clear and re-enter to change)'
+                      ? '✓ Password entered (will be sent with test/health-check)'
+                      : hasBackendPassword
+                      ? 'Password is saved. Re-enter to change.'
                       : 'SMTP authentication password (enters will be masked for security)'
                   }
                   size="small"

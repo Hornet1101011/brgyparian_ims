@@ -333,6 +333,14 @@ const SystemSettings: FC = () => {
     gmail: '',   // Real Gmail app password
     mailtrap: ''  // Real Mailtrap password
   });
+
+  // Track whether backend has a saved password for each provider
+  // Used to show appropriate helper text when field is empty
+  const [backendHasPassword, setBackendHasPassword] = useState({
+    custom: false,
+    gmail: false,
+    mailtrap: false
+  });
   
   // Health check status state
   const [healthStatus, setHealthStatus] = useState<any>(null);
@@ -483,6 +491,10 @@ const SystemSettings: FC = () => {
         // Single source of truth: all providers use the 'smtp' field on the server
         if ((sys as any).smtp) {
           const smtpData = (sys as any).smtp;
+          
+          // Check if backend has saved passwords (even if not displayed)
+          const hasBackendCustomPassword = !!(smtpData.password && smtpData.password.trim().length > 0);
+          
           const unifiedConfig: any = {
             // Provider config
             enabled: smtpData.enabled !== false,
@@ -524,12 +536,19 @@ const SystemSettings: FC = () => {
           setEmailConfig(unifiedConfig);
           originalEmailConfigRef.current = JSON.parse(JSON.stringify(unifiedConfig));
           
+          // Set backendHasPassword flag - password is saved if it exists in backend
+          setBackendHasPassword(prev => ({
+            ...prev,
+            custom: hasBackendCustomPassword
+          }));
+          
           console.log('[SystemSettings] Unified email config loaded:', {
             provider: unifiedConfig.provider,
             enabled: unifiedConfig.enabled,
             fromName: unifiedConfig.fromName,
             fromEmail: unifiedConfig.fromEmail,
             dryRunMode: unifiedConfig.dryRunMode,
+            hasBackendPassword: hasBackendCustomPassword
           });
         }
       }
@@ -1620,8 +1639,9 @@ const SystemSettings: FC = () => {
             <CustomSmtpSettings 
               emailConfig={emailConfig}
               setEmailConfig={setEmailConfig}
-              smtpPassword={smtpPasswords.custom}
+              smtpPasswordProp={smtpPasswords.custom}
               passwordDirty={passwordDirty.custom}
+              hasBackendPassword={backendHasPassword.custom}
             />
           )}
 
