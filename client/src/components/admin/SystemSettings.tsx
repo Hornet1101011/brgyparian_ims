@@ -287,6 +287,12 @@ const SystemSettings: FC = () => {
     clearNonProviderFields,
     createCleanProviderConfig,
   } = useEmailSettings(defaultEmailState);
+
+  // Extract convenient references to email state for use throughout component
+  const emailConfig = emailState;
+  const setEmailConfig = setEmailState;
+  const passwordModified = emailState.passwordDirty;
+  const backendHasPassword = emailState.smtpPasswords;
   
   // Health check status state
   const [healthStatus, setHealthStatus] = useState<any>(null);
