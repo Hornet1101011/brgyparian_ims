@@ -1,5 +1,6 @@
 // @ts-nocheck
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useEmailSettings, defaultEmailState, type EmailState } from '../../hooks/useEmailSettings';
 import {
   Box,
   Paper,
@@ -267,80 +268,24 @@ const SystemSettings: FC = () => {
   const [, setError] = useState<string | null>(null);
   const [testModalOpen, setTestModalOpen] = useState(false);
   
-  // Unified email configuration - single source of truth for all email settings
-  // Combines provider config + email behaviors in one object
-  const [emailConfig, setEmailConfig] = useState<any>({
-    // Email provider configuration
-    enabled: false,
-    provider: 'custom', // 'custom', 'gmail', 'mailtrap', 'sendgrid', 'aws-ses'
-    fromName: 'Barangay System',
-    fromEmail: '',
-    
-    // Custom SMTP fields
-    host: '',
-    port: 587,
-    user: '',
-    password: '',
-    secure: false,
-    
-    // Gmail fields
-    gmailAppPassword: '',
-    
-    // SendGrid fields
-    sendgridApiKey: '',
-    
-    // AWS SES fields
-    awsAccessKeyId: '',
-    awsSecretAccessKey: '',
-    awsRegion: 'us-east-1',
-    
-    // Email behaviors
-    enablePasswordResetEmails: true,
-    enableOtpEmails: true,
-    enableDocumentNotificationEmails: true,
-    enableAnnouncementEmails: true,
-    enableAnnouncementBcc: true,
-    recipientEmailsPerBatch: 100,
-    retryFailedEmails: true,
-    retryAttempts: 3,
-    retryDelayMinutes: 5,
-    dryRunMode: false,
-  });
-  
-  // Track password modification for each provider
-  // When true, password will be sent in save payload
-  // When false, password from backend is preserved (not overwritten)
-  const [passwordModified, setPasswordModified] = useState({
-    custom: false,
-    gmail: false,
-    mailtrap: false,
-  });
-  
-  // Track if password field has been edited by user (dirtied)
-  // Separate from passwordModified - indicates user interaction
-  // When true, includes password in health check and test email payloads
-  // When false, skips password in payloads (relies on DB or skips operation)
-  const [passwordDirty, setPasswordDirty] = useState({
-    custom: false,
-    gmail: false,
-    mailtrap: false,
-  });
-  
-  // Explicit password state management - real passwords stored here
-  // Maps provider to actual password string
-  const [smtpPasswords, setSmtpPasswords] = useState({
-    custom: '',  // Real SMTP password for custom provider
-    gmail: '',   // Real Gmail app password
-    mailtrap: ''  // Real Mailtrap password
-  });
-
-  // Track whether backend has a saved password for each provider
-  // Used to show appropriate helper text when field is empty
-  const [backendHasPassword, setBackendHasPassword] = useState({
-    custom: false,
-    gmail: false,
-    mailtrap: false
-  });
+  // Unified email settings using custom hook
+  // Consolidates emailConfig, passwordModified, passwordDirty, smtpPasswords, backendHasPassword into single state
+  // with proper handling of provider-specific fields and password dirty tracking
+  const {
+    emailState,
+    setEmailState,
+    updateField,
+    updateFields,
+    togglePasswordVisibility,
+    markPasswordDirty,
+    setBackendHasPassword: setEmailBackendHasPassword,
+    resetPasswordStates,
+    resetAllPasswordStates,
+    getPassword,
+    getPasswords,
+    clearNonProviderFields,
+    createCleanProviderConfig,
+  } = useEmailSettings(defaultEmailState);
   
   // Health check status state
   const [healthStatus, setHealthStatus] = useState<any>(null);
@@ -358,7 +303,7 @@ const SystemSettings: FC = () => {
   const [highlightedIds, setHighlightedIds] = useState<string[]>([]);
   const highlightTimeouts = useRef<Record<string, number>>({});
   const originalSettingsRef = useRef<SystemSettingsData | null>(null);
-  const originalEmailConfigRef = useRef<any>(null);
+  const originalEmailConfigRef = useRef<EmailState | null>(null);
   const originalOfficialsRef = useRef<Official[]>([]);
   
   // Initialization guard to prevent duplicate loading
