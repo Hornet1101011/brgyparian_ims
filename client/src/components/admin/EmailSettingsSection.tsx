@@ -114,8 +114,8 @@ const EmailSettingsSection: FC<EmailSettingsSectionProps> = ({
   onUpdateConfig,
   backendHasPassword = {},
 }) => {
-  // Extract email config from consolidated state
-  const emailConfig = emailState.emailConfig;
+  // emailState IS the consolidated email configuration
+  const emailConfig = emailState;
   const passwordDirty = emailState.passwordDirty;
   const smtpPasswords = emailState.smtpPasswords;
 
