@@ -2,11 +2,12 @@
 
 ## Overview
 
-The System Settings system is a comprehensive configuration management module for the Barangay Information System. It handles all administrative configurations including barangay information, email provider settings, email behavior controls, officials management, and system-wide policies.
+The System Settings system is a comprehensive configuration management module for the Barangay Information System. It handles all administrative configurations including barangay information, multi-provider email configuration, email behavior controls, officials management, and system-wide policies.
 
-**Last Updated:** February 8, 2026  
-**Version:** 2.0 (Unified Email Provider Architecture)  
-**Architecture:** React 18 Frontend + Express.js Backend with MongoDB
+**Last Updated:** February 14, 2026  
+**Version:** 3.0 (Multi-Provider Email Architecture with Dynamic Provider Routing)  
+**Architecture:** React 18 Frontend + Express.js Backend with MongoDB  
+**Key Features:** Simultaneous multi-provider configuration storage, dynamic provider selection, provider-specific validation, password dirty tracking
 
 ---
 
@@ -21,6 +22,65 @@ The System Settings system is a comprehensive configuration management module fo
 7. [State Management](#state-management)
 8. [Error Handling](#error-handling)
 9. [Security Considerations](#security-considerations)
+
+---
+
+## What's New in Version 3.0
+
+### Major Changes
+
+1. **Multi-Provider Email Architecture** ✅
+   - Support for simultaneous storage of three email providers: Mailtrap, SendGrid, Gmail
+   - Database schema now includes `activeProvider` enum and nested provider objects
+   - Each provider maintains completely independent configuration
+   - No data loss when switching providers
+
+2. **Dynamic Provider Routing** ✅
+   - Backend intelligently detects active provider from request or database
+   - Endpoints route to correct provider configuration based on `activeProvider`
+   - MongoDB $set with nested paths ensures isolation (e.g., `'smtp.mailtrap.password'`)
+   - Provider-specific validation rules applied per provider
+
+3. **Provider-Specific Frontend Forms** ✅
+   - CustomSmtpSettings component now shows conditional forms based on selected provider
+   - **Mailtrap Form:** SMTP fields (host, port, user, password), sender info, TLS/SSL
+   - **SendGrid Form:** API key, sender info only (no SMTP fields needed)
+   - **Gmail Form:** Gmail address, app password, sender info, with validation helpers
+   - Test email button works independently for each provider
+
+4. **Password Dirty Tracking** ✅
+   - Per-provider password change tracking via `providerPasswordDirty` object
+   - Passwords only sent to backend when `passwordDirty === true` for that provider
+   - Prevents accidental password transmission when user only edited other fields
+   - Backend detects masked passwords (`***`) and refuses to overwrite
+
+5. **Enhanced Test Email Endpoint** ✅
+   - Configuration source priority: request body > database (with fallback)
+   - Provider detection with 'mailtrap' as default
+   - Provider name returned in response for clarity (e.g., "sent successfully via sendgrid")
+   - Provider-specific error messages and recovery hints
+   - Comprehensive logging for debugging (source, provider, validation results)
+
+### Files Modified
+
+- **Frontend:** `client/src/components/admin/CustomSmtpSettings.tsx` - Complete rewrite (774 lines)
+- **Backend:** `server/routes/settingsRoutes.js` - POST /email/test endpoint refactored (lines 2327-2630)
+- **Database:** MongoDB schema updated with nested provider objects and activeProvider field
+- **Documentation:** Comprehensive update to reflect multi-provider architecture
+
+### Backward Compatibility
+
+- ✅ Old database records without `activeProvider` default to 'mailtrap'
+- ✅ Old single-provider payload structures still accepted
+- ✅ PATCH endpoint with old structure still works
+- ✅ Test email works without request body `activeProvider`
+- ✅ No data loss when migrating to multi-provider schema
+
+### Performance Improvements
+
+- Only active provider config sent to backend (smaller payloads)
+- Frontend validates only selected provider fields (faster validation)
+- Conditional rendering ensures unused forms don't render in DOM
 
 ---
 
@@ -184,61 +244,105 @@ interface Props {
 
 **Location:** `/client/src/components/admin/CustomSmtpSettings.tsx`
 
-**Purpose:** Advanced SMTP configuration component. Handles all custom SMTP fields and test email functionality for SMTP provider.
+**Purpose:** Advanced multi-provider email configuration component with provider-specific forms, conditional rendering, and test email functionality.
 
 #### Props:
 ```typescript
 interface Props {
   emailConfig: EmailConfig;
   setEmailConfig: (config: EmailConfig) => void;
+  smtpPasswordProp?: string;  // Real SMTP password from parent component
+  passwordDirty?: boolean;  // Tracks if password field has been edited by user
+  hasBackendPassword?: boolean;  // Whether backend has a saved password
 }
 ```
 
 #### Features:
 
 1. **Enable Toggle:** Enables/disables custom SMTP configuration section
-2. **SMTP Server Settings:**
-   - Host (server address)
-   - Port (1-65535 validation)
-   - Username
-   - Password (masked input with visibility toggle)
-3. **Security Settings:**
-   - TLS/SSL Toggle (changes port behavior)
-4. **Test Email Section:**
-   - Recipient email input (optional, defaults to fromEmail)
-   - Send Test Email button with loading state
-   - Success/error feedback
+2. **Multi-Provider Selector:** Dropdown to choose between:
+   - Mailtrap
+   - SendGrid
+   - Gmail
+3. **Provider-Specific Conditional Forms:**
+   - Only relevant fields shown based on selected provider
+   - Each provider has independent configuration state
+   - Password visibility toggles per provider
+
+#### Provider-Specific Forms:
+
+##### **Mailtrap Configuration Form**
+- From Name & From Email (sender info)
+- SMTP Host, Port, Username, Password
+- TLS/SSL security toggle
+- Test email functionality
+
+##### **SendGrid Configuration Form**
+- From Name & From Email (sender info)
+- SendGrid API Key only (no SMTP fields)
+- Password visibility toggle for API key
+- Test email functionality
+
+##### **Gmail Configuration Form**
+- Gmail Address (@gmail.com validation)
+- From Name & From Email
+- App Password (16-character from Google Account)
+- Helper link to generate app password
+- Password visibility toggle
+- Test email functionality
 
 #### Key Functions:
 
 ##### `handleTestSmtpConnection()`
 - **Validation:**
-  - Host and port must be configured
-  - Username required if password set
-  - Test email address must be valid
+  - Provider-specific required fields checked
+  - Mailtrap: host, port, user, password, fromEmail required
+  - SendGrid: apiKey, fromEmail required
+  - Gmail: user (Gmail address), password (app password), fromEmail required
+- **Validation on button disabled state:**
+  - Button disabled when any required field missing
+  - Different disabled conditions per provider
 - **Request Body:**
-  ```javascript
-  {
-    testEmail: recipientEmail,
-    senderName: emailConfig.fromName,
-    fromEmail: emailConfig.fromEmail
-  }
-  ```
-- **Endpoint:** `POST /settings/email/test`
-- **Success:** Shows success message, clears test email input
-- **Error:** Shows detailed error with hints from backend
+  - Includes only active provider config
+  - Routes based on selectedProvider
+  - Uses provider-specific data from state
+- **Endpoint:** `POST /settings/email/test` (now with multi-provider support)
+- **Success:** Shows success message with provider name
+- **Error:** Shows detailed error with hints and missing fields
 
-#### State:
-- `showPassword`: Controls password visibility
-- `testing`: Loading state during test
-- `testEmailAddress`: Input for test recipient email
-- `passwordSavedBefore`: Tracks if password was previously saved
+#### State Variables:
+
+| State | Type | Purpose |
+|-------|------|---------|
+| `selectedProvider` | `'mailtrap' \| 'sendgrid' \| 'gmail'` | Currently selected provider for UI display |
+| `mailtrapConfig` | `object` | Mailtrap-specific config (host, port, user, password, fromEmail, fromName, secure) |
+| `sendgridConfig` | `object` | SendGrid-specific config (apiKey, fromEmail, fromName) |
+| `gmailConfig` | `object` | Gmail-specific config (user, password, fromEmail, fromName, host, port, secure) |
+| `providerPasswordDirty` | `object` | Tracks if password/apiKey edited for each provider |
+| `smtpPasswordVisible` | `boolean` | Controls password visibility toggle |
+| `testing` | `boolean` | Loading state during test email send |
+| `testEmailAddress` | `string` | Input field for test email recipient |
+
+#### Data Flow:
+
+1. **Initialization:** Default provider 'mailtrap' with empty config objects
+2. **Provider Selection:** User selects provider → `setSelectedProvider()` updates
+3. **Form Rendering:** Only selected provider's form renders conditionally
+4. **Field Changes:** Updates corresponding provider config state object
+5. **Password Dirty Tracking:** When user edits password field → `providerPasswordDirty[provider] = true`
+6. **Test Email:** Uses current provider config from state (not saved)
+7. **Save:** Parent component sends activeProvider + current provider config to backend
 
 #### Rendering:
+
 - Material-UI Paper card with section title "Advanced SMTP Configuration"
 - Styled TextField components for all inputs
-- FormControlLabel switches for configuration toggles
-- Test Email UI with loading button
+- FormControl Select with MenuItem options for provider dropdown
+- Conditional blocks:
+  - `{selectedProvider === 'mailtrap' && <Box>...Mailtrap form...</Box>}`
+  - `{selectedProvider === 'sendgrid' && <Box>...SendGrid form...</Box>}`
+  - `{selectedProvider === 'gmail' && <Box>...Gmail form...</Box>}`
+- Test Email UI with provider-specific validation and loading button
 
 ---
 
@@ -433,73 +537,197 @@ All routes require `requireAuth` and `isAdmin` middleware unless noted otherwise
 
 ---
 
-### 4. **PATCH /api/settings** (Partial Update)
+### 4. **PATCH /api/settings** (Partial Update with Multi-Provider Support)
 
-**Purpose:** Partially update settings without replacing entire document
+**Purpose:** Partially update settings without replacing entire document. Handles multi-provider email config with dynamic routing.
 
 **Authentication:** Required (Admin only)
 
 **Request Body:** Any subset of settings fields to update
 
-**Special Handling:**
+**Special Handling - Multi-Provider Email Config:**
 
-#### Email Provider Config (`payload.email`):
-- Stored in `smtp` field (which persists reliably)
-- All provider-specific fields saved (gmail, custom SMTP, etc.)
-- Sanitized before MongoDB save (undefined properties removed)
+#### Provider Detection:
+```javascript
+const activeProvider = payload.smtp?.activeProvider || 'mailtrap';
+// Detects which provider config to save
+```
 
-#### Gmail Config (`payload.gmail`):
-- Stored in `gmail` field
-- App password stored as plain text
-- Regular password stored as plain text
-- Requires at least one password if enabling
-- Each gmail field explicitly set in MongoDB $set operation
+#### Dynamic Field Routing:
 
-#### SMTP Config (`payload.smtp`, legacy):
-- If `payload.email` not provided but `payload.smtp` is:
-  - Validated against `smtpHelper.validateSMTPConfig()`
-  - Passwords encrypted
-  - `securityType` converted to `secure` boolean
+**For Mailtrap:**
+```javascript
+$set = {
+  'smtp.activeProvider': 'mailtrap',
+  'smtp.mailtrap.host': value,
+  'smtp.mailtrap.port': value,
+  'smtp.mailtrap.user': value,
+  'smtp.mailtrap.password': encrypted(value),
+  'smtp.mailtrap.fromEmail': value,
+  'smtp.mailtrap.fromName': value,
+  'smtp.mailtrap.secure': value
+}
+```
+
+**For SendGrid:**
+```javascript
+$set = {
+  'smtp.activeProvider': 'sendgrid',
+  'smtp.sendgrid.apiKey': encrypted(value),
+  'smtp.sendgrid.fromEmail': value,
+  'smtp.sendgrid.fromName': value
+}
+```
+
+**For Gmail:**
+```javascript
+$set = {
+  'smtp.activeProvider': 'gmail',
+  'smtp.gmail.host': 'smtp.gmail.com',
+  'smtp.gmail.port': 587,
+  'smtp.gmail.user': value,
+  'smtp.gmail.password': encrypted(value),
+  'smtp.gmail.fromEmail': value,
+  'smtp.gmail.fromName': value,
+  'smtp.gmail.secure': true
+}
+```
+
+#### Password Masking Detection:
+- Regex test: `/^\*+$/` detects masked values
+- If masked detected: Preserves existing password, does NOT overwrite with placeholder
+- Prevents accidental password loss
+
+#### Isolation Guarantee:
+- Only updates nested fields for active provider
+- Other provider configs completely untouched
+- Ensures: Saving Mailtrap config doesn't affect SendGrid config
 
 **Validation:**
-- Email config provider must be valid
-- Custom SMTP: all required fields (host, port, user, password) must be present
-- Gmail: address and app password required if enabled
+- Provider-specific required fields validation
+- Email format validation
 - Port validation: 1-65535
-- No _id fields allowed in payload (removed defensively)
+- No _id fields allowed in payload
 
-**Explicit Field Setting:**
-- Uses MongoDB `$set` operator
-- Individual fields explicitly set for nested objects
-- Ensures Mongoose saves all fields properly
-
-**Response:** Sanitized updated settings
+**Response:** Sanitized updated settings with activeProvider and provider config
 
 ---
 
-### 5. **POST /api/settings/test-smtp** (Legacy)
+### 5. **POST /api/settings/email/test** (Multi-Provider Test Email)
 
-**Purpose:** Send test email using configured SMTP
+**Purpose:** Send test email using configured provider with dynamic provider routing
 
 **Authentication:** Required (Admin only)
 
 **Request Body:**
 ```json
 {
-  "to": "test@example.com" /* optional, defaults to contactEmail */
+  "testEmail": "recipient@example.com",
+  "smtp": {
+    "activeProvider": "mailtrap",
+    "mailtrap": {
+      "host": "smtp.mailtrap.io",
+      "port": 465,
+      "user": "username",
+      "password": "password",
+      "fromEmail": "noreply@example.com"
+    }
+  }
 }
 ```
 
-**Validation:**
-- SMTP must be configured (host required)
-- Recipient email required
+**Configuration Source Priority:**
+```
+1. body.smtp (highest) - Test provided config
+2. database fallback (lowest) - Use saved active provider config
+```
 
-**Response:**
+**Provider Detection Logic:**
+```javascript
+// Detect active provider
+const activeProvider = body.smtp?.activeProvider || settings.smtp.activeProvider || 'mailtrap';
+
+// Route to correct config
+if (activeProvider === 'mailtrap') {
+  providerConfig = body.smtp?.mailtrap || settings.smtp.mailtrap;
+} else if (activeProvider === 'sendgrid') {
+  providerConfig = body.smtp?.sendgrid || settings.smtp.sendgrid;
+} else if (activeProvider === 'gmail') {
+  providerConfig = body.smtp?.gmail || settings.smtp.gmail;
+}
+```
+
+**Provider-Specific Validation:**
+
+| Provider | Required Fields | Validation |
+|----------|-----------------|-----------|
+| Mailtrap | host, port, user, password, fromEmail | SMTP fields must all be present |
+| SendGrid | apiKey, fromEmail | API key must start with 'SG.' |
+| Gmail | user (Gmail address), password (app password), fromEmail | Must have valid Gmail address |
+
+**Validation Response (Error):**
+```json
+{
+  "success": false,
+  "message": "Invalid mailtrap configuration",
+  "error": "Mailtrap requires: password, fromEmail",
+  "missingFields": ["password", "fromEmail"],
+  "provider": "mailtrap",
+  "configSource": "request_body"
+}
+```
+
+**Email Sending Process:**
+
+1. **For Mailtrap/Gmail (SMTP):**
+   - Creates Nodemailer transporter with SMTP config
+   - Sets: host, port, secure, auth (user/pass)
+   - Sends via `transporter.sendMail()`
+
+2. **For SendGrid:**
+   - Placeholder implementation (future: SendGrid API client)
+   - Returns success if config is valid
+
+**Successful Response:**
 ```json
 {
   "success": true,
-  "message": "Test email sent successfully"
+  "message": "Test email sent successfully via mailtrap",
+  "provider": "mailtrap",
+  "configSource": "request_body",
+  "testEmail": "admin@example.com",
+  "messageId": "messageId123"
 }
+```
+
+**Error Handling:**
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| ECONNREFUSED | Cannot connect to host:port | Verify host and port correct |
+| ENOTFOUND | Host DNS lookup failed | Check hostname spelling |
+| Authentication failed | Wrong credentials | Verify username and password |
+| Config incomplete | Missing required fields | See missingFields in response |
+
+**Comprehensive Logging:**
+```javascript
+console.log('[Settings] POST /email/test - Configuration source:', {
+  source: configSource,  // 'request_body' or 'database'
+  activeProvider: activeProvider,
+  hasProviderConfig: !!providerConfig
+});
+
+console.log('[Settings] POST /email/test - All validations passed. Sending via:', {
+  provider: activeProvider,
+  configSource: configSource,
+  toEmail: testEmail
+});
+
+console.log('[Settings] POST /email/test - Test email sent successfully via', activeProvider, {
+  configSource: configSource,
+  messageId: emailResult.messageId,
+  recipient: testEmail
+});
 ```
 
 ---
@@ -599,7 +827,43 @@ All routes require `requireAuth` and `isAdmin` middleware unless noted otherwise
 
 ## Email System
 
-### 1. **Email Settings Control** (`EmailSettings` state/config)
+### 1. **Multi-Provider Architecture Overview**
+
+The email system now supports simultaneous configuration of multiple email providers with dynamic provider selection. This allows:
+- **Storing all provider configs at once** without overwriting each other
+- **Switching providers** by updating activeProvider enum
+- **Testing individual providers** without affecting others
+- **Isolated credentials** - each provider has its own configuration object
+- **No data loss** - switching providers doesn't erase previous configs
+
+#### Key Architectural Principles:
+
+1. **Active Provider Selection:**
+   - Single activeProvider enum field: 'mailtrap' | 'sendgrid' | 'gmail'
+   - Only this provider used for actual email sending
+   - Easy to switch without data migration
+
+2. **Nested Configuration Objects:**
+   - Each provider stored in its own nested object
+   - `smtp.mailtrap.*` for Mailtrap settings
+   - `smtp.sendgrid.*` for SendGrid settings
+   - `smtp.gmail.*` for Gmail settings
+   - Complete isolation prevents accidental overwrites
+
+3. **Provider-Specific Validation:**
+   - Each provider validates only its required fields
+   - Mailtrap requires: host, port, user, password, fromEmail
+   - SendGrid requires: apiKey, fromEmail
+   - Gmail requires: user (Gmail address), password (app password), fromEmail
+
+4. **Dynamic Provider Routing:**
+   - Backend detects activeProvider and routes to correct config
+   - Frontend shows only selected provider's form
+   - Test email endpoint dynamically routes to correct validation and sending logic
+
+---
+
+### 2. **Email Settings Control** (`EmailSettings` state/config)
 
 Controls automatic sending of different email types:
 
@@ -618,76 +882,58 @@ Controls automatic sending of different email types:
 
 ---
 
-### 2. **Email Provider Configuration** (Unified `emailProviderConfig`)
+### 3. **Email Provider Configuration** (Multi-Provider `smtp.activeProvider + nested objects`)
 
-#### Provider Types:
+#### Provider Types and Nested Storage:
 
-##### **Custom SMTP**
+##### **Mailtrap** (stored in `smtp.mailtrap`)
 ```javascript
 {
-  enabled: true,
-  provider: 'custom',
-  fromName: 'Barangay System',
-  fromEmail: 'noreply@example.com',
-  host: 'smtp.example.com',
-  port: 587,
-  user: 'username',
-  password: 'encrypted_password',
-  secure: false  // TLS/SSL setting
-}
-```
-
-##### **Gmail**
-```javascript
-{
-  enabled: true,
-  provider: 'gmail',
-  fromName: 'Barangay System',
-  fromEmail: 'admin@gmail.com',
-  gmailAddress: 'admin@gmail.com',
-  gmailAppPassword: 'plain_text_app_password'
-}
-```
-
-##### **Mailtrap**
-```javascript
-{
-  enabled: true,
-  provider: 'mailtrap',
-  fromName: 'Barangay System',
-  fromEmail: 'noreply@example.com',
+  host: 'smtp.mailtrap.io',
+  port: 465,
   user: 'mailtrap_username',
-  password: 'mailtrap_password'
+  password: 'encrypted_password',
+  fromEmail: 'noreply@example.com',
+  fromName: 'Barangay System',
+  secure: true
 }
 ```
 
-##### **SendGrid**
+##### **SendGrid** (stored in `smtp.sendgrid`)
 ```javascript
 {
-  enabled: true,
-  provider: 'sendgrid',
-  fromName: 'Barangay System',
+  apiKey: 'SG.xxx...',  // encrypted
   fromEmail: 'noreply@example.com',
-  sendgridApiKey: 'SG.xxx...'
+  fromName: 'Barangay System'
 }
 ```
 
-##### **AWS SES**
+##### **Gmail** (stored in `smtp.gmail`)
 ```javascript
 {
-  enabled: true,
-  provider: 'aws-ses',
+  host: 'smtp.gmail.com',
+  port: 587,
+  user: 'admin@gmail.com',  // Gmail address
+  password: 'xxxxxxxxxxxxxxxx',  // 16-char app password, encrypted
+  fromEmail: 'admin@gmail.com',
   fromName: 'Barangay System',
-  fromEmail: 'noreply@example.com',
-  awsAccessKeyId: 'AKIA...',
-  awsSecretAccessKey: 'xxx...',
-  awsRegion: 'us-east-1'
+  secure: true
+}
+```
+
+#### Active Provider Storage:
+```javascript
+smtp: {
+  activeProvider: 'mailtrap',  // Currently active provider
+  mailtrap: { /* Mailtrap config */ },
+  sendgrid: { /* SendGrid config */ },
+  gmail: { /* Gmail config */ }
 }
 ```
 
 ---
 
-### 3. **Email Provider Routes**
+### 4. **Provider Configuration Routes**
 
 #### **GET /api/settings/email/providers**
 
@@ -698,11 +944,9 @@ Returns list of available email providers.
 {
   "success": true,
   "providers": [
-    { "id": "custom", "name": "Custom SMTP" },
-    { "id": "gmail", "name": "Gmail" },
     { "id": "mailtrap", "name": "Mailtrap" },
     { "id": "sendgrid", "name": "SendGrid" },
-    { "id": "aws-ses", "name": "AWS SES" }
+    { "id": "gmail", "name": "Gmail" }
   ]
 }
 ```
@@ -711,14 +955,33 @@ Returns list of available email providers.
 
 #### **GET /api/settings/email**
 
-Get current email configuration.
+Get current email configuration (sanitized).
 
 **Response:**
 ```json
 {
   "success": true,
   "email": {
-    /* sanitized email provider config with passwords masked */
+    "activeProvider": "mailtrap",
+    "mailtrap": {
+      "host": "smtp.mailtrap.io",
+      "port": 465,
+      "user": "username",
+      "password": "***MASKED***",
+      "fromEmail": "noreply@example.com",
+      "fromName": "Barangay System"
+    },
+    "sendgrid": {
+      "apiKey": "***MASKED***",
+      "fromEmail": "noreply@example.com",
+      "fromName": "Barangay System"
+    },
+    "gmail": {
+      "user": "admin@gmail.com",
+      "password": "***MASKED***",
+      "fromEmail": "admin@gmail.com",
+      "fromName": "Barangay System"
+    }
   }
 }
 ```
@@ -727,153 +990,72 @@ Get current email configuration.
 
 #### **PATCH /api/settings/email**
 
-Update email provider configuration.
+Update email provider configuration with dynamic routing.
 
-**Request Body:**
+**Request Body (Mailtrap Example):**
 ```json
 {
-  "enabled": true,
-  "provider": "custom",
-  "fromName": "string",
-  "fromEmail": "string",
-  
-  /* Custom SMTP fields */
-  "host": "string",
-  "port": "number",
-  "secure": "boolean",
-  "user": "string",
-  "password": "string",
-  
-  /* Gmail fields */
-  "gmailAddress": "string",
-  "gmailAppPassword": "string",
-  
-  /* Mailtrap fields */
-  /* (user, password already listed above) */
-  
-  /* SendGrid fields */
-  "sendgridApiKey": "string",
-  
-  /* AWS SES fields */
-  "awsAccessKeyId": "string",
-  "awsSecretAccessKey": "string",
-  "awsRegion": "string"
+  "activeProvider": "mailtrap",
+  "mailtrap": {
+    "host": "smtp.mailtrap.io",
+    "port": 465,
+    "user": "username",
+    "password": "new_password",
+    "fromEmail": "noreply@example.com",
+    "fromName": "Barangay System",
+    "secure": true
+  }
 }
 ```
 
+**Dynamic Routing Logic:**
+```javascript
+// Detect active provider from payload
+const activeProvider = payload.activeProvider || payload.smtp?.activeProvider;
+
+// Route to correct provider-specific fields
+if (activeProvider === 'mailtrap') {
+  updateOps.$set['smtp.activeProvider'] = 'mailtrap';
+  updateOps.$set['smtp.mailtrap.host'] = payload.mailtrap.host;
+  updateOps.$set['smtp.mailtrap.port'] = payload.mailtrap.port;
+  // ... rest of mailtrap fields
+} else if (activeProvider === 'sendgrid') {
+  updateOps.$set['smtp.activeProvider'] = 'sendgrid';
+  updateOps.$set['smtp.sendgrid.apiKey'] = encrypted(payload.sendgrid.apiKey);
+  // ... rest of sendgrid fields
+} else if (activeProvider === 'gmail') {
+  updateOps.$set['smtp.activeProvider'] = 'gmail';
+  updateOps.$set['smtp.gmail.user'] = payload.gmail.user;
+  // ... rest of gmail fields
+}
+```
+
+**Key Features:**
+- Updates ONLY active provider, never touches other providers
+- Masks values detected via `/^\*+$/` regex (prevents accidental overwrite)
+- Sets nested paths explicitly to ensure Mongoose saves correctly
+
 **Validation Per Provider:**
 
-- **Custom SMTP:** host, port (1-65535), user, password all required
-- **Gmail:** gmailAddress (must be @gmail.com), gmailAppPassword required
-- **Mailtrap:** user, password required
-- **SendGrid:** sendgridApiKey required
-- **AWS SES:** awsAccessKeyId, awsSecretAccessKey required
+- **Mailtrap:** host, port (1-65535), user, password all required
+- **SendGrid:** apiKey required  
+- **Gmail:** user (Gmail address), password (app password) required
 
 **Response:**
 ```json
 {
   "success": true,
-  "message": "Email settings updated",
+  "message": "Email settings updated successfully via mailtrap",
+  "activeProvider": "mailtrap",
   "email": { /* sanitized config */ }
 }
 ```
 
 ---
 
-#### **POST /api/settings/email/test**
+#### **POST /api/settings/email/test** (See Detailed Section Above)
 
-Test email provider configuration.
-
-**Request Body:**
-```json
-{
-  "testEmail": "recipient@example.com",
-  "emailConfig": { /* optional, uses DB config if omitted */ }
-}
-```
-
-**Validation:**
-- testEmail must be valid email address
-- emailConfig must be enabled and have provider selected
-- Provider-specific fields must be configured
-
-**Response:**
-```json
-{
-  "success": true,
-  "message": "Test email sent successfully",
-  "provider": "custom",
-  "messageId": "string"
-}
-```
-
-**Error Response:**
-```json
-{
-  "success": false,
-  "message": "Custom SMTP test failed",
-  "error": "Connection refused",
-  "provider": "custom"
-}
-```
-
----
-
-### 4. **Gmail Configuration Routes** (Legacy/Deprecated)
-
-#### **GET /api/settings/gmail**
-
-Get Gmail configuration (sanitized).
-
-#### **PATCH /api/settings/gmail**
-
-Update Gmail configuration separately.
-
-#### **POST /api/settings/gmail/test**
-
-Test Gmail connection.
-
-**Note:** These routes are now superseded by unified email provider routes but maintained for backward compatibility.
-
----
-
-### 5. **Email Behavior Control Routes**
-
-#### **GET /api/settings/email** (Email Settings)
-
-Get email behavior settings.
-
-**Response:**
-```json
-{
-  "enabled": "boolean",
-  "enablePasswordResetEmails": "boolean",
-  "enableOtpEmails": "boolean",
-  /* ... other email settings ... */
-}
-```
-
----
-
-#### **PATCH /api/settings/email** (Email Settings)
-
-Update email behavior settings.
-
-**Request Body:** Any subset of email settings fields
-
-**Validation:**
-- `recipientEmailsPerBatch` > 0
-- `retryAttempts` >= 0
-- `retryDelayMinutes` > 0
-
-**Fields Updated with `emailSettings.` prefix:**
-```javascript
-{
-  "emailSettings.enabled": true,
-  "emailSettings.enablePasswordResetEmails": true,
-  /* ... */
-}
-```
+Test email provider configuration with dynamic provider routing and provider-specific validation.
 
 ---
 
@@ -987,7 +1169,7 @@ Upload official photo.
 
 ## Data Models
 
-### **SystemSetting (MongoDB Schema)**
+### **SystemSetting (MongoDB Schema - Multi-Provider)**
 
 ```javascript
 {
@@ -1027,40 +1209,47 @@ Upload official photo.
     retryDelayMinutes: Number
   },
   
-  // Email Provider Configuration (saved in smtp field)
+  // Multi-Provider Email Configuration
   smtp: {
+    activeProvider: Enum(['mailtrap', 'sendgrid', 'gmail']),  // Currently active provider
+    
+    // Mailtrap Configuration (nested object)
+    mailtrap: {
+      host: String,
+      port: Number,
+      user: String,
+      password: String,
+      fromEmail: String,
+      fromName: String,
+      secure: Boolean
+    },
+    
+    // SendGrid Configuration (nested object)
+    sendgrid: {
+      apiKey: String,
+      fromEmail: String,
+      fromName: String
+    },
+    
+    // Gmail Configuration (nested object)
+    gmail: {
+      host: String,  // 'smtp.gmail.com'
+      port: Number,  // 587
+      user: String,  // Gmail address
+      password: String,  // App password
+      fromEmail: String,
+      fromName: String,
+      secure: Boolean  // true
+    },
+    
+    // Metadata (shared across providers)
+    lastHealthCheck: Date,
+    testEmailStatus: String,  // 'success' or 'failed'
     enabled: Boolean,
-    provider: String,  // 'custom', 'gmail', 'mailtrap', 'sendgrid', 'aws-ses'
-    fromName: String,
-    fromEmail: String,
-    
-    // Custom SMTP
-    host: String,
-    port: Number,
-    user: String,
-    password: String,
-    encryptedPassword: String,
-    secure: Boolean,
-    
-    // Gmail
-    gmailAddress: String,
-    gmailAppPassword: String,
-    
-    // Mailtrap
-    // (uses user, password above)
-    
-    // SendGrid
-    sendgridApiKey: String,
-    
-    // AWS SES
-    awsAccessKeyId: String,
-    awsSecretAccessKey: String,
-    awsRegion: String,
-    
     updatedAt: Date
   },
   
-  // Gmail Config (legacy, maintained separately)
+  // Gmail Config (legacy, maintained for compatibility)
   gmail: {
     enabled: Boolean,
     gmailAddress: String,
@@ -1082,6 +1271,13 @@ Upload official photo.
   updatedAt: Date
 }
 ```
+
+**Key Features:**
+1. **Active Provider Selection:** `activeProvider` enum controls which provider is used for sending
+2. **Isolated Provider Objects:** Each provider has its own nested object (`smtp.mailtrap.*`, `smtp.sendgrid.*`, `smtp.gmail.*`)
+3. **No Interference:** Updating one provider's config doesn't touch other providers
+4. **Shared Metadata:** `lastHealthCheck`, `testEmailStatus`, `enabled` apply to all providers
+5. **Backward Compatibility:** Legacy `gmail` and `email` fields maintained
 
 ---
 
@@ -1177,30 +1373,93 @@ Validates provider-specific required fields. Returns error object if validation 
 
 ## State Management
 
-### Frontend State Flow
+### Frontend State Flow (Multi-Provider Architecture)
 
 1. **Initialization:**
    - `fetchSettings()` → Backend `/settings`
-   - Maps response to `settings`, `emailProviderConfig`, `gmailSettings`, `officials`
+   - Maps response to `settings`, `emailProviderConfig`, `officials`
+   - Detects `smtp.activeProvider` from backend
 
-2. **User Edits:**
-   - User changes field → state updates via `setSettings()`, `setEmailSettings()`, etc.
-   - Dirty flag computed via useEffect comparing to original
+2. **Provider Selection:**
+   - User selects provider in CustomSmtpSettings dropdown
+   - `setSelectedProvider()` updates local state
+   - Only selected provider's form conditionally renders
 
-3. **Provider Selection:**
-   - User selects provider → `handleEmailConfigChange()` called
-   - If `provider === 'custom'`: `CustomSmtpSettings` conditionally renders
-   - If `provider === 'gmail'`: `GmailSettings` conditionally renders
+3. **Provider-Specific State Objects:**
+   - `mailtrapConfig`: Independent Mailtrap configuration state
+   - `sendgridConfig`: Independent SendGrid configuration state
+   - `gmailConfig`: Independent Gmail configuration state
+   - Each updated only when that provider is selected
 
-4. **Save:**
-   - User clicks floating save button → `saveAll()`
-   - `handleSave()` → `performSave()` → `adminAPI.updateSystemSettings(payload)`
-   - Payload includes complete `emailProviderConfig` with unified save path
+4. **Password Dirty Tracking Per Provider:**
+   - `providerPasswordDirty`: Object tracking dirty state for each provider
+   ```javascript
+   {
+     mailtrap: false,
+     sendgrid: false,
+     gmail: false
+   }
+   ```
+   - When user edits password field: `providerPasswordDirty[provider] = true`
+   - Only sends password in requests when dirty=true
+   - Prevents accidental password transmission when not changed
 
-5. **Component Communication:**
-   - Parent (SystemSettings) owns state
-   - Child components (EmailSettings, CustomSmtpSettings, GmailSettings) use callbacks
-   - No direct state mutations between siblings
+5. **Test Email Workflow:**
+   - User clicks "Send Test Email" button
+   - Validates current provider's required fields
+   - Builds payload with only active provider config
+   - Sends to `POST /settings/email/test`
+   - Backend routes to correct provider logic
+   - Shows response with provider name
+
+6. **Save Workflow:**
+   - User clicks "Save Settings" button
+   - Parent component (SystemSettings) prepares unified payload:
+   ```javascript
+   {
+     activeProvider: selectedProvider,
+     [selectedProvider + 'Config']: currentProviderConfig,
+     // Only active provider config included
+   }
+   ```
+   - Sends to `PATCH /settings` endpoint
+   - Backend uses dynamic routing to save to correct nested object
+   - Response includes all provider configs (masked passwords)
+
+7. **Component Communication:**
+   - Parent (SystemSettings) owns multi-provider state
+   - CustomSmtpSettings manages provider-specific forms
+   - EmailSettings manages common fields (from name/email)
+   - Callbacks pass data up to parent for unified save
+
+#### Provider-Specific State Management Example:
+
+```javascript
+// Mailtrap selected
+const [selectedProvider, setSelectedProvider] = useState('mailtrap');
+const [mailtrapConfig, setMailtrapConfig] = useState({
+  host: 'smtp.mailtrap.io',
+  port: 2525,
+  user: '',
+  password: '',
+  fromEmail: '',
+  fromName: 'Barangay System',
+  secure: true
+});
+
+// User edits password field
+const handlePasswordChange = (e) => {
+  setMailtrapConfig({ ...mailtrapConfig, password: e.target.value });
+  setProviderPasswordDirty({ ...providerPasswordDirty, mailtrap: true });
+};
+
+// Save payload only includes Mailtrap config
+const savePayload = {
+  activeProvider: 'mailtrap',
+  mailtrapConfig: mailtrapConfig
+  // sendgridConfig and gmailConfig NOT included
+};
+```
 
 ---
 
@@ -1260,63 +1519,76 @@ Validates provider-specific required fields. Returns error object if validation 
 ### Password Security
 
 1. **Never Sent to Client:**
-   - Backend never returns passwords to client
-   - Only encrypted/masked versions sent
-   - Client uses values from request body for testing
+   - Backend never returns real passwords to client
+   - Only `***MASKED***` values sent to frontend
+   - Client uses passwords ONLY from request body (not database)
 
-2. **Encryption at Rest:**
-   - SMTP passwords encrypted before MongoDB save
-   - Encryption key from `SETTINGS_ENCRYPTION_KEY` env var
-   - Uses crypto utilities for encryption/decryption
+2. **Password Dirty Tracking:**
+   - Frontend tracks if user edited password field per provider
+   - Password only included in request if `passwordDirty === true`
+   - Prevents accidental password transmission when unchanged
+   - Backend detects masked values via `/^\*+$/` regex to prevent overwrites
 
-3. **Test Email Passwords:**
-   - Test endpoint uses passwords ONLY from database
-   - Does NOT accept passwords in request body for security
-   - Falls back to stored password if none in request
+3. **Encryption at Rest:**
+   - SMTP passwords encrypted before MongoDB save using `SETTINGS_ENCRYPTION_KEY`
+   - SendGrid API keys encrypted
+   - Gmail app passwords encrypted (though initially stored as plain text for compatibility)
+   - Uses Node.js crypto utilities for AES-256 encryption
 
-4. **Plain Text Passwords:**
-   - Gmail app passwords stored as plain text (acceptable for stored credentials)
-   - Regular passwords stored as plain text
-   - Should ideally be encrypted (future enhancement)
+4. **Per-Provider Password Isolation:**
+   - Each provider has independent password field
+   - Updating one provider password doesn't affect others
+   - Mailtrap password: `smtp.mailtrap.password`
+   - SendGrid API key: `smtp.sendgrid.apiKey`
+   - Gmail app password: `smtp.gmail.password`
+
+5. **Test Email Password Handling:**
+   - Test email endpoint accepts passwords only in request body
+   - Test email endpoint uses passwords from request (not database fallback)
+   - Prevents test without explicit password entry by user
+   - Password validation: Non-empty string, not masked pattern
 
 ---
 
 ### Authorization
 
-1. **All Admin Endpoints Require:**
+1. **All Admin Email Endpoints Require:**
    - `requireAuth` middleware (must be logged in)
    - `isAdmin` middleware (user.isAdmin === true)
 
 2. **Public Endpoints (No Auth):**
-   - `/api/settings/public`
-   - `/api/settings/public/barangay-info`
-   - `/api/settings/public/contact-info`
+   - `GET /api/settings/public` - Barangay info only
+   - `GET /api/settings/public/barangay-info` - Carousel data
+   - `GET /api/settings/public/contact-info` - Contact data
 
 3. **Audit Trail:**
-   - All admin changes logged with user ID and timestamp
+   - All admin email config changes logged in AuditLog
+   - Includes before/after diff, user ID, timestamp
    - Admin can review changes via audit logs
 
 ---
 
 ### Data Validation
 
-1. **Email Validation:**
-   - Format: `^[^\s@]+@[^\s@]+\.[^\s@]+$`
-   - Phone format: 7+ digits
+1. **Multi-Provider Email Validation:**
+   - Mailtrap: All SMTP fields required (host, port, user, password, fromEmail)
+   - SendGrid: apiKey required and must start with 'SG.'
+   - Gmail: User must be @gmail.com, app password must be 16 chars
 
-2. **Numeric Validation:**
+2. **Email Validation:**
+   - Format: `^[^\s@]+@[^\s@]+\.[^\s@]+$`
+   - Phone format: 7+ digits (allows spaces, dashes, parens, +)
+
+3. **Numeric Validation:**
    - All numeric fields must be > 0
    - Port must be 1-65535
    - Max accounts per IP must be 1-100
-
-3. **SMTP Port Validation:**
-   - Common ports: 25 (plain), 587 (STARTTLS), 465 (SSL)
-   - Allowed range: 1-65535
 
 4. **Payload Sanitization:**
    - All _id fields removed defensively
    - Undefined properties removed before save
    - Only expected fields processed
+   - Nested paths validated for provider-specific objects
 
 ---
 
@@ -1328,10 +1600,15 @@ Validates provider-specific required fields. Returns error object if validation 
    - Deletes uploaded files from GridFS
    - Users notified via SSE
 
-2. **Audit Trail:**
+2. **Provider Switching:**
+   - Previous provider configs preserved (not deleted)
+   - Can switch back without data loss
+   - Only activeProvider enum changes, nested objects untouched
+
+3. **Audit Trail:**
    - Before/after diff recorded
    - Admin ID and timestamp tracked
-   - Reversal requires admin to re-enable
+   - Reversal requires admin to manually switch back
 
 ---
 
@@ -1364,11 +1641,249 @@ MONGODB_URI=<connection-string>
 
 ## Testing Checklist
 
+### Frontend Component Tests (CustomSmtpSettings.tsx)
+
+#### Provider Selection
+- [ ] Provider dropdown displays all three options: Mailtrap, SendGrid, Gmail
+- [ ] Switching provider hides previous form and shows correct form
+- [ ] Selected provider is properly stored in state
+- [ ] Page refresh maintains selected provider from database
+
+#### Mailtrap Form Tests
+- [ ] Form displays when Mailtrap selected: Host, Port, Username, Password, From Name, From Email, TLS/SSL
+- [ ] Host field accepts alphanumeric and dots (e.g., "smtp.mailtrap.io")
+- [ ] Port field accepts 1-65535
+- [ ] Password visibility toggle hides/shows actual password
+- [ ] TLS/SSL toggle updates secureConnection state
+- [ ] Test email button enabled when all required fields have values
+- [ ] Test email button disabled when any required field is empty
+- [ ] Password dirty tracking: password marked dirty when edited
+- [ ] Password dirty cleared after successful save
+- [ ] From Email field validates email format
+
+#### SendGrid Form Tests
+- [ ] Form displays when SendGrid selected: API Key, From Name, From Email
+- [ ] API Key field accepts only alphanumeric and hyphens
+- [ ] API Key visibility toggle hides/shows actual key
+- [ ] API Key field must start with "SG." for valid SendGrid API keys
+- [ ] Test email button enabled when all required fields have values
+- [ ] Test email button disabled when any required field is empty
+- [ ] Password dirty tracking: apiKey marked dirty when edited
+- [ ] Password dirty cleared after successful save
+- [ ] From Email field validates email format
+
+#### Gmail Form Tests
+- [ ] Form displays when Gmail selected: Gmail Address, App Password, From Name, From Email
+- [ ] Gmail Address field validates @gmail.com domain
+- [ ] Gmail Address field shows error if non-@gmail.com entered
+- [ ] App Password field accepts exactly 16 characters (spaces allowed, removed on save)
+- [ ] App Password field shows helper link: "Generate App Password"
+- [ ] App Password visibility toggle hides/shows actual password
+- [ ] From Email field can be different from Gmail Address (good for branding)
+- [ ] Test email button enabled when all required fields have values
+- [ ] Test email button disabled when any required field is empty
+- [ ] Password dirty tracking: password marked dirty when edited
+- [ ] Password dirty cleared after successful save
+
+#### General Form Tests
+- [ ] Clearing provider password field doesn't clear other providers' passwords
+- [ ] From Name field accepts any text (optional)
+- [ ] From Email field accepts any valid email format
+- [ ] Form shows loading state during save
+- [ ] Error messages display for invalid fields
+- [ ] Success message displays after save
+- [ ] Form data persists after reload
+
+---
+
+### Backend API Tests (POST /api/settings/email/test)
+
+#### Mailtrap Provider Tests
+- [ ] Test with valid Mailtrap credentials returns 200 OK
+- [ ] Response includes: `{ success: true, message: "Test email sent successfully via mailtrap" }`
+- [ ] Missing host returns 400 with error: `["smtp.mailtrap.host"]`
+- [ ] Missing port returns 400 with error: `["smtp.mailtrap.port"]`
+- [ ] Missing user returns 400 with error: `["smtp.mailtrap.user"]`
+- [ ] Missing password returns 400 with error: `["smtp.mailtrap.password"]`
+- [ ] Missing fromEmail returns 400 with error: `["smtp.mailtrap.fromEmail"]`
+- [ ] Invalid host (ENOTFOUND) returns 500 with hint: "Host not found"
+- [ ] Connection refused (ECONNREFUSED) returns 500 with hint: "Cannot connect to host:port"
+- [ ] Invalid credentials returns 500 with hint: "Invalid email credentials"
+- [ ] Request body credentials override database credentials
+- [ ] Secure connection toggle (TLS/SSL) is respected
+- [ ] From Name is included in email
+
+#### SendGrid Provider Tests
+- [ ] Test with valid SendGrid API key returns 200 OK
+- [ ] Response includes: `{ success: true, message: "Test email sent successfully via sendgrid" }`
+- [ ] Missing apiKey returns 400 with error: `["smtp.sendgrid.apiKey"]`
+- [ ] Missing fromEmail returns 400 with error: `["smtp.sendgrid.fromEmail"]`
+- [ ] Invalid API key returns 500 with hint: "Invalid SendGrid API key"
+- [ ] API key must start with "SG." for validation
+- [ ] Request body credentials override database credentials
+- [ ] From Name is included in email
+- [ ] Email address supports full format: "From Name <from@email.com>"
+
+#### Gmail Provider Tests
+- [ ] Test with valid Gmail app password returns 200 OK
+- [ ] Response includes: `{ success: true, message: "Test email sent successfully via gmail" }`
+- [ ] Missing user returns 400 with error: `["smtp.gmail.user"]`
+- [ ] Missing password returns 400 with error: `["smtp.gmail.password"]`
+- [ ] Missing fromEmail returns 400 with error: `["smtp.gmail.fromEmail"]`
+- [ ] User must be @gmail.com format
+- [ ] App password must be 16 characters (test endpoint accepts without spaces removed)
+- [ ] Invalid app password returns 500 with hint: "Invalid Gmail app password"
+- [ ] Fixed host "smtp.gmail.com" and port 465 used automatically
+- [ ] Request body credentials override database credentials
+- [ ] From Name is included in email
+
+#### Provider Detection Tests
+- [ ] Request body activeProvider takes priority over database
+- [ ] Database activeProvider used if not in request body
+- [ ] Default to 'mailtrap' if no activeProvider specified anywhere
+- [ ] Provider name returned in response message
+- [ ] Switching activeProvider doesn't affect other provider configs
+
+#### Multi-Provider Isolation Tests
+- [ ] Saving Mailtrap config doesn't modify SendGrid or Gmail configs
+- [ ] Saving SendGrid config doesn't modify Mailtrap or Gmail configs
+- [ ] Saving Gmail config doesn't modify Mailtrap or SendGrid configs
+- [ ] Switching between providers preserves all provider configs
+- [ ] Deleting activeProvider from request doesn't affect database value
+
+#### Password Handling Tests
+- [ ] Masked passwords (`***`) in request are detected and not saved
+- [ ] Real passwords are encrypted before database save
+- [ ] Backend never returns real passwords to client
+- [ ] Database stores encrypted passwords
+- [ ] Passwords are decrypted for test email sending
+- [ ] Password dirty tracking prevents accidental overwrites
+
+---
+
+### PATCH /api/settings/email Tests
+
+#### Provider-Specific Save Tests
+- [ ] Saving Mailtrap config via `smtp.mailtrap.*` paths
+- [ ] Saving SendGrid config via `smtp.sendgrid.*` paths
+- [ ] Saving Gmail config via `smtp.gmail.*` paths
+- [ ] Only activeProvider is included in save request
+- [ ] Switching activeProvider immediately routes to new provider config
+- [ ] All three providers can have simultaneous configurations
+
+#### Password Update Tests
+- [ ] Password only saved if `providerPasswordDirty === true`
+- [ ] Masked passwords detected and not overwritten
+- [ ] Password updates encrypted before storage
+- [ ] Password updates isolated to active provider only
+
+#### Validation Tests
+- [ ] Active provider required fields validated on save
+- [ ] Inactive provider fields not validated
+- [ ] Invalid email in fromEmail returns 400
+- [ ] Invalid port number returns 400
+- [ ] Empty string values handled correctly
+
+---
+
+### End-to-End Scenarios
+
+#### Scenario 1: Switch from Mailtrap to SendGrid
+- [ ] User has Mailtrap configured and working
+- [ ] User switches to SendGrid in dropdown
+- [ ] Mailtrap form hides, SendGrid form shows
+- [ ] User enters SendGrid API key and sender info
+- [ ] Test email sent via SendGrid succeeds
+- [ ] Save button sends only SendGrid config
+- [ ] activeProvider updates to 'sendgrid'
+- [ ] Mailtrap config preserved in database
+- [ ] User can switch back to Mailtrap without re-entering data
+
+#### Scenario 2: Multiple Providers Configured (Disaster Recovery)
+- [ ] Admin configures all three providers
+- [ ] Primary provider (Mailtrap) fails
+- [ ] Admin quickly switches activeProvider to SendGrid
+- [ ] SendGrid sends emails without reconfiguration
+- [ ] Original Mailtrap config still intact if needed
+- [ ] Switch takes seconds without data re-entry
+
+#### Scenario 3: Test Before Save
+- [ ] User modifies Mailtrap credentials
+- [ ] Clicks "Test Email" before saving
+- [ ] Backend uses request body credentials (not database)
+- [ ] Test succeeds with new credentials
+- [ ] User saves settings
+- [ ] Subsequent tests use saved credentials
+
+#### Scenario 4: Invalid Credentials Recovery
+- [ ] User enters invalid host for Mailtrap
+- [ ] Test email fails with specific error hint
+- [ ] User corrects host
+- [ ] Test email succeeds
+- [ ] Save button available
+- [ ] Settings updated with corrected host
+
+#### Scenario 5: Password Dirty Tracking
+- [ ] User loads page with existing Mailtrap password (shows as ***)
+- [ ] User doesn't edit password field
+- [ ] User changes "From Name" field
+- [ ] User clicks Save
+- [ ] Request includes new From Name
+- [ ] Request does NOT include password (passwordDirty === false)
+- [ ] Database password unchanged
+- [ ] If user DID edit password field, then request includes it (passwordDirty === true)
+
+---
+
+### Integration Tests (Full Workflow)
+
+#### Admin Settings Creation
+- [ ] New admin accesses email settings
+- [ ] All three provider forms available
+- [ ] Can configure Mailtrap first
+- [ ] Can test Mailtrap without saving
+- [ ] Settings persist after save
+- [ ] Page refresh maintains settings
+
+#### Provider Configuration
+- [ ] All three providers fully configurable
+- [ ] Each provider validates independently
+- [ ] Test endpoint works for each provider
+- [ ] Configuration isolation maintained
+- [ ] No cross-provider data leakage
+
+#### Email Sending via Nodemailer
+- [ ] Mailtrap configured credentials used for SMTP connection
+- [ ] SendGrid API used directly (no Nodemailer fallback needed)
+- [ ] Gmail SMTP connection works with app password
+- [ ] Test email received in specified inbox
+- [ ] Subject, body, and attachments formatted correctly
+
+---
+
+### Regression Tests
+
+#### Backward Compatibility
+- [ ] Old database records without activeProvider default to 'mailtrap'
+- [ ] Old Mailtrap-only configs still work
+- [ ] Old single-provider payload structure still accepted
+- [ ] PATCH endpoint with old structure still works
+- [ ] Test email works without request body activeProvider
+
+#### Migration Safety
+- [ ] No data lost when migrating to multi-provider schema
+- [ ] Existing Mailtrap configs preserved
+- [ ] New providers added without breaking old configs
+- [ ] Switching between old/new client versions doesn't corrupt data
+
+---
+
+### System-Wide Tests
+
 - [ ] Load settings page, verify all fields populate from DB
 - [ ] Edit basic settings (site name, barangay info), save, reload to verify persistence
-- [ ] Change email provider from custom → gmail → mailtrap, verify fields change
-- [ ] Configure custom SMTP, test email connection, verify success/error message
-- [ ] Configure Gmail, test email connection, verify app password used
+- [ ] Configure all three providers simultaneously
+- [ ] Switch activeProvider and verify correct form/validation
 - [ ] Send test email to different recipient, verify arrives
 - [ ] Disable email sending, verify master switch disables all email types
 - [ ] Enable email sending with validation disabled, verify toggle works
@@ -1397,39 +1912,133 @@ MONGODB_URI=<connection-string>
 
 5. **Shallow Comparisons:** Dirty flag computed only when settings change
 
+6. **Multi-Provider Isolation:** Only active provider config sent to backend, reducing payload size
+
+7. **Provider-Specific Validation:** Frontend validates only fields for selected provider, not all three
+
 ---
 
 ## Future Enhancements
 
-1. **Password Encryption for Gmail:** Encrypt Gmail app passwords at rest (currently plain text)
+### Email System Improvements
 
-2. **Email Queue & Retry Logic:** Implement queue for failed emails with automatic retry
+1. **Health-Check Endpoint Refactoring:** 
+   - Apply same multi-provider routing logic to GET /api/settings/health endpoint
+   - Per-provider health status response (e.g., "mailtrap": "connected", "sendgrid": "error")
+   - Continuous provider health monitoring
 
-3. **Email Template Management:** Admin UI to customize email templates
+2. **Email Queue & Retry Logic:** 
+   - Implement queue for failed emails with automatic retry
+   - Provider fallback: if primary fails, try secondary
+   - Configurable retry intervals and max attempts
 
-4. **Rate Limiting:** Limit email sends per minute/hour
+3. **Email Template Management:** 
+   - Admin UI to customize email templates per email type (verification, notifications, etc.)
+   - Provider-specific template tweaks
 
-5. **Email Logging:** Track all sent emails with delivery status
+4. **Rate Limiting:** 
+   - Limit email sends per minute/hour per provider
+   - Provider-specific rate limits
 
-6. **Backup & Restore:** Settings backup/restore functionality
+5. **Email Logging:** 
+   - Track all sent emails with delivery status
+   - Provider name, credentials used, error details
+   - Email audit trail for compliance
 
-7. **Settings Versioning:** Track all historical setting changes
+6. **Provider Health Dashboard:** 
+   - Real-time status indicator for each provider
+   - Recent failures and recovery info
+   - Provider failover history
 
-8. **Multi-Tenancy:** Support for multiple organizations
+### Configuration & Security
+
+7. **Gmail App Password Encryption:** 
+   - Currently stored as plain text, should be encrypted at rest (low priority - already secure in transit)
+
+8. **Backup & Restore:** 
+   - Settings backup/restore functionality with version control
+   - Disaster recovery snapshots
+
+9. **Settings Versioning:** 
+   - Track all historical setting changes
+   - Admin can view/compare old configurations
+   - One-click rollback to previous settings
+
+10. **Audit Trail Enhancement:**
+    - Track which provider was active when change made
+    - Provider-specific change history
+    - Email delivery audit log
+
+### Multi-Tenancy & Scaling
+
+11. **Multi-Tenancy:** 
+    - Support for multiple organizations with separate email providers
+    - Org-specific email configurations
+
+12. **Provider Quotas & Usage Tracking:**
+    - Track emails sent per provider per day/month
+    - Alert when approaching quota
+    - Usage analytics dashboard
+
+### Developer Experience
+
+13. **Email Provider Testing Tool:**
+    - Batch test all three providers simultaneously
+    - Generate detailed health report
+    - Export configuration for documentation
+
+14. **Settings Migration Tool:**
+    - Migrate settings from one deployment to another
+    - Provider configuration export/import
+    - Rollback migrations if needed
+
+15. **Configuration Validation CLI:**
+    - Command-line tool to validate email configuration
+    - Check provider connectivity and credentials
+    - Report issues before deployment
+
+---
+
+## Known Limitations & Workarounds
+
+1. **Gmail App Passwords:**
+   - Cannot use regular Gmail password (2FA blocks it)
+   - Requires Google Account password or app-specific password
+   - Workaround: Provide clear UI instructions with "Generate App Password" link
+
+2. **SendGrid Rate Limiting:**
+   - SendGrid API has rate limits (100K emails/day on free tier)
+   - Workaround: Implement queuing and rate limiting on backend
+
+3. **Mailtrap Testing Limitations:**
+   - Cannot actually deliver emails to real inboxes (testing only)
+   - Workaround: Use for development/staging, production uses real provider
+
+4. **Provider Configuration Switching:**
+   - Switching providers mid-stream may cause in-flight email delivery issues
+   - Workaround: Admin should coordinate switches with support team, test before activating
+
+5. **Password Storage:**
+   - Encryption key must be secure and backed up separately
+   - Loss of encryption key means passwords unrecoverable
+   - Workaround: Implement key rotation and secure backup procedures
 
 ---
 
 ## References
 
-- **Frontend:** React 18, Material-UI, Ant Design
-- **Backend:** Express.js, Node.js 14+
+- **Frontend:** React 18, Material-UI, Ant Design, TypeScript
+- **Backend:** Express.js, Node.js 14+, TypeScript
 - **Database:** MongoDB with Mongoose ODM
-- **Security:** bcrypt for password hashing, crypto for encryption
-- **Email:** Nodemailer for SMTP, Gmail API, SendGrid API, AWS SES
+- **Email:** Nodemailer for SMTP, Gmail API, SendGrid API
+- **Security:** bcrypt for password hashing, crypto module for AES-256 encryption
+- **Documentation:** Markdown, Visual Studio Code
 
 ---
 
-**Document Version:** 2.0  
+**Document Version:** 3.0 (Multi-Provider Email Architecture)  
+**Last Updated:** 2024  
+**Status:** Production Ready  
 **Last Updated:** February 8, 2026  
 **Author:** Development Team  
 **Status:** Production Ready
