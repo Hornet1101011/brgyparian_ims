@@ -2188,26 +2188,44 @@ router.get('/email/providers', requireAuth, isAdmin, async (req, res) => {
   }
 });
 
-// GET /api/settings/email - Get current email configuration
-// CANONICAL SOURCE: Reads from `smtp` field (all providers stored here)
-// Returns sanitized config with all sensitive credentials removed
+// GET /api/settings/email - Get current SendGrid email configuration
+// Returns SendGrid config with masked API key
 router.get('/email', requireAuth, isAdmin, async (req, res) => {
   try {
     const settings = await SystemSetting.findOne().lean();
     
-    if (!settings || !settings.smtp) {
+    if (!settings || !settings.email) {
       return res.json({
         success: true,
         email: {
           enabled: false,
-          provider: 'custom',
-          fromName: 'Barangay System'
+          provider: 'sendgrid',
+          fromName: 'Barangay System',
+          fromEmail: '',
+          sendgrid: {
+            apiKey: '',
+            fromEmail: '',
+            fromName: ''
+          }
         }
       });
     }
 
-    // Sanitize for client (remove passwords)
-    const sanitized = emailProviderHelper.sanitizeEmailConfig(settings.smtp);
+    // Sanitize for client (mask API key)
+    const sanitized = { ...settings.email };
+    if (sanitized.sendgrid) {
+      sanitized.sendgrid = { ...sanitized.sendgrid };
+      if (sanitized.sendgrid.apiKey) {
+        sanitized.sendgrid.apiKey = '********';
+      }
+    }
+    
+    console.log('[Settings] GET /email - SendGrid config retrieved:', {
+      enabled: sanitized.enabled,
+      provider: sanitized.provider,
+      fromEmail: sanitized.fromEmail,
+      hasSendgridApiKey: !!sanitized.sendgrid?.apiKey
+    });
     
     res.json({
       success: true,
@@ -2223,255 +2241,115 @@ router.get('/email', requireAuth, isAdmin, async (req, res) => {
   }
 });
 
-// PATCH /api/settings/email - Update email configuration
-// CANONICAL DESTINATION: All providers stored in `smtp` field (multi-provider storage)
-// Single source of truth: smtp field contains enabled, provider, and ALL provider-specific credentials
-// Legacy fields (gmail, email) are deprecated and READ-ONLY (not updated by this endpoint)
+// PATCH /api/settings/email - Update SendGrid-only email configuration
+// Updates email field with SendGrid configuration
 router.patch('/email', requireAuth, isAdmin, async (req, res) => {
   try {
     const {
       enabled,
-      provider,
       fromName,
       fromEmail,
-      dryRunMode,
-      // Gmail fields
-      gmailAddress,
-      gmailAppPassword,
-      // Mailtrap fields
-      user,
-      password,
-      // SendGrid fields
-      sendgridApiKey,
-      // AWS SES fields
-      awsAccessKeyId,
-      awsSecretAccessKey,
-      awsRegion,
-      // Custom SMTP fields
-      host,
-      port,
-      secure
+      sendgrid
     } = req.body;
 
-    console.log('[Settings] Email config update request (storing in canonical smtp field):', {
+    console.log('[Settings] SendGrid email config update request:', {
       enabled,
-      provider,
-      fromName,
       fromEmail,
-      hasGmailAppPassword: !!gmailAppPassword,
-      hasPassword: !!password,
-      hasSendgridApiKey: !!sendgridApiKey,
-      hasAwsKeys: !!(awsAccessKeyId && awsSecretAccessKey)
+      fromName,
+      hasSendgridConfig: !!sendgrid,
+      sendgridKeys: sendgrid ? Object.keys(sendgrid) : []
     });
-
-    // ENFORCE SINGLE PROVIDER: Detect if multiple providers configured in request
-    const multipleProviders = detectMultipleProviders(req.body);
-    const irrelevantProviders = multipleProviders.filter(p => p !== provider);
-    
-    if (irrelevantProviders.length > 0) {
-      console.warn('[Settings] PATCH /email rejected: Multiple providers detected', {
-        selectedProvider: provider,
-        detectedProviders: multipleProviders,
-        irrelevantProviders: irrelevantProviders
-      });
-      return res.status(400).json({
-        success: false,
-        message: 'Only one email provider can be configured at a time',
-        error: `Multiple providers detected: ${multipleProviders.join(', ')}. Configure only ${provider}.`,
-        detectedProviders: multipleProviders,
-        selectedProvider: provider,
-        irrelevantProviders: irrelevantProviders,
-        hint: `Remove credentials for: ${irrelevantProviders.join(', ')}`,
-        validationFailure: 'MULTIPLE_PROVIDERS_DETECTED'
-      });
-    }
-
-    // Validate provider
-    if (!provider || !emailProviderHelper.PROVIDER_CONFIGS[provider]) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid email provider',
-        error: `Provider must be one of: ${Object.keys(emailProviderHelper.PROVIDER_CONFIGS).join(', ')}`
-      });
-    }
-
-    // Validate provider-specific requirements
-    if (enabled) {
-      if (provider === 'gmail' && (!gmailAddress || !gmailAppPassword)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Gmail requires address and app password',
-          error: 'gmailAddress and gmailAppPassword are required'
-        });
-      }
-
-      if (provider === 'mailtrap' && (!user || !password)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Mailtrap requires username and password',
-          error: 'user and password are required'
-        });
-      }
-
-      if (provider === 'sendgrid' && !sendgridApiKey) {
-        return res.status(400).json({
-          success: false,
-          message: 'SendGrid requires API key',
-          error: 'sendgridApiKey is required'
-        });
-      }
-
-      if (provider === 'aws-ses' && (!awsAccessKeyId || !awsSecretAccessKey)) {
-        return res.status(400).json({
-          success: false,
-          message: 'AWS SES requires access key and secret key',
-          error: 'awsAccessKeyId and awsSecretAccessKey are required'
-        });
-      }
-
-      if (provider === 'custom') {
-        // Strict validation for custom SMTP
-        const missingFields = [];
-        
-        if (!host) missingFields.push('host');
-        if (!port) missingFields.push('port');
-        if (!user) missingFields.push('user');
-        if (!password) missingFields.push('password');
-        
-        if (missingFields.length > 0) {
-          return res.status(400).json({
-            success: false,
-            message: `Custom SMTP requires: ${missingFields.join(', ')}`,
-            error: `Missing required fields: ${missingFields.join(', ')}`,
-            missingFields: missingFields
-          });
-        }
-        
-        // Validate port is a valid number between 1 and 65535
-        const portNum = Number(port);
-        if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
-          return res.status(400).json({
-            success: false,
-            message: 'Invalid SMTP port',
-            error: 'SMTP port must be a number between 1 and 65535',
-            field: 'port'
-          });
-        }
-      }
-    }
 
     let settings = await SystemSetting.findOne();
     if (!settings) {
       settings = new SystemSetting();
     }
 
-    // Build email provider config for canonical smtp field
-    // SINGLE PROVIDER ENFORCEMENT: Only include fields for the selected provider
-    // All other provider fields are intentionally excluded to enforce single provider
+    // Helper to detect masked values
+    const isMaskedValue = (val) => {
+      return typeof val === 'string' && val.length > 0 && /^\*+$/.test(val);
+    };
+
+    // Build SendGrid email config
     const emailConfig = {
       enabled: !!enabled,
-      provider,
+      provider: 'sendgrid',
       fromName: fromName || 'Barangay System',
-      fromEmail: fromEmail || gmailAddress || user,
+      fromEmail: fromEmail || '',
+      sendgrid: {},
       updatedAt: new Date()
     };
 
-    // IMPORTANT: Add ONLY the selected provider's fields
-    // By not including fields for other providers, we enforce single provider enforcement
-    // Example: If changing from Custom SMTP to Gmail, old SMTP fields won't be stored
-    if (provider === 'gmail') {
-      // Gmail provider: include ONLY Gmail fields (not custom SMTP, mailtrap, sendgrid, aws)
-      if (gmailAddress) emailConfig.gmailAddress = gmailAddress;
-      if (gmailAppPassword) emailConfig.gmailAppPassword = gmailAppPassword;
-    } else if (provider === 'mailtrap') {
-      // Mailtrap provider: include ONLY Mailtrap fields (not custom SMTP, gmail, sendgrid, aws)
-      if (user) emailConfig.user = user;
-      if (password) emailConfig.password = password;
-    } else if (provider === 'sendgrid') {
-      // SendGrid provider: include ONLY SendGrid fields (not custom SMTP, gmail, mailtrap, aws)
-      if (sendgridApiKey) emailConfig.sendgridApiKey = sendgridApiKey;
-    } else if (provider === 'aws-ses') {
-      // AWS SES provider: include ONLY AWS fields (not custom SMTP, gmail, mailtrap, sendgrid)
-      if (awsAccessKeyId) emailConfig.awsAccessKeyId = awsAccessKeyId;
-      if (awsSecretAccessKey) emailConfig.awsSecretAccessKey = awsSecretAccessKey;
-      if (awsRegion) emailConfig.awsRegion = awsRegion;
-      else emailConfig.awsRegion = 'us-east-1';
-    } else if (provider === 'custom') {
-      // Custom SMTP provider: include ONLY custom SMTP fields (not gmail, mailtrap, sendgrid, aws)
-      if (host) emailConfig.host = host;
-      if (port) {
-        emailConfig.port = Number(port);
-        
-        // AUTO-NORMALIZE: Set secure flag based on port if not explicitly provided
-        // Port 465 = Implicit SSL/TLS (secure=true)
-        // Port 587 = STARTTLS (secure=false)
-        // Port 25 = Plain SMTP (secure=false)
-        if (typeof secure !== 'boolean') {
-          if (emailConfig.port === 465) {
-            emailConfig.secure = true;
-            console.log('[Settings] PATCH /email - Auto-set secure=true for port 465 (SSL/TLS implicit)');
-          } else if (emailConfig.port === 587) {
-            emailConfig.secure = false;
-            console.log('[Settings] PATCH /email - Auto-set secure=false for port 587 (STARTTLS)');
-          } else {
-            emailConfig.secure = false;
-            console.log('[Settings] PATCH /email - Auto-set secure=false for port ' + emailConfig.port + ' (default)');
+    // Handle SendGrid-specific fields
+    if (sendgrid) {
+      // Handle API key - preserve existing if masked
+      if (sendgrid.apiKey !== undefined) {
+        if (isMaskedValue(sendgrid.apiKey)) {
+          console.log('[Settings] PATCH /email - SendGrid API key is masked, preserving existing value');
+          // Preserve existing value
+          const existing = settings.email?.sendgrid?.apiKey;
+          if (existing) {
+            emailConfig.sendgrid.apiKey = existing;
           }
+        } else if (sendgrid.apiKey && sendgrid.apiKey.length > 0) {
+          emailConfig.sendgrid.apiKey = sendgrid.apiKey;
+          console.log('[Settings] PATCH /email - SendGrid API key updated:', {
+            length: sendgrid.apiKey.length,
+            preview: sendgrid.apiKey.substring(0, 8) + '...'
+          });
         } else {
-          emailConfig.secure = secure;
-          
-          // Warn if using non-standard configuration
-          if (emailConfig.port === 465 && !secure) {
-            console.warn('[Settings] PATCH /email - Warning: port 465 typically requires secure=true');
-          } else if (emailConfig.port === 587 && secure) {
-            console.warn('[Settings] PATCH /email - Warning: port 587 typically requires secure=false');
+          console.log('[Settings] PATCH /email - SendGrid API key is empty, preserving existing');
+          const existing = settings.email?.sendgrid?.apiKey;
+          if (existing) {
+            emailConfig.sendgrid.apiKey = existing;
           }
         }
       }
-      if (user) emailConfig.user = user;
-      if (password) emailConfig.password = password;
+
+      // Handle fromEmail and fromName in sendgrid object
+      if (sendgrid.fromEmail) {
+        emailConfig.sendgrid.fromEmail = sendgrid.fromEmail;
+        console.log('[Settings] PATCH /email - SendGrid fromEmail:', sendgrid.fromEmail);
+      }
+      if (sendgrid.fromName) {
+        emailConfig.sendgrid.fromName = sendgrid.fromName;
+        console.log('[Settings] PATCH /email - SendGrid fromName:', sendgrid.fromName);
+      }
     }
 
-    // Remove any undefined properties before saving to MongoDB
-    // This ensures only defined fields are persisted
-    const cleanEmailConfig = removeUndefinedProperties(emailConfig);
-    
-    // STORE IN CANONICAL LOCATION: smtp field (not email or gmail)
-    // SINGLE PROVIDER ENFORCEMENT: cleanEmailConfig contains ONLY selected provider's fields
-    settings.smtp = cleanEmailConfig;
-    
-    // Update dry-run mode if provided
-    if (typeof dryRunMode === 'boolean') {
-      settings.dryRunMode = dryRunMode;
+    // Validate if enabled: require API key
+    if (emailConfig.enabled && !emailConfig.sendgrid.apiKey) {
+      console.warn('[Settings] PATCH /email - Cannot enable SendGrid without API key');
+      return res.status(400).json({
+        success: false,
+        message: 'SendGrid API key is required when enabling email',
+        error: 'sendgrid.apiKey is required'
+      });
     }
-    
-    // When provider changes, irrelevant fields are cleared:
-    // - Old custom SMTP fields (host, port, user, password) NOT stored if now using Gmail
-    // - Old Gmail fields (gmailAddress, gmailAppPassword) NOT stored if now using custom SMTP
-    // - Only ONE provider's credentials stored in smtp field at a time
-    //
-    // NOTE: Legacy fields (gmail, email) are NOT cleared or updated here
-    // This maintains backward compatibility in case of rollback
-    // Old data in legacy fields will be ignored by all new code
-    
+
+    settings.email = emailConfig;
     await settings.save();
 
-    console.log('[Settings] Email configuration updated in canonical smtp field (single provider enforced):', {
-      enabled,
-      provider,
-      fromName,
-      fromEmail,
-      dryRunMode: !!dryRunMode,
-      smtpFieldUpdated: true,
-      singleProviderEnforced: `Only ${provider} fields stored`,
-      legacyFieldsPreserved: 'gmail and email fields not modified'
+    console.log('[Settings] SendGrid email configuration saved:', {
+      enabled: emailConfig.enabled,
+      provider: emailConfig.provider,
+      fromEmail: emailConfig.fromEmail,
+      fromName: emailConfig.fromName,
+      hasSendgridApiKey: !!emailConfig.sendgrid.apiKey,
+      updatedAt: emailConfig.updatedAt
     });
+
+    // Fetch and sanitize for response
+    const sanitized = { ...emailConfig };
+    if (sanitized.sendgrid?.apiKey) {
+      sanitized.sendgrid = { ...sanitized.sendgrid };
+      sanitized.sendgrid.apiKey = '********';
+    }
 
     res.json({
       success: true,
-      message: 'Email settings updated',
-      email: emailProviderHelper.sanitizeEmailConfig(settings.smtp),
-      dryRunMode: settings.dryRunMode
+      message: 'SendGrid email settings updated',
+      email: sanitized
     });
   } catch (err) {
     console.error('[Settings] PATCH /email error:', err);
@@ -2482,6 +2360,7 @@ router.patch('/email', requireAuth, isAdmin, async (req, res) => {
     });
   }
 });
+
 
 // POST /api/settings/email/test - Test email configuration
 // Accepts smtp config in request body OR uses activeProvider from database
