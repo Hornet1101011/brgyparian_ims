@@ -1418,35 +1418,6 @@ router.get('/public/contact-info', async (req, res) => {
   }
 });
 
-// GET /api/settings/email - Get email settings (admin only)
-router.get('/email', requireAuth, isAdmin, async (req, res) => {
-  try {
-    let settings = await SystemSetting.findOne().lean();
-    if (!settings) {
-      settings = new SystemSetting();
-    }
-    
-    // Return email settings with defaults
-    const emailSettings = settings.emailSettings || {
-      enabled: true,
-      enablePasswordResetEmails: true,
-      enableOtpEmails: true,
-      enableDocumentNotificationEmails: true,
-      enableAnnouncementEmails: true,
-      enableAnnouncementBcc: true,
-      recipientEmailsPerBatch: 100,
-      retryFailedEmails: true,
-      retryAttempts: 3,
-      retryDelayMinutes: 5
-    };
-    
-    return res.json(emailSettings);
-  } catch (err) {
-    console.error('GET /api/settings/email error', err);
-    return res.status(500).json({ message: 'Failed to load email settings' });
-  }
-});
-
 // GET /api/settings/email/health - Get email provider health status
 router.get('/email/health', requireAuth, isAdmin, async (req, res) => {
   try {
@@ -1652,67 +1623,6 @@ router.post('/email/health-check', requireAuth, isAdmin, async (req, res) => {
   }
 });
 
-
-// PATCH /api/settings/email - Update email settings (admin only)
-router.patch('/email', requireAuth, isAdmin, async (req, res) => {
-  try {
-    let payload = req.body || {};
-    
-    // Defensive: Remove _id from payload as MongoDB doesn't allow updating it
-    if (payload._id) delete payload._id;
-    
-    // Validate numeric fields
-    if (payload.recipientEmailsPerBatch != null && !(Number(payload.recipientEmailsPerBatch) > 0)) {
-      return res.status(400).json({ message: 'recipientEmailsPerBatch must be > 0' });
-    }
-    if (payload.retryAttempts != null && !(Number(payload.retryAttempts) >= 0)) {
-      return res.status(400).json({ message: 'retryAttempts must be >= 0' });
-    }
-    if (payload.retryDelayMinutes != null && !(Number(payload.retryDelayMinutes) > 0)) {
-      return res.status(400).json({ message: 'retryDelayMinutes must be > 0' });
-    }
-    
-    // Build update object with emailSettings prefix
-    const updatePayload = {};
-    const emailSettingsFields = [
-      'enabled',
-      'enablePasswordResetEmails',
-      'enableOtpEmails',
-      'enableDocumentNotificationEmails',
-      'enableAnnouncementEmails',
-      'enableAnnouncementBcc',
-      'recipientEmailsPerBatch',
-      'retryFailedEmails',
-      'retryAttempts',
-      'retryDelayMinutes'
-    ];
-    
-    for (const field of emailSettingsFields) {
-      if (field in payload) {
-        updatePayload[`emailSettings.${field}`] = payload[field];
-      }
-    }
-    
-    const before = await SystemSetting.findOne().lean();
-    const updated = await SystemSetting.findOneAndUpdate(
-      {},
-      { $set: updatePayload },
-      { new: true, upsert: true, setDefaultsOnInsert: true }
-    );
-    
-    // Record audit
-    const diff = { before, after: updated.toObject ? updated.toObject() : updated };
-    await recordAudit(req.user?._id, 'update_email_settings', diff, req.ip || req.headers['x-forwarded-for']);
-    
-    console.log('[Settings] Email settings updated by admin:', req.user?._id);
-    
-    const emailSettings = updated.emailSettings || {};
-    return res.json(emailSettings);
-  } catch (err) {
-    console.error('PATCH /api/settings/email error', err);
-    return res.status(500).json({ message: 'Failed to update email settings' });
-  }
-});
 
 // ===== GMAIL CONFIGURATION ROUTES =====
 
@@ -2199,31 +2109,35 @@ router.get('/email', requireAuth, isAdmin, async (req, res) => {
         success: true,
         email: {
           enabled: false,
-          provider: 'sendgrid',
-          fromName: 'Barangay System',
-          fromEmail: '',
+          activeProvider: 'sendgrid',
           sendgrid: {
             apiKey: '',
             fromEmail: '',
-            fromName: ''
+            fromName: 'Barangay System'
           }
         }
       });
     }
 
     // Sanitize for client (mask API key)
-    const sanitized = { ...settings.email };
-    if (sanitized.sendgrid) {
-      sanitized.sendgrid = { ...sanitized.sendgrid };
-      if (sanitized.sendgrid.apiKey) {
-        sanitized.sendgrid.apiKey = '********';
+    const sanitized = {
+      enabled: settings.email.enabled || false,
+      activeProvider: settings.email.activeProvider || 'sendgrid',
+      sendgrid: settings.email.sendgrid ? { ...settings.email.sendgrid } : {
+        apiKey: '',
+        fromEmail: '',
+        fromName: 'Barangay System'
       }
+    };
+    
+    if (sanitized.sendgrid?.apiKey) {
+      sanitized.sendgrid.apiKey = '********';
     }
     
     console.log('[Settings] GET /email - SendGrid config retrieved:', {
       enabled: sanitized.enabled,
-      provider: sanitized.provider,
-      fromEmail: sanitized.fromEmail,
+      activeProvider: sanitized.activeProvider,
+      fromEmail: sanitized.sendgrid?.fromEmail,
       hasSendgridApiKey: !!sanitized.sendgrid?.apiKey
     });
     
@@ -2270,15 +2184,18 @@ router.patch('/email', requireAuth, isAdmin, async (req, res) => {
       return typeof val === 'string' && val.length > 0 && /^\*+$/.test(val);
     };
 
-    // Build SendGrid email config
-    const emailConfig = {
-      enabled: !!enabled,
-      provider: 'sendgrid',
-      fromName: fromName || 'Barangay System',
-      fromEmail: fromEmail || '',
-      sendgrid: {},
-      updatedAt: new Date()
-    };
+    // Build SendGrid email config matching smtpSchema structure
+    // Initialize email config from existing settings or new structure
+    const emailConfig = settings.email || {};
+    
+    // Update top-level properties
+    emailConfig.enabled = !!enabled;
+    emailConfig.activeProvider = 'sendgrid';
+    
+    // Initialize sendgrid sub-object if it doesn't exist
+    if (!emailConfig.sendgrid) {
+      emailConfig.sendgrid = {};
+    }
 
     // Handle SendGrid-specific fields
     if (sendgrid) {
@@ -2286,10 +2203,10 @@ router.patch('/email', requireAuth, isAdmin, async (req, res) => {
       if (sendgrid.apiKey !== undefined) {
         if (isMaskedValue(sendgrid.apiKey)) {
           console.log('[Settings] PATCH /email - SendGrid API key is masked, preserving existing value');
-          // Preserve existing value
-          const existing = settings.email?.sendgrid?.apiKey;
-          if (existing) {
-            emailConfig.sendgrid.apiKey = existing;
+          // Preserve existing value (don't overwrite with masked placeholder)
+          if (!emailConfig.sendgrid.apiKey) {
+            // Only set if there's no existing value
+            console.log('[Settings] PATCH /email - No existing API key to preserve');
           }
         } else if (sendgrid.apiKey && sendgrid.apiKey.length > 0) {
           emailConfig.sendgrid.apiKey = sendgrid.apiKey;
@@ -2298,23 +2215,35 @@ router.patch('/email', requireAuth, isAdmin, async (req, res) => {
             preview: sendgrid.apiKey.substring(0, 8) + '...'
           });
         } else {
-          console.log('[Settings] PATCH /email - SendGrid API key is empty, preserving existing');
-          const existing = settings.email?.sendgrid?.apiKey;
-          if (existing) {
-            emailConfig.sendgrid.apiKey = existing;
-          }
+          console.log('[Settings] PATCH /email - SendGrid API key is empty, keeping existing');
+          // Don't clear the apiKey if it's empty in request
         }
       }
 
-      // Handle fromEmail and fromName in sendgrid object
+      // Handle fromEmail in sendgrid object
       if (sendgrid.fromEmail) {
         emailConfig.sendgrid.fromEmail = sendgrid.fromEmail;
         console.log('[Settings] PATCH /email - SendGrid fromEmail:', sendgrid.fromEmail);
       }
+      
+      // Handle fromName in sendgrid object
       if (sendgrid.fromName) {
         emailConfig.sendgrid.fromName = sendgrid.fromName;
         console.log('[Settings] PATCH /email - SendGrid fromName:', sendgrid.fromName);
       }
+    }
+
+    // Handle top-level fromEmail and fromName (for backwards compatibility)
+    if (fromEmail) {
+      emailConfig.sendgrid.fromEmail = fromEmail;
+    }
+    if (fromName) {
+      emailConfig.sendgrid.fromName = fromName;
+    }
+
+    // Set defaults for sendgrid sub-object
+    if (!emailConfig.sendgrid.fromName) {
+      emailConfig.sendgrid.fromName = 'Barangay System';
     }
 
     // Validate if enabled: require API key
@@ -2327,22 +2256,27 @@ router.patch('/email', requireAuth, isAdmin, async (req, res) => {
       });
     }
 
+    // Update the email field in the document
     settings.email = emailConfig;
+    settings.markModified('email');
     await settings.save();
 
     console.log('[Settings] SendGrid email configuration saved:', {
       enabled: emailConfig.enabled,
-      provider: emailConfig.provider,
-      fromEmail: emailConfig.fromEmail,
-      fromName: emailConfig.fromName,
-      hasSendgridApiKey: !!emailConfig.sendgrid.apiKey,
-      updatedAt: emailConfig.updatedAt
+      activeProvider: emailConfig.activeProvider,
+      fromEmail: emailConfig.sendgrid?.fromEmail,
+      fromName: emailConfig.sendgrid?.fromName,
+      hasSendgridApiKey: !!emailConfig.sendgrid?.apiKey
     });
 
     // Fetch and sanitize for response
-    const sanitized = { ...emailConfig };
+    const sanitized = {
+      enabled: emailConfig.enabled,
+      activeProvider: emailConfig.activeProvider,
+      sendgrid: emailConfig.sendgrid ? { ...emailConfig.sendgrid } : {}
+    };
+    
     if (sanitized.sendgrid?.apiKey) {
-      sanitized.sendgrid = { ...sanitized.sendgrid };
       sanitized.sendgrid.apiKey = '********';
     }
 
