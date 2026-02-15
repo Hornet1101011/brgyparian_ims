@@ -1,0 +1,282 @@
+const sgMail = require('@sendgrid/mail');
+const SystemSetting = require('../models/SystemSetting');
+
+/**
+ * SendGrid Email Service
+ * Handles all email sending operations using SendGrid API exclusively.
+ * NO SMTP or Nodemailer usage - SendGrid only.
+ */
+
+/**
+ * Load SendGrid configuration from database
+ * @returns {Promise<Object>} SendGrid configuration object
+ * @throws {Error} If SendGrid is not properly configured
+ */
+async function loadSendGridConfig() {
+  try {
+    const settings = await SystemSetting.findOne().lean();
+    
+    if (!settings || !settings.email) {
+      throw new Error('No email configuration found in system settings');
+    }
+
+    if (!settings.email.enabled) {
+      throw new Error('Email sending is disabled in system settings');
+    }
+
+    if (settings.email.provider !== 'sendgrid') {
+      throw new Error(`Email provider is '${settings.email.provider}', not 'sendgrid'`);
+    }
+
+    if (!settings.email.sendgrid) {
+      throw new Error('SendGrid configuration not found in email settings');
+    }
+
+    const { apiKey, fromEmail, fromName } = settings.email.sendgrid;
+
+    if (!apiKey || apiKey.length === 0) {
+      throw new Error('SendGrid API key is missing or empty');
+    }
+
+    if (!fromEmail || fromEmail.length === 0) {
+      throw new Error('SendGrid fromEmail is missing or empty');
+    }
+
+    console.log('[EmailService] SendGrid config loaded successfully:', {
+      hasApiKey: !!apiKey,
+      apiKeyLength: apiKey.length,
+      fromEmail: fromEmail,
+      fromName: fromName || 'Barangay System'
+    });
+
+    return {
+      apiKey,
+      fromEmail,
+      fromName: fromName || 'Barangay System',
+      enabled: true
+    };
+  } catch (err) {
+    console.error('[EmailService] Failed to load SendGrid config:', err.message);
+    throw err;
+  }
+}
+
+/**
+ * Send email using SendGrid
+ * @param {Object} options - Email options
+ * @param {string} options.to - Recipient email address
+ * @param {string} options.subject - Email subject
+ * @param {string} options.html - HTML email body
+ * @param {Object} options.settings - SystemSetting document or config object
+ * @returns {Promise<Object>} SendGrid response
+ * @throws {Error} If configuration is missing or SendGrid API fails
+ */
+async function sendEmail({ to, subject, html, settings = null }) {
+  try {
+    // Validate required parameters
+    if (!to || !to.trim()) {
+      throw new Error('Recipient email address (to) is required');
+    }
+
+    if (!subject || !subject.trim()) {
+      throw new Error('Email subject is required');
+    }
+
+    if (!html || !html.trim()) {
+      throw new Error('Email body (html) is required');
+    }
+
+    console.log('[EmailService] Email send request:', {
+      to,
+      subject: subject.substring(0, 50) + '...',
+      hasHtml: !!html,
+      htmlLength: html.length
+    });
+
+    // Load configuration from database if not provided
+    let config = settings?.email?.sendgrid ? settings.email.sendgrid : null;
+    if (!config) {
+      config = await loadSendGridConfig();
+    }
+
+    // Validate configuration
+    if (!config.apiKey) {
+      throw new Error('SendGrid API key not available');
+    }
+
+    if (!config.fromEmail) {
+      throw new Error('SendGrid fromEmail not configured');
+    }
+
+    // Set SendGrid API key
+    sgMail.setApiKey(config.apiKey);
+
+    // Build message
+    const msg = {
+      to: to.trim(),
+      from: {
+        email: config.fromEmail,
+        name: config.fromName || 'Barangay System'
+      },
+      subject: subject.trim(),
+      html: html.trim(),
+      replyTo: config.fromEmail
+    };
+
+    console.log('[EmailService] Sending email via SendGrid:', {
+      to: msg.to,
+      from: msg.from.email,
+      fromName: msg.from.name,
+      subject: msg.subject.substring(0, 50) + '...'
+    });
+
+    // Send email
+    const response = await sgMail.send(msg);
+
+    console.log('[EmailService] Email sent successfully:', {
+      to: msg.to,
+      statusCode: response[0]?.statusCode,
+      messageId: response[0]?.headers?.['x-message-id']
+    });
+
+    return {
+      success: true,
+      messageId: response[0]?.headers?.['x-message-id'],
+      statusCode: response[0]?.statusCode,
+      message: 'Email sent successfully'
+    };
+  } catch (err) {
+    console.error('[EmailService] Failed to send email:', {
+      message: err.message,
+      to: to,
+      subject: subject?.substring(0, 50)
+    });
+    throw err;
+  }
+}
+
+/**
+ * Test SendGrid connection with provided configuration
+ * @param {Object} config - SendGrid configuration to test
+ * @param {string} config.apiKey - SendGrid API key
+ * @param {string} config.fromEmail - Sender email
+ * @param {string} config.fromName - Sender name
+ * @param {string} testEmail - Test recipient email
+ * @returns {Promise<Object>} Test result
+ */
+async function testSendGridConnection(config, testEmail) {
+  try {
+    if (!config || !config.apiKey) {
+      throw new Error('SendGrid API key is required for testing');
+    }
+
+    if (!config.fromEmail) {
+      throw new Error('FromEmail is required for testing');
+    }
+
+    if (!testEmail || !testEmail.trim()) {
+      throw new Error('Test email recipient is required');
+    }
+
+    console.log('[EmailService] Testing SendGrid connection:', {
+      hasApiKey: !!config.apiKey,
+      apiKeyLength: config.apiKey.length,
+      fromEmail: config.fromEmail,
+      testEmail: testEmail
+    });
+
+    // Set API key
+    sgMail.setApiKey(config.apiKey);
+
+    // Build test message
+    const msg = {
+      to: testEmail.trim(),
+      from: {
+        email: config.fromEmail,
+        name: config.fromName || 'Barangay System'
+      },
+      subject: 'SendGrid Configuration Test',
+      html: `
+        <h2>SendGrid Test Email</h2>
+        <p>This is a test email to verify SendGrid is properly configured.</p>
+        <p><strong>Configuration:</strong></p>
+        <ul>
+          <li>From Email: ${config.fromEmail}</li>
+          <li>From Name: ${config.fromName || 'Barangay System'}</li>
+          <li>Sent At: ${new Date().toISOString()}</li>
+        </ul>
+        <p>If you received this email, SendGrid is working correctly!</p>
+      `,
+      replyTo: config.fromEmail
+    };
+
+    console.log('[EmailService] Sending test email:', {
+      to: msg.to,
+      from: msg.from.email,
+      subject: msg.subject
+    });
+
+    // Send test email
+    const response = await sgMail.send(msg);
+
+    const result = {
+      success: true,
+      message: 'Test email sent successfully',
+      details: {
+        statusCode: response[0]?.statusCode,
+        messageId: response[0]?.headers?.['x-message-id'],
+        to: testEmail,
+        from: config.fromEmail
+      }
+    };
+
+    console.log('[EmailService] Test email sent successfully:', result.details);
+    return result;
+  } catch (err) {
+    console.error('[EmailService] SendGrid test failed:', {
+      message: err.message,
+      code: err.code,
+      testEmail: testEmail
+    });
+
+    // Format SendGrid API error
+    const errorMessage = err.message || 'Unknown SendGrid error';
+    const errorCode = err.code || 'SENDGRID_ERROR';
+
+    throw new Error(`SendGrid test failed: ${errorMessage} (${errorCode})`);
+  }
+}
+
+/**
+ * Verify SendGrid is available and configuration is valid
+ * @returns {Promise<Object>} Verification result
+ */
+async function verifySendGridAvailable() {
+  try {
+    const config = await loadSendGridConfig();
+    return {
+      available: true,
+      configured: true,
+      config: {
+        hasApiKey: !!config.apiKey,
+        apiKeyLength: config.apiKey.length,
+        fromEmail: config.fromEmail,
+        fromName: config.fromName
+      }
+    };
+  } catch (err) {
+    console.warn('[EmailService] SendGrid verification failed:', err.message);
+    return {
+      available: false,
+      configured: false,
+      error: err.message
+    };
+  }
+}
+
+module.exports = {
+  loadSendGridConfig,
+  sendEmail,
+  testSendGridConnection,
+  verifySendGridAvailable
+};

@@ -16,7 +16,7 @@ import {
 } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { message as antdMessage } from 'antd';
-import { adminAPI } from '../../services/api';
+import { adminAPI, axiosInstance } from '../../services/api';
 import EmailProviderManager from '../../utils/EmailProviderManager';
 
 interface SendGridConfig {
@@ -46,12 +46,68 @@ const SendGridSettings: React.FC<SendGridSettingsProps> = ({
   const [apiKeyDirty, setApiKeyDirty] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [isTestingEmail, setIsTestingEmail] = useState(false);
+  const [testEmail, setTestEmail] = useState('');
 
   // Update local config when prop changes
   useEffect(() => {
     setLocalConfig(config);
     setApiKeyDirty(false);
   }, [config]);
+
+  /**
+   * Test SendGrid email with unsaved config
+   */
+  const handleTestEmail = async () => {
+    // Validate email address
+    if (!testEmail || !testEmail.trim()) {
+      antdMessage.error('Please enter a test email address');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(testEmail.trim())) {
+      antdMessage.error('Please enter a valid email address');
+      return;
+    }
+
+    setIsTestingEmail(true);
+    try {
+      const payload = {
+        testEmail: testEmail.trim(),
+        emailConfig: {
+          enabled: localConfig.enabled,
+          provider: 'sendgrid',
+          sendgrid: {
+            apiKey: localConfig.apiKey,
+            fromEmail: localConfig.fromEmail,
+            fromName: localConfig.fromName,
+          }
+        }
+      };
+
+      console.log('[SendGridSettings] Testing email with config:', {
+        testEmail: testEmail.trim(),
+        hasApiKey: !!localConfig.apiKey,
+        fromEmail: localConfig.fromEmail,
+      });
+
+      const response = await axiosInstance.post('/admin/settings/email/test', payload);
+
+      if (response.data.success) {
+        antdMessage.success(`Test email sent successfully to ${testEmail.trim()}`);
+        setTestEmail('');
+      } else {
+        antdMessage.error(`Failed to send test email: ${response.data.error}`);
+      }
+    } catch (error: any) {
+      console.error('[SendGridSettings] Test email failed:', error);
+      const errorMsg = error.response?.data?.error || error.message || 'Failed to send test email';
+      antdMessage.error(`Test email failed: ${errorMsg}`);
+    } finally {
+      setIsTestingEmail(false);
+    }
+  };
 
   /**
    * Validate SendGrid configuration
@@ -282,6 +338,47 @@ const SendGridSettings: React.FC<SendGridSettingsProps> = ({
                 />
               </Grid>
             </Grid>
+
+            {/* Test Email Section */}
+            <Divider sx={{ my: 3 }} />
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 2, color: '#1f2937' }}>
+                🧪 Test Email Configuration
+              </Typography>
+              <Typography variant="caption" sx={{ color: '#6b7280', mb: 2, display: 'block' }}>
+                Send a test email to verify your SendGrid configuration is working correctly.
+              </Typography>
+              
+              <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', mb: 3 }}>
+                <TextField
+                  label="Test Email Address"
+                  type="email"
+                  value={testEmail}
+                  onChange={(e) => setTestEmail(e.target.value)}
+                  placeholder="admin@example.com"
+                  helperText="Enter the email where you want to receive the test"
+                  size="small"
+                  disabled={isSaving || isTestingEmail}
+                  sx={{ flexGrow: 1 }}
+                />
+                <Button
+                  variant="outlined"
+                  color="primary"
+                  onClick={handleTestEmail}
+                  disabled={isSaving || isTestingEmail || !testEmail.trim() || !localConfig.apiKey || !localConfig.fromEmail}
+                  sx={{ mt: 1, whiteSpace: 'nowrap' }}
+                >
+                  {isTestingEmail ? (
+                    <>
+                      <CircularProgress size={16} sx={{ mr: 1 }} />
+                      Testing...
+                    </>
+                  ) : (
+                    'Send Test Email'
+                  )}
+                </Button>
+              </Box>
+            </Box>
 
             {/* Info Box */}
             <Box sx={{ p: 2, backgroundColor: '#dbeafe', border: '1px solid #3b82f6', borderRadius: 1, mb: 3 }}>

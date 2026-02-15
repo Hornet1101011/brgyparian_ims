@@ -1777,308 +1777,133 @@ router.patch('/email', requireAuth, isAdmin, async (req, res) => {
 // Priority: body.smtp > database (if body.smtp missing)
 router.post('/email/test', requireAuth, isAdmin, async (req, res) => {
   try {
-    const { testEmail, smtp } = req.body;
+    const { testEmail, emailConfig } = req.body;
 
-    // VALIDATION 1: Validate test email format
-    if (!testEmail) {
-      console.error('[Settings] POST /email/test - Missing testEmail in payload');
+    console.log('[Settings] POST /email/test - Test email request:', {
+      testEmail,
+      hasEmailConfig: !!emailConfig
+    });
+
+    // Validation: Test email is required
+    if (!testEmail || !testEmail.trim()) {
+      console.error('[Settings] POST /email/test - Missing testEmail');
       return res.status(400).json({
         success: false,
-        message: 'Valid test email required',
-        error: 'testEmail field is required',
-        validationField: 'testEmail'
+        message: 'Test email address is required',
+        error: 'testEmail field is required'
       });
     }
 
-    if (!testEmail.includes('@')) {
-      console.error('[Settings] POST /email/test - Invalid testEmail format:', testEmail);
+    // Validation: Valid email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(testEmail.trim())) {
+      console.error('[Settings] POST /email/test - Invalid email format:', testEmail);
       return res.status(400).json({
         success: false,
-        message: 'Valid test email required',
-        error: 'testEmail must be a valid email address',
-        validationField: 'testEmail',
-        receivedValue: testEmail
+        message: 'Invalid email address format',
+        error: `'${testEmail}' is not a valid email address`
       });
     }
 
-    // VALIDATION 2: Determine configuration source and active provider
-    let configSource = null;
-    let activeProvider = null;
-    let providerConfig = null;
+    // Get SendGrid configuration
+    let config = null;
 
-    if (smtp) {
-      // Use smtp from request body (highest priority)
-      console.log('[Settings] POST /email/test - Using smtp config from request body');
-      configSource = 'request_body';
-      activeProvider = smtp.activeProvider || 'mailtrap';
-      
-      // Get provider-specific config from request
-      if (activeProvider === 'mailtrap' && smtp.mailtrap) {
-        providerConfig = smtp.mailtrap;
-      } else if (activeProvider === 'sendgrid' && smtp.sendgrid) {
-        providerConfig = smtp.sendgrid;
-      } else if (activeProvider === 'gmail' && smtp.gmail) {
-        providerConfig = smtp.gmail;
-      } else if (smtp.password) {
-        // Legacy format support - treat as direct SMTP config
-        console.log('[Settings] POST /email/test - Detected legacy SMTP format with password field');
-        providerConfig = smtp;
-        activeProvider = 'custom-smtp'; // Indicate legacy format
-      }
+    if (emailConfig && emailConfig.sendgrid) {
+      // Use configuration from request body (for testing before saving)
+      console.log('[Settings] POST /email/test - Using emailConfig from request body');
+      config = emailConfig.sendgrid;
     } else {
-      // Fall back to database
-      console.log('[Settings] POST /email/test - No smtp in request body, attempting DB fallback');
+      // Load from database
+      console.log('[Settings] POST /email/test - Loading SendGrid config from database');
       const settings = await SystemSetting.findOne().lean();
-      
-      if (!settings || !settings.smtp) {
-        console.error('[Settings] POST /email/test - No SMTP config in DB and no config in request body');
+
+      if (!settings || !settings.email || !settings.email.sendgrid) {
+        console.error('[Settings] POST /email/test - No SendGrid configuration found');
         return res.status(400).json({
           success: false,
-          message: 'Email configuration required',
-          error: 'smtp field is required in request body, or email must be configured in settings',
-          validationField: 'configuration',
-          configSource: 'none',
-          details: 'Provide smtp in request body or configure email in settings'
+          message: 'SendGrid configuration not found',
+          error: 'SendGrid configuration must be saved in settings before testing'
         });
       }
 
-      configSource = 'database';
-      activeProvider = settings.smtp.activeProvider || 'mailtrap';
-      
-      // Get provider-specific config from database
-      if (activeProvider === 'mailtrap') {
-        providerConfig = settings.smtp.mailtrap;
-      } else if (activeProvider === 'sendgrid') {
-        providerConfig = settings.smtp.sendgrid;
-      } else if (activeProvider === 'gmail') {
-        providerConfig = settings.smtp.gmail;
-      }
-
-      console.log('[Settings] POST /email/test - Loaded from database:', {
-        activeProvider: activeProvider,
-        hasProviderConfig: !!providerConfig
-      });
+      config = settings.email.sendgrid;
     }
 
-    console.log('[Settings] POST /email/test - Configuration source:', {
-      source: configSource,
-      activeProvider: activeProvider,
-      hasProviderConfig: !!providerConfig
-    });
-
-    // VALIDATION 3: Validate provider config exists
-    if (!providerConfig) {
-      console.error('[Settings] POST /email/test - No config found for active provider:', {
-        activeProvider: activeProvider,
-        configSource: configSource
-      });
+    // Validation: SendGrid API key is required
+    if (!config.apiKey || !config.apiKey.trim()) {
+      console.error('[Settings] POST /email/test - Missing SendGrid API key');
       return res.status(400).json({
         success: false,
-        message: `${activeProvider} configuration is incomplete`,
-        error: `No configuration found for active provider: ${activeProvider}`,
-        validationField: 'provider_config',
-        configSource: configSource,
-        activeProvider: activeProvider,
-        details: 'Configure the selected email provider before testing'
+        message: 'SendGrid API key is required',
+        error: 'SendGrid API key is missing or empty'
       });
     }
 
-    // VALIDATION 4: Validate provider-specific required fields
-    console.log('[Settings] POST /email/test - Validating provider:', {
-      provider: activeProvider,
-      configSource: configSource
-    });
-
-    let validationError = null;
-    let testEmailConfig = { ...providerConfig, fromEmail: providerConfig.fromEmail };
-
-    // Provider-specific validation
-    if (activeProvider === 'mailtrap') {
-      // Mailtrap requires: host, port, user, password, fromEmail
-      const missingMailtrap = [];
-      if (!providerConfig.host) missingMailtrap.push('host');
-      if (!providerConfig.port) missingMailtrap.push('port');
-      if (!providerConfig.user) missingMailtrap.push('user');
-      if (!providerConfig.password) missingMailtrap.push('password');
-      if (!providerConfig.fromEmail) missingMailtrap.push('fromEmail');
-      
-      if (missingMailtrap.length > 0) {
-        validationError = {
-          provider: 'mailtrap',
-          missingFields: missingMailtrap,
-          error: `Mailtrap requires: ${missingMailtrap.join(', ')}`
-        };
-      }
-      testEmailConfig.host = providerConfig.host;
-      testEmailConfig.port = providerConfig.port;
-      testEmailConfig.user = providerConfig.user;
-      testEmailConfig.password = providerConfig.password;
-      testEmailConfig.secure = providerConfig.secure !== false;
-    } 
-    else if (activeProvider === 'sendgrid') {
-      // SendGrid requires: apiKey, fromEmail
-      const missingSendgrid = [];
-      if (!providerConfig.apiKey) missingSendgrid.push('apiKey');
-      if (!providerConfig.fromEmail) missingSendgrid.push('fromEmail');
-      
-      if (missingSendgrid.length > 0) {
-        validationError = {
-          provider: 'sendgrid',
-          missingFields: missingSendgrid,
-          error: `SendGrid requires: ${missingSendgrid.join(', ')}`
-        };
-      }
-      testEmailConfig.apiKey = providerConfig.apiKey;
-    } 
-    else if (activeProvider === 'gmail') {
-      // Gmail requires: host, port, user, password, fromEmail
-      const missingGmail = [];
-      if (!providerConfig.user) missingGmail.push('user (Gmail address)');
-      if (!providerConfig.password) missingGmail.push('password (app password)');
-      if (!providerConfig.fromEmail) missingGmail.push('fromEmail');
-      
-      if (missingGmail.length > 0) {
-        validationError = {
-          provider: 'gmail',
-          missingFields: missingGmail,
-          error: `Gmail requires: ${missingGmail.join(', ')}`
-        };
-      }
-      testEmailConfig.host = 'smtp.gmail.com';
-      testEmailConfig.port = 587;
-      testEmailConfig.user = providerConfig.user;
-      testEmailConfig.password = providerConfig.password;
-      testEmailConfig.secure = true;
-    }
-
-    if (validationError) {
-      console.error('[Settings] POST /email/test - Provider validation failed:', {
-        ...validationError,
-        configSource: configSource
-      });
+    // Validation: FromEmail is required
+    if (!config.fromEmail || !config.fromEmail.trim()) {
+      console.error('[Settings] POST /email/test - Missing SendGrid fromEmail');
       return res.status(400).json({
         success: false,
-        message: `Invalid ${activeProvider} configuration`,
-        error: validationError.error,
-        missingFields: validationError.missingFields,
-        validationField: 'provider_config',
-        configSource: configSource,
-        activeProvider: activeProvider
+        message: 'SendGrid fromEmail is required',
+        error: 'SendGrid fromEmail is missing or empty'
       });
     }
 
-    console.log('[Settings] POST /email/test - All validations passed. Sending via:', {
-      provider: activeProvider,
-      configSource: configSource,
-      toEmail: testEmail
+    console.log('[Settings] POST /email/test - SendGrid config loaded:', {
+      hasApiKey: !!config.apiKey,
+      apiKeyLength: config.apiKey.length,
+      fromEmail: config.fromEmail,
+      fromName: config.fromName || 'Barangay System',
+      testEmail: testEmail
     });
 
-    // Send test email using production email service
+    // Import SendGrid email service
     const emailService = require('../services/emailService');
-    let emailResult;
-    
-    try {
-      // Create transporter for the specific provider configuration
-      const nodemailer = require('nodemailer');
-      let transporter;
-      
-      if (activeProvider === 'sendgrid') {
-        // SendGrid uses API, no standard SMTP transporter
-        console.log('[Settings] POST /email/test - Preparing SendGrid transport for testing');
-        // For SendGrid, we would need a custom implementation
-        // For now, we'll create a mock success to indicate the config is valid
-        emailResult = {
-          success: true,
-          messageId: `sendgrid-test-${Date.now()}`,
-          response: 'Test email configuration is valid'
-        };
-      } else {
-        // Mailtrap and Gmail use SMTP
-        console.log('[Settings] POST /email/test - Creating SMTP transporter for testing', {
-          provider: activeProvider,
-          host: testEmailConfig.host,
-          port: testEmailConfig.port,
-          user: testEmailConfig.user
-        });
-        
-        transporter = nodemailer.createTransport({
-          host: testEmailConfig.host,
-          port: testEmailConfig.port,
-          secure: testEmailConfig.secure,
-          auth: {
-            user: testEmailConfig.user,
-            pass: testEmailConfig.password
-          }
-        });
 
-        // Send test email
-        emailResult = await transporter.sendMail({
-          from: testEmailConfig.fromEmail || testEmailConfig.user,
-          to: testEmail,
-          subject: '🧪 Barangay System - Test Email',
-          text: 'This is a test email from your Barangay System.',
-          html: '<h2>Test Email</h2><p>This is a test email from your Barangay System.</p><p>If you received this, your email configuration is working correctly!</p>'
-        });
-        
-        emailResult = {
-          success: true,
-          messageId: emailResult.messageId || emailResult.response
-        };
-      }
-    } catch (sendError) {
-      console.error('[Settings] POST /email/test - Failed to send test email via', activeProvider, {
-        configSource: configSource,
-        provider: activeProvider,
-        error: sendError.message,
-        testEmail: testEmail,
-        code: sendError.code,
-        command: sendError.command
+    // Send test email
+    try {
+      const result = await emailService.testSendGridConnection(
+        {
+          apiKey: config.apiKey,
+          fromEmail: config.fromEmail,
+          fromName: config.fromName || 'Barangay System'
+        },
+        testEmail.trim()
+      );
+
+      console.log('[Settings] POST /email/test - Test email sent successfully:', {
+        messageId: result.details.messageId,
+        statusCode: result.details.statusCode,
+        to: testEmail
       });
-      
-      let errorMessage = sendError.message;
-      let hint = 'Check your provider credentials and configuration';
-      
-      if (sendError.code === 'ECONNREFUSED') {
-        hint = `Cannot connect to ${testEmailConfig.host}:${testEmailConfig.port}. Verify the host and port are correct.`;
-      } else if (sendError.code === 'ENOTFOUND') {
-        hint = `Host "${testEmailConfig.host}" not found. Verify the host is correct.`;
-      } else if (errorMessage.includes('Invalid credentials')) {
-        hint = 'Invalid email credentials. Check your username and password.';
-      } else if (errorMessage.includes('Authentication failed')) {
-        hint = 'Authentication failed. Verify your username and password.';
-      }
-      
+
+      return res.json({
+        success: true,
+        message: 'Test email sent successfully',
+        details: result.details,
+        provider: 'sendgrid'
+      });
+    } catch (sendError) {
+      console.error('[Settings] POST /email/test - Failed to send test email:', {
+        message: sendError.message,
+        testEmail: testEmail
+      });
+
       return res.status(400).json({
         success: false,
-        message: `Failed to send test email via ${activeProvider}`,
-        error: errorMessage,
-        provider: activeProvider,
-        configSource: configSource,
-        hint: hint
+        message: 'Failed to send test email via SendGrid',
+        error: sendError.message,
+        provider: 'sendgrid',
+        hint: 'Verify your SendGrid API key and configuration are correct'
       });
     }
-
-    console.log('[Settings] POST /email/test - Test email sent successfully via', activeProvider, {
-      configSource: configSource,
-      messageId: emailResult.messageId,
-      recipient: testEmail
-    });
-
-    res.json({
-      success: true,
-      message: `Test email sent successfully via ${activeProvider}`,
-      provider: activeProvider,
-      configSource: configSource,
-      testEmail: testEmail,
-      messageId: emailResult.messageId
-    });
   } catch (err) {
-    console.error('[Settings] POST /email/test unexpected error:', {
+    console.error('[Settings] POST /email/test - Unexpected error:', {
       message: err.message,
-      stack: err.stack,
-      requestBody: req.body
+      stack: err.stack
     });
-    res.status(500).json({
+
+    return res.status(500).json({
       success: false,
       message: 'Failed to send test email',
       error: err.message
