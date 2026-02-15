@@ -1809,12 +1809,12 @@ router.post('/email/test', requireAuth, isAdmin, async (req, res) => {
     // Get SendGrid configuration
     let config = null;
 
-    if (emailConfig && emailConfig.sendgrid) {
-      // Use configuration from request body (for testing before saving)
-      console.log('[Settings] POST /email/test - Using emailConfig from request body');
+    // Use configuration from request body ONLY if it has a valid API key (for testing before saving)
+    if (emailConfig && emailConfig.sendgrid && emailConfig.sendgrid.apiKey && emailConfig.sendgrid.apiKey.trim()) {
+      console.log('[Settings] POST /email/test - Using emailConfig from request body (has valid API key)');
       config = emailConfig.sendgrid;
     } else {
-      // Load from database
+      // Load from database (either no emailConfig in request, or emailConfig has empty API key)
       console.log('[Settings] POST /email/test - Loading SendGrid config from database');
       const settings = await SystemSetting.findOne().lean();
 
