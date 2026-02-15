@@ -2109,12 +2109,13 @@ router.get('/email', requireAuth, isAdmin, async (req, res) => {
         success: true,
         email: {
           enabled: false,
-          activeProvider: 'sendgrid',
+          provider: 'sendgrid',
           sendgrid: {
             apiKey: '',
             fromEmail: '',
             fromName: 'Barangay System'
-          }
+          },
+          updatedAt: new Date()
         }
       });
     }
@@ -2122,12 +2123,13 @@ router.get('/email', requireAuth, isAdmin, async (req, res) => {
     // Sanitize for client (mask API key)
     const sanitized = {
       enabled: settings.email.enabled || false,
-      activeProvider: settings.email.activeProvider || 'sendgrid',
+      provider: settings.email.provider || 'sendgrid',
       sendgrid: settings.email.sendgrid ? { ...settings.email.sendgrid } : {
         apiKey: '',
         fromEmail: '',
         fromName: 'Barangay System'
-      }
+      },
+      updatedAt: settings.email.updatedAt || new Date()
     };
     
     if (sanitized.sendgrid?.apiKey) {
@@ -2136,7 +2138,7 @@ router.get('/email', requireAuth, isAdmin, async (req, res) => {
     
     console.log('[Settings] GET /email - SendGrid config retrieved:', {
       enabled: sanitized.enabled,
-      activeProvider: sanitized.activeProvider,
+      provider: sanitized.provider,
       fromEmail: sanitized.sendgrid?.fromEmail,
       hasSendgridApiKey: !!sanitized.sendgrid?.apiKey
     });
@@ -2184,13 +2186,13 @@ router.patch('/email', requireAuth, isAdmin, async (req, res) => {
       return typeof val === 'string' && val.length > 0 && /^\*+$/.test(val);
     };
 
-    // Build SendGrid email config matching smtpSchema structure
+    // Build SendGrid email config
     // Initialize email config from existing settings or new structure
     const emailConfig = settings.email || {};
     
     // Update top-level properties
     emailConfig.enabled = !!enabled;
-    emailConfig.activeProvider = 'sendgrid';
+    emailConfig.provider = 'sendgrid';
     
     // Initialize sendgrid sub-object if it doesn't exist
     if (!emailConfig.sendgrid) {
@@ -2246,6 +2248,9 @@ router.patch('/email', requireAuth, isAdmin, async (req, res) => {
       emailConfig.sendgrid.fromName = 'Barangay System';
     }
 
+    // Update timestamp
+    emailConfig.updatedAt = new Date();
+
     // Validate if enabled: require API key
     if (emailConfig.enabled && !emailConfig.sendgrid.apiKey) {
       console.warn('[Settings] PATCH /email - Cannot enable SendGrid without API key');
@@ -2263,17 +2268,19 @@ router.patch('/email', requireAuth, isAdmin, async (req, res) => {
 
     console.log('[Settings] SendGrid email configuration saved:', {
       enabled: emailConfig.enabled,
-      activeProvider: emailConfig.activeProvider,
+      provider: emailConfig.provider,
       fromEmail: emailConfig.sendgrid?.fromEmail,
       fromName: emailConfig.sendgrid?.fromName,
-      hasSendgridApiKey: !!emailConfig.sendgrid?.apiKey
+      hasSendgridApiKey: !!emailConfig.sendgrid?.apiKey,
+      updatedAt: emailConfig.updatedAt
     });
 
     // Fetch and sanitize for response
     const sanitized = {
       enabled: emailConfig.enabled,
-      activeProvider: emailConfig.activeProvider,
-      sendgrid: emailConfig.sendgrid ? { ...emailConfig.sendgrid } : {}
+      provider: emailConfig.provider,
+      sendgrid: emailConfig.sendgrid ? { ...emailConfig.sendgrid } : {},
+      updatedAt: emailConfig.updatedAt
     };
     
     if (sanitized.sendgrid?.apiKey) {
