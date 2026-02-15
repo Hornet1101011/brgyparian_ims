@@ -185,27 +185,17 @@ async function analyzeDocuments(stats) {
     stats.documentsWithLegacyFields = withLegacy;
     logSuccess(`Documents with legacy fields (smtp/gmail): ${withLegacy}`);
 
-    // Count documents without email field
-    const withoutEmail = await collection.countDocuments({
-      email: { $exists: false }
+    // Count dedicated SendGrid config documents
+    const sendgridConfigDocs = await collection.countDocuments({
+      docType: 'sendgrid_config'
     });
-    stats.documentsWithoutEmail = withoutEmail;
-    logSuccess(`Documents without email field: ${withoutEmail}`);
+    logSuccess(`Dedicated SendGrid config documents: ${sendgridConfigDocs}`);
 
-    // Count documents with incomplete email structure
-    const incompleteEmail = await collection.countDocuments({
-      $or: [
-        { 'email.sendgrid': { $exists: false } },
-        { 'email.provider': { $exists: false } },
-        { 'email.enabled': { $exists: false } },
-      ]
+    // Count general settings documents
+    const generalSettingsDocs = await collection.countDocuments({
+      docType: { $ne: 'sendgrid_config' }
     });
-    
-    if (incompleteEmail > 0) {
-      logWarning(`Documents with incomplete email structure: ${incompleteEmail}`);
-    } else {
-      logSuccess('All email structures are complete');
-    }
+    logSuccess(`General settings documents: ${generalSettingsDocs}`);
 
     return true;
   } catch (error) {
@@ -251,84 +241,54 @@ async function performMigration(stats) {
       stats.documentsUnset = unsetResult.modifiedCount;
       logSuccess(`Unset legacy fields from ${unsetResult.modifiedCount} document(s)`);
 
-      // STEP 2: Initialize email.sendgrid for documents without email field
-      log('\nStep 2: Initializing email.sendgrid structure for documents without email...');
+      // STEP 2: Create dedicated SendGrid config document if it doesn't exist
+      log('\nStep 2: Creating dedicated SendGrid configuration document...');
       
-      const initResult = await collection.updateMany(
-        { email: { $exists: false } },
-        {
-          $set: {
-            email: {
-              enabled: false,
-              provider: 'sendgrid',
-              sendgrid: {
+      const existingSendGridDoc = await collection.findOne({ docType: 'sendgrid_config' });
+      
+      let sgDocCreated = false;
+      if (!existingSendGridDoc) {
+        const sgDocResult = await collection.updateOne(
+          { docType: 'sendgrid_config' }, // Won't match anything initially
+          {
+            $set: {
+              docType: 'sendgrid_config',
+              sendgridConfig: {
+                enabled: false,
+                provider: 'sendgrid',
                 apiKey: '',
                 fromEmail: '',
-                fromName: 'Barangay System'
-              },
-              updatedAt: new Date()
+                fromName: 'Barangay System',
+                updatedAt: new Date()
+              }
             }
+          },
+          {
+            upsert: true, // Create if doesn't exist
+            session: transactionStarted && !DRY_RUN ? session : undefined
           }
+        );
+        
+        sgDocCreated = sgDocResult.upsertedId !== undefined || sgDocResult.matchedCount === 0;
+        logSuccess(`SendGrid config document ${sgDocCreated ? 'created' : 'already exists'}`);
+      } else {
+        logSuccess('SendGrid config document already exists (skipping creation)');
+      }
+
+      stats.documentsInitialized = sgDocCreated ? 1 : 0;
+
+      // STEP 3: Remove email field from general settings documents
+      log('\nStep 3: Removing email field from general settings documents...');
+      
+      const removeEmailResult = await collection.updateMany(
+        { docType: { $ne: 'sendgrid_config' } },
+        {
+          $unset: { email: '' }
         },
         { session: transactionStarted && !DRY_RUN ? session : undefined }
       );
 
-      stats.documentsInitialized = initResult.modifiedCount;
-      logSuccess(`Initialized email structure for ${initResult.modifiedCount} document(s)`);
-
-      // STEP 3: Fix documents with incomplete email structure
-      log('\nStep 3: Fixing incomplete email structures...');
-      
-      const incompleteDocuments = await collection.find({
-        $or: [
-          { 'email.sendgrid': { $exists: false } },
-          { 'email.provider': { $exists: false } },
-          { 'email.enabled': { $exists: false } },
-        ]
-      }).toArray();
-
-      let fixedCount = 0;
-      for (const doc of incompleteDocuments) {
-        const updateOps = { $set: {} };
-
-        // Ensure sendgrid structure exists
-        if (!doc.email?.sendgrid) {
-          updateOps.$set['email.sendgrid'] = {
-            apiKey: '',
-            fromEmail: '',
-            fromName: 'Barangay System'
-          };
-        }
-
-        // Ensure provider is set to 'sendgrid'
-        if (!doc.email?.provider) {
-          updateOps.$set['email.provider'] = 'sendgrid';
-        }
-
-        // Ensure enabled is set (default to false)
-        if (doc.email && typeof doc.email.enabled === 'undefined') {
-          updateOps.$set['email.enabled'] = false;
-        }
-
-        // Only update if there are changes to make
-        if (Object.keys(updateOps.$set).length > 0) {
-          try {
-            await collection.updateOne(
-              { _id: doc._id },
-              updateOps,
-              { session: transactionStarted && !DRY_RUN ? session : undefined }
-            );
-            fixedCount++;
-          } catch (error) {
-            logWarning(`Failed to fix document ${doc._id}: ${error.message}`);
-            stats.addError(error, doc._id);
-          }
-        }
-      }
-
-      if (fixedCount > 0) {
-        logSuccess(`Fixed incomplete email structures in ${fixedCount} document(s)`);
-      }
+      logSuccess(`Removed email field from ${removeEmailResult.modifiedCount} document(s)`);
 
       if (!DRY_RUN) {
         if (transactionStarted) {
@@ -381,50 +341,67 @@ async function verifyMigration(stats) {
       $or: [
         { smtp: { $exists: true } },
         { gmail: { $exists: true } },
+        { emailSettings: { $exists: true } }
       ]
     });
 
     if (withLegacy === 0) {
-      logSuccess('✓ No legacy fields (smtp/gmail) found');
+      logSuccess('✓ No legacy fields (smtp/gmail/emailSettings) found');
     } else {
       logWarning(`✗ Found ${withLegacy} document(s) still with legacy fields`);
     }
 
-    // Check for email structure
-    const withoutEmail = await collection.countDocuments({
-      email: { $exists: false }
+    // Check for dedicated SendGrid config document
+    const sendgridConfigDocs = await collection.countDocuments({
+      docType: 'sendgrid_config'
     });
 
-    if (withoutEmail === 0) {
-      logSuccess('✓ All documents have email field');
+    if (sendgridConfigDocs > 0) {
+      logSuccess(`✓ Found ${sendgridConfigDocs} dedicated SendGrid config document(s)`);
     } else {
-      logWarning(`✗ Found ${withoutEmail} document(s) without email field`);
+      logWarning('✗ No dedicated SendGrid config document found');
     }
 
-    // Check email structure completeness
-    const incompleteEmail = await collection.countDocuments({
-      $or: [
-        { 'email.sendgrid': { $exists: false } },
-        { 'email.provider': { $exists: false } },
-        { 'email.enabled': { $exists: false } },
-      ]
+    // Check that general settings don't have email field anymore
+    const withEmailField = await collection.countDocuments({
+      docType: { $ne: 'sendgrid_config' },
+      email: { $exists: true }
     });
 
-    if (incompleteEmail === 0) {
-      logSuccess('✓ All email structures are complete');
+    if (withEmailField === 0) {
+      logSuccess('✓ General settings documents have no email field');
     } else {
-      logWarning(`✗ Found ${incompleteEmail} document(s) with incomplete email structure`);
+      logWarning(`✗ Found ${withEmailField} general settings document(s) still with email field`);
     }
 
-    // Sample a document to verify structure
-    const sampleDoc = await collection.findOne();
-    if (sampleDoc) {
-      log('\nSample document structure (after migration):');
+    // Sample documents to verify structure
+    const generalSample = await collection.findOne({ docType: { $ne: 'sendgrid_config' } });
+    const sgSample = await collection.findOne({ docType: 'sendgrid_config' });
+
+    if (generalSample) {
+      log('\nSample general settings document (after migration):');
       log(JSON.stringify({
-        _id: sampleDoc._id,
-        email: sampleDoc.email,
-        hasSmtp: !!sampleDoc.smtp,
-        hasGmail: !!sampleDoc.gmail,
+        _id: generalSample._id,
+        docType: generalSample.docType,
+        siteName: generalSample.siteName,
+        hasEmailField: !!generalSample.email,
+        hasSmtp: !!generalSample.smtp,
+        hasGmail: !!generalSample.gmail,
+      }, null, 2));
+    }
+
+    if (sgSample) {
+      log('\nSample SendGrid config document (after migration):');
+      log(JSON.stringify({
+        _id: sgSample._id,
+        docType: sgSample.docType,
+        sendgridConfig: {
+          enabled: sgSample.sendgridConfig?.enabled,
+          provider: sgSample.sendgridConfig?.provider,
+          apiKey_set: !!sgSample.sendgridConfig?.apiKey,
+          fromEmail: sgSample.sendgridConfig?.fromEmail,
+          fromName: sgSample.sendgridConfig?.fromName
+        }
       }, null, 2));
     }
 
