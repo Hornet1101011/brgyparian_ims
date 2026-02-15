@@ -457,7 +457,8 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
       // Mark legacy fields for removal
       updateOps.$unset['smtp'] = '';
       updateOps.$unset['gmail'] = '';
-      console.log('[Settings PATCH] Marked legacy fields for removal: smtp, gmail');
+      updateOps.$unset['emailSettings'] = ''; // Also remove old emailSettings field
+      console.log('[Settings PATCH] Marked legacy fields for removal: smtp, gmail, emailSettings');
     }
 
     // Get before state for audit

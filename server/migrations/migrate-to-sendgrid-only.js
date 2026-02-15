@@ -215,18 +215,19 @@ async function analyzeDocuments(stats) {
   }
 }
 
-/**
- * Perform the migration
- */
 async function performMigration(stats) {
   try {
     logSection(`Performing Migration (${DRY_RUN ? 'DRY-RUN MODE' : 'LIVE MODE'})`);
 
     const collection = mongoose.connection.db.collection(COLLECTION_NAME);
     const session = await mongoose.connection.startSession();
+    let transactionStarted = false;
 
     try {
-      session.startTransaction();
+      // Don't attempt transactions on standalone MongoDB
+      // Just proceed without them
+      logWarning('Skipping transaction support for standalone MongoDB');
+      transactionStarted = false;
 
       // STEP 1: Remove legacy smtp and gmail fields
       log('\nStep 1: Removing legacy fields (smtp, gmail)...');
@@ -244,7 +245,7 @@ async function performMigration(stats) {
             gmail: 1,
           }
         },
-        { session: DRY_RUN ? undefined : session }
+        { session: transactionStarted && !DRY_RUN ? session : undefined }
       );
 
       stats.documentsUnset = unsetResult.modifiedCount;
@@ -269,7 +270,7 @@ async function performMigration(stats) {
             }
           }
         },
-        { session: DRY_RUN ? undefined : session }
+        { session: transactionStarted && !DRY_RUN ? session : undefined }
       );
 
       stats.documentsInitialized = initResult.modifiedCount;
@@ -315,7 +316,7 @@ async function performMigration(stats) {
             await collection.updateOne(
               { _id: doc._id },
               updateOps,
-              { session: DRY_RUN ? undefined : session }
+              { session: transactionStarted && !DRY_RUN ? session : undefined }
             );
             fixedCount++;
           } catch (error) {
@@ -330,18 +331,28 @@ async function performMigration(stats) {
       }
 
       if (!DRY_RUN) {
-        await session.commitTransaction();
-        logSuccess('Transaction committed successfully');
+        if (transactionStarted) {
+          await session.commitTransaction();
+          logSuccess('Transaction committed successfully');
+        } else {
+          logSuccess('Changes applied (no transaction available on standalone MongoDB)');
+        }
       } else {
         logWarning('DRY-RUN: Changes not committed to database');
-        await session.abortTransaction();
+        if (transactionStarted) {
+          await session.abortTransaction();
+        }
       }
 
       return true;
     } catch (error) {
-      if (!DRY_RUN) {
-        await session.abortTransaction();
-        logError('Transaction rolled back due to error');
+      if (!DRY_RUN && transactionStarted) {
+        try {
+          await session.abortTransaction();
+          logError('Transaction rolled back due to error');
+        } catch (e) {
+          // ignore abort errors
+        }
       }
       logError(`Migration failed: ${error.message}`);
       stats.addError(error);
