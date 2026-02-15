@@ -71,6 +71,30 @@ const SendGridSettings: React.FC<SendGridSettingsProps> = ({
       return;
     }
 
+    // Validate SendGrid configuration before testing
+    const errors: string[] = [];
+    
+    if (!localConfig.apiKey || localConfig.apiKey.trim().length === 0) {
+      if (!hasBackendApiKey) {
+        errors.push('SendGrid API Key is required');
+      }
+    }
+    
+    if (!localConfig.fromEmail || localConfig.fromEmail.trim().length === 0) {
+      errors.push('From Email address is required');
+    } else if (!localConfig.fromEmail.includes('@')) {
+      errors.push('From Email must be a valid email address');
+    }
+    
+    if (!localConfig.fromName || localConfig.fromName.trim().length === 0) {
+      errors.push('From Name is required');
+    }
+
+    if (errors.length > 0) {
+      antdMessage.error(`Cannot test email: ${errors[0]}`);
+      return;
+    }
+
     setIsTestingEmail(true);
     try {
       const payload = {
