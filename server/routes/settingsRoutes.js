@@ -334,7 +334,6 @@ router.put('/', requireAuth, isAdmin, async (req, res) => {
 router.patch('/', requireAuth, isAdmin, async (req, res) => {
   try {
     console.log('[Settings PATCH] Handler called');
-    console.log('[Settings PATCH] Encryption key available:', !!process.env.SETTINGS_ENCRYPTION_KEY);
     let payload = req.body || {};
     
     // Defensive: Recursively remove all _id fields from payload
@@ -354,47 +353,28 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
     payload = removeAllIds(payload);
     
     console.log('[Settings PATCH] Received payload keys:', Object.keys(payload));
-    console.log('[Settings PATCH] Full payload:', JSON.stringify(payload, null, 2));
-    if (payload.smtp) {
-      console.log('[Settings PATCH] SMTP data received:', { 
-        host: payload.smtp.host, 
-        port: payload.smtp.port, 
-        user: payload.smtp.user,
-        hasPassword: !!payload.smtp.password,
-        hasAppPassword: !!payload.smtp.appPassword,
-        securityType: payload.smtp.securityType
-      });
-    }
-    
+
     const errors = validateSettingsPayload(payload);
     if (errors.length) {
       console.error('[Settings PATCH] Validation errors:', errors);
       return res.status(400).json({ message: 'Validation error', errors });
     }
 
-    // Build update payload, separating email settings which don't need encryption
-    const updatePayload = {};
+    // Build MongoDB update operations
+    const updateOps = { $set: {}, $unset: {} };
     
-    // Copy all simple fields (strings, booleans, numbers)
+    // Copy simple fields (excluding email, smtp, gmail)
     for (const [key, value] of Object.entries(payload)) {
-      if (key === 'smtp' || key === 'emailSettings' || key === 'gmail' || key === 'email') {
-        // Skip these for now, we'll handle them separately
-        continue;
+      if (key !== 'email' && key !== 'smtp' && key !== 'gmail' && key !== 'emailSettings') {
+        updateOps.$set[key] = value;
       }
-      updatePayload[key] = value;
-    }
-    
-    // Handle email settings (no encryption needed)
-    if (payload.emailSettings) {
-      updatePayload.emailSettings = payload.emailSettings;
-      console.log('[Settings] Email settings updated:', Object.keys(payload.emailSettings));
     }
 
-    // Handle SENDGRID-ONLY email provider configuration
-    if (payload.email) {
-      const emailData = { ...payload.email };
+    // ===== SENDGRID-ONLY EMAIL CONFIGURATION =====
+    if (payload.email && payload.email.provider === 'sendgrid') {
+      const emailData = payload.email;
       
-      console.log('[Settings PATCH - SendGrid] Email config received:', {
+      console.log('[Settings PATCH - SendGrid] Email config update request:', {
         enabled: emailData.enabled,
         provider: emailData.provider,
         fromEmail: emailData.fromEmail,
@@ -402,645 +382,132 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
         hasSendgridConfig: !!emailData.sendgrid,
         sendgridKeys: emailData.sendgrid ? Object.keys(emailData.sendgrid) : []
       });
-      
-      // Helper to detect masked values (e.g., "********")
+
+      // Helper to detect masked values
       const isMaskedValue = (val) => {
         return typeof val === 'string' && val.length > 0 && /^\*+$/.test(val);
       };
-      
-      // Build the email config update
-      updatePayload.email = {
-        enabled: emailData.enabled === true,
-        provider: 'sendgrid',
-        sendgrid: {}
-      };
-      
-      // Handle fromEmail and fromName
-      if (emailData.fromEmail) {
-        updatePayload.email.fromEmail = emailData.fromEmail;
-        console.log('[Settings PATCH - SendGrid] fromEmail:', emailData.fromEmail);
-      }
-      if (emailData.fromName) {
-        updatePayload.email.fromName = emailData.fromName;
-        console.log('[Settings PATCH - SendGrid] fromName:', emailData.fromName);
-      }
-      
-      // Handle SendGrid-specific configuration
+
+      // Set email.enabled
+      updateOps.$set['email.enabled'] = !!emailData.enabled;
+      console.log('[Settings PATCH - SendGrid] Set email.enabled:', emailData.enabled);
+
+      // Set email.provider to 'sendgrid'
+      updateOps.$set['email.provider'] = 'sendgrid';
+      console.log('[Settings PATCH - SendGrid] Set email.provider:', 'sendgrid');
+
+      // Set sendgrid configuration
       if (emailData.sendgrid) {
-        const sgConfig = emailData.sendgrid;
-        
-        // Handle API key - preserve existing if masked
-        if (sgConfig.apiKey !== undefined) {
-          if (isMaskedValue(sgConfig.apiKey)) {
-            console.log('[Settings PATCH - SendGrid] API key is masked - preserving existing value');
-            // Don't set it, will preserve DB value
-          } else if (sgConfig.apiKey && sgConfig.apiKey.length > 0) {
-            updatePayload.email.sendgrid.apiKey = sgConfig.apiKey;
-            console.log('[Settings PATCH - SendGrid] API key updated:', {
-              length: sgConfig.apiKey.length,
-              preview: sgConfig.apiKey.substring(0, 8) + '...'
-            });
+        const sgData = emailData.sendgrid;
+
+        // Handle API key - always save unless masked
+        if (sgData.apiKey !== undefined) {
+          if (isMaskedValue(sgData.apiKey)) {
+            console.log('[Settings PATCH - SendGrid] apiKey is masked - preserving existing value');
+            // Don't set, preserves existing value in DB
           } else {
-            console.log('[Settings PATCH - SendGrid] API key is empty - preserving existing value');
-          }
-        }
-        
-        // Save fromEmail and fromName in sendgrid nested object if provided
-        if (sgConfig.fromEmail) {
-          updatePayload.email.sendgrid.fromEmail = sgConfig.fromEmail;
-          console.log('[Settings PATCH - SendGrid] sendgrid.fromEmail:', sgConfig.fromEmail);
-        }
-        if (sgConfig.fromName) {
-          updatePayload.email.sendgrid.fromName = sgConfig.fromName;
-          console.log('[Settings PATCH - SendGrid] sendgrid.fromName:', sgConfig.fromName);
-        }
-      }
-      
-      console.log('[Settings PATCH - SendGrid] Final email config to save:', {
-        enabled: updatePayload.email.enabled,
-        provider: updatePayload.email.provider,
-        fromEmail: updatePayload.email.fromEmail,
-        fromName: updatePayload.email.fromName,
-        sendgridKeys: Object.keys(updatePayload.email.sendgrid)
-      });
-    }
-    
-    // Handle SMTP updates with proper nesting
-    // NEW: Support provider-specific configuration storage
-    if (payload.smtp) {
-      const smtpData = { ...payload.smtp };
-      const activeProvider = smtpData.activeProvider || 'mailtrap';
-      
-      console.log('[Settings PATCH] SMTP configuration received:', {
-        activeProvider: activeProvider,
-        enabled: smtpData.enabled,
-        hasActiveProvider: !!smtpData.activeProvider,
-        keys: Object.keys(smtpData)
-      });
-
-      // IMPORTANT: Set the active provider
-      updateOps.$set['smtp.activeProvider'] = activeProvider;
-      updateOps.$set['smtp.enabled'] = smtpData.enabled !== undefined ? smtpData.enabled : true;
-      
-      console.log('[Settings PATCH] Active provider set to:', activeProvider);
-
-      // Helper to detect masked passwords and apiKeys
-      const isMaskedValue = (val) => {
-        return typeof val === 'string' && val.length > 0 && /^\*+$/.test(val);
-      };
-
-      // Helper to preserve existing value if masked or empty
-      const shouldPreserveValue = async (fieldPath, currentValue) => {
-        if (isMaskedValue(currentValue)) {
-          console.log(`[Settings PATCH] ${fieldPath} is masked - will preserve existing DB value`);
-          return true;
-        }
-        return false;
-      };
-
-      // Route configuration to appropriate provider namespace based on activeProvider
-      if (activeProvider === 'mailtrap') {
-        console.log('[Settings PATCH] Configuring Mailtrap provider');
-        
-        const mailtrapConfig = {
-          host: smtpData.host,
-          port: smtpData.port,
-          secure: smtpData.secure,
-          user: smtpData.user,
-          fromName: smtpData.fromName || 'Barangay System',
-          fromEmail: smtpData.fromEmail
-        };
-
-        // Handle password - preserve existing if masked
-        if (smtpData.password !== undefined) {
-          if (isMaskedValue(smtpData.password)) {
-            console.log('[Settings PATCH] Mailtrap password is masked - preserving existing value');
-          } else {
-            mailtrapConfig.password = smtpData.password;
-            console.log('[Settings PATCH] Mailtrap password updated:', {
-              length: mailtrapConfig.password.length,
-              isMasked: isMaskedValue(mailtrapConfig.password)
-            });
-          }
-        }
-
-        // Set individual Mailtrap fields
-        if (mailtrapConfig.host) updateOps.$set['smtp.mailtrap.host'] = mailtrapConfig.host;
-        if (mailtrapConfig.port) updateOps.$set['smtp.mailtrap.port'] = mailtrapConfig.port;
-        if (mailtrapConfig.secure !== undefined) updateOps.$set['smtp.mailtrap.secure'] = mailtrapConfig.secure;
-        if (mailtrapConfig.user) updateOps.$set['smtp.mailtrap.user'] = mailtrapConfig.user;
-        if (mailtrapConfig.fromName) updateOps.$set['smtp.mailtrap.fromName'] = mailtrapConfig.fromName;
-        if (mailtrapConfig.fromEmail) updateOps.$set['smtp.mailtrap.fromEmail'] = mailtrapConfig.fromEmail;
-        if (mailtrapConfig.password !== undefined) updateOps.$set['smtp.mailtrap.password'] = mailtrapConfig.password;
-        
-        updateOps.$set['smtp.mailtrap.updatedAt'] = new Date();
-        
-        console.log('[Settings PATCH] Mailtrap config fields updated:', {
-          fields: Object.keys(updateOps.$set).filter(k => k.startsWith('smtp.mailtrap.')),
-          count: Object.keys(updateOps.$set).filter(k => k.startsWith('smtp.mailtrap.')).length
-        });
-      } 
-      else if (activeProvider === 'sendgrid') {
-        console.log('[Settings PATCH] Configuring SendGrid provider');
-        
-        const sendgridConfig = {
-          apiKey: smtpData.sendgridApiKey || smtpData.apiKey,
-          fromName: smtpData.fromName || 'Barangay System',
-          fromEmail: smtpData.fromEmail
-        };
-
-        // Handle apiKey - preserve existing if masked
-        if (sendgridConfig.apiKey !== undefined) {
-          if (isMaskedValue(sendgridConfig.apiKey)) {
-            console.log('[Settings PATCH] SendGrid API key is masked - preserving existing value');
-            delete sendgridConfig.apiKey; // Don't save masked value
-          } else {
-            console.log('[Settings PATCH] SendGrid API key updated:', {
-              length: sendgridConfig.apiKey.length,
-              isMasked: isMaskedValue(sendgridConfig.apiKey)
-            });
-          }
-        }
-
-        // Set individual SendGrid fields
-        if (sendgridConfig.apiKey !== undefined) updateOps.$set['smtp.sendgrid.apiKey'] = sendgridConfig.apiKey;
-        if (sendgridConfig.fromName) updateOps.$set['smtp.sendgrid.fromName'] = sendgridConfig.fromName;
-        if (sendgridConfig.fromEmail) updateOps.$set['smtp.sendgrid.fromEmail'] = sendgridConfig.fromEmail;
-        
-        updateOps.$set['smtp.sendgrid.updatedAt'] = new Date();
-        
-        console.log('[Settings PATCH] SendGrid config fields updated:', {
-          fields: Object.keys(updateOps.$set).filter(k => k.startsWith('smtp.sendgrid.')),
-          count: Object.keys(updateOps.$set).filter(k => k.startsWith('smtp.sendgrid.')).length
-        });
-      } 
-      else if (activeProvider === 'gmail') {
-        console.log('[Settings PATCH] Configuring Gmail provider');
-        
-        const gmailConfig = {
-          host: smtpData.host,
-          port: smtpData.port,
-          secure: smtpData.secure,
-          user: smtpData.user,
-          fromName: smtpData.fromName || 'Barangay System',
-          fromEmail: smtpData.fromEmail
-        };
-
-        // Handle password - preserve existing if masked
-        if (smtpData.password !== undefined) {
-          if (isMaskedValue(smtpData.password)) {
-            console.log('[Settings PATCH] Gmail password is masked - preserving existing value');
-          } else {
-            gmailConfig.password = smtpData.password;
-            console.log('[Settings PATCH] Gmail password updated:', {
-              length: gmailConfig.password.length,
-              isMasked: isMaskedValue(gmailConfig.password)
-            });
-          }
-        }
-
-        // Set individual Gmail fields
-        if (gmailConfig.host) updateOps.$set['smtp.gmail.host'] = gmailConfig.host;
-        if (gmailConfig.port) updateOps.$set['smtp.gmail.port'] = gmailConfig.port;
-        if (gmailConfig.secure !== undefined) updateOps.$set['smtp.gmail.secure'] = gmailConfig.secure;
-        if (gmailConfig.user) updateOps.$set['smtp.gmail.user'] = gmailConfig.user;
-        if (gmailConfig.fromName) updateOps.$set['smtp.gmail.fromName'] = gmailConfig.fromName;
-        if (gmailConfig.fromEmail) updateOps.$set['smtp.gmail.fromEmail'] = gmailConfig.fromEmail;
-        if (gmailConfig.password !== undefined) updateOps.$set['smtp.gmail.password'] = gmailConfig.password;
-        
-        updateOps.$set['smtp.gmail.updatedAt'] = new Date();
-        
-        console.log('[Settings PATCH] Gmail config fields updated:', {
-          fields: Object.keys(updateOps.$set).filter(k => k.startsWith('smtp.gmail.')),
-          count: Object.keys(updateOps.$set).filter(k => k.startsWith('smtp.gmail.')).length
-        });
-      }
-      else {
-        console.warn('[Settings PATCH] Unknown active provider:', activeProvider);
-      }
-
-      console.log('[Settings PATCH] Provider-specific SMTP configuration complete:', {
-        activeProvider: activeProvider,
-        totalSmtpFields: Object.keys(updateOps.$set).filter(k => k.startsWith('smtp.')).length,
-        smtpFieldsSet: Object.keys(updateOps.$set).filter(k => k.startsWith('smtp.'))
-      });
-    }
-
-    // Handle Gmail updates with proper encryption
-    if (payload.gmail) {
-      const gmailData = { ...payload.gmail };
-      
-      console.log('[Settings PATCH] Gmail data received:', {
-        enabled: gmailData.enabled,
-        gmailAddress: gmailData.gmailAddress,
-        hasAppPassword: !!gmailData.appPassword,
-        appPasswordLength: gmailData.appPassword?.length || 0,
-        hasPassword: !!gmailData.password,
-        passwordLength: gmailData.password?.length || 0
-      });
-      
-      // Handle app password - store as plain text (no encryption)
-      if (gmailData.appPassword) {
-        console.log('[Settings PATCH] App password provided, storing as plain text');
-        // Just keep the plain text password as-is
-        gmailData.appPassword = gmailData.appPassword.trim();
-        console.log('[Settings PATCH] App password stored:', {
-          length: gmailData.appPassword.length,
-          preview: gmailData.appPassword.substring(0, 5) + '***'
-        });
-      } else {
-        console.log('[Settings PATCH] No app password provided');
-      }
-      
-      // Handle regular Gmail password - store as plain text (fallback)
-      if (gmailData.password) {
-        console.log('[Settings PATCH] Regular password provided, storing as plain text');
-        gmailData.password = gmailData.password.trim();
-        console.log('[Settings PATCH] Regular password stored:', {
-          length: gmailData.password.length,
-          preview: gmailData.password.substring(0, 5) + '***'
-        });
-      } else {
-        console.log('[Settings PATCH] No regular password provided');
-      }
-      
-      // Require at least one password if enabling Gmail
-      const hasAnyPassword = gmailData.appPassword || gmailData.password;
-      if (gmailData.enabled && !hasAnyPassword) {
-        console.warn('[Settings PATCH] Cannot enable Gmail without password');
-        return res.status(400).json({ 
-          message: 'Gmail password is required when enabling Gmail (app password or regular password)',
-          errors: ['At least one password is required (appPassword or password)']
-        });
-      }
-      
-      // Set updatedAt timestamp for Gmail settings
-      gmailData.updatedAt = new Date();
-      
-      console.log('[Settings PATCH] Final gmailData to save:', {
-        enabled: gmailData.enabled,
-        gmailAddress: gmailData.gmailAddress,
-        displayName: gmailData.displayName,
-        useAppPassword: gmailData.useAppPassword,
-        hasAppPassword: !!gmailData.appPassword,
-        appPasswordLength: gmailData.appPassword ? gmailData.appPassword.length : 0,
-        hasPassword: !!gmailData.password,
-        passwordLength: gmailData.password ? gmailData.password.length : 0,
-        allKeys: Object.keys(gmailData)
-      });
-      
-      updatePayload.gmail = gmailData;
-      console.log('[Settings PATCH] updatePayload.gmail set:', {
-        enabled: updatePayload.gmail.enabled,
-        gmailAddress: updatePayload.gmail.gmailAddress,
-        hasEncryptedPassword: !!updatePayload.gmail.encryptedPassword,
-        encryptedPasswordLength: updatePayload.gmail.encryptedPassword ? updatePayload.gmail.encryptedPassword.length : 0,
-        allKeys: Object.keys(updatePayload.gmail)
-      });
-    }
-
-    const before = await SystemSetting.findOne().lean();
-    console.log('[Settings PATCH] Before save - Gmail state:', {
-      hasGmail: !!before?.gmail,
-      gmailEnabled: before?.gmail?.enabled,
-      hasAppPassword: !!before?.gmail?.appPassword,
-      hasPassword: !!before?.gmail?.password
-    });
-    
-    console.log('[Settings PATCH] updatePayload being saved:', {
-      keys: Object.keys(updatePayload),
-      hasGmail: !!updatePayload.gmail,
-      gmailData: updatePayload.gmail ? {
-        enabled: updatePayload.gmail.enabled,
-        gmailAddress: updatePayload.gmail.gmailAddress,
-        hasAppPassword: !!updatePayload.gmail.appPassword,
-        hasPassword: !!updatePayload.gmail.password,
-        updatePayloadGmailKeys: Object.keys(updatePayload.gmail)
-      } : null
-    });
-    
-    // Build explicit field updates for nested gmail object to ensure all fields are saved
-    const updateOps = { $set: {} };
-    
-    // Copy simple fields
-    for (const [key, value] of Object.entries(updatePayload)) {
-      if (key !== 'gmail' && key !== 'email' && key !== 'smtp') {
-        updateOps.$set[key] = value;
-      }
-    }
-    
-    // Explicitly set each gmail field to ensure Mongoose saves them properly
-    if (updatePayload.gmail) {
-      console.log('[Settings PATCH] Setting individual gmail fields:', {
-        'gmail.enabled': updatePayload.gmail.enabled,
-        'gmail.gmailAddress': updatePayload.gmail.gmailAddress,
-        'gmail.displayName': updatePayload.gmail.displayName,
-        'gmail.useAppPassword': updatePayload.gmail.useAppPassword,
-        'gmail.appPassword_exists': !!updatePayload.gmail.appPassword,
-        'gmail.password_exists': !!updatePayload.gmail.password,
-        'gmail.updatedAt': updatePayload.gmail.updatedAt
-      });
-      
-      updateOps.$set['gmail.enabled'] = updatePayload.gmail.enabled;
-      updateOps.$set['gmail.gmailAddress'] = updatePayload.gmail.gmailAddress;
-      updateOps.$set['gmail.displayName'] = updatePayload.gmail.displayName;
-      updateOps.$set['gmail.useAppPassword'] = updatePayload.gmail.useAppPassword;
-      updateOps.$set['gmail.appPassword'] = updatePayload.gmail.appPassword;
-      updateOps.$set['gmail.password'] = updatePayload.gmail.password;
-      updateOps.$set['gmail.updatedAt'] = updatePayload.gmail.updatedAt;
-      
-      console.log('[Settings PATCH] FINAL updateOps being sent to MongoDB:', {
-        '$set': Object.keys(updateOps.$set),
-        'gmail.appPassword_in_ops': !!updateOps.$set['gmail.appPassword'],
-        'gmail.password_in_ops': !!updateOps.$set['gmail.password']
-      });
-    }
-
-    // Explicitly set each email provider field (saved to smtp) to ensure Mongoose saves them properly
-    if (updatePayload.smtp) {
-      console.log('[Settings PATCH] Setting individual SMTP fields:', {
-        'smtp.enabled': updatePayload.smtp.enabled,
-        'smtp.provider': updatePayload.smtp.provider,
-        'smtp.fromName': updatePayload.smtp.fromName,
-        'smtp.fromEmail': updatePayload.smtp.fromEmail,
-        'smtp_keys': Object.keys(updatePayload.smtp)
-      });
-      
-      // Set individual smtp fields to ensure nested object is properly saved
-      // Only set fields that have actual values to avoid overwriting with null
-      if (updatePayload.smtp.enabled !== undefined) updateOps.$set['smtp.enabled'] = updatePayload.smtp.enabled;
-      if (updatePayload.smtp.provider) updateOps.$set['smtp.provider'] = updatePayload.smtp.provider;
-      if (updatePayload.smtp.fromName) updateOps.$set['smtp.fromName'] = updatePayload.smtp.fromName;
-      if (updatePayload.smtp.fromEmail) updateOps.$set['smtp.fromEmail'] = updatePayload.smtp.fromEmail;
-      if (updatePayload.smtp.host) updateOps.$set['smtp.host'] = updatePayload.smtp.host;
-      if (updatePayload.smtp.port) updateOps.$set['smtp.port'] = updatePayload.smtp.port;
-      if (updatePayload.smtp.secure !== undefined) updateOps.$set['smtp.secure'] = updatePayload.smtp.secure;
-      if (updatePayload.smtp.user) updateOps.$set['smtp.user'] = updatePayload.smtp.user;
-      
-      // REFACTORED PASSWORD LOGIC:
-      // - If password is present and not masked (e.g., not "********"), ALWAYS persist it
-      // - If password is masked, keep existing DB password unchanged
-      // - Only skip if explicitly undefined
-      const isMaskedPassword = (pwd) => {
-        // Check if password is masked format (multiple asterisks, typically "********")
-        return typeof pwd === 'string' && pwd.length > 0 && /^\*+$/.test(pwd);
-      };
-      
-      const hasPasswordField = updatePayload.smtp.password !== undefined && updatePayload.smtp.password !== null;
-      const passwordValue = updatePayload.smtp.password;
-      
-      if (hasPasswordField) {
-        if (isMaskedPassword(passwordValue)) {
-          // Password is masked - keep existing DB password
-          console.log('[Settings PATCH] Password field is masked - will preserve existing DB password');
-          // Don't add to updateOps, which keeps the existing value
-        } else {
-          // Password is real value (not masked) - ALWAYS persist it, even if empty
-          updateOps.$set['smtp.password'] = passwordValue;
-          console.log('[Settings PATCH] Password field is NOT masked - persisting new value', {
-            isEmptyString: passwordValue === '',
-            length: typeof passwordValue === 'string' ? passwordValue.length : 0,
-            willPersist: true
-          });
-        }
-      } else {
-        // Password is explicitly undefined - don't save anything (keeps existing)
-        console.log('[Settings PATCH] Password field is undefined - will not modify password in DB');
-      }
-      
-      if (updatePayload.smtp.encryptedPassword) updateOps.$set['smtp.encryptedPassword'] = updatePayload.smtp.encryptedPassword;
-      
-      // Include provider-specific fields if present
-      if (updatePayload.smtp.gmailAddress) updateOps.$set['smtp.gmailAddress'] = updatePayload.smtp.gmailAddress;
-      if (updatePayload.smtp.gmailAppPassword) updateOps.$set['smtp.gmailAppPassword'] = updatePayload.smtp.gmailAppPassword;
-      if (updatePayload.smtp.sendgridApiKey) updateOps.$set['smtp.sendgridApiKey'] = updatePayload.smtp.sendgridApiKey;
-      if (updatePayload.smtp.awsAccessKeyId) updateOps.$set['smtp.awsAccessKeyId'] = updatePayload.smtp.awsAccessKeyId;
-      if (updatePayload.smtp.awsSecretAccessKey) updateOps.$set['smtp.awsSecretAccessKey'] = updatePayload.smtp.awsSecretAccessKey;
-      if (updatePayload.smtp.awsRegion) updateOps.$set['smtp.awsRegion'] = updatePayload.smtp.awsRegion;
-      
-      console.log('[Settings PATCH] SMTP config fields set in updateOps:', Object.keys(updateOps.$set).filter(k => k.startsWith('smtp.')));
-    }
-
-    // Handle SENDGRID-ONLY email configuration with $set operator
-    if (updatePayload.email) {
-      const emailCfg = updatePayload.email;
-      
-      console.log('[Settings PATCH - SendGrid] Building email update operations:', {
-        'email.enabled': emailCfg.enabled,
-        'email.provider': emailCfg.provider,
-        'email.fromEmail': emailCfg.fromEmail,
-        'email.fromName': emailCfg.fromName,
-        'email.sendgrid_keys': emailCfg.sendgrid ? Object.keys(emailCfg.sendgrid) : []
-      });
-      
-      // Set email top-level fields
-      updateOps.$set['email.enabled'] = emailCfg.enabled;
-      updateOps.$set['email.provider'] = emailCfg.provider || 'sendgrid';
-      
-      // Set fromEmail and fromName at both email and sendgrid levels for clarity
-      if (emailCfg.fromEmail) {
-        updateOps.$set['email.fromEmail'] = emailCfg.fromEmail;
-        console.log('[Settings PATCH - SendGrid] Set email.fromEmail:', emailCfg.fromEmail);
-      }
-      if (emailCfg.fromName) {
-        updateOps.$set['email.fromName'] = emailCfg.fromName;
-        console.log('[Settings PATCH - SendGrid] Set email.fromName:', emailCfg.fromName);
-      }
-      
-      // Set SendGrid configuration in nested sendgrid object
-      if (emailCfg.sendgrid) {
-        const sgCfg = emailCfg.sendgrid;
-        
-        // Helper to detect masked values
-        const isMaskedSendGrid = (val) => {
-          return typeof val === 'string' && val.length > 0 && /^\*+$/.test(val);
-        };
-        
-        // Handle API key - preserve existing if masked or empty
-        if (sgCfg.apiKey !== undefined) {
-          if (isMaskedSendGrid(sgCfg.apiKey)) {
-            console.log('[Settings PATCH - SendGrid] apiKey is masked - preserving existing value from DB');
-            // Don't add to updateOps, preserves existing value
-          } else if (sgCfg.apiKey && sgCfg.apiKey.length > 0) {
-            updateOps.$set['email.sendgrid.apiKey'] = sgCfg.apiKey;
+            // ALWAYS save, even if empty string (per requirements)
+            updateOps.$set['email.sendgrid.apiKey'] = sgData.apiKey;
             console.log('[Settings PATCH - SendGrid] Set email.sendgrid.apiKey:', {
-              length: sgCfg.apiKey.length,
-              preview: sgCfg.apiKey.substring(0, 8) + '...'
+              value: sgData.apiKey || '(empty string)',
+              length: sgData.apiKey ? sgData.apiKey.length : 0
             });
-          } else {
-            console.log('[Settings PATCH - SendGrid] apiKey is empty - preserving existing value from DB');
           }
         }
-        
-        // Handle fromEmail in sendgrid object
-        if (sgCfg.fromEmail) {
-          updateOps.$set['email.sendgrid.fromEmail'] = sgCfg.fromEmail;
-          console.log('[Settings PATCH - SendGrid] Set email.sendgrid.fromEmail:', sgCfg.fromEmail);
+
+        // Set fromEmail
+        if (sgData.fromEmail !== undefined) {
+          updateOps.$set['email.sendgrid.fromEmail'] = sgData.fromEmail;
+          console.log('[Settings PATCH - SendGrid] Set email.sendgrid.fromEmail:', sgData.fromEmail);
         }
-        
-        // Handle fromName in sendgrid object
-        if (sgCfg.fromName) {
-          updateOps.$set['email.sendgrid.fromName'] = sgCfg.fromName;
-          console.log('[Settings PATCH - SendGrid] Set email.sendgrid.fromName:', sgCfg.fromName);
+
+        // Set fromName
+        if (sgData.fromName !== undefined) {
+          updateOps.$set['email.sendgrid.fromName'] = sgData.fromName;
+          console.log('[Settings PATCH - SendGrid] Set email.sendgrid.fromName:', sgData.fromName);
         }
       }
-      
-      // Add timestamp for audit
+
+      // Set updatedAt timestamp
       updateOps.$set['email.updatedAt'] = new Date();
       console.log('[Settings PATCH - SendGrid] Set email.updatedAt:', updateOps.$set['email.updatedAt']);
-      
-      const emailFieldsInOps = Object.keys(updateOps.$set).filter(k => k.startsWith('email.'));
-      console.log('[Settings PATCH - SendGrid] Email config fields set in updateOps:', {
-        count: emailFieldsInOps.length,
-        fields: emailFieldsInOps,
-        summary: {
-          'email.enabled': updateOps.$set['email.enabled'],
-          'email.provider': updateOps.$set['email.provider'],
-          'email.sendgrid.apiKey_exists': !!updateOps.$set['email.sendgrid.apiKey']
-        }
+
+      // Log final email configuration
+      const emailFields = Object.keys(updateOps.$set).filter(k => k.startsWith('email.'));
+      console.log('[Settings PATCH - SendGrid] Final email configuration:', {
+        fields: emailFields,
+        'email.enabled': updateOps.$set['email.enabled'],
+        'email.provider': updateOps.$set['email.provider'],
+        'email.sendgrid.apiKey_set': !!updateOps.$set['email.sendgrid.apiKey'],
+        'email.sendgrid.fromEmail': updateOps.$set['email.sendgrid.fromEmail'],
+        'email.sendgrid.fromName': updateOps.$set['email.sendgrid.fromName'],
+        'email.updatedAt': updateOps.$set['email.updatedAt']
       });
-    }
-    
-    // SAFEGUARD: Ensure smtp.password is never accidentally deleted
-    // Only delete if explicitly marked for deletion (value === undefined in $unset)
-    // Do NOT delete when falsy (empty string, 0, false, etc.)
-    if (updateOps.$unset) {
-      if (updateOps.$unset['smtp.password'] !== undefined) {
-        console.warn('[Settings PATCH] SECURITY WARNING: Attempted to unset smtp.password - BLOCKING!');
-        delete updateOps.$unset['smtp.password'];
+
+      // Validate if enabled: require API key
+      if (emailData.enabled && !updateOps.$set['email.sendgrid.apiKey']) {
+        console.warn('[Settings PATCH - SendGrid] Cannot enable SendGrid without API key');
+        return res.status(400).json({
+          success: false,
+          message: 'SendGrid API key is required when enabling email',
+          error: 'email.sendgrid.apiKey is required'
+        });
       }
+
+      // Mark legacy fields for removal
+      updateOps.$unset['smtp'] = '';
+      updateOps.$unset['gmail'] = '';
+      console.log('[Settings PATCH] Marked legacy fields for removal: smtp, gmail');
     }
-    
-    // Verify smtp.password is NOT being set to null/undefined in $set
-    if (updateOps.$set['smtp.password'] === null || updateOps.$set['smtp.password'] === undefined) {
-      console.warn('[Settings PATCH] SECURITY WARNING: Attempted to set smtp.password to null/undefined - REMOVING from $set!');
-      delete updateOps.$set['smtp.password'];
-    }
-    
-    // Log the COMPLETE updateOps.$set before MongoDB operation to verify smtp fields are included
-    const smtpFieldsInOps = Object.keys(updateOps.$set).filter(k => k.startsWith('smtp.'));
-    console.log('[Settings PATCH] COMPLETE updateOps before MongoDB update:', {
-      totalFields: Object.keys(updateOps.$set).length,
-      smtpFieldCount: smtpFieldsInOps.length,
-      smtpFieldsPresent: smtpFieldsInOps,
-      'smtp.password_in_ops': !!updateOps.$set['smtp.password'],
-      'smtp.password_being_deleted': !!updateOps.$unset?.['smtp.password'],
-      sampleSmtpValues: {
-        'smtp.enabled': updateOps.$set['smtp.enabled'],
-        'smtp.provider': updateOps.$set['smtp.provider'],
-        'smtp.host': updateOps.$set['smtp.host']
-      }
-    });
-    
-    const updated = await SystemSetting.findOneAndUpdate({}, updateOps, { new: true, upsert: true, setDefaultsOnInsert: true });
-    
-    // Immediately query the database directly to verify what was actually saved
-    const dbCheck = await SystemSetting.findOne().lean();
-    console.log('[Settings PATCH] Direct DB query after update - checking SMTP field:', {
-      hasSmtp: !!dbCheck?.smtp,
-      smtpKeys: dbCheck?.smtp ? Object.keys(dbCheck.smtp) : [],
-      fullSmtp: dbCheck?.smtp ? JSON.stringify(dbCheck.smtp, null, 2) : 'null'
-    });
-    
-    console.log('[Settings PATCH] After save - Gmail in DB:', {
-      hasGmail: !!updated?.gmail,
-      gmailEnabled: updated?.gmail?.enabled,
-      gmailAddress: updated?.gmail?.gmailAddress,
-      hasAppPassword: !!updated?.gmail?.appPassword,
-      appPasswordLength: updated?.gmail?.appPassword ? updated.gmail.appPassword.length : 0,
-      hasPassword: !!updated?.gmail?.password,
-      passwordLength: updated?.gmail?.password ? updated.gmail.password.length : 0,
-      gmailFields: updated?.gmail ? Object.keys(updated.gmail) : [],
-      allGmailData: updated?.gmail ? JSON.stringify(updated.gmail, null, 2) : 'null'
+
+    // Get before state for audit
+    const before = await SystemSetting.findOne().lean();
+
+    // Execute MongoDB update with $set and $unset
+    console.log('[Settings PATCH] Executing MongoDB update with:', {
+      '$set fields': Object.keys(updateOps.$set),
+      '$unset fields': Object.keys(updateOps.$unset),
+      totalSetFields: Object.keys(updateOps.$set).length,
+      totalUnsetFields: Object.keys(updateOps.$unset).length
     });
 
-    console.log('[Settings PATCH] After save - Email in DB:', {
-      hasEmail: !!updated?.email,
-      emailProvider: updated?.email?.provider,
-      emailEnabled: updated?.email?.enabled,
-      emailFromName: updated?.email?.fromName,
-      emailFromEmail: updated?.email?.fromEmail,
-      emailFields: updated?.email ? Object.keys(updated.email) : [],
-      allEmailData: updated?.email ? JSON.stringify(updated.email, null, 2) : 'null'
+    const updated = await SystemSetting.findOneAndUpdate({}, updateOps, { 
+      new: true, 
+      upsert: true, 
+      setDefaultsOnInsert: true 
     });
 
-    // CONFIRM SENDGRID CONFIGURATION SAVED
+    // Log saved values for confirmation
     if (updated?.email) {
-      console.log('[Settings PATCH - SendGrid] CONFIRMATION: Final saved SendGrid config in DB:', {
-        enabled: updated.email.enabled,
-        provider: updated.email.provider,
-        fromEmail: updated.email.fromEmail,
-        fromName: updated.email.fromName,
-        sendgridConfigExists: !!updated.email.sendgrid,
-        hasSendgridApiKey: !!updated.email.sendgrid?.apiKey,
-        apiKeyLength: updated.email.sendgrid?.apiKey ? updated.email.sendgrid.apiKey.length : 0,
-        sendgridFromEmail: updated.email.sendgrid?.fromEmail,
-        sendgridFromName: updated.email.sendgrid?.fromName,
-        updatedAt: updated.email.updatedAt,
-        allEmailData: JSON.stringify(updated.email, null, 2)
+      console.log('[Settings PATCH - SendGrid] CONFIRMATION: Final saved configuration in DB:', {
+        'email.enabled': updated.email.enabled,
+        'email.provider': updated.email.provider,
+        'email.sendgrid.apiKey_saved': !!updated.email.sendgrid?.apiKey,
+        'email.sendgrid.apiKey_length': updated.email.sendgrid?.apiKey ? updated.email.sendgrid.apiKey.length : 0,
+        'email.sendgrid.fromEmail': updated.email.sendgrid?.fromEmail,
+        'email.sendgrid.fromName': updated.email.sendgrid?.fromName,
+        'email.updatedAt': updated.email.updatedAt
       });
     }
 
-    // CONFIRM FINAL SAVED SMTP PASSWORD
-    console.log('[Settings PATCH] CONFIRMATION: Final saved SMTP password in DB:', {
-      hasSmtpPassword: !!updated?.smtp?.password,
-      smtpPasswordLength: updated?.smtp?.password ? updated.smtp.password.length : 0,
-      hasSmtpEncryptedPassword: !!updated?.smtp?.encryptedPassword,
-      smtpEncryptedPasswordLength: updated?.smtp?.encryptedPassword ? updated.smtp.encryptedPassword.length : 0,
-      passwordWasPersisted: !!(updated?.smtp?.password || updated?.smtp?.encryptedPassword),
-      smtpConfigured: !!updated?.smtp
-    });
-
-    // CONFIRM PROVIDER-SPECIFIC CONFIGURATION
-    if (updated?.smtp?.activeProvider) {
-      const activeProvider = updated.smtp.activeProvider;
-      const providerConfig = updated.smtp[activeProvider];
-      
-      console.log('[Settings PATCH] PROVIDER CONFIGURATION CONFIRMED:', {
-        activeProvider: activeProvider,
-        providerConfigExists: !!providerConfig,
-        mailtrapConfigExists: !!updated.smtp.mailtrap,
-        sendgridConfigExists: !!updated.smtp.sendgrid,
-        gmailConfigExists: !!updated.smtp.gmail,
+    // Verify legacy fields were removed
+    if (!updated?.smtp && !updated?.gmail) {
+      console.log('[Settings PATCH] CONFIRMATION: Legacy fields successfully removed from DB (smtp, gmail)');
+    } else {
+      console.warn('[Settings PATCH] WARNING: Legacy fields still present in DB:', {
+        hasSMTP: !!updated?.smtp,
+        hasGmail: !!updated?.gmail
       });
-
-      if (activeProvider === 'mailtrap' && providerConfig) {
-        console.log('[Settings PATCH] MAILTRAP configuration saved:', {
-          host: providerConfig.host,
-          port: providerConfig.port,
-          user: providerConfig.user,
-          hasPassword: !!providerConfig.password,
-          passwordLength: providerConfig.password ? providerConfig.password.length : 0,
-          fromEmail: providerConfig.fromEmail,
-          updatedAt: providerConfig.updatedAt
-        });
-      } else if (activeProvider === 'sendgrid' && providerConfig) {
-        console.log('[Settings PATCH] SENDGRID configuration saved:', {
-          hasApiKey: !!providerConfig.apiKey,
-          apiKeyLength: providerConfig.apiKey ? providerConfig.apiKey.length : 0,
-          fromEmail: providerConfig.fromEmail,
-          updatedAt: providerConfig.updatedAt
-        });
-      } else if (activeProvider === 'gmail' && providerConfig) {
-        console.log('[Settings PATCH] GMAIL configuration saved:', {
-          host: providerConfig.host,
-          port: providerConfig.port,
-          user: providerConfig.user,
-          hasPassword: !!providerConfig.password,
-          passwordLength: providerConfig.password ? providerConfig.password.length : 0,
-          fromEmail: providerConfig.fromEmail,
-          updatedAt: providerConfig.updatedAt
-        });
-      }
     }
 
+    // Record audit trail
     const diff = { before, after: updated.toObject ? updated.toObject() : updated };
     await recordAudit(req.user?._id, 'patch_settings', diff, req.ip || req.headers['x-forwarded-for']);
     
-    // Sync public information to PublicView collection for fast unauthenticated access
+    // Sync public information
     await syncToPublicView(updated);
     
-    // If enableVerifications was turned OFF by this patch, perform cleanup of pending verification requests
+    // Cleanup verification requests if needed
     try {
       const beforeEnabled = before && typeof before.enableVerifications !== 'undefined' ? !!before.enableVerifications : true;
       const afterEnabled = updated && typeof updated.enableVerifications !== 'undefined' ? !!updated.enableVerifications : true;
@@ -1081,6 +548,7 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
     } catch (e) {
       console.warn('Error evaluating enableVerifications change for patch cleanup', e && e.message);
     }
+
     return res.json(sanitizeForClient(updated));
   } catch (err) {
     console.error('PATCH /api/settings error:', {
