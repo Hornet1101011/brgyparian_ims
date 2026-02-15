@@ -1827,8 +1827,12 @@ router.post('/email/test', requireAuth, isAdmin, async (req, res) => {
     const getConfigFromPayload = (emailConfig) => {
       if (!emailConfig) return null;
       const sgData = emailConfig.sendgrid || emailConfig;
-        // Check if we have a valid API key that is not masked
-        if (sgData.apiKey && typeof sgData.apiKey === 'string' && sgData.apiKey.trim() && !/^\*+$/.test(sgData.apiKey)) {
+      // Check if we have a valid API key that is not masked
+      if (sgData.apiKey && typeof sgData.apiKey === 'string' && sgData.apiKey.trim() && !/^\*+$/.test(sgData.apiKey)) {
+        return {
+          apiKey: sgData.apiKey,
+          fromEmail: sgData.fromEmail || '',
+          fromName: sgData.fromName || 'Barangay System'
         };
       }
       return null;
