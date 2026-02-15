@@ -492,16 +492,16 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
       setDefaultsOnInsert: true 
     });
 
-    // Log saved values for confirmation
-    if (updated?.email) {
-      console.log('[Settings PATCH - SendGrid] CONFIRMATION: Final saved configuration in DB:', {
-        'email.enabled': updated.email.enabled,
-        'email.provider': updated.email.provider,
-        'email.sendgrid.apiKey_saved': !!updated.email.sendgrid?.apiKey,
-        'email.sendgrid.apiKey_length': updated.email.sendgrid?.apiKey ? updated.email.sendgrid.apiKey.length : 0,
-        'email.sendgrid.fromEmail': updated.email.sendgrid?.fromEmail,
-        'email.sendgrid.fromName': updated.email.sendgrid?.fromName,
-        'email.updatedAt': updated.email.updatedAt
+    // Verify SendGrid config was saved (check dedicated document)
+    if (payload.email && payload.email.provider === 'sendgrid') {
+      const savedSGConfig = await SystemSetting.getSendGridConfig();
+      console.log('[Settings PATCH - SendGrid] CONFIRMATION: SendGrid config saved to dedicated document:', {
+        hasConfig: !!savedSGConfig,
+        enabled: savedSGConfig?.sendgridConfig?.enabled,
+        hasApiKey: !!savedSGConfig?.sendgridConfig?.apiKey,
+        fromEmail: savedSGConfig?.sendgridConfig?.fromEmail,
+        fromName: savedSGConfig?.sendgridConfig?.fromName,
+        updatedAt: savedSGConfig?.sendgridConfig?.updatedAt
       });
     }
 
@@ -1827,11 +1827,8 @@ router.post('/email/test', requireAuth, isAdmin, async (req, res) => {
     const getConfigFromPayload = (emailConfig) => {
       if (!emailConfig) return null;
       const sgData = emailConfig.sendgrid || emailConfig;
-      if (sgData.apiKey && sgData.apiKey.trim()) {
-        return {
-          apiKey: sgData.apiKey,
-          fromEmail: sgData.fromEmail || '',
-          fromName: sgData.fromName || 'Barangay System'
+        // Check if we have a valid API key that is not masked
+        if (sgData.apiKey && typeof sgData.apiKey === 'string' && sgData.apiKey.trim() && !/^\*+$/.test(sgData.apiKey)) {
         };
       }
       return null;
@@ -1852,7 +1849,7 @@ router.post('/email/test', requireAuth, isAdmin, async (req, res) => {
         return res.status(400).json({
           success: false,
           message: 'SendGrid configuration not found',
-          error: 'SendGrid configuration must be saved in settings before testing'
+          error: 'Please save your SendGrid API key in settings before testing. If config is saved, ensure enabled is true.'
         });
       }
 
@@ -1860,22 +1857,30 @@ router.post('/email/test', requireAuth, isAdmin, async (req, res) => {
     }
 
     // Validation: SendGrid API key is required
-    if (!config.apiKey || !config.apiKey.trim()) {
-      console.error('[Settings] POST /email/test - Missing SendGrid API key');
+    if (!config.apiKey || typeof config.apiKey !== 'string' || !config.apiKey.trim()) {
+      console.error('[Settings] POST /email/test - Missing or invalid SendGrid API key', {
+        hasApiKey: !!config.apiKey,
+        apiKeyType: typeof config.apiKey,
+        apiKeyLength: config.apiKey ? config.apiKey.length : 0
+      });
       return res.status(400).json({
         success: false,
         message: 'SendGrid API key is required',
-        error: 'SendGrid API key is missing or empty'
+        error: 'API key must be a non-empty string. Please set it in settings.'
       });
     }
 
     // Validation: FromEmail is required
-    if (!config.fromEmail || !config.fromEmail.trim()) {
-      console.error('[Settings] POST /email/test - Missing SendGrid fromEmail');
+    if (!config.fromEmail || typeof config.fromEmail !== 'string' || !config.fromEmail.trim()) {
+      console.error('[Settings] POST /email/test - Missing or invalid SendGrid fromEmail', {
+        hasFromEmail: !!config.fromEmail,
+        fromEmailType: typeof config.fromEmail,
+        fromEmailLength: config.fromEmail ? config.fromEmail.length : 0
+      });
       return res.status(400).json({
         success: false,
-        message: 'SendGrid fromEmail is required',
-        error: 'SendGrid fromEmail is missing or empty'
+        message: 'SendGrid from email is required',
+        error: 'From email must be a valid email address. Please set it in settings.'
       });
     }
 
