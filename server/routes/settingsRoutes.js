@@ -515,6 +515,22 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
       });
     }
 
+    // Rebuild email field from dedicated document for response (just like GET does)
+    const sendgridConfigDoc = await SystemSetting.getSendGridConfig();
+    if (sendgridConfigDoc?.sendgridConfig) {
+      updated.email = {
+        enabled: sendgridConfigDoc.sendgridConfig.enabled,
+        provider: 'sendgrid',
+        sendgrid: {
+          apiKey: sendgridConfigDoc.sendgridConfig.apiKey,
+          fromEmail: sendgridConfigDoc.sendgridConfig.fromEmail,
+          fromName: sendgridConfigDoc.sendgridConfig.fromName
+        },
+        updatedAt: sendgridConfigDoc.sendgridConfig.updatedAt
+      };
+      console.log('[Settings PATCH] Rebuilt email field from dedicated document for response');
+    }
+
     // Record audit trail
     const diff = { before, after: updated.toObject ? updated.toObject() : updated };
     await recordAudit(req.user?._id, 'patch_settings', diff, req.ip || req.headers['x-forwarded-for']);
