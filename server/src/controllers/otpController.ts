@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { User } from '../models/User';
+import { Resident } from '../models/Resident';
 import { PasswordResetToken } from '../models/PasswordResetToken';
 import { sendMail } from '../services/EmailService';
 // runtime require for JS model (avoid TS module resolution errors)
@@ -17,11 +18,29 @@ export async function forgotPassword(req: Request, res: Response) {
   try {
     const { email, mode } = req.body; // mode: 'link' (default) or 'otp'
     if (!email) return res.status(400).json({ message: 'Email is required' });
+    const normalizedEmail = String(email || '').trim();
 
-    const user = await User.findOne({ email: email.toLowerCase() });
+    // Helper: escape regex special chars for exact case-insensitive match
+    const escapeRegExp = (s: string) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    // Require that the email belongs to a registered resident (case-insensitive)
+    const resident = await Resident.findOne({ email: new RegExp(`^${escapeRegExp(normalizedEmail)}$`, 'i') }).lean();
+    if (!resident) {
+      console.log('forgotPassword: email is not a registered resident:', email);
+      return res.status(404).json({ message: 'The provided email is not a registered resident.' });
+    }
+
+    // Find the associated user account. Prefer resident.userId if present.
+    let user: any = null;
+    if (resident.userId) {
+      user = await User.findById(resident.userId);
+    } else {
+      user = await User.findOne({ email: new RegExp(`^${escapeRegExp(normalizedEmail)}$`, 'i') });
+    }
+
     if (!user) {
-      console.log('forgotPassword: email not found, returning generic response for', email);
-      return res.status(200).json({ message: 'If that email is registered, a reset link has been sent.' }); // avoid enumeration
+      console.log('forgotPassword: resident found but no linked user account:', resident._id);
+      return res.status(404).json({ message: 'No user account is linked to this resident. Please register or contact support.' });
     }
 
   // Support two modes: 'link' (default) or 'otp' (numeric 6-digit code)
@@ -35,7 +54,7 @@ export async function forgotPassword(req: Request, res: Response) {
     token = String(otpNum).padStart(6, '0');
     tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes for OTP
-    await PasswordResetToken.create({ userId: user._id, tokenHash, expiresAt });
+    await PasswordResetToken.create({ userId: (user as any)._id, tokenHash, expiresAt });
 
     const html = `
       <p>Dear ${(user as any).firstName || user.email},</p>
@@ -57,7 +76,7 @@ export async function forgotPassword(req: Request, res: Response) {
     (async () => {
       try {
         console.log('[forgotPassword] Sending OTP via SendGrid (no SMTP fallback)');
-        await sendGridService.sendEmail({ to: user.email, subject: 'Your Password Reset Code', html });
+          await sendGridService.sendEmail({ to: (user as any).email, subject: 'Your Password Reset Code', html });
       } catch (sgErr: any) {
         console.error('[forgotPassword] SendGrid failed to send OTP (no fallback):', sgErr?.message ?? sgErr);
       }
@@ -67,7 +86,7 @@ export async function forgotPassword(req: Request, res: Response) {
     token = crypto.randomBytes(32).toString('hex');
     tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
-    await PasswordResetToken.create({ userId: user._id, tokenHash, expiresAt });
+    await PasswordResetToken.create({ userId: (user as any)._id, tokenHash, expiresAt });
 
     // include the raw token in the reset link (raw token is emailed once)
     const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password/${token}`;
@@ -94,7 +113,7 @@ export async function forgotPassword(req: Request, res: Response) {
     (async () => {
       try {
         console.log('[forgotPassword] Sending password reset link via SendGrid (no SMTP fallback)');
-        await sendGridService.sendEmail({ to: user.email, subject: 'Password Reset Request', html });
+        await sendGridService.sendEmail({ to: (user as any).email, subject: 'Password Reset Request', html });
       } catch (sgErr: any) {
         console.error('[forgotPassword] SendGrid failed to send reset link (no fallback):', sgErr?.message ?? sgErr);
       }
