@@ -571,13 +571,15 @@ const SystemSettings: FC = () => {
       };
 
       // Add unified SendGrid email configuration under 'email' field
+      // Use the ref-updated value first to avoid race with setState
+      const latestSG = originalSendgridConfigRef.current || sendgridConfig;
       payload.email = {
-        enabled: sendgridConfig.enabled,
+        enabled: latestSG.enabled,
         provider: 'sendgrid',
         sendgrid: {
-          apiKey: sendgridConfig.apiKey,
-          fromEmail: sendgridConfig.fromEmail,
-          fromName: sendgridConfig.fromName,
+          apiKey: latestSG.apiKey,
+          fromEmail: latestSG.fromEmail,
+          fromName: latestSG.fromName,
         }
       };
 
@@ -711,8 +713,11 @@ const SystemSettings: FC = () => {
       fromEmail: config.fromEmail,
       hasApiKey: !!config.apiKey,
     });
-    
+
+    // Update both state and a ref immediately to avoid race when performSave
+    // is invoked right after this callback (setState is async).
     setSendgridConfig(config);
+    originalSendgridConfigRef.current = JSON.parse(JSON.stringify(config));
     setDirtySendGrid(true);
   }, []);
 
