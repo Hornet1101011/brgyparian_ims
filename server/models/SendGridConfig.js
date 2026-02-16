@@ -96,7 +96,16 @@ module.exports.saveConfig = async function(configData) {
   try {
     // Delete existing configs first to ensure only one
     await model.deleteMany({});
-    
+
+    // Debug: log incoming payload
+    console.log('[SendGridConfig] saveConfig called with:', {
+      enabled: configData.enabled,
+      hasApiKey: !!configData.apiKey,
+      apiKeyLength: configData.apiKey ? configData.apiKey.length : 0,
+      fromEmail: configData.fromEmail,
+      fromName: configData.fromName
+    });
+
     // Create new config
     const saved = await model.create({
       enabled: configData.enabled !== undefined ? configData.enabled : false,
@@ -107,11 +116,15 @@ module.exports.saveConfig = async function(configData) {
       updatedAt: new Date()
     });
 
-    console.log('[SendGridConfig] Config saved successfully:', {
+    console.log('[SendGridConfig] Config saved successfully (db):', {
+      _id: saved._id,
       enabled: saved.enabled,
       hasApiKey: !!saved.apiKey,
+      apiKeyLength: saved.apiKey ? saved.apiKey.length : 0,
       fromEmail: saved.fromEmail,
-      fromName: saved.fromName
+      fromName: saved.fromName,
+      createdAt: saved.createdAt,
+      updatedAt: saved.updatedAt
     });
 
     return saved;
