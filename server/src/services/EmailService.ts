@@ -295,7 +295,7 @@ export async function sendMail(to: string, subject: string, html: string, bcc?: 
             // Log email as sent
             await logEmailToDb(to, subject, true, undefined, undefined, emailType || 'generic', bcc ? bcc.length : 0);
             return { success: true, message: 'Email sent via SendGrid' };
-          } catch (innerSgErr) {
+          } catch (innerSgErr: any) {
             console.error('[EmailService] SendGrid sendEmail threw:', innerSgErr && (innerSgErr.message || innerSgErr));
             // Let the outer catch/fallback handle continuing to SMTP
             throw innerSgErr;
@@ -304,7 +304,7 @@ export async function sendMail(to: string, subject: string, html: string, bcc?: 
       } else {
         console.log('[EmailService] sendGridService not available in this runtime');
       }
-    } catch (sgErr) {
+    } catch (sgErr: any) {
       console.warn('[EmailService] SendGrid send attempt failed, falling back to SMTP/Gmail transporter', sgErr instanceof Error ? sgErr.message : sgErr);
       // continue to fallback transporter below
     }
