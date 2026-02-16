@@ -5,6 +5,9 @@ import { sendMail } from '../services/EmailService';
 // runtime require for JS model (avoid TS module resolution errors)
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const SendGridConfig: any = require('../../models/SendGridConfig');
+// runtime require for SendGrid JS service
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const sendGridService: any = require('../../services/emailService');
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { handleSaveError } from '../utils/handleSaveError';
@@ -50,10 +53,15 @@ export async function forgotPassword(req: Request, res: Response) {
       console.warn('[forgotPassword] Unable to read SendGrid config for logging', e?.message ?? e);
     }
 
-    // send email in background (don't await - fire and forget)
-    sendMail(user.email, 'Your Password Reset Code', html, undefined, 'otp').catch((emailErr: any) => {
-      console.error('[forgotPassword] Failed to send reset OTP email:', emailErr?.message ?? emailErr);
-    });
+    // Send via SendGrid only (do not fallback to SMTP)
+    (async () => {
+      try {
+        console.log('[forgotPassword] Sending OTP via SendGrid (no SMTP fallback)');
+        await sendGridService.sendEmail({ to: user.email, subject: 'Your Password Reset Code', html });
+      } catch (sgErr: any) {
+        console.error('[forgotPassword] SendGrid failed to send OTP (no fallback):', sgErr?.message ?? sgErr);
+      }
+    })();
   } else {
     // default: link-token flow (existing behavior)
     token = crypto.randomBytes(32).toString('hex');
@@ -82,10 +90,15 @@ export async function forgotPassword(req: Request, res: Response) {
       console.warn('[forgotPassword] Unable to read SendGrid config for logging', e?.message ?? e);
     }
 
-    // send email in background (don't await - fire and forget)
-    sendMail(user.email, 'Password Reset Request', html, undefined, 'password-reset').catch((emailErr: any) => {
-      console.error('[forgotPassword] Failed to send reset email:', emailErr?.message ?? emailErr);
-    });
+    // Send via SendGrid only (do not fallback to SMTP)
+    (async () => {
+      try {
+        console.log('[forgotPassword] Sending password reset link via SendGrid (no SMTP fallback)');
+        await sendGridService.sendEmail({ to: user.email, subject: 'Password Reset Request', html });
+      } catch (sgErr: any) {
+        console.error('[forgotPassword] SendGrid failed to send reset link (no fallback):', sgErr?.message ?? sgErr);
+      }
+    })();
   }
 
   console.log('forgotPassword: reset token created for userId=', String((user as any)._id));
@@ -224,13 +237,18 @@ export async function verifyOtpAndEmailNewPassword(req: Request, res: Response) 
     // delete token so it cannot be reused
     await PasswordResetToken.deleteOne({ _id: tokenDoc._id });
 
-    // Email the new password to the user (in background - don't await)
+    // Email the new password to the user via SendGrid only (background - don't await)
     const html = `<p>Your password has been reset as requested. A new temporary password has been generated for your account. Please log in and change it immediately.</p>
       <p><strong>Temporary password:</strong> <code style="letter-spacing:2px">${newPassword}</code></p>
       <p>If you didn't request this, contact support immediately.</p>`;
-    sendMail(user.email, 'Your new temporary password', html).catch((emailErr) => {
-      console.error('Failed to send new-password email', emailErr);
-    });
+    (async () => {
+      try {
+        console.log('[verifyOtp] Sending new-password email via SendGrid (no SMTP fallback)');
+        await sendGridService.sendEmail({ to: user.email, subject: 'Your new temporary password', html });
+      } catch (sgErr: any) {
+        console.error('[verifyOtp] SendGrid failed to send new-password email (no fallback):', sgErr?.message ?? sgErr);
+      }
+    })();
 
     console.log('verifyOtp: new password generated and emailed for userId=', String((user as any)._id));
     return res.json({ message: 'If the code was valid, a temporary password has been emailed to the account.' });
