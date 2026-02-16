@@ -114,7 +114,6 @@ module.exports.setSendGridConfig = async function(configData) {
     { docType: 'sendgrid_config' },
     {
       $set: {
-        docType: 'sendgrid_config',
         sendgridConfig: {
           enabled: configData.enabled !== undefined ? configData.enabled : false,
           provider: 'sendgrid',
@@ -123,11 +122,14 @@ module.exports.setSendGridConfig = async function(configData) {
           fromName: configData.fromName || 'Barangay System',
           updatedAt: new Date()
         }
+      },
+      $setOnInsert: {
+        docType: 'sendgrid_config'
       }
     },
     {
       new: true,
-      upsert: true, // Create if doesn't exist
+      upsert: true,
       setDefaultsOnInsert: true
     }
   );
