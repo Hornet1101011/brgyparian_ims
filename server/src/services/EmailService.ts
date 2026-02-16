@@ -3,6 +3,16 @@ import { Transporter } from 'nodemailer';
 import { EmailLog } from '../models/EmailLog';
 import SystemSetting from '../models/SystemSetting';
 import { createGmailTransporter, decryptGmailPassword, sanitizeGmailConfig } from '../utils/gmailHelper';
+// Attempt to integrate SendGrid when configured
+let sendGridService: any = null;
+try {
+  // require the CommonJS sendgrid service (compiled JS)
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  sendGridService = require('../services/emailService');
+} catch (e) {
+  // ignore if not available
+  sendGridService = null;
+}
 
 /**
  * Gmail SMTP Transporter
@@ -261,8 +271,29 @@ export async function sendMail(to: string, subject: string, html: string, bcc?: 
       return { messageId: 'skipped', response: 'Email sending disabled for this type' };
     }
     
-    const transporter = await getConfiguredTransporter();
     const settings = await SystemSetting.findOne().lean();
+
+    // If SendGrid service is available and sendgrid is configured and enabled, prefer SendGrid
+    try {
+      if (sendGridService) {
+        const SendGridConfig = require('../models/SendGridConfig');
+        const sgCfg = await SendGridConfig.getConfig();
+        if (sgCfg && sgCfg.enabled) {
+          console.log('[EmailService] Using SendGrid for sending email (password-reset integration)');
+          // Call the SendGrid service's sendEmail function which expects an options object
+          await sendGridService.sendEmail({ to, subject, html, settings: { email: { sendgrid: sgCfg } } });
+
+          // Log email as sent
+          await logEmailToDb(to, subject, true, undefined, undefined, emailType || 'generic', bcc ? bcc.length : 0);
+          return { success: true, message: 'Email sent via SendGrid' };
+        }
+      }
+    } catch (sgErr) {
+      console.warn('[EmailService] SendGrid send attempt failed, falling back to SMTP/Gmail transporter', sgErr instanceof Error ? sgErr.message : sgErr);
+      // continue to fallback transporter below
+    }
+
+    const transporter = await getConfiguredTransporter();
     
     // Determine sender based on whether Gmail or SMTP is active
     let fromEmail: string | undefined;
