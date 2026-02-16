@@ -239,11 +239,23 @@ async function testSendGridConnection(config, testEmail) {
       testEmail: testEmail
     });
 
-    // Format SendGrid API error
-    const errorMessage = err.message || 'Unknown SendGrid error';
-    const errorCode = err.code || 'SENDGRID_ERROR';
+    // Provide more helpful error messages for common issues
+    let userMessage = err.message || 'Unknown SendGrid error';
+    
+    if (err.code === 403 || err.message?.includes('403')) {
+      userMessage = 'SendGrid rejected the request (403 Forbidden). This usually means: ' +
+        '1) The sender email "' + config.fromEmail + '" is not verified in your SendGrid account, ' +
+        '2) The API key does not have permission to send from this address, ' +
+        'or 3) Your SendGrid domain is not verified. ' +
+        'Please verify your sender email in SendGrid dashboard and ensure the API key is correct.';
+    } else if (err.code === 401 || err.message?.includes('401')) {
+      userMessage = 'SendGrid API key is invalid or unauthorized (401). Please check your API key in SendGrid dashboard.';
+    } else if (err.code === 400 || err.message?.includes('400')) {
+      userMessage = 'SendGrid request is invalid (400). Please check your configuration.';
+    }
 
-    throw new Error(`SendGrid test failed: ${errorMessage} (${errorCode})`);
+    const errorCode = err.code || 'SENDGRID_ERROR';
+    throw new Error(`SendGrid test failed: ${userMessage} (${errorCode})`);
   }
 }
 
