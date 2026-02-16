@@ -46,8 +46,8 @@ export async function forgotPassword(req: Request, res: Response) {
     try {
       const sgCfg = await SendGridConfig.getConfig();
       console.log('[forgotPassword] SendGrid config present:', { enabled: !!sgCfg?.enabled, fromEmail: sgCfg?.fromEmail });
-    } catch (e) {
-      console.warn('[forgotPassword] Unable to read SendGrid config for logging', e && e.message);
+    } catch (e: any) {
+      console.warn('[forgotPassword] Unable to read SendGrid config for logging', e?.message ?? e);
     }
 
     // send email in background (don't await - fire and forget)
@@ -78,8 +78,8 @@ export async function forgotPassword(req: Request, res: Response) {
     try {
       const sgCfg = await SendGridConfig.getConfig();
       console.log('[forgotPassword] SendGrid config present:', { enabled: !!sgCfg?.enabled, fromEmail: sgCfg?.fromEmail });
-    } catch (e) {
-      console.warn('[forgotPassword] Unable to read SendGrid config for logging', e && e.message);
+    } catch (e: any) {
+      console.warn('[forgotPassword] Unable to read SendGrid config for logging', e?.message ?? e);
     }
 
     // send email in background (don't await - fire and forget)
