@@ -8,6 +8,7 @@ const gmailHelper = require('../utils/gmailHelper');
 const emailProviderHelper = require('../utils/emailProviderHelper');
 const settingsLockHelper = require('../utils/settingsLockHelper');
 const SystemSetting = require('../models/SystemSetting');
+const SendGridConfig = require('../models/SendGridConfig');
 const PublicView = require('../models/PublicView');
 const AuditLog = require('../models/AuditLog');
 const { createRateLimiter } = require('../middleware/rateLimiter');
@@ -141,27 +142,27 @@ function sanitizeForClient(setting) {
 // GET /api/settings - Protected endpoint, requires authentication
 router.get('/', requireAuth, isAdmin, async (req, res) => {
   try {
-    let settings = await SystemSetting.findOne({ docType: { $ne: 'sendgrid_config' } }).lean();
+    let settings = await SystemSetting.findOne().lean();
     if (!settings) {
       // return default shape
       settings = new SystemSetting();
     }
 
-    // Load SendGrid config from dedicated document
-    const sendgridConfigDoc = await SystemSetting.getSendGridConfig();
-    if (sendgridConfigDoc?.sendgridConfig) {
-      // Map dedicated document structure to email field for frontend compatibility
+    // Load SendGrid config from dedicated sendgrid collection
+    const sendgridConfig = await SendGridConfig.getConfig();
+    if (sendgridConfig) {
+      // Map SendGrid config to email field for frontend compatibility
       settings.email = {
-        enabled: sendgridConfigDoc.sendgridConfig.enabled,
+        enabled: sendgridConfig.enabled,
         provider: 'sendgrid',
         sendgrid: {
-          apiKey: sendgridConfigDoc.sendgridConfig.apiKey,
-          fromEmail: sendgridConfigDoc.sendgridConfig.fromEmail,
-          fromName: sendgridConfigDoc.sendgridConfig.fromName
+          apiKey: sendgridConfig.apiKey,
+          fromEmail: sendgridConfig.fromEmail,
+          fromName: sendgridConfig.fromName
         },
-        updatedAt: sendgridConfigDoc.sendgridConfig.updatedAt
+        updatedAt: sendgridConfig.updatedAt
       };
-      console.log('[Settings GET] Loaded SendGrid config from dedicated document');
+      console.log('[Settings GET] Loaded SendGrid config from sendgrid collection');
     }
 
     return res.json(sanitizeForClient(settings));
@@ -431,22 +432,20 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
         });
       }
 
-      // Save to dedicated SendGrid config document
+      // Save to dedicated sendgrid collection
       try {
-        const savedConfig = await SystemSetting.setSendGridConfig({
+        const savedConfig = await SendGridConfig.saveConfig({
           enabled: !!emailData.enabled,
           apiKey: apiKey || '',
           fromEmail: sendgridData.fromEmail || '',
           fromName: sendgridData.fromName || 'Barangay System'
         });
 
-        console.log('[Settings PATCH - SendGrid] Saved to dedicated document:', {
-          documentId: savedConfig._id,
-          docType: savedConfig.docType,
-          enabled: savedConfig.sendgridConfig.enabled,
-          hasApiKey: !!savedConfig.sendgridConfig.apiKey,
-          fromEmail: savedConfig.sendgridConfig.fromEmail,
-          updatedAt: savedConfig.sendgridConfig.updatedAt
+        console.log('[Settings PATCH - SendGrid] Saved to sendgrid collection:', {
+          enabled: savedConfig.enabled,
+          hasApiKey: !!savedConfig.apiKey,
+          fromEmail: savedConfig.fromEmail,
+          updatedAt: savedConfig.updatedAt
         });
       } catch (sgError) {
         console.error('[Settings PATCH - SendGrid] Failed to save SendGrid config:', sgError);
@@ -494,14 +493,13 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
 
     // Verify SendGrid config was saved (check dedicated document)
     if (payload.email && payload.email.provider === 'sendgrid') {
-      const savedSGConfig = await SystemSetting.getSendGridConfig();
-      console.log('[Settings PATCH - SendGrid] CONFIRMATION: SendGrid config saved to dedicated document:', {
-        hasConfig: !!savedSGConfig,
-        enabled: savedSGConfig?.sendgridConfig?.enabled,
-        hasApiKey: !!savedSGConfig?.sendgridConfig?.apiKey,
-        fromEmail: savedSGConfig?.sendgridConfig?.fromEmail,
-        fromName: savedSGConfig?.sendgridConfig?.fromName,
-        updatedAt: savedSGConfig?.sendgridConfig?.updatedAt
+      const savedSGConfig = await SendGridConfig.getConfig();
+      console.log('[Settings PATCH - SendGrid] CONFIRMATION: SendGrid config saved to sendgrid collection:', {
+        enabled: savedSGConfig?.enabled,
+        hasApiKey: !!savedSGConfig?.apiKey,
+        fromEmail: savedSGConfig?.fromEmail,
+        fromName: savedSGConfig?.fromName,
+        updatedAt: savedSGConfig?.updatedAt
       });
     }
 
@@ -515,20 +513,20 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
       });
     }
 
-    // Rebuild email field from dedicated document for response (just like GET does)
-    const sendgridConfigDoc = await SystemSetting.getSendGridConfig();
-    if (sendgridConfigDoc?.sendgridConfig) {
+    // Rebuild email field from sendgrid collection for response (just like GET does)
+    const sendgridConfig = await SendGridConfig.getConfig();
+    if (sendgridConfig) {
       updated.email = {
-        enabled: sendgridConfigDoc.sendgridConfig.enabled,
+        enabled: sendgridConfig.enabled,
         provider: 'sendgrid',
         sendgrid: {
-          apiKey: sendgridConfigDoc.sendgridConfig.apiKey,
-          fromEmail: sendgridConfigDoc.sendgridConfig.fromEmail,
-          fromName: sendgridConfigDoc.sendgridConfig.fromName
+          apiKey: sendgridConfig.apiKey,
+          fromEmail: sendgridConfig.fromEmail,
+          fromName: sendgridConfig.fromName
         },
-        updatedAt: sendgridConfigDoc.sendgridConfig.updatedAt
+        updatedAt: sendgridConfig.updatedAt
       };
-      console.log('[Settings PATCH] Rebuilt email field from dedicated document for response');
+      console.log('[Settings PATCH] Rebuilt email field from sendgrid collection for response');
     }
 
     // Record audit trail
@@ -1860,11 +1858,11 @@ router.post('/email/test', requireAuth, isAdmin, async (req, res) => {
       console.log('[Settings] POST /email/test - Using emailConfig from request body (has valid API key)');
       config = payloadConfig;
     } else {
-      // Load from dedicated SendGrid config document
-      console.log('[Settings] POST /email/test - Loading SendGrid config from dedicated document');
-      const sgConfigDoc = await SystemSetting.getSendGridConfig();
+      // Load from dedicated SendGrid config collection
+      console.log('[Settings] POST /email/test - Loading SendGrid config from sendgrid collection');
+      const sgConfig = await SendGridConfig.getConfig();
 
-      if (!sgConfigDoc || !sgConfigDoc.sendgridConfig) {
+      if (!sgConfig) {
         console.error('[Settings] POST /email/test - No SendGrid configuration found');
         return res.status(400).json({
           success: false,
@@ -1873,7 +1871,11 @@ router.post('/email/test', requireAuth, isAdmin, async (req, res) => {
         });
       }
 
-      config = sgConfigDoc.sendgridConfig;
+      config = {
+        apiKey: sgConfig.apiKey,
+        fromEmail: sgConfig.fromEmail,
+        fromName: sgConfig.fromName || 'Barangay System'
+      };
     }
 
     // Validation: SendGrid API key is required

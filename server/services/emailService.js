@@ -1,5 +1,6 @@
 const sgMail = require('@sendgrid/mail');
 const SystemSetting = require('../models/SystemSetting');
+const SendGridConfig = require('../models/SendGridConfig');
 
 /**
  * SendGrid Email Service
@@ -14,25 +15,17 @@ const SystemSetting = require('../models/SystemSetting');
  */
 async function loadSendGridConfig() {
   try {
-    const settings = await SystemSetting.findOne().lean();
+    const config = await SendGridConfig.getConfig();
     
-    if (!settings || !settings.email) {
-      throw new Error('No email configuration found in system settings');
+    if (!config) {
+      throw new Error('No SendGrid configuration found in sendgrid collection');
     }
 
-    if (!settings.email.enabled) {
-      throw new Error('Email sending is disabled in system settings');
+    if (!config.enabled) {
+      throw new Error('SendGrid email sending is disabled');
     }
 
-    if (settings.email.provider !== 'sendgrid') {
-      throw new Error(`Email provider is '${settings.email.provider}', not 'sendgrid'`);
-    }
-
-    if (!settings.email.sendgrid) {
-      throw new Error('SendGrid configuration not found in email settings');
-    }
-
-    const { apiKey, fromEmail, fromName } = settings.email.sendgrid;
+    const { apiKey, fromEmail, fromName } = config;
 
     if (!apiKey || apiKey.length === 0) {
       throw new Error('SendGrid API key is missing or empty');
