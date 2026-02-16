@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { User } from '../models/User';
 import { PasswordResetToken } from '../models/PasswordResetToken';
 import { sendMail } from '../services/EmailService';
+import SendGridConfig from '../models/SendGridConfig';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { handleSaveError } from '../utils/handleSaveError';
@@ -39,9 +40,17 @@ export async function forgotPassword(req: Request, res: Response) {
       <p>Thank you,<br>Barangay Information Management System</p>
     `;
 
+    // Log which transport will be used (non-blocking check)
+    try {
+      const sgCfg = await SendGridConfig.getConfig();
+      console.log('[forgotPassword] SendGrid config present:', { enabled: !!sgCfg?.enabled, fromEmail: sgCfg?.fromEmail });
+    } catch (e) {
+      console.warn('[forgotPassword] Unable to read SendGrid config for logging', e && e.message);
+    }
+
     // send email in background (don't await - fire and forget)
     sendMail(user.email, 'Your Password Reset Code', html, undefined, 'otp').catch((emailErr) => {
-      console.error('[forgotPassword] Failed to send reset OTP email:', emailErr);
+      console.error('[forgotPassword] Failed to send reset OTP email:', emailErr && (emailErr.message || emailErr));
     });
   } else {
     // default: link-token flow (existing behavior)
@@ -63,9 +72,17 @@ export async function forgotPassword(req: Request, res: Response) {
       <p>Thank you,<br>Barangay Information Management System</p>
     `;
 
+    // Log which transport will be used (non-blocking check)
+    try {
+      const sgCfg = await SendGridConfig.getConfig();
+      console.log('[forgotPassword] SendGrid config present:', { enabled: !!sgCfg?.enabled, fromEmail: sgCfg?.fromEmail });
+    } catch (e) {
+      console.warn('[forgotPassword] Unable to read SendGrid config for logging', e && e.message);
+    }
+
     // send email in background (don't await - fire and forget)
     sendMail(user.email, 'Password Reset Request', html, undefined, 'password-reset').catch((emailErr) => {
-      console.error('[forgotPassword] Failed to send reset email:', emailErr);
+      console.error('[forgotPassword] Failed to send reset email:', emailErr && (emailErr.message || emailErr));
     });
   }
 

@@ -139,11 +139,41 @@ async function sendEmail({ to, subject, html, settings = null }) {
       message: 'Email sent successfully'
     };
   } catch (err) {
-    console.error('[EmailService] Failed to send email:', {
-      message: err.message,
-      to: to,
-      subject: subject?.substring(0, 50)
-    });
+    // Attempt to capture SendGrid error body (masked) when available
+    try {
+      const maskString = (s) => {
+        if (!s || typeof s !== 'string') return s;
+        // Mask SendGrid API keys (start with SG.)
+        s = s.replace(/SG\.[A-Za-z0-9_-]{10,}/g, 'SG.[REDACTED]');
+        // Mask email local-part (keep domain)
+        s = s.replace(/([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g, (m, local, domain) => {
+          const maskedLocal = local.length <= 2 ? '*'.repeat(local.length) : local[0] + '*'.repeat(Math.max(1, local.length - 2)) + local[local.length-1];
+          return `${maskedLocal}@${domain}`;
+        });
+        return s;
+      };
+
+      const rawBody = err && err.response && err.response.body ? err.response.body : null;
+      let maskedBody = null;
+      if (rawBody) {
+        try {
+          const str = typeof rawBody === 'string' ? rawBody : JSON.stringify(rawBody);
+          maskedBody = maskString(str);
+        } catch (e) {
+          maskedBody = '[unserializable error body]';
+        }
+      }
+
+      console.error('[EmailService] Failed to send email:', {
+        message: err.message,
+        to: to,
+        subject: subject?.substring(0, 50),
+        sendgridErrorBody: maskedBody
+      });
+    } catch (logErr) {
+      console.error('[EmailService] Failed to send email (no extra info):', err && err.message);
+    }
+
     throw err;
   }
 }
@@ -226,11 +256,34 @@ async function testSendGridConnection(config, testEmail) {
     console.log('[EmailService] Test email sent successfully:', result.details);
     return result;
   } catch (err) {
-    console.error('[EmailService] SendGrid test failed:', {
-      message: err.message,
-      code: err.code,
-      testEmail: testEmail
-    });
+    // Mask and log SendGrid error body for debugging
+    try {
+      const rawBody = err && err.response && err.response.body ? err.response.body : null;
+      let maskedBody = null;
+      if (rawBody) {
+        try {
+          const str = typeof rawBody === 'string' ? rawBody : JSON.stringify(rawBody);
+          // simple masking for API key and emails
+          const s = str.replace(/SG\.[A-Za-z0-9_-]{10,}/g, 'SG.[REDACTED]')
+                       .replace(/([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g, (m, local, domain) => {
+                         const maskedLocal = local.length <= 2 ? '*'.repeat(local.length) : local[0] + '*'.repeat(Math.max(1, local.length - 2)) + local[local.length-1];
+                         return `${maskedLocal}@${domain}`;
+                       });
+          maskedBody = s;
+        } catch (e) {
+          maskedBody = '[unserializable error body]';
+        }
+      }
+
+      console.error('[EmailService] SendGrid test failed:', {
+        message: err.message,
+        code: err.code,
+        testEmail: testEmail,
+        sendgridErrorBody: maskedBody
+      });
+    } catch (logErr) {
+      console.error('[EmailService] SendGrid test failed (no extra info):', err.message);
+    }
 
     // Provide more helpful error messages for common issues
     let userMessage = err.message || 'Unknown SendGrid error';
