@@ -183,7 +183,10 @@ const SendGridSettings: React.FC<SendGridSettingsProps> = ({
       // Build the config object
       const configToSave: SendGridConfig = {
         enabled: localConfig.enabled,
-        apiKey: apiKeyDirty ? localConfig.apiKey : '', // Only send if changed
+        // Always send the current API key value
+        // If user entered something new, send it
+        // If user left it blank and there's a backend key, send empty (backend will preserve it)
+        apiKey: localConfig.apiKey,
         fromEmail: localConfig.fromEmail,
         fromName: localConfig.fromName,
       };
@@ -215,6 +218,8 @@ const SendGridSettings: React.FC<SendGridSettingsProps> = ({
     setLocalConfig((prev) => ({ ...prev, [field]: value }));
 
     if (field === 'apiKey') {
+      // Mark as dirty whenever the API key field is modified
+      // This ensures we send the new value to the backend
       setApiKeyDirty(true);
     }
 
@@ -222,22 +227,6 @@ const SendGridSettings: React.FC<SendGridSettingsProps> = ({
     if (validationErrors.length > 0) {
       setValidationErrors([]);
     }
-  };
-
-  /**
-   * Get API key display value
-   * - If dirty (user edited): show actual value
-   * - If not dirty but backend has key: show masked
-   * - If not dirty and no backend key: show empty
-   */
-  const getApiKeyDisplayValue = (): string => {
-    if (apiKeyDirty) {
-      return localConfig.apiKey;
-    }
-    if (hasBackendApiKey && !apiKeyDirty) {
-      return '••••••••••••••••'; // Show masked value
-    }
-    return '';
   };
 
   if (loading) {
@@ -301,11 +290,15 @@ const SendGridSettings: React.FC<SendGridSettingsProps> = ({
               <TextField
                 label="SendGrid API Key"
                 type={showApiKey ? 'text' : 'password'}
-                value={getApiKeyDisplayValue()}
+                value={localConfig.apiKey}
                 onChange={(e) => handleFieldChange('apiKey', e.target.value)}
                 fullWidth
                 margin="normal"
-                placeholder={hasBackendApiKey ? 'API key is saved' : 'Enter your SendGrid API key'}
+                placeholder={
+                  hasBackendApiKey && !apiKeyDirty 
+                    ? 'API key is saved (leave blank to keep it)' 
+                    : 'Enter your SendGrid API key'
+                }
                 helperText={
                   apiKeyDirty
                     ? 'Enter your new SendGrid API key'
@@ -322,7 +315,7 @@ const SendGridSettings: React.FC<SendGridSettingsProps> = ({
                         onClick={() => setShowApiKey(!showApiKey)}
                         edge="end"
                         size="small"
-                        disabled={!getApiKeyDisplayValue() || isSaving}
+                        disabled={!localConfig.apiKey || isSaving}
                       >
                         {showApiKey ? <VisibilityOff /> : <Visibility />}
                       </IconButton>
