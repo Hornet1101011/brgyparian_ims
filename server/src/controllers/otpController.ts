@@ -2,7 +2,9 @@ import { Request, Response } from 'express';
 import { User } from '../models/User';
 import { PasswordResetToken } from '../models/PasswordResetToken';
 import { sendMail } from '../services/EmailService';
-import SendGridConfig from '../models/SendGridConfig';
+// runtime require for JS model (avoid TS module resolution errors)
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const SendGridConfig: any = require('../../models/SendGridConfig');
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { handleSaveError } from '../utils/handleSaveError';
@@ -49,8 +51,8 @@ export async function forgotPassword(req: Request, res: Response) {
     }
 
     // send email in background (don't await - fire and forget)
-    sendMail(user.email, 'Your Password Reset Code', html, undefined, 'otp').catch((emailErr) => {
-      console.error('[forgotPassword] Failed to send reset OTP email:', emailErr && (emailErr.message || emailErr));
+    sendMail(user.email, 'Your Password Reset Code', html, undefined, 'otp').catch((emailErr: any) => {
+      console.error('[forgotPassword] Failed to send reset OTP email:', emailErr?.message ?? emailErr);
     });
   } else {
     // default: link-token flow (existing behavior)
@@ -81,8 +83,8 @@ export async function forgotPassword(req: Request, res: Response) {
     }
 
     // send email in background (don't await - fire and forget)
-    sendMail(user.email, 'Password Reset Request', html, undefined, 'password-reset').catch((emailErr) => {
-      console.error('[forgotPassword] Failed to send reset email:', emailErr && (emailErr.message || emailErr));
+    sendMail(user.email, 'Password Reset Request', html, undefined, 'password-reset').catch((emailErr: any) => {
+      console.error('[forgotPassword] Failed to send reset email:', emailErr?.message ?? emailErr);
     });
   }
 
