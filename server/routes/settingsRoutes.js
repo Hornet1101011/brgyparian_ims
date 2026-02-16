@@ -413,11 +413,16 @@ router.patch('/', requireAuth, isAdmin, async (req, res) => {
       // Handle API key masking
       if (isMaskedValue(apiKey)) {
         console.log('[Settings PATCH - SendGrid] apiKey is masked - preserving existing value');
-        // Load existing key from database to preserve it
-        const existingConfig = await SystemSetting.getSendGridConfig();
-        if (existingConfig?.sendgridConfig?.apiKey) {
-          apiKey = existingConfig.sendgridConfig.apiKey;
-        } else {
+        // Load existing key from dedicated sendgrid collection to preserve it
+        try {
+          const existingSG = await SendGridConfig.getConfig();
+          if (existingSG?.apiKey) {
+            apiKey = existingSG.apiKey;
+          } else {
+            apiKey = '';
+          }
+        } catch (e) {
+          console.warn('[Settings PATCH - SendGrid] Failed to load existing SendGrid config to preserve API key', e && e.message);
           apiKey = '';
         }
       }
