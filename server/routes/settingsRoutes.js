@@ -172,6 +172,37 @@ router.get('/', requireAuth, isAdmin, async (req, res) => {
   }
 });
 
+// Admin-only: return stored SendGrid config (masked API key)
+router.get('/sendgrid-config', requireAuth, isAdmin, async (req, res) => {
+  try {
+    const cfg = await SendGridConfig.getConfig();
+    if (!cfg) return res.json({ success: true, config: null });
+
+    // Mask API key for safety (show last 4 chars only)
+    const maskedApiKey = cfg.apiKey && typeof cfg.apiKey === 'string' && cfg.apiKey.length > 4
+      ? '***' + cfg.apiKey.slice(-4)
+      : (cfg.apiKey ? '***' : '');
+
+    return res.json({
+      success: true,
+      config: {
+        _id: cfg._id,
+        enabled: !!cfg.enabled,
+        provider: cfg.provider,
+        apiKeyMasked: maskedApiKey,
+        hasApiKey: !!cfg.apiKey,
+        fromEmail: cfg.fromEmail || '',
+        fromName: cfg.fromName || '',
+        createdAt: cfg.createdAt,
+        updatedAt: cfg.updatedAt
+      }
+    });
+  } catch (err) {
+    console.error('GET /admin/settings/sendgrid-config error', err);
+    return res.status(500).json({ success: false, message: 'Failed to load SendGrid config' });
+  }
+});
+
 // Admin-only debug: return sanitized SMTP config (do NOT include encryptedPassword)
 // Use this to verify what SMTP fields are stored in the DB without exposing secrets.
 router.get('/smtp-debug', requireAuth, isAdmin, async (req, res) => {
