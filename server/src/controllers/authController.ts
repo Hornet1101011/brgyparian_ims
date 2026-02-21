@@ -5,6 +5,7 @@ import { Notification } from '../models/Notification';
 import { Resident } from '../models/Resident';
 import jwt from 'jsonwebtoken';
 import { validateEmail, validatePassword } from '../utils/validation';
+import { sendMail } from '../services/EmailService';
 
 // Types for request bodies
 interface RegisterRequest {
@@ -179,6 +180,30 @@ export const register = async (req: Request, res: Response, next: unknown) => {
 
     // Log registration activity
     await logActivity(req, 'USER', 'REGISTER', `User ${user.email} registered with role ${user.role}.`);
+
+    // Send verification email for residents (background, no await)
+    if (actualRole === 'resident') {
+      (async () => {
+        try {
+          const verificationLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email/${token}`;
+          const html = `
+            <p>Dear ${finalFullName},</p>
+            <p>Welcome to the Barangay Information Management System! Your account has been successfully created.</p>
+            <p>Please verify your email address by clicking the link below:</p>
+            <p style="margin: 20px 0;">
+              <a href="${verificationLink}" style="background-color: #1890ff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">Verify Email Address</a>
+            </p>
+            <p>Or copy this link: <a href="${verificationLink}">${verificationLink}</a></p>
+            <p>This link will expire in 24 hours. If you didn't create this account, please ignore this email.</p>
+            <p>Thank you,<br>Barangay Information Management System</p>
+          `;
+          await sendMail(email, 'Verify Your Email Address', html, undefined, 'registration');
+          console.log('[Registration] Verification email sent to:', email);
+        } catch (emailErr: any) {
+          console.error('[Registration] Failed to send verification email:', emailErr?.message ?? emailErr);
+        }
+      })();
+    }
 
     res.status(201).json({
       message: staffRequest ? 'Registration successful. Staff request sent to admin.' : 'Registration successful',
