@@ -5,7 +5,8 @@ import { Notification } from '../models/Notification';
 import { Resident } from '../models/Resident';
 import jwt from 'jsonwebtoken';
 import { validateEmail, validatePassword } from '../utils/validation';
-import { sendMail } from '../services/EmailService';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const sendGridService: any = require('../services/emailService');
 
 // Types for request bodies
 interface RegisterRequest {
@@ -181,7 +182,7 @@ export const register = async (req: Request, res: Response, next: unknown) => {
     // Log registration activity
     await logActivity(req, 'USER', 'REGISTER', `User ${user.email} registered with role ${user.role}.`);
 
-    // Send verification email for residents (background, no await)
+    // Send verification email for residents via SendGrid only (no SMTP fallback)
     if (actualRole === 'resident') {
       (async () => {
         try {
@@ -197,10 +198,11 @@ export const register = async (req: Request, res: Response, next: unknown) => {
             <p>This link will expire in 24 hours. If you didn't create this account, please ignore this email.</p>
             <p>Thank you,<br>Barangay Information Management System</p>
           `;
-          await sendMail(email, 'Verify Your Email Address', html, undefined, 'registration');
-          console.log('[Registration] Verification email sent to:', email);
-        } catch (emailErr: any) {
-          console.error('[Registration] Failed to send verification email:', emailErr?.message ?? emailErr);
+          console.log('[Register] Sending verification email via SendGrid (no SMTP fallback)');
+          await sendGridService.sendEmail({ to: email, subject: 'Verify Your Email Address', html });
+          console.log('[Register] Verification email sent via SendGrid to:', email);
+        } catch (sgErr: any) {
+          console.error('[Register] SendGrid failed to send verification email (no fallback):', sgErr?.message ?? sgErr);
         }
       })();
     }
