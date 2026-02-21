@@ -5,10 +5,10 @@ import { PasswordResetToken } from '../models/PasswordResetToken';
 import { sendMail } from '../services/EmailService';
 // runtime require for JS model (avoid TS module resolution errors)
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const SendGridConfig: any = require('../models/SendGridConfig');
+const SendGridConfig: any = require('../../models/SendGridConfig');
 // runtime require for SendGrid JS service
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const sendGridService: any = require('../services/emailService');
+const sendGridService: any = require('../../services/emailService');
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { handleSaveError } from '../utils/handleSaveError';
