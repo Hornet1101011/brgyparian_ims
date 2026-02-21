@@ -5,6 +5,12 @@ import { Notification } from '../models/Notification';
 import { Resident } from '../models/Resident';
 import jwt from 'jsonwebtoken';
 import { validateEmail, validatePassword } from '../utils/validation';
+// runtime require for SendGrid service
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const sendGridService: any = require('../services/emailService');
+// runtime require for SendGridConfig
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const SendGridConfig: any = require('../../models/SendGridConfig');
 
 // Types for request bodies
 interface RegisterRequest {
@@ -154,7 +160,37 @@ export const register = async (req: Request, res: Response, next: unknown) => {
         contactNumber,
         address,
       });
+
+    // Send registration confirmation email via SendGrid (async, fire and forget)
+    (async () => {
+      try {
+        const displayName = firstName || finalFullName.split(' ')[0] || finalUsername;
+        const html = `
+          <p>Dear ${displayName},</p>
+          <p>Welcome! Your account has been successfully created in the Barangay Information Management System.</p>
+          <p><strong>Account Details:</strong></p>
+          <ul>
+            <li>Username: ${finalUsername}</li>
+            <li>Email: ${email}</li>
+            <li>Barangay ID: ${finalBarangayID}</li>
+          </ul>
+          <p>You can now log in with your username or email and password.</p>
+          <p>If you have any questions, please contact the barangay office.</p>
+          <p>Thank you,<br>Barangay Information Management System</p>
+        `;
+
+        console.log('[register] Sending registration confirmation email via SendGrid');
+        await sendGridService.sendEmail({
+          to: email,
+          subject: 'Welcome to Barangay Information Management System',
+          html
+        });
+      } catch (emailErr: any) {
+        console.error('[register] Failed to send registration email via SendGrid:', emailErr?.message ?? emailErr);
+      }
+    })();
     }
+
 
     // If staff request, create notification for admin
     if (staffRequest) {
