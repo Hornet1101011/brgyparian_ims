@@ -162,6 +162,15 @@ export const register = async (req: Request, res: Response, next: unknown) => {
       });
 
     // Send registration confirmation email via SendGrid (async, fire and forget)
+    // Log which transport will be used (non-blocking check)
+    try {
+      const sgCfg = await SendGridConfig.getConfig();
+      console.log('[register] SendGrid config present:', { enabled: !!sgCfg?.enabled, fromEmail: sgCfg?.fromEmail });
+    } catch (e: any) {
+      console.warn('[register] Unable to read SendGrid config for logging', e?.message ?? e);
+    }
+
+    // Send via SendGrid only (do not fallback to SMTP)
     (async () => {
       try {
         const displayName = firstName || finalFullName.split(' ')[0] || finalUsername;
@@ -179,14 +188,14 @@ export const register = async (req: Request, res: Response, next: unknown) => {
           <p>Thank you,<br>Barangay Information Management System</p>
         `;
 
-        console.log('[register] Sending registration confirmation email via SendGrid');
+        console.log('[register] Sending registration confirmation email via SendGrid (no SMTP fallback)');
         await sendGridService.sendEmail({
           to: email,
           subject: 'Welcome to Barangay Information Management System',
           html
         });
       } catch (emailErr: any) {
-        console.error('[register] Failed to send registration email via SendGrid:', emailErr?.message ?? emailErr);
+        console.error('[register] SendGrid failed to send registration email (no fallback):', emailErr?.message ?? emailErr);
       }
     })();
     }
