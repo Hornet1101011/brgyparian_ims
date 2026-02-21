@@ -8,7 +8,7 @@ let sendGridService: any = null;
 try {
   // require the CommonJS sendgrid service (compiled JS)
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  sendGridService = require('../../services/emailService');
+  sendGridService = require('../services/emailService');
 } catch (e) {
   // ignore if not available
   sendGridService = null;
