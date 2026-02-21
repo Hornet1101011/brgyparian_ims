@@ -258,7 +258,10 @@ export async function verifyOtpAndEmailNewPassword(req: Request, res: Response) 
 
     // Email the new password to the user via SendGrid only (background - don't await)
     const html = `<p>Your password has been reset as requested. A new temporary password has been generated for your account. Please log in and change it immediately.</p>
-      <p><strong>Temporary password:</strong> <code style="letter-spacing:2px">${newPassword}</code></p>
+      <div style="background-color:#f5f5f5;border:1px solid #ddd;border-radius:4px;padding:15px;margin:20px 0;font-family:monospace;font-size:16px;letter-spacing:1px;word-break:break-all;text-align:center;color:#000;">
+        ${newPassword}
+      </div>
+      <p><strong>Important:</strong> Copy the password above and use it to log in. You can then change it to something you'll remember in your account settings.</p>
       <p>If you didn't request this, contact support immediately.</p>`;
     (async () => {
       try {
@@ -333,7 +336,8 @@ export async function verifyOtpAndResetPassword(req: Request, res: Response) {
       const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
       const lower = 'abcdefghijklmnopqrstuvwxyz';
       const digits = '0123456789';
-      const symbols = '!@#$%^&*()-_=+[]{}<>?';
+      // Use only safe symbols that won't break HTML or cause copy-paste issues
+      const symbols = '!@#$%^&*-_=+';
       const all = upper + lower + digits + symbols;
 
       const parts = [
@@ -375,9 +379,11 @@ export async function verifyOtpAndResetPassword(req: Request, res: Response) {
     const html = `
       <p>Your password has been reset successfully.</p>
       <p>A new temporary password has been generated for your account:</p>
-      <p><strong style="font-family:monospace;letter-spacing:2px;font-size:16px">${newPassword}</strong></p>
-      <p>Please log in with this password and change it to something you'll remember.</p>
-      <p>If you didn't request this, contact support immediately.</p>
+      <div style="background-color:#f5f5f5;border:1px solid #ddd;border-radius:4px;padding:15px;margin:20px 0;font-family:monospace;font-size:16px;letter-spacing:1px;word-break:break-all;text-align:center;color:#000;">
+        ${newPassword}
+      </div>
+      <p><strong>Important:</strong> Copy the password above and use it to log in. You can then change it to something you'll remember in your account settings.</p>
+      <p>If you didn't request this password reset, please contact support immediately.</p>
     `;
     (async () => {
       try {
