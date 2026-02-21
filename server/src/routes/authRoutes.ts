@@ -18,7 +18,8 @@ import {
 import {
   forgotPassword,
   resetPassword,
-  verifyOtpAndEmailNewPassword
+  verifyOtpAndEmailNewPassword,
+  verifyOtpAndResetPassword
 } from '../controllers/otpController';
 // load guest controller (use require() to avoid TS module resolution timing issues)
 const guestController = require('../controllers/guestController');
@@ -49,6 +50,8 @@ router.post('/reset-password/:token', resetPasswordLimiter, resetPassword);
 router.post('/reset-password', resetPasswordLimiter, resetPassword);
 // Verify OTP and generate/email a temporary password
 router.post('/verify-otp', resetPasswordLimiter, verifyOtpAndEmailNewPassword);
+// Frontend OTP flow: verify OTP and reset password with email + OTP
+router.post('/verify-otp-and-reset-password', resetPasswordLimiter, verifyOtpAndResetPassword);
 
 // Test SMTP endpoint (for debugging email issues)
 router.get('/test-smtp', async (req: any, res: Response) => {

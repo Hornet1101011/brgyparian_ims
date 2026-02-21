@@ -42,12 +42,15 @@ const LoginForm: React.FC = () => {
   const [forgotPasswordModalVisible, setForgotPasswordModalVisible] = useState(false);
   const [guestForm] = Form.useForm();
   const [forgotPasswordForm] = Form.useForm();
+  const [otpForm] = Form.useForm();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
   const [forgotPasswordSent, setForgotPasswordSent] = useState(false);
   const [forgotPasswordMode, setForgotPasswordMode] = useState<'link' | 'otp'>('link');
   const [forgotPasswordSubmittedEmail, setForgotPasswordSubmittedEmail] = useState<string | null>(null);
+  const [otpVerified, setOtpVerified] = useState(false);
+  const [otpVerifying, setOtpVerifying] = useState(false);
   const [officials, setOfficials] = useState<PublicOfficial[]>([]);
   const [, setOfficialsStatus] = useState<string>('loading');
   const officialsCarouselRef = useRef<HTMLDivElement | null>(null);
@@ -178,6 +181,30 @@ const LoginForm: React.FC = () => {
       notification.error({ message: 'Error', description: msg });
     } finally {
       setForgotPasswordLoading(false);
+    }
+  };
+
+  const onOtpVerify = async (values: { otp: string }) => {
+    setOtpVerifying(true);
+    try {
+      const res = await axiosPublic.post('/auth/verify-otp-and-reset-password', {
+        email: forgotPasswordSubmittedEmail,
+        otp: values.otp.replace(/\s/g, '') // Remove spaces
+      });
+      notification.success({ message: 'Success', description: res.data?.message || 'Your password has been reset. Check your email for the new password.' });
+      setOtpVerified(true);
+      setTimeout(() => {
+        setForgotPasswordModalVisible(false);
+        setForgotPasswordSent(false);
+        setOtpVerified(false);
+        forgotPasswordForm.resetFields();
+        otpForm.resetFields();
+      }, 1500);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err.message || 'Failed to verify OTP';
+      notification.error({ message: 'Error', description: msg });
+    } finally {
+      setOtpVerifying(false);
     }
   };
 
@@ -828,12 +855,76 @@ const LoginForm: React.FC = () => {
     <Modal
       title="Forgot Password"
       open={forgotPasswordModalVisible}
-      onCancel={() => { setForgotPasswordModalVisible(false); setForgotPasswordSent(false); forgotPasswordForm.resetFields(); }}
+      onCancel={() => { setForgotPasswordModalVisible(false); setForgotPasswordSent(false); setOtpVerified(false); forgotPasswordForm.resetFields(); otpForm.resetFields(); }}
       footer={null}
       centered
       width={500}
     >
-      {forgotPasswordSent ? (
+      {otpVerified ? (
+        <div style={{ textAlign: 'center' }}>
+          <Typography.Paragraph style={{ marginBottom: 24, color: '#52c41a' }}>
+            ✓ Your password has been reset successfully! Check your email for your new password.
+          </Typography.Paragraph>
+          <Button
+            type="primary"
+            block
+            onClick={() => {
+              setForgotPasswordModalVisible(false);
+              setForgotPasswordSent(false);
+              setOtpVerified(false);
+              forgotPasswordForm.resetFields();
+              otpForm.resetFields();
+            }}
+          >
+            Back to Login
+          </Button>
+        </div>
+      ) : forgotPasswordSent && forgotPasswordMode === 'otp' ? (
+        <div>
+          <Typography.Paragraph style={{ marginBottom: 24 }}>
+            We sent a 6-digit code to <strong>{forgotPasswordSubmittedEmail}</strong>. Enter it below to reset your password.
+          </Typography.Paragraph>
+          <Form
+            layout="vertical"
+            form={otpForm}
+            onFinish={onOtpVerify}
+            requiredMark={false}
+          >
+            <Form.Item
+              name="otp"
+              label="Enter 6-Digit Code"
+              rules={[
+                { required: true, message: 'Please enter the code' },
+                { pattern: /^\d{6}$/, message: 'Code must be 6 digits' }
+              ]}
+            >
+              <Input placeholder="000000" size="large" maxLength={6} />
+            </Form.Item>
+            <Form.Item>
+              <Button
+                htmlType="submit"
+                type="primary"
+                size="large"
+                loading={otpVerifying}
+                disabled={otpVerifying}
+                block
+              >
+                Verify & Reset Password
+              </Button>
+            </Form.Item>
+            <Button
+              type="link"
+              block
+              onClick={() => {
+                setForgotPasswordSent(false);
+                otpForm.resetFields();
+              }}
+            >
+              Back
+            </Button>
+          </Form>
+        </div>
+      ) : forgotPasswordSent ? (
         <div style={{ textAlign: 'center' }}>
           <Typography.Paragraph style={{ marginBottom: 24 }}>
             Check your email at <strong>{forgotPasswordSubmittedEmail}</strong> for password reset instructions.

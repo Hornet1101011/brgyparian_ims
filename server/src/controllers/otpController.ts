@@ -276,3 +276,126 @@ export async function verifyOtpAndEmailNewPassword(req: Request, res: Response) 
     return res.status(500).json({ message: 'Server error' });
   }
 }
+
+// POST /api/auth/verify-otp-and-reset-password
+// Frontend flow: user provides { email, otp } after receiving OTP email
+// This endpoint verifies the OTP, generates a new password, and emails it
+export async function verifyOtpAndResetPassword(req: Request, res: Response) {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) return res.status(400).json({ message: 'Email and OTP are required' });
+
+    const normalizedEmail = String(email || '').trim();
+    const normalizedOtp = String(otp || '').trim();
+
+    // Helper: escape regex special chars for exact case-insensitive match
+    const escapeRegExp = (s: string) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    // Verify email is a registered resident
+    const resident = await Resident.findOne({ email: new RegExp(`^${escapeRegExp(normalizedEmail)}$`, 'i') }).lean();
+    if (!resident) {
+      console.log('[verifyOtpAndResetPassword] Email is not a registered resident:', email);
+      return res.status(404).json({ message: 'Email not found in resident records.' });
+    }
+
+    // Find the associated user account
+    let user: any = null;
+    if (resident.userId) {
+      user = await User.findById(resident.userId);
+    } else {
+      user = await User.findOne({ email: new RegExp(`^${escapeRegExp(normalizedEmail)}$`, 'i') });
+    }
+
+    if (!user) {
+      console.log('[verifyOtpAndResetPassword] Resident found but no linked user account:', resident._id);
+      return res.status(404).json({ message: 'No user account linked to this email.' });
+    }
+
+    // Hash incoming OTP and look up the token doc
+    const incomingHash = crypto.createHash('sha256').update(normalizedOtp).digest('hex');
+    const tokenDoc = await PasswordResetToken.findOne({ 
+      tokenHash: incomingHash,
+      userId: (user as any)._id 
+    });
+    if (!tokenDoc) {
+      console.log('[verifyOtpAndResetPassword] OTP not found or mismatch for user:', (user as any)._id);
+      return res.status(400).json({ message: 'Invalid OTP. Please try again or request a new code.' });
+    }
+
+    // Check if token has expired
+    if (tokenDoc.expiresAt.getTime() < Date.now()) {
+      console.log('[verifyOtpAndResetPassword] OTP expired for user:', (user as any)._id);
+      return res.status(410).json({ message: 'OTP has expired. Please request a new code.' });
+    }
+
+    // Generate a secure random password
+    function generatePassword(len = 12) {
+      const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      const lower = 'abcdefghijklmnopqrstuvwxyz';
+      const digits = '0123456789';
+      const symbols = '!@#$%^&*()-_=+[]{}<>?';
+      const all = upper + lower + digits + symbols;
+
+      const parts = [
+        upper[crypto.randomInt(0, upper.length)],
+        lower[crypto.randomInt(0, lower.length)],
+        digits[crypto.randomInt(0, digits.length)],
+        symbols[crypto.randomInt(0, symbols.length)],
+      ];
+      while (parts.join('').length < len) {
+        parts.push(all[crypto.randomInt(0, all.length)]);
+      }
+      for (let i = parts.length - 1; i > 0; i--) {
+        const j = crypto.randomInt(0, i + 1);
+        const tmp = parts[i];
+        parts[i] = parts[j];
+        parts[j] = tmp;
+      }
+      return parts.join('');
+    }
+
+    const newPassword = generatePassword(12);
+
+    // Hash new password and save
+    const salt = await bcrypt.genSalt(12);
+    const hash = await bcrypt.hash(newPassword, salt);
+    user.password = hash;
+    try {
+      await user.save();
+    } catch (err) {
+      if (handleSaveError(err, res)) return;
+      console.error('[verifyOtpAndResetPassword] Error saving user:', err);
+      return res.status(500).json({ message: 'Server error' });
+    }
+
+    // delete token so it cannot be reused
+    await PasswordResetToken.deleteOne({ _id: tokenDoc._id });
+
+    // Email the new password via SendGrid (background)
+    const html = `
+      <p>Your password has been reset successfully.</p>
+      <p>A new temporary password has been generated for your account:</p>
+      <p><strong style="font-family:monospace;letter-spacing:2px;font-size:16px">${newPassword}</strong></p>
+      <p>Please log in with this password and change it to something you'll remember.</p>
+      <p>If you didn't request this, contact support immediately.</p>
+    `;
+    (async () => {
+      try {
+        console.log('[verifyOtpAndResetPassword] Sending new-password email via SendGrid');
+        await sendGridService.sendEmail({ 
+          to: user.email, 
+          subject: 'Your New Temporary Password - Barangay System', 
+          html 
+        });
+      } catch (sgErr: any) {
+        console.error('[verifyOtpAndResetPassword] SendGrid failed:', sgErr?.message ?? sgErr);
+      }
+    })();
+
+    console.log('[verifyOtpAndResetPassword] Password reset completed for userId:', String((user as any)._id));
+    return res.json({ message: 'Password reset successful. Check your email for your new temporary password.' });
+  } catch (err) {
+    console.error('[verifyOtpAndResetPassword] error:', err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+}
