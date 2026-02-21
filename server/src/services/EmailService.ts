@@ -8,7 +8,7 @@ let sendGridService: any = null;
 try {
   // require the CommonJS sendgrid service (compiled JS)
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  sendGridService = require('./emailService');
+  sendGridService = require('../emailService');
 } catch (e) {
   // ignore if not available
   sendGridService = null;
@@ -276,7 +276,7 @@ export async function sendMail(to: string, subject: string, html: string, bcc?: 
     // If SendGrid service is available and sendgrid is configured and enabled, prefer SendGrid
     try {
       if (sendGridService) {
-        const SendGridConfig = require('../models/SendGridConfig');
+        const SendGridConfig = require('../../models/SendGridConfig');
         const sgCfg = await SendGridConfig.getConfig();
         console.log('[EmailService] SendGrid branch check:', {
           sendGridServiceLoaded: !!sendGridService,
