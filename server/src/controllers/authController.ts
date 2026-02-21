@@ -7,7 +7,7 @@ import jwt from 'jsonwebtoken';
 import { validateEmail, validatePassword } from '../utils/validation';
 // runtime require for SendGrid service
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const sendGridService: any = require('../services/emailService');
+const sendGridService: any = require('../../services/emailService');
 // runtime require for SendGridConfig
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const SendGridConfig: any = require('../../models/SendGridConfig');
