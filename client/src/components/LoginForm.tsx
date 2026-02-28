@@ -566,7 +566,7 @@ const LoginForm: React.FC = () => {
                     </Button>
                   </Form.Item>
 
-                  <Form.Item style={{ marginBottom: 14 }}>
+                  <Form.Item style={{ marginBottom: 14, display: 'none' }}>
                     <Button 
                       onClick={() => setGuestModalVisible(true)} 
                       size="large" 
