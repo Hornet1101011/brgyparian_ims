@@ -242,10 +242,8 @@ export async function verifyOtpAndEmailNewPassword(req: Request, res: Response) 
 
     const newPassword = generatePassword(12);
 
-    // Hash new password and save
-    const salt = await bcrypt.genSalt(12);
-    const hash = await bcrypt.hash(newPassword, salt);
-    user.password = hash;
+    // Set the plain password - let the pre-save middleware handle hashing
+    user.password = newPassword;
     try {
       await user.save();
     } catch (err) {
@@ -361,10 +359,8 @@ export async function verifyOtpAndResetPassword(req: Request, res: Response) {
 
     const newPassword = generatePassword(12);
 
-    // Hash new password and save
-    const salt = await bcrypt.genSalt(12);
-    const hash = await bcrypt.hash(newPassword, salt);
-    user.password = hash;
+    // Set the plain password - let the pre-save middleware handle hashing
+    user.password = newPassword;
     try {
       await user.save();
     } catch (err) {
