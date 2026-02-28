@@ -698,7 +698,25 @@ const DocumentRequestForm: React.FC = () => {
         open={showInfoModal}
         onCancel={() => setShowInfoModal(false)}
         width={700}
-        footer={null}
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+            <Button onClick={() => setShowInfoModal(false)}>Close</Button>
+            <Button 
+              type="primary"
+              onClick={() => {
+                // Copy basic information
+                const textToCopy = `${personalInfo?.firstName || ''} ${personalInfo?.lastName || ''} ${personalInfo?.middleName || ''}\n${personalInfo?.contactNumber || ''}`.trim();
+                navigator.clipboard.writeText(textToCopy).then(() => {
+                  message.success('Basic information copied!');
+                }).catch(() => {
+                  message.error('Failed to copy information');
+                });
+              }}
+            >
+              Copy Basic Info
+            </Button>
+          </div>
+        }
         title={
           <div style={{ 
             background: 'linear-gradient(135deg, #40c9ff 0%, #e81cff 100%)',
