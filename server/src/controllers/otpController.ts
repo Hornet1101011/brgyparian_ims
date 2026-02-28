@@ -216,7 +216,8 @@ export async function verifyOtpAndEmailNewPassword(req: Request, res: Response) 
       const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
       const lower = 'abcdefghijklmnopqrstuvwxyz';
       const digits = '0123456789';
-      const symbols = '!@#$%^&*()-_=+[]{}<>?';
+      // Use only safe symbols that won't break HTML or cause copy-paste issues
+      const symbols = '!@#$%^&*-_=+';
       const all = upper + lower + digits + symbols;
 
       // ensure at least one from each set
