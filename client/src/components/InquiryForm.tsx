@@ -678,39 +678,30 @@ const InquiryForm: React.FC = () => {
                 background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(240, 248, 255, 0.95) 100%)',
                 border: '1px solid rgba(64, 201, 255, 0.15)',
                 position: 'relative',
-                overflow: 'hidden'
+                overflow: 'hidden',
+                padding: '12px 16px'
               }}>
-                {/* Top bar: Title + centered month/year + consolidated month/year dropdown */}
+                {/* Top bar: Title + centered month/year */}
                 {(() => {
                   const monthYearLabel = calendarValue ? calendarValue.format('MMMM YYYY') : dayjs().format('MMMM YYYY');
                   return (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', padding: '8px 12px', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 8 : 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <Typography.Title level={5} style={{ margin: 0 }}>Appointment Scheduling</Typography.Title>
-                        <div style={{ color: '#6c757d', fontSize: 13 }}>{/* helper in header if needed */}</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', marginBottom: '8px', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 6 : 0 }}>
+                      <Typography.Title level={5} style={{ margin: 0, fontSize: 16 }}>Appointment Scheduling</Typography.Title>
+                      <div style={{ textAlign: 'center', flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                        <div style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: '#111' }}>{monthYearLabel}</div>
                       </div>
-
-                      {/* Centered month/year for easy visibility */}
-                      <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                        <div style={{ textAlign: 'center' }}>
-                          <div style={{ fontSize: isMobile ? 16 : 18, fontWeight: 700, color: '#111' }}>{monthYearLabel}</div>
-                          <div style={{ fontSize: 12, color: '#666' }}>Selected month</div>
-                        </div>
-                      </div>
-
-                      {/* Empty right placeholder - month selector moved into the action panel */}
                       <div style={{ width: 160 }} />
                     </div>
                   );
                 })()}
 
-                {/* Rules text under the nav */}
-                <div style={{ padding: '6px 12px 12px 12px', color: '#6c757d', fontSize: 13 }}>
+                {/* Rules text */}
+                <div style={{ padding: '4px 0 8px 0', color: '#6c757d', fontSize: 12 }}>
                   Choose up to 3 preferred weekdays. Past dates and weekends are disabled.
                 </div>
 
                 {/* Main area: calendar + action sidebar */}
-                <div className="af-main-calendar-area" style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 20, alignItems: 'stretch' }}>
+                <div className="af-main-calendar-area" style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 16, alignItems: 'stretch' }}>
                   <div style={{ flex: 1, minWidth: isMobile ? 'auto' : 360 }}>
                     <div ref={calendarRef} className="af-calendar-container">
                       <Calendar
@@ -748,34 +739,42 @@ const InquiryForm: React.FC = () => {
                   </div>
 
                   {/* Right action panel */}
-                  <div className="af-action-panel" style={{ width: isMobile ? '100%' : 320, borderLeft: isMobile ? 'none' : '1px solid #f0f0f0', paddingLeft: isMobile ? 0 : 16, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', marginTop: isMobile ? 12 : 0 }}>
-                    {/* Month selector moved here for easier access in the action panel */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                      <strong>Selected Dates ({appointmentDates.length}/3)</strong>
-                      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                          <span className="af-legend af-legend-available" /> <small>Available</small>
+                  <div className="af-action-panel" style={{ width: isMobile ? '100%' : 300, borderLeft: isMobile ? 'none' : '1px solid #f0f0f0', paddingLeft: isMobile ? 0 : 16, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', marginTop: isMobile ? 12 : 0 }}>
+                    {/* Selected dates header with legend */}
+                    <div style={{ marginBottom: 12 }}>
+                      <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>Selected Dates ({appointmentDates.length}/3)</div>
+                      <div className="af-legend-container">
+                        <div className="af-legend-item">
+                          <span className="af-legend af-legend-available" />
+                          <span style={{ fontSize: 12 }}>Available</span>
                         </div>
-                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                          <span className="af-legend af-legend-selected" /> <small>Selected</small>
+                        <div className="af-legend-item">
+                          <span className="af-legend af-legend-selected" />
+                          <span style={{ fontSize: 12 }}>Selected</span>
                         </div>
-                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                          <span className="af-legend af-legend-unavailable" /> <small>Unavailable</small>
+                        <div className="af-legend-item">
+                          <span className="af-legend af-legend-unavailable" />
+                          <span style={{ fontSize: 12 }}>Unavailable</span>
                         </div>
                       </div>
                     </div>
 
-                    <div className="af-selected-panel" style={{ marginBottom: 12 }}>
-                      {appointmentDates.length === 0 && <div style={{ color: '#8c8c8c' }}>No dates selected</div>}
-                      {appointmentDates.map(d => (
-                        <div key={d} className="af-chip">
-                          <span style={{ marginRight: 8 }}>{dayjs(d).format('MMM DD, YYYY')}</span>
-                          <Button type="link" size="small" onClick={() => setAppointmentDates(prev => prev.filter(x => x !== d))}>✕</Button>
-                        </div>
-                      ))}
+                    {/* Flex spacer to push buttons down */}
+                    <div style={{ flex: 1 }}>
+                      <div className="af-selected-panel" style={{ marginBottom: 8 }}>
+                        {appointmentDates.length === 0 && <div style={{ color: '#8c8c8c', fontSize: 12 }}>No dates selected</div>}
+                        {appointmentDates.map(d => (
+                          <div key={d} className="af-chip" style={{ padding: '4px 8px', fontSize: 12 }}>
+                            <span style={{ marginRight: 6 }}>{dayjs(d).format('MMM DD')}</span>
+                            <Button type="link" size="small" style={{ padding: 0, minWidth: 0, height: 16 }} onClick={() => setAppointmentDates(prev => prev.filter(x => x !== d))}>✕</Button>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    {/* Month selector moved below selected dates as requested */}
-                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+
+                    {/* Month selector moved below selected dates */}
+                    <div style={{ marginBottom: 12 }}>
+                      <div style={{ fontSize: 12, color: '#666', marginBottom: 6 }}>Navigate months:</div>
                       <Select
                         value={calendarValue.format('YYYY-MM')}
                         onChange={(val: string) => {
@@ -783,7 +782,8 @@ const InquiryForm: React.FC = () => {
                           if (!isNaN(y) && !isNaN(m)) setCalendarValue(dayjs().year(y).month(m - 1).date(1));
                         }}
                         className="af-month-year-select"
-                        style={{ minWidth: 160 }}
+                        style={{ width: '100%' }}
+                        size="small"
                       >
                         {Array.from({ length: 12 }).map((_, i) => {
                           const opt = now.startOf('month').add(i, 'month');
@@ -796,9 +796,9 @@ const InquiryForm: React.FC = () => {
                       </Select>
                     </div>
 
-                    <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
-                      <Button className="inquiry-outline-btn" onClick={() => setAppointmentDates([])} style={{ borderRadius: 20, padding: '6px 14px' }}>Clear</Button>
-                      <Button className="inquiry-gradient-btn" onClick={applyAppointmentDatesToForm} disabled={appointmentDates.length === 0} style={{ borderRadius: 20, padding: '6px 18px', minWidth: 160 }}>Add Dates to Inquiry</Button>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                      <Button className="inquiry-outline-btn" onClick={() => setAppointmentDates([])} style={{ borderRadius: 18, padding: '6px 12px', fontSize: 13, flex: 1 }}>Clear</Button>
+                      <Button className="inquiry-gradient-btn" onClick={applyAppointmentDatesToForm} disabled={appointmentDates.length === 0} style={{ borderRadius: 18, padding: '6px 12px', fontSize: 13, flex: 1.2, fontWeight: 500 }}>Add Dates</Button>
                     </div>
                   </div>
                 </div>

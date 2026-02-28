@@ -93,7 +93,7 @@
   box-shadow: 0 0 0 3px rgba(24,144,255,0.06);
 }
 
-/* New calendar number styles */
+/* New calendar number styles - optimized for compact display */
 .af-calendar-container .ant-picker-calendar {
   box-shadow: none;
 }
@@ -101,16 +101,27 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 54px;
+  height: 42px;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+.af-date-cell:hover:not(.af-disabled) {
+  background-color: rgba(64, 169, 255, 0.06);
 }
 .af-date-number {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 20px;
+  border-radius: 18px;
   font-weight: 600;
+  font-size: 13px;
+  transition: all 120ms ease;
+}
+.af-date-cell:not(.af-disabled) .af-date-number:hover {
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 /* Make calendar container fluid and allow horizontal scroll if needed */
@@ -120,20 +131,20 @@
 }
 .af-calendar-container .ant-picker-calendar {
   width: 100%;
-  min-width: 280px; /* allow shrink but keep usable */
+  min-width: 260px; /* compact but usable */
 }
 
 /* Reduce sizes on medium screens to fit container */
 @media (max-width: 900px) {
-  .af-date-cell { height: 46px; }
-  .af-date-number { width: 30px; height: 30px; font-size: 14px; }
+  .af-date-cell { height: 40px; }
+  .af-date-number { width: 30px; height: 30px; font-size: 12px; }
 }
 
 /* Further compact on narrow/small screens */
 @media (max-width: 640px) {
-  .af-date-cell { height: 40px; }
-  .af-date-number { width: 28px; height: 28px; font-size: 13px; }
-  .af-today-label { font-size: 10px; padding: 2px 5px; }
+  .af-date-cell { height: 38px; }
+  .af-date-number { width: 28px; height: 28px; font-size: 11px; }
+  .af-today-label { font-size: 9px; padding: 2px 4px; }
   .af-calendar-container .ant-picker-calendar { min-width: 240px; }
 }
 .af-date-available .af-date-number {
@@ -179,15 +190,61 @@
   padding-bottom: 6px !important;
 }
 
-/* Action panel legend */
-.af-legend { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+/* Action panel legend - optimized for compact display */
+.af-legend { width: 10px; height: 10px; border-radius: 2px; display: inline-block; flex-shrink: 0; }
 .af-legend-available { background: #52c41a; }
 .af-legend-selected { background: #1890ff; }
-.af-legend-unavailable { background: #f0f0f0; }
+.af-legend-unavailable { background: #f0f0f0; border: 1px solid #e8e8e8; }
 
-/* Selected chips */
-.af-selected-panel { display:flex; gap:8px; flex-wrap:wrap; }
-.af-chip { display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:999px; background:#fafafa; border:1px solid #f0f0f0; }
+/* Legend container responsive layout */
+.af-legend-container {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+
+.af-legend-item {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .af-legend-container {
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
+}
+
+/* Selected chips - optimized for compact display */
+.af-selected-panel { 
+  display: flex; 
+  gap: 6px; 
+  flex-wrap: wrap; 
+  max-height: 120px;
+  overflow-y: auto;
+}
+.af-chip { 
+  display: flex; 
+  align-items: center; 
+  gap: 6px; 
+  padding: 4px 8px; 
+  border-radius: 16px; 
+  background: #fafafa; 
+  border: 1px solid #e8e8e8;
+  font-size: 12px;
+  white-space: nowrap;
+  transition: all 120ms ease;
+}
+.af-chip:hover {
+  background: #f5f5f5;
+  border-color: #d9d9d9;
+}
 
 /* highlight when scrolled into view */
 .af-scroll-highlight { box-shadow: 0 0 0 6px rgba(64,169,255,0.12); border-radius: 8px; transition: box-shadow 280ms ease-in-out; }
