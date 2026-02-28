@@ -613,12 +613,6 @@ const LoginForm: React.FC = () => {
                       >
                         Forgot Password?
                       </Button>
-                      <RouterLink to="/register" style={{ color: '#667eea', fontWeight: 600, textDecoration: 'none', fontSize: 11, transition: 'all 0.2s' }} onMouseEnter={(e) => (e.currentTarget as HTMLAnchorElement).style.color = '#764ba2'} onMouseLeave={(e) => (e.currentTarget as HTMLAnchorElement).style.color = '#667eea'}>
-                        Create Account
-                      </RouterLink>
-                    </div>
-
-                    <div style={{ textAlign: 'center' }}>
                       <Button 
                         type="link" 
                         onClick={() => setEmergencyModalVisible(true)}
@@ -632,6 +626,9 @@ const LoginForm: React.FC = () => {
                       >
                         🚨 Emergency Hotline
                       </Button>
+                      <RouterLink to="/register" style={{ color: '#667eea', fontWeight: 600, textDecoration: 'none', fontSize: 11, transition: 'all 0.2s' }} onMouseEnter={(e) => (e.currentTarget as HTMLAnchorElement).style.color = '#764ba2'} onMouseLeave={(e) => (e.currentTarget as HTMLAnchorElement).style.color = '#667eea'}>
+                        Create Account
+                      </RouterLink>
                     </div>
                   </div>
                 </Form>
