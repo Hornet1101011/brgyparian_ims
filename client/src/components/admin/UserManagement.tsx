@@ -325,6 +325,31 @@ const UserManagement: React.FC = () => {
       onFilter: (value: any, record: any) => record.isActive === value,
     },
     {
+      title: 'Verified',
+      dataIndex: 'verified',
+      key: 'verified',
+      width: 100,
+      render: (verified: boolean) => (
+        <span style={{ 
+          background: verified ? '#d1fae5' : '#fee2e2',
+          color: verified ? '#059669' : '#dc2626', 
+          padding: '6px 14px',
+          borderRadius: 6,
+          fontWeight: 700,
+          fontSize: 13,
+          border: `1px solid ${verified ? '#a7f3d0' : '#fecaca'}`,
+          display: 'inline-block'
+        }}>
+          {verified ? 'Verified' : 'Not Verified'}
+        </span>
+      ),
+      filters: [
+        { text: 'Verified', value: true },
+        { text: 'Not Verified', value: false },
+      ],
+      onFilter: (value: any, record: any) => record.verified === value,
+    },
+    {
       title: 'Created',
       dataIndex: 'createdAt',
       key: 'createdAt',
@@ -369,7 +394,7 @@ const UserManagement: React.FC = () => {
                 Modal.confirm({
                   title: record.verified ? 'Unverify user' : 'Verify user',
                   content: confirmText,
-                  onOk: async () => { await handleToggleVerified(record._id, !!record.verified); }
+                  onOk: async () => { await handleToggleVerified(record._id, !record.verified); }
                 });
               }}>
                 {record.verified ? 'Unverify' : 'Verify'}
