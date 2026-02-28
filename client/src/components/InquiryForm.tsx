@@ -679,30 +679,38 @@ const InquiryForm: React.FC = () => {
                 border: '1px solid rgba(64, 201, 255, 0.15)',
                 position: 'relative',
                 overflow: 'hidden',
-                padding: '12px 16px'
+                padding: 0
               }}>
-                {/* Top bar: Title + centered month/year */}
-                {(() => {
-                  const monthYearLabel = calendarValue ? calendarValue.format('MMMM YYYY') : dayjs().format('MMMM YYYY');
-                  return (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', marginBottom: '8px', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 6 : 0 }}>
-                      <Typography.Title level={5} style={{ margin: 0, fontSize: 16 }}>Appointment Scheduling</Typography.Title>
-                      <div style={{ textAlign: 'center', flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                        <div style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: '#111' }}>{monthYearLabel}</div>
-                      </div>
-                      <div style={{ width: 160 }} />
+                {/* Color header bar - mobile optimized */}
+                <div style={{ 
+                  background: 'linear-gradient(135deg, #1890ff 0%, #096dd9 50%, #0050b3 100%)',
+                  padding: isMobile ? '10px 12px' : '12px 16px',
+                  color: 'white',
+                  borderBottom: '2px solid rgba(0, 80, 179, 0.2)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 4 : 0 }}>
+                    <Typography.Title level={5} style={{ margin: 0, fontSize: isMobile ? 15 : 17, fontWeight: 700, color: 'white', textShadow: '0 1px 2px rgba(0,0,0,0.1)' }}>📅 Appointment Scheduling</Typography.Title>
+                    <div style={{ textAlign: 'center', flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                      <div style={{ fontSize: isMobile ? 13 : 17, fontWeight: 700, color: '#e6f7ff', letterSpacing: 0.5 }}>{(() => { const monthYearLabel = calendarValue ? calendarValue.format('MMMM YYYY') : dayjs().format('MMMM YYYY'); return monthYearLabel; })()}</div>
                     </div>
-                  );
-                })()}
-
-                {/* Rules text */}
-                <div style={{ padding: '4px 0 8px 0', color: '#6c757d', fontSize: 12 }}>
-                  Choose up to 3 preferred weekdays. Past dates and weekends are disabled.
+                    {!isMobile && <div style={{ width: 160 }} />}
+                  </div>
                 </div>
 
-                {/* Main area: calendar + action sidebar */}
-                <div className="af-main-calendar-area" style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 16, alignItems: 'stretch' }}>
-                  <div style={{ flex: 1, minWidth: isMobile ? 'auto' : 360 }}>
+                {/* Rules section with accent - mobile optimized */}
+                <div style={{ padding: isMobile ? '6px 12px' : '8px 16px', background: 'linear-gradient(90deg, rgba(24, 144, 255, 0.03) 0%, rgba(82, 196, 26, 0.03) 100%)', borderBottom: '1px solid rgba(24, 144, 255, 0.1)' }}>
+                  <div style={{ color: '#1890ff', fontSize: isMobile ? 11 : 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ fontSize: isMobile ? 12 : 14, flexShrink: 0 }}>ℹ️</span>
+                    <span>Choose up to 3 preferred weekdays. Weekends disabled.</span>
+                  </div>
+                </div>
+
+                {/* Main content with padding - mobile optimized */}
+                <div style={{ padding: isMobile ? '8px 12px' : '12px 16px' }}>
+
+                {/* Main area: calendar + action sidebar - mobile optimized */}
+                <div className="af-main-calendar-area" style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 12 : 16, alignItems: 'stretch' }}>
+                  <div style={{ flex: 1, minWidth: isMobile ? 'auto' : 360, background: 'rgba(255, 255, 255, 0.5)', borderRadius: 8, padding: isMobile ? 8 : 12, overflow: 'hidden' }}>
                     <div ref={calendarRef} className="af-calendar-container">
                       <Calendar
                         fullscreen={false}
@@ -739,10 +747,13 @@ const InquiryForm: React.FC = () => {
                   </div>
 
                   {/* Right action panel */}
-                  <div className="af-action-panel" style={{ width: isMobile ? '100%' : 300, borderLeft: isMobile ? 'none' : '1px solid #f0f0f0', paddingLeft: isMobile ? 0 : 16, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', marginTop: isMobile ? 12 : 0 }}>
+                  <div className="af-action-panel" style={{ width: isMobile ? '100%' : 300, background: 'linear-gradient(135deg, rgba(24, 144, 255, 0.06) 0%, rgba(82, 196, 26, 0.04) 100%)', border: '2px solid rgba(24, 144, 255, 0.15)', borderRadius: 8, borderLeft: isMobile ? 'none' : '4px solid #1890ff', borderTop: isMobile ? '4px solid #1890ff' : 'none', paddingLeft: isMobile ? 0 : 16, padding: isMobile ? 10 : 12, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', marginTop: isMobile ? 12 : 0 }}>
                     {/* Selected dates header with legend */}
-                    <div style={{ marginBottom: 12 }}>
-                      <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>Selected Dates ({appointmentDates.length}/3)</div>
+                    <div style={{ marginBottom: isMobile ? 10 : 12 }}>
+                      <div style={{ fontWeight: 700, marginBottom: 8, fontSize: isMobile ? 13 : 14, color: '#0050b3', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: isMobile ? 14 : 16 }}>✓</span>
+                        Selected Dates ({appointmentDates.length}/3)
+                      </div>
                       <div className="af-legend-container">
                         <div className="af-legend-item">
                           <span className="af-legend af-legend-available" />
@@ -772,9 +783,9 @@ const InquiryForm: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Month selector moved below selected dates */}
-                    <div style={{ marginBottom: 12 }}>
-                      <div style={{ fontSize: 12, color: '#666', marginBottom: 6 }}>Navigate months:</div>
+                    {/* Month selector moved below selected dates - mobile optimized */}
+                    <div style={{ marginBottom: isMobile ? 10 : 12 }}>
+                      <div style={{ fontSize: isMobile ? 11 : 12, color: '#666', marginBottom: 6 }}>Navigate months:</div>
                       <Select
                         value={calendarValue.format('YYYY-MM')}
                         onChange={(val: string) => {
@@ -782,6 +793,7 @@ const InquiryForm: React.FC = () => {
                           if (!isNaN(y) && !isNaN(m)) setCalendarValue(dayjs().year(y).month(m - 1).date(1));
                         }}
                         className="af-month-year-select"
+                        size={isMobile ? 'small' : 'middle'}
                         style={{ width: '100%' }}
                         size="small"
                       >
@@ -797,10 +809,11 @@ const InquiryForm: React.FC = () => {
                     </div>
 
                     <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                      <Button className="inquiry-outline-btn" onClick={() => setAppointmentDates([])} style={{ borderRadius: 18, padding: '6px 12px', fontSize: 13, flex: 1 }}>Clear</Button>
-                      <Button className="inquiry-gradient-btn" onClick={applyAppointmentDatesToForm} disabled={appointmentDates.length === 0} style={{ borderRadius: 18, padding: '6px 12px', fontSize: 13, flex: 1.2, fontWeight: 500 }}>Add Dates</Button>
+                      <Button className="inquiry-outline-btn" onClick={() => setAppointmentDates([])} style={{ borderRadius: 18, padding: '6px 12px', fontSize: 13, flex: 1, border: '2px solid #faad14', color: '#faad14', fontWeight: 500 }}>Clear</Button>
+                      <Button className="inquiry-gradient-btn" onClick={applyAppointmentDatesToForm} disabled={appointmentDates.length === 0} style={{ borderRadius: 18, padding: '6px 12px', fontSize: 13, flex: 1.2, fontWeight: 600, background: appointmentDates.length > 0 ? 'linear-gradient(135deg, #1890ff 0%, #096dd9 100%)' : '#d9d9d9', border: 'none', color: 'white' }}>Add Dates</Button>
                     </div>
                   </div>
+                </div>
                 </div>
               </Card>
             </div>
