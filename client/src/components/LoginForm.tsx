@@ -47,7 +47,7 @@ const LoginForm: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
   const [forgotPasswordSent, setForgotPasswordSent] = useState(false);
-  const [forgotPasswordMode, setForgotPasswordMode] = useState<'link' | 'otp'>('link');
+  const [forgotPasswordMode, setForgotPasswordMode] = useState<'link' | 'otp'>('otp');
   const [forgotPasswordSubmittedEmail, setForgotPasswordSubmittedEmail] = useState<string | null>(null);
   const [otpVerified, setOtpVerified] = useState(false);
   const [otpVerifying, setOtpVerifying] = useState(false);
@@ -948,15 +948,6 @@ const LoginForm: React.FC = () => {
           onFinish={onForgotPasswordFinish}
           requiredMark={false}
         >
-          <Form.Item label="How would you like to reset your password?">
-            <Radio.Group
-              value={forgotPasswordMode}
-              onChange={(e) => setForgotPasswordMode(e.target.value)}
-            >
-              <Radio value="link">Send reset link (email)</Radio>
-              <Radio value="otp">Send 6-digit code (email)</Radio>
-            </Radio.Group>
-          </Form.Item>
           <Form.Item
             name="email"
             label="Email"
@@ -976,7 +967,7 @@ const LoginForm: React.FC = () => {
               disabled={forgotPasswordLoading}
               block
             >
-              Send Reset Instructions
+              Send 6-Digit Code
             </Button>
           </Form.Item>
           <Button
