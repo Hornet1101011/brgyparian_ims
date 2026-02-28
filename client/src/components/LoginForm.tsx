@@ -945,15 +945,6 @@ const LoginForm: React.FC = () => {
           onFinish={onForgotPasswordFinish}
           requiredMark={false}
         >
-          <Form.Item label="What would you like to do?">
-            <Radio.Group
-              value={forgotPasswordMode}
-              onChange={(e) => setForgotPasswordMode(e.target.value)}
-            >
-              <Radio value="otp" style={{ display: 'block', marginBottom: 12 }}>Forgot Password - Generate new password</Radio>
-              <Radio value="link" style={{ display: 'block' }}>Recover Password - Retrieve account info</Radio>
-            </Radio.Group>
-          </Form.Item>
           <Form.Item
             name="email"
             label="Email"
