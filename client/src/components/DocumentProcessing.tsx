@@ -924,145 +924,57 @@ const DocumentProcessing: React.FC = () => {
                   if (!selectedFile || generateLoading) return;
                   setGenerateLoading(true);
                   try {
-                    // Prefer the currently previewed request if available
                     let request: any = null;
                     if (previewSelectedRequestId) {
-                      // find in mapping
                       const requestsForFile = getRequestsForFile(selectedFile._id);
                       request = requestsForFile.find((r: any) => (r._id || r.requestId) === previewSelectedRequestId) || null;
                     }
-                    // fallback to prioritized or primary
                     if (!request) request = getPrioritizedRequest(selectedFile._id) || getPrimaryRequest(selectedFile._id);
 
                     if (!request || !request.fieldValues) {
-                      alert('No document request or field values found for this file.');
+                      alert('No document request or field values found.');
                       setGenerateLoading(false);
                       return;
                     }
 
-                    // Generate filled docx via server endpoint (returns blob). Server may save the generated file and return X-Filled-File-Id header.
                     const result = await generateFilledDocx(selectedFile._id, request.fieldValues, (request._id || request.requestId));
                     const blob = result.blob;
-                    // Use the transaction/request id as the downloaded filename when available.
-                    // Prefer explicit transaction identifiers if present to avoid using resident/user ids.
-                    // Prefer transactionCode fields (server uses 'transactionCode'), fallback to older keys and finally server headers/ids
-                    const txId = (request && (request.transactionCode || request.transactionId || request.txId || request.transaction_id || request._id || request.requestId)) || result.transactionCode || result.generatedCopyId || result.processedDocId || null;
-                    const safeId = txId ? String(txId).replace(/[^a-zA-Z0-9-_.]/g, '_') : null;
-                    // Prefer transactionCode (returned in header) for filename, then request.transactionCode, then server filename, then safe id, then fallback
-                    const preferredCode = result.transactionCode || (request && request.transactionCode) || safeId || null;
-                    const serverFilename = preferredCode ? `${String(preferredCode).replace(/[^a-zA-Z0-9-_.]/g, '_')}.docx` : (result.filename || `filled_${selectedFile.filename || 'document'}.docx`);
 
-                    // Trigger download using server filename
-                    const url = window.URL.createObjectURL(new Blob([blob], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }));
+                    const txId = request._id || request.requestId;
+                    const filename = txId ? `${String(txId).replace(/[^a-zA-Z0-9-_.]/g, '_')}.docx` : `filled_${selectedFile.filename || 'document'}.docx`;
+                    const url = window.URL.createObjectURL(new Blob([blob]));
                     const link = document.createElement('a');
                     link.href = url;
-                    link.setAttribute('download', serverFilename);
+                    link.setAttribute('download', filename);
                     document.body.appendChild(link);
                     link.click();
                     link.parentNode?.removeChild(link);
                     window.URL.revokeObjectURL(url);
 
-                    // If server returned a saved id header, we assume it's already saved to GridFS; refresh listing
-                    const savedId = result.savedId || null;
-                    if (savedId) {
-                      // Refresh list so uploaded/generated file appears
-                      await fetchFilesAndRequests();
-                      const processedId = result.processedDocId || null;
-                      if (processedId) {
-                        notification.open({
-                          message: 'Generated copy saved',
-                          description: (
-                            <div>Saved to processed documents. <a href={`${API_URL.replace(/\/$/, '')}/processed-documents/${processedId}/raw`} target="_blank" rel="noreferrer">Open processed copy</a></div>
-                          ),
-                          duration: 8,
-                        });
-                        setProcessedDocId(processedId);
-                        setGeneratedModalVisible(true);
-                      } else {
-                        notification.open({ message: 'Generated document saved', description: 'Saved to server processed documents.', duration: 6 });
-                      }
-                      if (result.generatedCopyId) {
-                        setGeneratedCopyId(result.generatedCopyId);
-                        setGeneratedModalVisible(true);
-                      }
-                    } else {
-                      // Attempt to upload the generated file to the documents endpoint so the backend will store .files and .chunks (GridFS)
-                      try {
-                        const form = new FormData();
-                        form.append('file', new Blob([blob], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }), serverFilename);
-                        // include source metadata if helpful
-                        form.append('sourceTemplateId', selectedFile._id || '');
-                        form.append('requestId', (request._id || request.requestId) || '');
-                        // try a couple of likely endpoints
-                        const base = API_URL.replace(/\/$/, '');
-                        let uploaded = false;
-                        // Prefer uploading directly into the processed_documents bucket if available on the server
-                        const tryUrls = [ `${base}/processed-documents/upload`, `${base}/documents/upload-inline`, `${base}/documents/upload`, `${base}/documents`, `${base}/admin/documents/upload` ];
-                        for (const u of tryUrls) {
-                          try {
-                            const resp = await fetch(u, { method: 'POST', body: form, credentials: 'include' });
-                            if (resp.ok) {
-                              uploaded = true;
-                              break;
-                            }
-                          } catch (e) {
-                            // continue
-                          }
-                        }
-                        if (uploaded) {
-                          await fetchFilesAndRequests();
-                          // show a non-blocking toast with a direct link to the processed copy when available
-                          const processedId = result.processedDocId || null;
-                          if (processedId) {
-                            notification.open({
-                              message: 'Generated copy saved',
-                              description: (
-                                <div>Saved to processed documents. <a href={`${API_URL.replace(/\/$/, '')}/processed-documents/${processedId}/raw`} target="_blank" rel="noreferrer">Open processed copy</a></div>
-                              ),
-                              duration: 8,
-                            });
-                            setProcessedDocId(processedId);
-                            setGeneratedModalVisible(true);
-                          } else {
-                            notification.open({ message: 'Generated document uploaded', description: 'Uploaded to server processed documents.', duration: 6 });
-                          }
-                        } else {
-                          console.warn('Upload fallback failed; generated file was downloaded but not uploaded to documents collection.');
-                          alert('Generated document downloaded. Server-side save not confirmed.');
-                        }
-                      } catch (uploadErr) {
-                        console.error('Upload fallback error', uploadErr);
-                        alert('Generated document downloaded but upload to server failed.');
-                      }
-                    }
-                    // After successful generation (and attempted save), also mark the associated request as completed
+                    const requestId = request._id || request.requestId;
                     try {
-                      // Determine request id to mark as approved
-                      let requestId: string | null = previewSelectedRequestId;
-                      if (!requestId) {
-                        const r = getPrioritizedRequest(selectedFile._id) || getPrimaryRequest(selectedFile._id);
-                        requestId = (r && (r._id || r.requestId)) || null;
-                      }
-                      if (requestId) {
-                        if (documentsAPI.updateDocumentStatus) {
-                          await documentsAPI.updateDocumentStatus(requestId, { status: 'approved' });
-                        } else {
-                          await (await import('../services/api')).axiosInstance.patch(`/document-requests/${requestId}/process`);
-                        }
-                        // Refresh mapping/UI after marking complete
-                        await fetchFilesAndRequests();
-                        setPreviewVisible(false);
-                        alert('Request marked as completed.');
-                      }
-                    } catch (markErr) {
-                      console.warn('Failed to mark request complete after generation', (markErr as any)?.message || markErr);
+                      await documentsAPI.updateDocumentStatus(requestId, { status: 'approved' });
+                      notification.open({
+                        message: 'Success!',
+                        description: 'Document generated and request marked as approved.',
+                        duration: 3,
+                      });
+                    } catch (err) {
+                      notification.open({
+                        message: 'Document Generated',
+                        description: 'Document downloaded. Status update failed.',
+                        duration: 3,
+                      });
                     }
+
+                    await fetchFilesAndRequests();
+                    setPreviewVisible(false);
+
                   } catch (err) {
-                    console.error('Generation error', err);
-                    alert('Failed to generate filled document.');
+                    console.error(err);
+                    alert('Failed to generate document.');
                   } finally {
                     setGenerateLoading(false);
-                    setPreviewVisible(false);
                   }
                 }}
                 disabled={generateLoading}
