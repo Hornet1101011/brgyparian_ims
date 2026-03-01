@@ -319,7 +319,14 @@ export const createDocumentRequest = async (req: any, res: Response) => {
     const user = (req as any).user;
     // Resolve requester information from authenticated user or by lookup
     let username = req.body.username || 'Unknown';
-    let barangayID: string | undefined = req.body.barangayID || undefined;
+    // Start with barangayID from request body, then from JWT token
+    let barangayID: string | undefined = req.body.barangayID || user?.barangayID || undefined;
+    console.log('[createDocumentRequest] Barangay ID resolution:', {
+      fromReqBody: req.body.barangayID,
+      fromUser: user?.barangayID,
+      resolved: barangayID,
+      userData: user ? { _id: user._id, username: user.username, barangayID: user.barangayID } : 'NO USER'
+    });
     let requesterId: any = null;
     let requesterFullName: string | undefined = undefined;
     try {
@@ -328,6 +335,7 @@ export const createDocumentRequest = async (req: any, res: Response) => {
         const found = await UserModel.findById(user._id).lean();
         if (found) {
           username = found.username || (found.fullName ? found.fullName : username);
+          // Use database barangayID if available, otherwise keep JWT barangayID
           barangayID = found.barangayID || barangayID;
           requesterId = found._id;
           requesterFullName = found.fullName;
@@ -397,8 +405,15 @@ export const createDocumentRequest = async (req: any, res: Response) => {
 
     try {
       console.log('[createDocumentRequest] Saving document request...');
-      await documentRequest.save();
-      console.log('[createDocumentRequest] Document request saved successfully:', documentRequest._id);
+      const saved = await documentRequest.save();
+      console.log('[createDocumentRequest] Document request saved successfully:', {
+        _id: (saved as any)._id,
+        status: (saved as any).status,
+        barangayID: (saved as any).barangayID,
+        requesterId: (saved as any).requesterId,
+        username: (saved as any).username,
+        type: (saved as any).type
+      });
     } catch (err: any) {
       if (handleSaveError(err, res)) return; // handled as 409
       console.error('Error saving documentRequest during creation:', {
@@ -436,18 +451,29 @@ export const getMyDocumentRequests = async (req: any, res: Response) => {
     }
     
     const user = req.user;
-    const query: any = {};
+    console.log('[getMyDocumentRequests] User info:', { userId: user._id, username: user.username, barangayID: user.barangayID });
     
-    // Primary: Match by requesterId (most reliable)
-    if (user && user._id) {
-      query.requesterId = user._id;
-    }
+    // Build query with multiple fallbacks to find user's requests
+    // Try: requesterId (new), then username (any version)
+    const query: any = {
+      $or: [
+        { requesterId: user._id },  // Primary: modern requests with requesterId
+        { username: user.username }  // Secondary: any request with matching username
+      ]
+    };
+    
+    console.log('[getMyDocumentRequests] Query:', JSON.stringify(query));
     
     const documentRequests = await DocumentRequest.find(query)
       .sort({ dateRequested: -1 })
       .populate('processedBy', 'fullName')
       .populate('requesterId', 'fullName username barangayID');
 
+    console.log('[getMyDocumentRequests] Found', documentRequests.length, 'requests');
+    documentRequests.forEach((req: any, i: number) => {
+      console.log(`  [${i}] id=${req._id}, status=${req.status}, username=${req.username}, requesterId=${req.requesterId}`);
+    });
+    
     res.json(documentRequests);
   } catch (error) {
       console.error("Error in getMyDocumentRequests:", error);
@@ -467,6 +493,12 @@ export const getAllDocumentRequests = async (req: any, res: Response) => {
       .sort({ dateRequested: -1 })
       .populate('processedBy', 'fullName username barangayID')
       .populate('requesterId', 'fullName username barangayID');
+    
+    // Log stats about the results
+    const pendingCount = documentRequests.filter(d => d.status === 'pending').length;
+    const approvedCount = documentRequests.filter(d => d.status === 'approved').length;
+    console.log('[getAllDocumentRequests] Returning', documentRequests.length, 'requests - Pending:', pendingCount, 'Approved:', approvedCount);
+    
     res.json(documentRequests);
   } catch (error) {
     res.status(500).json({

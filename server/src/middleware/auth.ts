@@ -20,6 +20,20 @@ const authMiddleware = async (req: Request, res: Response, next: NextFunction) =
     if (!user) {
       throw new Error();
     }
+
+    // Ensure user has barangayID - if missing, try to generate or recover one
+    if (!user.barangayID || user.barangayID.trim() === '') {
+      console.warn(`[auth middleware] User ${user._id} (${user.username}) has no barangayID, generating one...`);
+      // Generate a barangayID if missing
+      const year = new Date().getFullYear();
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+      let rand = '';
+      for (let i = 0; i < 6; i++) rand += chars.charAt(Math.floor(Math.random() * chars.length));
+      user.barangayID = `brgyparian-${year}-${rand}`;
+      await user.save();
+      console.log(`[auth middleware] Generated barangayID for user ${user._id}: ${user.barangayID}`);
+    }
+    
     // Ensure downstream code always gets username and barangayID
     (req as any).user = {
       _id: user._id,
@@ -35,6 +49,12 @@ const authMiddleware = async (req: Request, res: Response, next: NextFunction) =
       ,
       verified: user.verified || false
     };
+    console.log('[auth middleware] User attached to req.user:', {
+      userId: user._id,
+      username: user.username,
+      barangayID: user.barangayID,
+      role: user.role
+    });
     next();
   } catch (error) {
     res.status(401).json({ message: 'Please authenticate' });
