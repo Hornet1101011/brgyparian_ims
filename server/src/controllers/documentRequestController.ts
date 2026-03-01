@@ -434,16 +434,15 @@ export const getMyDocumentRequests = async (req: any, res: Response) => {
     if (!req.user || !req.user._id) {
       return res.status(401).json({ message: "Unauthorized: No user found" });
     }
-    // Find document requests for this authenticated user. Prefer requesterId if stored.
+    
     const user = req.user;
     const query: any = {};
+    
+    // Primary: Match by requesterId (most reliable)
     if (user && user._id) {
-      // Try to match requesterId or fallback to username/barangayID
-      query.$or = [ { requesterId: user._id }, { username: user.username, barangayID: user.barangayID } ];
-    } else {
-      query.username = user.username;
-      query.barangayID = user.barangayID;
+      query.requesterId = user._id;
     }
+    
     const documentRequests = await DocumentRequest.find(query)
       .sort({ dateRequested: -1 })
       .populate('processedBy', 'fullName')

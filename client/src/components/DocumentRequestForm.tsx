@@ -576,6 +576,8 @@ const DocumentRequestForm: React.FC = () => {
                 };
                 await documentsAPI.requestDocument(payload);
                 message.success('Request submitted successfully!');
+                // Dispatch custom event so Dashboard and other components can refresh
+                window.dispatchEvent(new CustomEvent('documentRequestCreated', { detail: payload }));
                 setModalOpen(false);
               } catch (err) {
                 message.error('Failed to submit request.');

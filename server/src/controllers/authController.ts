@@ -35,10 +35,19 @@ interface LoginRequest {
   password: string;
 }
 
-// Generate JWT Token (now includes username)
-const generateToken = (user: { _id: string, role: string, username: string }): string => {
+// Generate JWT Token (now includes username, email, fullName, barangayID, address, contactNumber)
+const generateToken = (user: { _id: string, role: string, username: string, email?: string, fullName?: string, barangayID?: string, address?: string, contactNumber?: string }): string => {
   return jwt.sign(
-    { _id: user._id, role: user.role, username: user.username },
+    { 
+      _id: user._id, 
+      role: user.role, 
+      username: user.username,
+      email: user.email,
+      fullName: user.fullName,
+      barangayID: user.barangayID,
+      address: user.address,
+      contactNumber: user.contactNumber
+    },
     process.env.JWT_SECRET || 'defaultsecret',
     { expiresIn: '24h' }
   );
@@ -216,7 +225,16 @@ export const register = async (req: Request, res: Response, next: unknown) => {
     }
 
     // Generate token
-    const token = generateToken({ _id: String(user._id), role: user.role, username: user.username });
+    const token = generateToken({ 
+      _id: String(user._id), 
+      role: user.role, 
+      username: user.username,
+      email: user.email,
+      fullName: user.fullName,
+      barangayID: user.barangayID,
+      address: user.address,
+      contactNumber: user.contactNumber
+    });
 
     // Update last login
     user.lastLogin = new Date();
@@ -307,7 +325,16 @@ export const login = async (req: Request, res: Response) => {
     }
 
     // Generate token
-    const token = generateToken({ _id: String(user._id), role: user.role, username: user.username });
+    const token = generateToken({ 
+      _id: String(user._id), 
+      role: user.role, 
+      username: user.username,
+      email: user.email,
+      fullName: user.fullName,
+      barangayID: user.barangayID,
+      address: user.address,
+      contactNumber: user.contactNumber
+    });
 
     // Update last login
     user.lastLogin = new Date();

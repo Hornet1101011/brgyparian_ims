@@ -199,6 +199,39 @@ const Dashboard: React.FC = () => {
     // TODO: Fetch unread notifications count
   }, [user]);
 
+  // Listen for document request creation and refetch
+  useEffect(() => {
+    const handleDocumentRequestCreated = () => {
+      // Refetch documents when a new request is created
+      const fetchDocuments = async () => {
+        try {
+          let response;
+          if (user?.role === 'admin' || user?.role === 'staff') {
+            response = await documentsAPI.getAllDocuments();
+          } else {
+            response = await documentsAPI.getMyDocuments();
+          }
+          setDocuments(response);
+          // Recompute pending/approved counts
+          const list = Array.isArray(response) ? response : (response && response.data) ? response.data : [];
+          const pendingItems = (list || []).filter((d: any) => (d.status || '').toString().toLowerCase() === 'pending');
+          setPendingUnreadCount(pendingItems.length);
+          setHasUnreadPending(pendingItems.length > 0);
+          
+          const approvedItems = (list || []).filter((d: any) => (d.status || '').toString().toLowerCase() === 'approved');
+          setApprovedUnreadCount(approvedItems.length);
+          setHasUnreadApproved(approvedItems.length > 0);
+        } catch (error) {
+          console.error('Error refetching documents after request:', error);
+        }
+      };
+      fetchDocuments();
+    };
+    
+    window.addEventListener('documentRequestCreated', handleDocumentRequestCreated);
+    return () => window.removeEventListener('documentRequestCreated', handleDocumentRequestCreated);
+  }, [user]);
+
   // Fetch resident's inquiries/appointments when role is resident
   useEffect(() => {
     let mounted = true;
