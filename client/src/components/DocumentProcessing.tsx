@@ -681,35 +681,6 @@ const DocumentProcessing: React.FC = () => {
                   }
                 },
                 {
-                  title: '🏷️ Type',
-                  dataIndex: 'type',
-                  key: 'type',
-                  width: 150,
-                  render: (text: string) => (
-                    <Tag style={{ borderRadius: 4, fontSize: 12, padding: '4px 10px', background: '#f0f5ff', color: '#1890ff', border: 'none' }}>
-                      {text || 'Unknown'}
-                    </Tag>
-                  )
-                },
-                {
-                  title: '⏳ Status',
-                  dataIndex: '_id',
-                  key: 'status',
-                  width: 120,
-                  render: (id: string) => {
-                    const primary = getPrimaryRequest(id);
-                    const status = primary?.status || 'pending';
-                    let config = { label: 'Pending', color: '#1890ff', bgColor: 'linear-gradient(135deg, #e6f4ff 0%, #bae0ff 100%)', borderColor: '#1890ff' };
-                    if (status === 'approved') config = { label: 'Approved', color: '#52c41a', bgColor: 'linear-gradient(135deg, #f6ffed 0%, #d9f7be 100%)', borderColor: '#52c41a' };
-                    if (status === 'rejected') config = { label: 'Rejected', color: '#ff4d4f', bgColor: 'linear-gradient(135deg, #fff2f0 0%, #ffe7e6 100%)', borderColor: '#ff4d4f' };
-                    return (
-                      <Tag style={{ borderRadius: 6, background: config.bgColor, color: config.color, border: `2px solid ${config.borderColor}`, fontSize: 12, fontWeight: 700, padding: '6px 12px' }}>
-                        {config.label}
-                      </Tag>
-                    );
-                  }
-                },
-                {
                   title: '📅 Uploaded',
                   dataIndex: 'uploadDate',
                   key: 'uploadDate',
