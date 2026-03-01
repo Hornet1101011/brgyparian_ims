@@ -43,28 +43,28 @@ const statusOptions = [
 // Columns will be defined inside the component to access state/handlers
 
 
-const UserManagement: React.FC = () => {
-  const [users, setUsers] = useState<any[]>([]);
+const UserManagement = () => {
+  const [users, setUsers] = useState([]);
   const [search, setSearch] = useState('');
-  const [roleFilter, setRoleFilter] = useState<string | undefined>(undefined);
-  const [statusFilter, setStatusFilter] = useState<boolean | undefined>(undefined);
-  const [dateRange, setDateRange] = useState<any>(null);
+  const [roleFilter, setRoleFilter] = useState(undefined);
+  const [statusFilter, setStatusFilter] = useState(undefined);
+  const [dateRange, setDateRange] = useState(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+  const [selectedRowKeys, setSelectedRowKeys] = useState([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<any | null>(null);
-  const [selectedResident, setSelectedResident] = useState<any | null>(null);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [selectedResident, setSelectedResident] = useState(null);
   const [residentLoading, setResidentLoading] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editUserModalOpen, setEditUserModalOpen] = useState(false);
-  const [userFormValues, setUserFormValues] = useState<any>({});
+  const [userFormValues, setUserFormValues] = useState({});
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadPreview, setUploadPreview] = useState<string | null>(null);
-  const pendingUploadRef = React.useRef<Promise<any> | null>(null);
+  const [uploadPreview, setUploadPreview] = useState(null);
+  const pendingUploadRef = React.useRef(null);
   const [loading, setLoading] = useState(true);
-  const [editFormValues, setEditFormValues] = useState<any>({});
+  const [editFormValues, setEditFormValues] = useState({});
   // Helper to generate a random unique Barangay ID
   
 
@@ -927,7 +927,7 @@ const UserManagement: React.FC = () => {
             )}
 
             {/* Action buttons */}
-            <div style={{ marginTop: 28, paddingTop: 20, paddingBottom: 8, borderTop: '2px solid #e5e7eb', display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-start' }}>
+            <div style={{ marginTop: 28, paddingTop: 20, paddingBottom: 8, borderTop: '2px solid #e5e7eb', display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-start', flexDirection: window.innerWidth < 576 ? 'column' : 'row' }}>
               <Button 
                 icon={<EditOutlined />} 
                 onClick={() => setEditUserModalOpen(true)}
@@ -936,9 +936,11 @@ const UserManagement: React.FC = () => {
                   color: 'white',
                   fontWeight: 600,
                   border: 'none',
-                  height: 36,
-                  paddingLeft: 16,
-                  paddingRight: 16
+                  height: window.innerWidth < 576 ? 40 : 36,
+                  paddingLeft: window.innerWidth < 576 ? 12 : 16,
+                  paddingRight: window.innerWidth < 576 ? 12 : 16,
+                  flex: window.innerWidth < 576 ? 1 : 'none',
+                  fontSize: window.innerWidth < 576 ? '14px' : '16px'
                 }}
               >
                 Edit User
@@ -952,9 +954,11 @@ const UserManagement: React.FC = () => {
                     color: 'white',
                     fontWeight: 600,
                     border: 'none',
-                    height: 36,
-                    paddingLeft: 16,
-                    paddingRight: 16
+                    height: window.innerWidth < 576 ? 40 : 36,
+                    paddingLeft: window.innerWidth < 576 ? 12 : 16,
+                    paddingRight: window.innerWidth < 576 ? 12 : 16,
+                    flex: window.innerWidth < 576 ? 1 : 'none',
+                    fontSize: window.innerWidth < 576 ? '14px' : '16px'
                   }}
                 >
                   Edit Resident
@@ -975,9 +979,11 @@ const UserManagement: React.FC = () => {
                       color: 'white',
                       fontWeight: 600,
                       border: 'none',
-                      height: 36,
-                      paddingLeft: 16,
-                      paddingRight: 16
+                      height: window.innerWidth < 576 ? 40 : 36,
+                      paddingLeft: window.innerWidth < 576 ? 12 : 16,
+                      paddingRight: window.innerWidth < 576 ? 12 : 16,
+                      flex: window.innerWidth < 576 ? 1 : 'none',
+                      fontSize: window.innerWidth < 576 ? '14px' : '16px'
                     }}
                   >
                     Disable
@@ -991,9 +997,11 @@ const UserManagement: React.FC = () => {
                     color: 'white',
                     fontWeight: 600,
                     border: 'none',
-                    height: 36,
-                    paddingLeft: 16,
-                    paddingRight: 16
+                    height: window.innerWidth < 576 ? 40 : 36,
+                    paddingLeft: window.innerWidth < 576 ? 12 : 16,
+                    paddingRight: window.innerWidth < 576 ? 12 : 16,
+                    flex: window.innerWidth < 576 ? 1 : 'none',
+                    fontSize: window.innerWidth < 576 ? '14px' : '16px'
                   }}
                 >
                   Enable
@@ -1023,7 +1031,7 @@ const UserManagement: React.FC = () => {
             message.error('Failed to update resident.');
           }
         }}
-        width={900}
+        width={window.innerWidth < 576 ? '90%' : 900}
       >
         {/* Tabbed structured form with validation and avatar upload */}
         <Form
@@ -1193,7 +1201,7 @@ const UserManagement: React.FC = () => {
             message.error('Failed to update user');
           }
         }}
-        width={600}
+        width={window.innerWidth < 576 ? '90%' : 600}
       >
         <Form layout="vertical" initialValues={userFormValues} onValuesChange={(_, vals) => setUserFormValues(vals)}>
           <Row gutter={8}>

@@ -37,6 +37,7 @@ const DocumentProcessing: React.FC = () => {
   const [filterType, setFilterType] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<string | null>(null);
   const [filterRange, setFilterRange] = useState<any | null>(null);
+  const [generateLoading, setGenerateLoading] = useState<boolean>(false);
   const location = useLocation();
   const navigate = useNavigate();
   const openRequestIdFromNav = (location && (location.state as any) && (location.state as any).openRequestId) ? (location.state as any).openRequestId : null;
@@ -804,13 +805,6 @@ const DocumentProcessing: React.FC = () => {
                   Process
                 </Button>
                 <Button 
-                  style={{ borderRadius: 6, flex: '1 1 150px', color: '#52c41a', borderColor: '#52c41a' }}
-                  size="large"
-                  icon={<CheckCircleOutlined />}
-                >
-                  Approve
-                </Button>
-                <Button 
                   danger 
                   style={{ borderRadius: 6, flex: '1 1 150px' }}
                   size="large"
@@ -956,7 +950,8 @@ const DocumentProcessing: React.FC = () => {
               <button
                 className={styles.generateButton}
                 onClick={async () => {
-                  if (!selectedFile) return;
+                  if (!selectedFile || generateLoading) return;
+                  setGenerateLoading(true);
                   try {
                     // Prefer the currently previewed request if available
                     let request: any = null;
@@ -970,6 +965,7 @@ const DocumentProcessing: React.FC = () => {
 
                     if (!request || !request.fieldValues) {
                       alert('No document request or field values found for this file.');
+                      setGenerateLoading(false);
                       return;
                     }
 
@@ -1093,10 +1089,22 @@ const DocumentProcessing: React.FC = () => {
                   } catch (err) {
                     console.error('Generation error', err);
                     alert('Failed to generate filled document.');
-                  }
+                  } finally {
+                    setGenerateLoading(false);
                     setPreviewVisible(false);
+                  }
                 }}
-              >Generate</button>
+                disabled={generateLoading}
+              >
+                {generateLoading ? (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    <Spin size="small" />
+                    <span>Generating...</span>
+                  </div>
+                ) : (
+                  'Generate'
+                )}
+              </button>
             </div>
           </>
         )}

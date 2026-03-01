@@ -79,6 +79,31 @@
   vertical-align: middle;
 }
 
+/* Icon alignment and sizing */
+.af-header-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.af-info-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.af-check-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
 /* Brief highlight when calendar is auto-scrolled into view */
 .af-scroll-highlight {
   box-shadow: 0 0 0 6px rgba(64,169,255,0.12);
@@ -294,11 +319,25 @@
   font-weight: 500;
 }
 
+/* Mobile legend - horizontal compact */
+@media (max-width: 768px) {
+  .af-legend-container {
+    gap: 12px;
+    padding: 6px 8px;
+  }
+}
+
 @media (max-width: 640px) {
   .af-legend-container {
-    flex-direction: column;
-    gap: 8px;
-    align-items: flex-start;
+    flex-direction: row;
+    gap: 10px;
+    padding: 6px 8px;
+    margin-bottom: 10px;
+  }
+
+  .af-legend-item {
+    gap: 5px;
+    font-size: 11px;
   }
 }
 

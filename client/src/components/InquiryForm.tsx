@@ -688,8 +688,11 @@ const InquiryForm: React.FC = () => {
                   color: 'white',
                   borderBottom: '2px solid rgba(0, 80, 179, 0.2)'
                 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 4 : 0 }}>
-                    <Typography.Title level={5} style={{ margin: 0, fontSize: isMobile ? 15 : 17, fontWeight: 700, color: 'white', textShadow: '0 1px 2px rgba(0,0,0,0.1)' }}>📅 Appointment Scheduling</Typography.Title>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'center' : 'center', flexDirection: isMobile ? 'row' : 'row', gap: isMobile ? 8 : 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 8 }}>
+                      <span style={{ fontSize: isMobile ? 18 : 20, lineHeight: 1 }}>📅</span>
+                      <Typography.Title level={5} style={{ margin: 0, fontSize: isMobile ? 14 : 17, fontWeight: 700, color: 'white', textShadow: '0 1px 2px rgba(0,0,0,0.1)' }}>Appointment Scheduling</Typography.Title>
+                    </div>
                     <div style={{ textAlign: 'center', flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                       <div style={{ fontSize: isMobile ? 13 : 17, fontWeight: 700, color: '#e6f7ff', letterSpacing: 0.5 }}>{(() => { const monthYearLabel = calendarValue ? calendarValue.format('MMMM YYYY') : dayjs().format('MMMM YYYY'); return monthYearLabel; })()}</div>
                     </div>
@@ -699,9 +702,9 @@ const InquiryForm: React.FC = () => {
 
                 {/* Rules section with accent - mobile optimized */}
                 <div style={{ padding: isMobile ? '6px 12px' : '8px 16px', background: 'linear-gradient(90deg, rgba(24, 144, 255, 0.03) 0%, rgba(82, 196, 26, 0.03) 100%)', borderBottom: '1px solid rgba(24, 144, 255, 0.1)' }}>
-                  <div style={{ color: '#1890ff', fontSize: isMobile ? 11 : 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <span style={{ fontSize: isMobile ? 12 : 14, flexShrink: 0 }}>ℹ️</span>
-                    <span>Choose up to 3 preferred weekdays. Weekends disabled.</span>
+                  <div style={{ color: '#1890ff', fontSize: isMobile ? 11 : 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 8 }}>
+                    <span style={{ fontSize: isMobile ? 14 : 16, flexShrink: 0, lineHeight: 1 }}>ℹ️</span>
+                    <span>{isMobile ? 'Up to 3 weekdays only' : 'Choose up to 3 preferred weekdays. Weekends disabled.'}</span>
                   </div>
                 </div>
 
@@ -750,22 +753,22 @@ const InquiryForm: React.FC = () => {
                   <div className="af-action-panel" style={{ width: isMobile ? '100%' : 300, background: 'linear-gradient(135deg, rgba(24, 144, 255, 0.06) 0%, rgba(82, 196, 26, 0.04) 100%)', border: '2px solid rgba(24, 144, 255, 0.15)', borderRadius: 8, borderLeft: isMobile ? 'none' : '4px solid #1890ff', borderTop: isMobile ? '4px solid #1890ff' : 'none', paddingLeft: isMobile ? 0 : 16, padding: isMobile ? 10 : 12, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', marginTop: isMobile ? 12 : 0 }}>
                     {/* Selected dates header with legend */}
                     <div style={{ marginBottom: isMobile ? 10 : 12 }}>
-                      <div style={{ fontWeight: 700, marginBottom: 8, fontSize: isMobile ? 13 : 14, color: '#0050b3', display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontSize: isMobile ? 14 : 16 }}>✓</span>
-                        Selected Dates ({appointmentDates.length}/3)
+                      <div style={{ fontWeight: 700, marginBottom: 8, fontSize: isMobile ? 13 : 14, color: '#0050b3', display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 8 }}>
+                        <span style={{ fontSize: isMobile ? 16 : 18, lineHeight: 1, flexShrink: 0 }}>✓</span>
+                        <span>Selected ({appointmentDates.length}/3)</span>
                       </div>
                       <div className="af-legend-container">
                         <div className="af-legend-item">
                           <span className="af-legend af-legend-available" />
-                          <span style={{ fontSize: 12 }}>Available</span>
+                          <span style={{ fontSize: isMobile ? 11 : 12 }}>{isMobile ? 'Avail' : 'Available'}</span>
                         </div>
                         <div className="af-legend-item">
                           <span className="af-legend af-legend-selected" />
-                          <span style={{ fontSize: 12 }}>Selected</span>
+                          <span style={{ fontSize: isMobile ? 11 : 12 }}>{isMobile ? 'Sel' : 'Selected'}</span>
                         </div>
                         <div className="af-legend-item">
                           <span className="af-legend af-legend-unavailable" />
-                          <span style={{ fontSize: 12 }}>Unavailable</span>
+                          <span style={{ fontSize: isMobile ? 11 : 12 }}>{isMobile ? 'N/A' : 'Unavailable'}</span>
                         </div>
                       </div>
                     </div>
