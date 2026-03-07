@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import dayjs, { Dayjs } from 'dayjs';
-import type { FormInstance } from 'antd';
 import {
   Form,
   Select,
@@ -18,12 +17,11 @@ import {
   Modal,
   Descriptions,
   Calendar,
-  Tag,
 } from 'antd';
 import { UploadOutlined, InfoCircleOutlined, SendOutlined, ReloadOutlined, MailOutlined } from '@ant-design/icons';
 import './InquiryForm.css';
 import { useAuth } from '../contexts/AuthContext';
-import { contactAPI } from '../services/api';
+import { contactAPI, adminAPI } from '../services/api';
 
 const { TextArea } = Input;
 
@@ -46,34 +44,63 @@ const inquiryTypeGroups = [
   },
 ];
 
-const InquiryForm: React.FC = () => {
+const InquiryForm = () => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [form] = Form.useForm();
-  const formRef = React.useRef<FormInstance | null>(null);
+  const formRef = React.useRef(null);
   React.useEffect(() => { formRef.current = form; }, [form]);
   // ref for calendar container to allow smooth scroll into view
-  const calendarRef = React.useRef<HTMLDivElement | null>(null);
+  const calendarRef = React.useRef(null);
   const [subjectCount, setSubjectCount] = React.useState(0);
   const [messageCount, setMessageCount] = React.useState(0);
   const SUBJECT_MAX = 100;
   const MESSAGE_MAX = 500;
   const [currentStep, setCurrentStep] = React.useState(0);
-  const [fileListState, setFileListState] = React.useState<any[]>([]);
+  const [fileListState, setFileListState] = React.useState([]);
   const [previewModalVisible, setPreviewModalVisible] = React.useState(false);
-  const [previewValues, setPreviewValues] = React.useState<any>(null);
+  const [previewValues, setPreviewValues] = React.useState(null);
   const LOCALSTORAGE_KEY = 'inquiryFormDraft_v1';
+  const [staffList, setStaffList] = React.useState([]);
+  const [staffLoading, setStaffLoading] = React.useState(false);
+
+  // Fetch staff list on component mount
+  React.useEffect(() => {
+    const fetchStaff = async () => {
+      try {
+        setStaffLoading(true);
+        const response = await adminAPI.getUsers();
+        console.log('[InquiryForm] Staff fetch response:', response);
+        if (Array.isArray(response)) {
+          const staff = response.filter((user: any) => user && user.role === 'staff');
+          console.log('[InquiryForm] Filtered staff:', staff);
+          setStaffList(staff);
+          // Set default value once staff is loaded
+          if (staff.length > 0 && formRef.current) {
+            formRef.current.setFieldsValue({ assignedRole: staff[0]._id });
+          }
+        } else {
+          console.warn('[InquiryForm] adminAPI.getUsers() returned non-array:', response);
+        }
+      } catch (err) {
+        console.error('[InquiryForm] Failed to fetch staff list:', err);
+      } finally {
+        setStaffLoading(false);
+      }
+    };
+    fetchStaff();
+  }, []);
 
   // Helper: Appointment scheduler state lives here when inquiry type is appointment
   const [appointmentMode, setAppointmentMode] = React.useState(false);
-  const [appointmentDates, setAppointmentDates] = React.useState<string[]>([]);
+  const [appointmentDates, setAppointmentDates] = React.useState([]);
   // calendar visible month/year control
-  const [calendarValue, setCalendarValue] = React.useState<Dayjs>(dayjs());
+  const [calendarValue, setCalendarValue] = React.useState(dayjs());
   // live clock to allow month dropdown to refresh when months pass while the page is open
-  const [now, setNow] = React.useState<Dayjs>(dayjs());
+  const [now, setNow] = React.useState(dayjs());
   // Responsive state: detect mobile/small screens to adapt calendar layout
-  const [isMobile, setIsMobile] = React.useState<boolean>(false);
+  const [isMobile, setIsMobile] = React.useState(false);
 
   React.useEffect(() => {
     const check = () => setIsMobile(typeof window !== 'undefined' ? window.innerWidth <= 640 : false);
@@ -93,8 +120,10 @@ const InquiryForm: React.FC = () => {
   };
 
   // Use a reusable utility to get the next 30 available weekdays (dayjs objects)
-  const { getAvailableAppointmentDates } = (() => require('../utils/appointments'))();
-  const rawAvailable = React.useMemo(() => getAvailableAppointmentDates(30), []);
+  const getAvailableAppointmentDates = React.useMemo(() => {
+    return (() => require('../utils/appointments').getAvailableAppointmentDates)();
+  }, []);
+  const rawAvailable = React.useMemo(() => getAvailableAppointmentDates(30), [getAvailableAppointmentDates]);
   // Exclude today from available appointment dates (user requested today not be selectable)
   const availableDayjs = React.useMemo(() => rawAvailable.filter((d: Dayjs) => !d.isSame(dayjs(), 'day')), [rawAvailable]);
   const allowedWeekdays = React.useMemo(() => new Set(availableDayjs.map((d: Dayjs) => d.format('YYYY-MM-DD'))), [availableDayjs]);
@@ -117,13 +146,13 @@ const InquiryForm: React.FC = () => {
     try {
       const firstOpt = now.startOf('month');
       const lastOpt = now.startOf('month').add(11, 'month');
-      if (calendarValue.isBefore(firstOpt) || calendarValue.isAfter(lastOpt)) {
+      if (calendarValue && (calendarValue.isBefore(firstOpt) || calendarValue.isAfter(lastOpt))) {
         setCalendarValue(firstOpt);
       }
     } catch (e) {
       // ignore
     }
-  }, [now]);
+  }, [now, calendarValue]);
 
   // Default select the earliest available date (the first element of availableDayjs)
   React.useEffect(() => {
@@ -333,7 +362,7 @@ const InquiryForm: React.FC = () => {
       formData.append('type', values.type || '');
       formData.append('subject', values.subject || '');
       formData.append('message', values.message || '');
-      formData.append('assignedRole', values.assignedRole || 'staff');
+      formData.append('assignedRole', values.assignedRole || (staffList.length > 0 ? staffList[0]._id : ''));
       formData.append('username', user?.username || '');
       formData.append('barangayID', user?.barangayID || '');
       if (values.assignedTo && Array.isArray(values.assignedTo)) {
@@ -483,16 +512,28 @@ const InquiryForm: React.FC = () => {
                 name="assignedRole"
                 label={
                   <span>
-                    Assign to Role <span style={{ color: 'red' }}>*</span>{' '}
-                    <Tooltip title="Select which role should handle your inquiry.">
+                    Staff <span style={{ color: 'red' }}>*</span>{' '}
+                    <Tooltip title="Select which staff member should handle your inquiry.">
                       <InfoCircleOutlined style={{ marginLeft: 6, color: '#8c8c8c' }} />
                     </Tooltip>
                   </span>
                 }
-                initialValue="staff"
-                rules={[{ required: true, message: 'Please select a role to assign' }]}
+                rules={[{ required: true, message: 'Please select a staff member' }]}
               >
-                <Select options={[{ value: 'staff', label: 'Staff' }, { value: 'admin', label: 'Admin' }]} placeholder="Assign to role" className="inquiry-rounded-input" />
+                <Select 
+                  options={staffList && staffList.length > 0 ? staffList.map((staff: any) => {
+                    const label = staff?.fullName ? staff.fullName : (staff?.username || 'Unknown');
+                    const username = staff?.username || '';
+                    return {
+                      value: staff._id,
+                      label: username ? `${label} (${username})` : label
+                    };
+                  }) : []}
+                  placeholder={staffLoading ? 'Loading staff...' : 'Select a staff member'}
+                  className="inquiry-rounded-input"
+                  loading={staffLoading}
+                  notFoundContent={staffLoading ? 'Loading...' : (staffList.length === 0 ? 'No staff members found' : 'Not found')}
+                />
               </Form.Item>
 
               <Form.Item
@@ -796,9 +837,8 @@ const InquiryForm: React.FC = () => {
                           if (!isNaN(y) && !isNaN(m)) setCalendarValue(dayjs().year(y).month(m - 1).date(1));
                         }}
                         className="af-month-year-select"
-                        size={isMobile ? 'small' : 'middle'}
-                        style={{ width: '100%' }}
                         size="small"
+                        style={{ width: '100%' }}
                       >
                         {Array.from({ length: 12 }).map((_, i) => {
                           const opt = now.startOf('month').add(i, 'month');
@@ -883,7 +923,7 @@ const InquiryForm: React.FC = () => {
           {previewValues && (
             <Descriptions column={1} bordered>
               <Descriptions.Item label="Inquiry Type">{previewValues.type}</Descriptions.Item>
-              <Descriptions.Item label="Assign to Role">{previewValues.assignedRole}</Descriptions.Item>
+              <Descriptions.Item label="Assigned Staff">{previewValues.assignedRole ? staffList.find((s: any) => s._id === previewValues.assignedRole)?.fullName || previewValues.assignedRole : 'N/A'}</Descriptions.Item>
               <Descriptions.Item label="Subject">{previewValues.subject}</Descriptions.Item>
               <Descriptions.Item label="Message">{previewValues.message}</Descriptions.Item>
               <Descriptions.Item label="Attachments">{(fileListState || []).map((f: any) => f.name || (f.originFileObj && f.originFileObj.name)).join(', ')}</Descriptions.Item>
