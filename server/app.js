@@ -75,8 +75,8 @@ app.use((req, res, next) => {
 
 // Content Security Policy middleware: allow WebSocket connections
 app.use((req, res, next) => {
-  // Set a permissive CSP that allows WebSocket connections and same-origin requests
-  res.setHeader('Content-Security-Policy', "default-src 'self' https: wss: ws:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https:; connect-src 'self' https: wss: ws: http://localhost:*");
+  // Set a permissive CSP that allows WebSocket connections, same-origin requests, embedded Google Maps, and blob images
+  res.setHeader('Content-Security-Policy', "default-src 'self' https: wss: ws:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https: blob:; connect-src 'self' https: wss: ws: http://localhost:*; frame-src 'self' https://*.google.com");
   next();
 });
 

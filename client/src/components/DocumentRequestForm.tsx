@@ -133,7 +133,7 @@ const DocumentRequestForm: React.FC = () => {
   const [showInfoModal, setShowInfoModal] = useState(false);
   
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
+  // Removed category filter state
   const [sortBy, setSortBy] = useState<'name' | 'date' | 'type'>('name');
   const [loading, setLoading] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
@@ -339,15 +339,11 @@ const DocumentRequestForm: React.FC = () => {
       // Exclude those patterns here so generated copies remain only in the
       // `processed_documents` bucket and don't appear in the templates grid.
       const fname = file.filename || '';
-      // Exclude obvious filled/generate file names
       if (/^filled_/i.test(fname)) return false;
-      // Exclude filenames that start with a year-like transaction code
       if (/^\d{4}-/.test(fname)) return false;
-
       const name = fname.toLowerCase();
       const search = searchTerm.toLowerCase();
-      const categoryMatch = selectedCategory === 'all' || file.category === selectedCategory;
-      return name.includes(search) && categoryMatch;
+      return name.includes(search);
     })
     .sort((a, b) => {
       switch (sortBy) {
@@ -418,32 +414,19 @@ const DocumentRequestForm: React.FC = () => {
 
       {/* Filters Section */}
       <Row gutter={16} style={{ marginBottom: 32 }}>
-        <Col xs={24} sm={12} md={10} lg={8}>
-          <Search
-            placeholder="Search documents..."
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            style={{ width: '100%' }}
-            className="document-search"
-          />
-        </Col>
-        <Col xs={24} sm={12} md={14} lg={16}>
-          <div className="filter-controls">
-            <Select
-              value={selectedCategory}
-              className="filter-select category-select"
-              style={{ minWidth: 200 }}
-              onChange={value => setSelectedCategory(value)}
-            >
-              <Select.Option value="all">All Categories</Select.Option>
-              <Select.Option value="personal">Personal Documents</Select.Option>
-              <Select.Option value="business">Business Documents</Select.Option>
-              <Select.Option value="certificates">Certificates</Select.Option>
-            </Select>
+        <Col xs={24}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, maxWidth: 800 }}>
+            <Search
+              placeholder="Search documents..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              style={{ flex: 1, maxWidth: 600 }}
+              className="document-search"
+            />
             <Select
               value={sortBy}
               className="filter-select sort-select"
-              style={{ minWidth: 160 }}
+              style={{ minWidth: 100, maxWidth: 150 }}
               onChange={value => setSortBy(value as 'name' | 'date' | 'type')}
             >
               <Select.Option value="name">Sort by Name</Select.Option>

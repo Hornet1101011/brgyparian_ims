@@ -263,8 +263,8 @@ const InquiryForm = () => {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed) {
-          const { type, assignedRole, subject, message, attachments } = parsed;
-          formRef.current?.setFieldsValue({ type, assignedRole, subject, message });
+          const { type, assignedTo, subject, message, attachments } = parsed;
+          formRef.current?.setFieldsValue({ type, assignedTo, subject, message });
           if (subject) setSubjectCount(subject.length);
           if (message) setMessageCount(message.length);
           if (attachments && Array.isArray(attachments) && attachments.length) {
@@ -274,7 +274,7 @@ const InquiryForm = () => {
             formRef.current?.setFieldsValue({ attachment: restored });
           }
           // set step based on restored values
-          if (subject && message && (assignedRole || type)) setCurrentStep(2);
+          if (subject && message && (assignedTo || type)) setCurrentStep(2);
           else if (attachments && attachments.length) setCurrentStep(1);
           else setCurrentStep(0);
         }
@@ -292,7 +292,7 @@ const InquiryForm = () => {
         const values = formRef.current?.getFieldsValue(true) || {};
         const draft = {
           type: values.type || null,
-          assignedRole: values.assignedRole || null,
+          assignedTo: values.assignedTo || null,
           subject: values.subject || '',
           message: values.message || '',
           attachments: (fileListState || []).map((f: any) => f.name || (f.originFileObj && f.originFileObj.name) || ''),
@@ -316,7 +316,7 @@ const InquiryForm = () => {
         const values = formRef.current?.getFieldsValue(true) || {};
         const draft = {
           type: values.type || null,
-          assignedRole: values.assignedRole || null,
+          assignedTo: values.assignedTo || null,
           subject: values.subject || '',
           message: values.message || '',
           attachments: (fileListState || []).map((f: any) => f.name || (f.originFileObj && f.originFileObj.name) || ''),
@@ -362,11 +362,11 @@ const InquiryForm = () => {
       formData.append('type', values.type || '');
       formData.append('subject', values.subject || '');
       formData.append('message', values.message || '');
-      formData.append('assignedRole', values.assignedRole || (staffList.length > 0 ? staffList[0]._id : ''));
+      formData.append('assignedRole', 'staff');
       formData.append('username', user?.username || '');
       formData.append('barangayID', user?.barangayID || '');
-      if (values.assignedTo && Array.isArray(values.assignedTo)) {
-        for (const id of values.assignedTo) formData.append('assignedTo[]', id);
+      if (values.assignedTo) {
+        formData.append('assignedTo', values.assignedTo);
       }
       // Append selected appointment dates (if any)
       if (selectedDates && Array.isArray(selectedDates) && selectedDates.length) {
@@ -509,7 +509,7 @@ const InquiryForm = () => {
               </Form.Item>
 
               <Form.Item
-                name="assignedRole"
+                name="assignedTo"
                 label={
                   <span>
                     Staff <span style={{ color: 'red' }}>*</span>{' '}
@@ -924,6 +924,7 @@ const InquiryForm = () => {
             <Descriptions column={1} bordered>
               <Descriptions.Item label="Inquiry Type">{previewValues.type}</Descriptions.Item>
               <Descriptions.Item label="Assigned Staff">{previewValues.assignedRole ? staffList.find((s: any) => s._id === previewValues.assignedRole)?.fullName || previewValues.assignedRole : 'N/A'}</Descriptions.Item>
+                            <Descriptions.Item label="Assigned Staff">{previewValues.assignedTo ? staffList.find((s: any) => s._id === previewValues.assignedTo)?.fullName || previewValues.assignedTo : 'N/A'}</Descriptions.Item>
               <Descriptions.Item label="Subject">{previewValues.subject}</Descriptions.Item>
               <Descriptions.Item label="Message">{previewValues.message}</Descriptions.Item>
               <Descriptions.Item label="Attachments">{(fileListState || []).map((f: any) => f.name || (f.originFileObj && f.originFileObj.name)).join(', ')}</Descriptions.Item>

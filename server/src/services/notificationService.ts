@@ -103,6 +103,25 @@ export async function sendAppointmentNotification(residentId: any, type: 'create
     } catch (e) {
       console.warn('Failed to emit appointment socket event', (e as any)?.message || e);
     }
+
+    // send email notification as well
+    try {
+      // dynamically require to avoid potential circular dependencies
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { sendMail } = require('./EmailService');
+      // look up resident email address
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const resident = await require('../models/User').User.findById(residentId).lean();
+      if (resident && resident.email) {
+        const emailSubject = title;
+        // basic html wrapper
+        const emailHtml = `<p>${message}</p><p>Please log in to your account to view details.</p>`;
+        // fire-and-forget, but await to catch errors
+        await sendMail(resident.email, emailSubject, emailHtml, [], 'appointment');
+      }
+    } catch (e) {
+      console.warn('Failed to send appointment email', (e && (e.message || e)));
+    }
   } catch (err) {
     // ensure this function never throws to callers
     console.warn('sendAppointmentNotification encountered error', (err as any)?.message || err);

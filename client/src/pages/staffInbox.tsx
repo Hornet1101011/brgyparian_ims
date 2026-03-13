@@ -799,12 +799,12 @@ const StaffInbox: React.FC = () => {
                     el.style.height = Math.min(isMobile ? 80 : 100, el.scrollHeight) + 'px';
                   }}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
+                    if (e.key === 'Enter' && !e.shiftKey && !(selectedInquiry && selectedInquiry.status === 'closed')) {
                       e.preventDefault();
                       handleSendReply();
                     }
                   }}
-                  placeholder="Aa"
+                  placeholder={selectedInquiry && selectedInquiry.status === 'closed' ? 'Inquiry is closed' : 'Aa'}
                   style={{
                     width: '100%',
                     minHeight: isMobile ? 32 : 36,
@@ -817,18 +817,22 @@ const StaffInbox: React.FC = () => {
                     outline: 'none',
                     fontFamily: 'Poppins, Arial, sans-serif',
                     color: '#1f2937',
-                    backgroundColor: '#ffffff'
+                    backgroundColor: selectedInquiry && selectedInquiry.status === 'closed' ? '#f3f4f6' : '#ffffff',
+                    cursor: selectedInquiry && selectedInquiry.status === 'closed' ? 'not-allowed' : 'auto',
                   }}
                   onFocus={(e) => {
-                    e.currentTarget.style.borderColor = '#1890ff';
-                    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(24, 144, 255, 0.1)';
-                    e.currentTarget.style.backgroundColor = '#ffffff';
+                    if (!(selectedInquiry && selectedInquiry.status === 'closed')) {
+                      e.currentTarget.style.borderColor = '#1890ff';
+                      e.currentTarget.style.boxShadow = '0 0 0 3px rgba(24, 144, 255, 0.1)';
+                      e.currentTarget.style.backgroundColor = '#ffffff';
+                    }
                   }}
                   onBlur={(e) => {
                     e.currentTarget.style.borderColor = 'rgba(114, 46, 209, 0.2)';
                     e.currentTarget.style.boxShadow = 'none';
-                    e.currentTarget.style.backgroundColor = '#ffffff';
+                    e.currentTarget.style.backgroundColor = selectedInquiry && selectedInquiry.status === 'closed' ? '#f3f4f6' : '#ffffff';
                   }}
+                  disabled={selectedInquiry && selectedInquiry.status === 'closed'}
                 />
 
                 <button
@@ -839,7 +843,7 @@ const StaffInbox: React.FC = () => {
                     border: 'none',
                     padding: isMobile ? '6px 10px' : '8px 16px',
                     borderRadius: 20,
-                    cursor: replyText.trim() ? 'pointer' : 'not-allowed',
+                    cursor: (replyText.trim() && !(selectedInquiry && selectedInquiry.status === 'closed')) ? 'pointer' : 'not-allowed',
                     fontSize: isMobile ? 12 : 14,
                     fontWeight: 600,
                     display: 'flex',
@@ -848,21 +852,21 @@ const StaffInbox: React.FC = () => {
                     transition: 'all 0.3s ease-in-out',
                     gap: isMobile ? 4 : 6,
                     flexShrink: 0,
-                    opacity: replyText.trim() ? 1 : 0.5,
+                    opacity: (replyText.trim() && !(selectedInquiry && selectedInquiry.status === 'closed')) ? 1 : 0.5,
                     minWidth: isMobile ? 32 : 40,
                     minHeight: isMobile ? 32 : 36,
-                    boxShadow: replyText.trim() ? '0 4px 20px rgba(114, 46, 209, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.4)' : 'none'
+                    boxShadow: (replyText.trim() && !(selectedInquiry && selectedInquiry.status === 'closed')) ? '0 4px 20px rgba(114, 46, 209, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.4)' : 'none'
                   }}
-                  disabled={!replyText.trim() || (selectedInquiry && replyLoading[selectedInquiry._id])}
-                  title="Send (Enter)"
+                  disabled={selectedInquiry && selectedInquiry.status === 'closed' || !replyText.trim() || (selectedInquiry && replyLoading[selectedInquiry._id])}
+                  title={selectedInquiry && selectedInquiry.status === 'closed' ? 'Inquiry is closed' : 'Send (Enter)'}
                   onMouseEnter={(e) => {
-                    if (replyText.trim()) {
+                    if (replyText.trim() && !(selectedInquiry && selectedInquiry.status === 'closed')) {
                       e.currentTarget.style.boxShadow = '0 6px 24px rgba(114, 46, 209, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.4)';
                       e.currentTarget.style.transform = 'translateY(-2px)';
                     }
                   }}
                   onMouseLeave={(e) => {
-                    if (replyText.trim()) {
+                    if (replyText.trim() && !(selectedInquiry && selectedInquiry.status === 'closed')) {
                       e.currentTarget.style.boxShadow = '0 4px 20px rgba(114, 46, 209, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.4)';
                       e.currentTarget.style.transform = 'translateY(0)';
                     }
@@ -870,6 +874,11 @@ const StaffInbox: React.FC = () => {
                 >
                   <SendOutlined style={{ fontSize: isMobile ? 12 : 14 }} />
                 </button>
+                {selectedInquiry && selectedInquiry.status === 'closed' && (
+                  <div style={{ color: '#dc2626', fontWeight: 600, fontSize: isMobile ? 12 : 14, marginTop: 8 }}>
+                    This inquiry is closed. You cannot send further replies.
+                  </div>
+                )}
 
                 <button
                   onClick={handleCloseInquiry}

@@ -732,7 +732,7 @@ const RegisterForm = () => {
               </Box>
 
               {/* Google Maps Embed (Desktop) or Redirect Button (Mobile) */}
-              <Box sx={{ flex: 1, minHeight: { xs: 300, md: 400 }, overflow: 'hidden', borderRadius: 2, border: '1px solid #e2e8f0', position: 'relative', display: { xs: 'none', md: 'block' }, zIndex: 1 }}>
+              <Box sx={{ height: { xs: 300, md: 400 }, overflow: 'hidden', borderRadius: 2, border: '1px solid #e2e8f0', position: 'relative', display: { xs: 'none', md: 'block' }, zIndex: 1 }}>
                 <iframe
                   key={pinnedLocation ? `${pinnedLocation.lat}-${pinnedLocation.lng}` : 'default'}
                   width="100%"

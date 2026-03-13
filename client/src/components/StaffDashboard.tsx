@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
+// If you want to use React.FC, uncomment the next line:
+// import type { FC } from 'react';
 import { Card, Row, Col, Statistic, List, Typography, Space, Spin, Button, Modal, Input, Collapse, Tag, Empty, Badge, Drawer, Table, notification, Grid } from 'antd';
 import AppAvatar from './AppAvatar';
 import styles from './StaffDashboard.module.css';
@@ -40,20 +42,20 @@ interface DocumentRequest {
   [key: string]: any;
 }
 
-const StaffDashboard: React.FC = () => {
+const StaffDashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [documentRequests, setDocumentRequests] = useState<DocumentRequest[]>([]);
-  const [inquiries, setInquiries] = useState<any[]>([]);
-  const [inboxInquiries, setInboxInquiries] = useState<any[]>([]);
-  const [viewedInquiryIds, setViewedInquiryIds] = useState<Set<string>>(() => {
+  const [documentRequests, setDocumentRequests] = useState([]);
+  const [inquiries, setInquiries] = useState([]);
+  const [inboxInquiries, setInboxInquiries] = useState([]);
+  const [viewedInquiryIds, setViewedInquiryIds] = useState(() => {
     try {
       const raw = localStorage.getItem('viewedInquiries');
-      const arr = raw ? JSON.parse(raw) as string[] : [];
+      const arr = raw ? JSON.parse(raw) : [];
       return new Set(arr || []);
     } catch (e) {
-      return new Set<string>();
+      return new Set();
     }
   });
 
@@ -88,27 +90,26 @@ const StaffDashboard: React.FC = () => {
   };
   
   // Mini announcements (replace Recent Activity)
-  const [miniAnns, setMiniAnns] = useState<any[]>([]);
+  const [miniAnns, setMiniAnns] = useState([]);
   const [miniLoading, setMiniLoading] = useState(false);
-  const [miniSelected, setMiniSelected] = useState<any | null>(null);
+  const [miniSelected, setMiniSelected] = useState(null);
   const [drawerVisible, setDrawerVisible] = useState(false);
-  const [selectedDocument, setSelectedDocument] = useState<DocumentRequest | null>(null);
-  const [selectedInquiry, setSelectedInquiry] = useState<any>(null);
+  const [selectedDocument, setSelectedDocument] = useState(null);
+  const [selectedInquiry, setSelectedInquiry] = useState(null);
   const [manageModalVisible, setManageModalVisible] = useState(false);
-  const [manageTableData, setManageTableData] = useState<any[] | null>(null);
+  const [manageTableData, setManageTableData] = useState(null);
   const [responseText, setResponseText] = useState('');
   const [documentStatus, setDocumentStatus] = useState('');
   const [responding] = useState(false);
   const [completedModalVisible, setCompletedModalVisible] = useState(false);
   // Documents modal state
   const [docsModalVisible, setDocsModalVisible] = useState(false);
-  const [allDocuments, setAllDocuments] = useState<any[]>([]);
+  const [allDocuments, setAllDocuments] = useState([]);
   const [docsLoading, setDocsLoading] = useState(false);
   const [previewVisible, setPreviewVisible] = useState(false);
-  const [previewDoc, setPreviewDoc] = useState<any | null>(null);
-  const [docsSearch, setDocsSearch] = useState<string>('');
+  const [previewDoc, setPreviewDoc] = useState(null);
+  const [docsSearch, setDocsSearch] = useState('');
   const screens = Grid.useBreakpoint();
-
   // Group document requests by type for processing
   const requestsByCategory: { [type: string]: DocumentRequest[] } = {};
   documentRequests.forEach((req) => {
@@ -1090,9 +1091,8 @@ const StaffDashboard: React.FC = () => {
                       e.currentTarget.style.borderColor = '#0891b2';
                       e.currentTarget.style.boxShadow = 'none';
                     }}
-                    onClick={() => navigate('/admin/announcements')}
                   >
-                    Manage
+                    View All Announcements
                   </Button>
                 </Card>
                 <Drawer 

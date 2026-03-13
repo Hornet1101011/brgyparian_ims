@@ -2,13 +2,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, Row, Col, List, Typography, Space, Spin, Button, Drawer, Table, Empty, Modal } from 'antd';
-import AppAvatar from '../AppAvatar';
 import {
   UserOutlined,
   BellOutlined,
   FileTextOutlined,
-  TeamOutlined,
-  
   CheckOutlined,
   ExclamationCircleOutlined
 } from '@ant-design/icons';
@@ -43,34 +40,66 @@ interface DashboardStats {
 
 interface Activity {
   id: string;
-  type: 'document' | 'user' | 'system';
+  type: string;
   description: string;
   timestamp: string;
-  user?: string;
+  user: string;
+}
+
+interface DocumentData {
+  status: string;
+  category: string;
+  count: number;
+}
+
+interface VerificationRequest {
+  _id: string;
+  userId: { _id: string; fullName?: string; username?: string };
+  status: string;
+  createdAt: string;
+  approvedAt?: string;
+  filesMeta?: any[];
+  gridFileIds?: string[];
+}
+
+interface Inquiry {
+  _id: string;
+  assignedRole?: string;
+  assignedTo?: string[];
+  status?: string;
+}
+
+interface Announcement {
+  _id: string;
+  text?: string;
+  createdAt?: string;
+  imagePath?: string;
 }
 
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [, setDocumentRequests] = useState<any[]>([]);
-  const [stats, setStats] = useState<DashboardStats>({
+  const [stats, setStats] = useState({
     totalUsers: 0,
     activeUsers: 0,
     pendingRequests: 0,
     totalDocuments: 0,
     completedRequests: 0,
     unreadMessages: 0
-  });
+  } as DashboardStats);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [staffAccessNotifs, setStaffAccessNotifs] = useState<Notification[]>([]);
   const [, setRecentActivity] = useState<Activity[]>([]);
-  const [verifs, setVerifs] = useState<any[]>([]);
+  const [verifs, setVerifs] = useState<VerificationRequest[]>([]);
   const [verifsLoading, setVerifsLoading] = useState(false);
   const [verifModalVisible, setVerifModalVisible] = useState(false);
-  const [selectedVerif, setSelectedVerif] = useState<any | null>(null);
-  const [, setInquiries] = useState<any[]>([]);
-  const [, setInboxInquiries] = useState<any[]>([]);
+  const [selectedVerif, setSelectedVerif] = useState<VerificationRequest | null>(null);
+  const [, setInquiries] = useState<Inquiry[]>([]);
+  const [, setInboxInquiries] = useState<Inquiry[]>([]);
+  const [documentsModalVisible, setDocumentsModalVisible] = useState(false);
+  const [documentsData, setDocumentsData] = useState<DocumentData[]>([]);
+  const [templatesCount, setTemplatesCount] = useState(0);
   // Demo data for mini charts
   const usersTrend = [3, 5, 4, 6, 7, 8, 10]; // last 7 days
   const requestsByType = [
@@ -95,12 +124,38 @@ const AdminDashboard: React.FC = () => {
       setLoading(true);
       const statsRes = await adminAPI.getSystemStatistics();
       // Fetch document requests for modal
-  // Fetch document requests for modal
       try {
-  const docs = await documentsAPI.getDocumentRecords();
-        setDocumentRequests(docs);
+        const docs = await documentsAPI.getDocumentRecords();
+
+        // Process documents for modal table
+        const categorized = docs.reduce((acc: any, doc: any) => {
+          const status = doc.status || 'pending';
+          const category = doc.category || 'Other';
+          if (!acc[status]) acc[status] = {};
+          if (!acc[status][category]) acc[status][category] = 0;
+          acc[status][category]++;
+          return acc;
+        }, {});
+        const tableData = Object.entries(categorized).flatMap(([status, categories]: [string, any]) =>
+          Object.entries(categories).map(([category, count]: [string, number]) => ({ status, category, count }))
+        );
+        setDocumentsData(tableData);
+
+        // Fetch templates count
+        try {
+          const templatesRes = await fetch(getAbsoluteApiUrl('/api/templates'));
+          if (templatesRes.ok) {
+            const templates = await templatesRes.json();
+            setTemplatesCount(Array.isArray(templates) ? templates.length : 0);
+          } else {
+            setTemplatesCount(0);
+          }
+        } catch (err) {
+          setTemplatesCount(0);
+        }
       } catch (err) {
-        setDocumentRequests([]);
+        setDocumentsData([]);
+        setTemplatesCount(0);
       }
 
   const notificationsRes = await notificationAPI.getNotifications();
@@ -129,13 +184,18 @@ const AdminDashboard: React.FC = () => {
       }
 
       const totalPending = directPending + (staffApprovalNotifs ? staffApprovalNotifs.length : 0);
+      
+      // Calculate total documents from fetched data
+      const totalDocsFromFetch = docs ? docs.length : 0;
+      const completedDocsCount = docs ? docs.filter((d: any) => (d.status || '').toString().toLowerCase() === 'approved').length : 0;
+      
       setStats({
         totalUsers: statsRes.users?.total || 0,
         activeUsers: statsRes.users?.active || 0,
         // Combine pending document requests with unread staff access notifications
         pendingRequests: totalPending,
-        totalDocuments: systemTotalDocs,
-        completedRequests: statsRes.documents?.completed || 0,
+        totalDocuments: totalDocsFromFetch,
+        completedRequests: completedDocsCount,
         unreadMessages: (unreadNotifs && Array.isArray(unreadNotifs)) ? unreadNotifs.length : 0
       });
 
@@ -333,37 +393,8 @@ const AdminDashboard: React.FC = () => {
       bg: 'linear-gradient(90deg, #52c41a 0%, #b7eb8f 100%)',
       color: '#52c41a',
       labelColor: '#f6ffed',
-      onClick: undefined,
-      chart: (
-                <div style={{ width: '100%', marginTop: 8, height: 32, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                  {/* Pure SVG pie chart for Documents */}
-                  <svg width="40" height="40" viewBox="0 0 40 40">
-                    {(() => {
-                      const total = documentCategoryData.reduce((sum, d) => sum + d.value, 0);
-                      let startAngle = 0;
-                      return documentCategoryData.map((d, i) => {
-                        const angle = (d.value / total) * 360;
-                        const endAngle = startAngle + angle;
-                        const largeArc = angle > 180 ? 1 : 0;
-                        const x1 = 20 + 18 * Math.cos((Math.PI * (startAngle - 90)) / 180);
-                        const y1 = 20 + 18 * Math.sin((Math.PI * (startAngle - 90)) / 180);
-                        const x2 = 20 + 18 * Math.cos((Math.PI * (endAngle - 90)) / 180);
-                        const y2 = 20 + 18 * Math.sin((Math.PI * (endAngle - 90)) / 180);
-                        const path = `M20,20 L${x1},${y1} A18,18 0 ${largeArc} 1 ${x2},${y2} Z`;
-                        const el = (
-                          <path
-                            key={i}
-                            d={path}
-                            fill={pieColors[i % pieColors.length]}
-                          />
-                        );
-                        startAngle += angle;
-                        return el;
-                      });
-                    })()}
-                  </svg>
-                </div>
-      ),
+      onClick: () => setDocumentsModalVisible(true),
+      chart: null,
     },
     {
       label: 'Notifications',
@@ -445,7 +476,7 @@ const AdminDashboard: React.FC = () => {
             }}>
               {card.icon}
             </div>
-            <span style={{ fontSize: 44, fontWeight: 900, lineHeight: 1.1, background: `linear-gradient(135deg, ${card.color} 0%, ${card.color}cc 100%)`, backgroundClip: 'text', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: 8 }}>{card.value}</span>
+            <span style={{ fontSize: 44, fontWeight: 900, lineHeight: 1.1, background: `linear-gradient(135deg, ${card.color} 0%, ${card.color}cc 100%)`, backgroundClip: 'text', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: 8, whiteSpace: 'pre-line' }}>{card.value}</span>
             <span style={{ fontSize: 16, color: card.color, fontWeight: 700, marginBottom: 4, letterSpacing: '-0.3px' }}>{card.label}</span>
             <span style={{ fontSize: 13, color: '#9ca3af', fontWeight: 500, textAlign: 'center', letterSpacing: '0.3px' }}>{statCardSubtitles[idx]}</span>
             {card.chart && <div style={{ marginTop: 12, width: '100%' }}>{card.chart}</div>}
@@ -517,13 +548,13 @@ const AdminDashboard: React.FC = () => {
   );
 
   // Verification widget for admin dashboard
-  const handleApproveVerif = async (arg: any) => {
+  const handleApproveVerif = async (arg: VerificationRequest | string) => {
     // arg may be a userId string or the verification request object
     try {
       setVerifsLoading(true);
       if (arg && typeof arg === 'object') {
         const reqId = arg._id;
-        const userId = arg.userId?._id || arg.userId;
+        const userId = arg.userId._id;
         // mark request approved on server (if endpoint exists)
         try { await verificationAPI.approveRequest(reqId); } catch (e) { /* best-effort */ }
         // set the user verified
@@ -541,12 +572,12 @@ const AdminDashboard: React.FC = () => {
   };
 
   // Handler to revert an approval (unverify)
-  const handleUnverifyVerif = async (arg: any) => {
+  const handleUnverifyVerif = async (arg: VerificationRequest | string) => {
     try {
       setVerifsLoading(true);
       if (arg && typeof arg === 'object') {
         const reqId = arg._id;
-        const userId = arg.userId?._id || arg.userId;
+        const userId = arg.userId._id;
         // Call the server-side unapprove route if available to revert approval state
         try { if (reqId) await verificationAPI.unapproveRequest(reqId); } catch (e) { /* best-effort */ }
         if (userId) await verificationAPI.verifyUser(userId, false);
@@ -563,12 +594,12 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
-  const handleRejectVerif = async (arg: any) => {
+  const handleRejectVerif = async (arg: VerificationRequest | string) => {
     try {
       setVerifsLoading(true);
       if (arg && typeof arg === 'object') {
         const reqId = arg._id;
-        const userId = arg.userId?._id || arg.userId;
+        const userId = arg.userId._id;
         try { await verificationAPI.rejectRequest(reqId); } catch (e) { /* best-effort */ }
         if (userId) await verificationAPI.verifyUser(userId, false);
       } else if (typeof arg === 'string') {
@@ -583,7 +614,7 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
-  const openCheckId = (req: any) => {
+  const openCheckId = (req: VerificationRequest) => {
     setSelectedVerif(req);
     setVerifModalVisible(true);
   };
@@ -605,12 +636,12 @@ const AdminDashboard: React.FC = () => {
           size="small"
           pagination={{ pageSize: 6 }}
           dataSource={verifs}
-          rowKey={(r: any) => r._id}
+          rowKey={(r: VerificationRequest) => r._id}
           columns={[
             {
               title: 'Resident',
               key: 'resident',
-              render: (_: any, record: any) => <span style={{ fontWeight: 700, color: '#1f2937', fontSize: 14 }}>{(record.userId && (record.userId.fullName || record.userId.username)) || 'Unknown Resident'}</span>
+              render: (_: any, record: VerificationRequest) => <span style={{ fontWeight: 700, color: '#1f2937', fontSize: 14 }}>{(record.userId && (record.userId.fullName || record.userId.username)) || 'Unknown Resident'}</span>
             },
             {
               title: 'Status',
@@ -649,7 +680,7 @@ const AdminDashboard: React.FC = () => {
             {
               title: 'Files',
               key: 'files',
-              render: (_: any, record: any) => {
+              render: (_: any, record: VerificationRequest) => {
                 const files = Array.isArray(record.filesMeta) && record.filesMeta.length ? record.filesMeta
                   : (Array.isArray(record.gridFileIds) ? record.gridFileIds.map((id: string) => ({ filename: id, gridFileId: id })) : []);
                 return (
@@ -664,7 +695,7 @@ const AdminDashboard: React.FC = () => {
             {
               title: 'Action',
               key: 'action',
-              render: (_: any, record: any) => (
+              render: (_: any, record: VerificationRequest) => (
                 <Space size="small">
                   <Button size="small" onClick={() => openCheckId(record)} style={{ fontWeight: 600 }}>Check ID</Button>
                   {record.status === 'approved' ? (
@@ -724,9 +755,9 @@ const AdminDashboard: React.FC = () => {
   );
 
   // Mini announcements viewer to replace Recent Activity
-  const [miniAnns, setMiniAnns] = useState<any[]>([]);
+  const [miniAnns, setMiniAnns] = useState<Announcement[]>([]);
   const [miniLoading, setMiniLoading] = useState(false);
-  const [miniSelected, setMiniSelected] = useState<any | null>(null);
+  const [miniSelected, setMiniSelected] = useState<Announcement | null>(null);
   const [drawerVisible, setDrawerVisible] = useState(false);
 
   const fetchMiniAnnouncements = async () => {
@@ -839,7 +870,24 @@ const AdminDashboard: React.FC = () => {
             {renderVerificationWidget()}
           </Col>
         </Row>
-        {/* Modal is rendered inside renderInbox above */}
+        <Modal
+          title="Document Breakdown"
+          open={documentsModalVisible}
+          onCancel={() => setDocumentsModalVisible(false)}
+          footer={null}
+          width={800}
+        >
+          <Table
+            dataSource={documentsData}
+            columns={[
+              { title: 'Status', dataIndex: 'status', key: 'status' },
+              { title: 'Category', dataIndex: 'category', key: 'category' },
+              { title: 'Count', dataIndex: 'count', key: 'count' },
+            ]}
+            pagination={false}
+            size="small"
+          />
+        </Modal>
       </div>
     </Spin>
   );

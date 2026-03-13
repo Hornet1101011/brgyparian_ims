@@ -338,292 +338,53 @@ const StaffCalendar: React.FC = () => {
         </div>
       </div>
 
-      {isMobile ? (
-        // Mobile list view
-        <List loading={loading} dataSource={weekDates} renderItem={(d) => {
-          const ds = isoDate(d);
-          const isToday = ds === todayIso;
-          const status = dayStatus(ds);
-          return (
-            <List.Item>
-              <List.Item.Meta title={
-                <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div>{ds}</div>
-                    </div>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      {isToday && <SmallBadge color={TODAY_BLUE} label="Today" />}
-                      {status !== 'disabled' && <SmallBadge color={dayTokenColor(status)} label={status === 'available' ? 'Available' : status === 'partial' ? 'Limited' : 'Full'} />}
-                    </div>
-                    {status === 'disabled' && <div style={{ marginTop: 6 }}><SmallBadge color={DISABLED_BG} label="Disabled" muted /></div>}
+      {/* Always render as a list view (vertical) for both desktop and mobile */}
+      <List loading={loading} dataSource={weekDates} renderItem={(d) => {
+        const ds = isoDate(d);
+        const isToday = ds === todayIso;
+        const status = dayStatus(ds);
+        return (
+          <List.Item>
+            <List.Item.Meta title={
+              <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div>{ds}</div>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
-                    <div>
-                      <Button size="small" onClick={() => { if (!isPastDate(d) && !isOfficeClosed(d)) openDetail(ds); }} style={{ marginLeft: 8 }} disabled={isPastDate(d) || isOfficeClosed(d)}>View</Button>
-                      {/* Mobile quick-schedule action */}
-                      <Button size="small" onClick={async () => {
-                        if (isPastDate(d) || isOfficeClosed(d)) return;
-                        // find first free block
-                        const list = slotsByDate.get(ds) || [];
-                        const free = DAY_BLOCKS.find(b => !list.some(s => rangesOverlap(b.sMin, b.eMin, toMinutes(s.startTime), toMinutes(s.endTime))));
-                        if (!free) {
-                          // open detail if no free block
-                          openDetail(ds);
-                        } else {
-                          openQuickSchedule(ds, free.start, free.end);
-                        }
-                      }} style={{ marginLeft: 8 }} disabled={isPastDate(d) || isOfficeClosed(d)}>Quick Schedule</Button>
-                    </div>
-                    <div style={{ fontSize: 12, color: '#666' }}>{isOfficeClosed(d) ? 'Closed' : (isPastDate(d) ? 'Past' : '')}</div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    {isToday && <SmallBadge color={TODAY_BLUE} label="Today" />}
+                    {status !== 'disabled' && <SmallBadge color={dayTokenColor(status)} label={status === 'available' ? 'Available' : status === 'partial' ? 'Limited' : 'Full'} />}
                   </div>
+                  {status === 'disabled' && <div style={{ marginTop: 6 }}><SmallBadge color={DISABLED_BG} label="Disabled" muted /></div>}
                 </div>
-              } description={(() => {
-                const list = slotsByDate.get(ds) || [];
-                if (!list.length) return 'No appointments';
-                return `${list.length} appointment(s)`;
-              })()} />
-            </List.Item>
-          );
-        }} />
-      ) : (
-        // Desktop grid view with modern design
-        <div>
-          {/* Day headers */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 12, marginBottom: 12 }}>
-            {weekDates.map((d, idx) => {
-              const short = d.toLocaleDateString(undefined, { weekday: 'short' });
-              const closed = isOfficeClosed(d);
-              const past = isPastDate(d);
-              return (
-                <div 
-                  key={idx} 
-                  style={{ 
-                    padding: 12,
-                    background: closed || past ? '#f9fafb' : '#faf5ff',
-                    borderRadius: 10,
-                    textAlign: 'center',
-                    border: closed || past ? '1px solid #e5e7eb' : '1px solid #ede9fe',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: closed || past ? '#6b7280' : '#7c3aed',
-                    boxShadow: closed || past ? 'none' : '0 2px 6px rgba(139, 92, 246, 0.08)',
-                    transition: 'all 0.2s ease'
-                  }}
-                >
-                  {short}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
+                  <div>
+                    <Button size="small" onClick={() => { if (!isPastDate(d) && !isOfficeClosed(d)) openDetail(ds); }} style={{ marginLeft: 8 }} disabled={isPastDate(d) || isOfficeClosed(d)}>View</Button>
+                    {/* Quick-schedule action */}
+                    <Button size="small" onClick={async () => {
+                      if (isPastDate(d) || isOfficeClosed(d)) return;
+                      // find first free block
+                      const list = slotsByDate.get(ds) || [];
+                      const free = DAY_BLOCKS.find(b => !list.some(s => rangesOverlap(b.sMin, b.eMin, toMinutes(s.startTime), toMinutes(s.endTime))));
+                      if (!free) {
+                        // open detail if no free block
+                        openDetail(ds);
+                      } else {
+                        openQuickSchedule(ds, free.start, free.end);
+                      }
+                    }} style={{ marginLeft: 8 }} disabled={isPastDate(d) || isOfficeClosed(d)}>Quick Schedule</Button>
+                  </div>
+                  <div style={{ fontSize: 12, color: '#666' }}>{isOfficeClosed(d) ? 'Closed' : (isPastDate(d) ? 'Past' : '')}</div>
                 </div>
-              );
-            })}
-          </div>
-
-          {/* Day cards grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 14 }}>
-            {weekDates.map((d) => {
-              const ds = isoDate(d);
-              const isToday = ds === todayIso;
-              const status = dayStatus(ds);
+              </div>
+            } description={(() => {
               const list = slotsByDate.get(ds) || [];
-              const closed = isOfficeClosed(d);
-              const past = isPastDate(d);
-
-              return (
-                <div
-                  key={ds}
-                  style={{
-                    borderRadius: 12,
-                    overflow: 'hidden',
-                    background: past ? '#f9fafb' : '#ffffff',
-                    border: isToday ? '2px solid #8b5cf6' : '1px solid #ede9fe',
-                    borderTop: isToday ? '4px solid #8b5cf6' : '1px solid transparent',
-                    boxShadow: isToday 
-                      ? '0 8px 24px rgba(139, 92, 246, 0.15)' 
-                      : '0 2px 8px rgba(0, 0, 0, 0.06)',
-                    transition: 'all 0.2s ease',
-                    cursor: 'pointer',
-                    opacity: past ? 0.7 : 1
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!past && !closed) {
-                      e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.1)';
-                      e.currentTarget.style.transform = 'translateY(-4px)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.boxShadow = isToday 
-                      ? '0 8px 24px rgba(139, 92, 246, 0.15)' 
-                      : '0 2px 8px rgba(0, 0, 0, 0.06)';
-                    e.currentTarget.style.transform = 'translateY(0)';
-                  }}
-                >
-                  {/* Header section */}
-                  <div style={{ 
-                    padding: 14,
-                    background: isToday 
-                      ? 'linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%)' 
-                      : '#f9fafb',
-                    borderBottom: '1px solid #ede9fe',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'flex-start'
-                  }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: isToday ? '#8b5cf6' : '#0f172a' }}>
-                        {ds}
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
-                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                          {isToday && (
-                            <div style={{ 
-                              padding: '4px 10px', 
-                              background: '#8b5cf6', 
-                              color: '#fff',
-                              borderRadius: 4,
-                              fontSize: 11,
-                              fontWeight: 700,
-                              letterSpacing: '0.5px'
-                            }}>
-                              TODAY
-                            </div>
-                          )}
-                          {!closed && !past && status !== 'disabled' && (
-                            <div style={{ 
-                              padding: '3px 8px',
-                              background: dayTokenColor(status),
-                              color: '#fff',
-                              borderRadius: 4,
-                              fontSize: 11,
-                              fontWeight: 600
-                            }}>
-                              {status === 'available' ? '✓ Available' : status === 'partial' ? '◐ Limited' : '✕ Full'}
-                            </div>
-                          )}
-                        </div>
-                        {(closed || past) && (
-                          <div style={{ 
-                            padding: '3px 8px',
-                            background: '#f5f5f5',
-                            color: '#999',
-                            borderRadius: 4,
-                            fontSize: 11,
-                            fontWeight: 600,
-                            border: '1px solid #e0e0e0',
-                            display: 'inline-block',
-                            width: 'fit-content'
-                          }}>
-                            {closed ? 'CLOSED' : 'PAST'}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <Button 
-                      size="small" 
-                      onClick={() => { if (!past && !closed) openDetail(ds); }} 
-                      disabled={past || closed}
-                      style={{ borderRadius: 6 }}
-                    >
-                      View
-                    </Button>
-                  </div>
-
-                  {/* Time slots grid */}
-                  <div style={{ padding: 12 }}>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 12, justifyContent: 'flex-start' }}>
-                      {DAY_BLOCKS.map((b, idx) => {
-                        const overlapping = list.some(s => rangesOverlap(b.sMin, b.eMin, toMinutes(s.startTime), toMinutes(s.endTime)));
-                        const cellDisabled = closed || past;
-                        const cellBg = cellDisabled ? DISABLED_BG : (overlapping ? BOOKED_RED : AVAILABLE_GREEN);
-                        
-                        return (
-                          <Tooltip 
-                            key={idx} 
-                            placement="top" 
-                            title={
-                              <div style={{ fontSize: 12 }}>
-                                {overlapping ? (
-                                  list.filter(s => rangesOverlap(b.sMin, b.eMin, toMinutes(s.startTime), toMinutes(s.endTime))).map((s: any, i: number) => (
-                                    <div key={i}>
-                                      <strong>{s.residentName || 'Resident'}</strong> {s.startTime}
-                                    </div>
-                                  ))
-                                ) : (
-                                  <div>{b.start}-{b.end} Available</div>
-                                )}
-                              </div>
-                            }
-                          >
-                            <div
-                              role="button"
-                              tabIndex={cellDisabled ? -1 : 0}
-                              aria-disabled={cellDisabled}
-                              onClick={() => {
-                                if (cellDisabled) return;
-                                if (overlapping) {
-                                  const first = list.find(s => rangesOverlap(b.sMin, b.eMin, toMinutes(s.startTime), toMinutes(s.endTime)));
-                                  if (first && (first as any).inquiryId) openEditorForInquiry((first as any).inquiryId);
-                                } else {
-                                  openQuickSchedule(ds, b.start, b.end);
-                                }
-                              }}
-                              style={{
-                                width: 35,
-                                height: 35,
-                                borderRadius: 10,
-                                background: cellBg,
-                                opacity: cellDisabled ? 0.5 : 1,
-                                cursor: cellDisabled ? 'not-allowed' : 'pointer',
-                                transition: 'all 0.3s ease',
-                                boxShadow: cellDisabled 
-                                  ? '0 2px 4px rgba(0, 0, 0, 0.08)'
-                                  : overlapping
-                                  ? '0 4px 12px rgba(255, 77, 79, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.6)'
-                                  : '0 4px 12px rgba(82, 196, 26, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.6)',
-                                border: 'none',
-                                fontSize: 11,
-                                fontWeight: 600,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                flexDirection: 'column',
-                                color: overlapping ? '#fff' : 'rgba(0, 0, 0, 0.25)',
-                                padding: '4px',
-                                position: 'relative',
-                                flexShrink: 0
-                              }}
-                              onMouseEnter={(e) => {
-                                if (!cellDisabled) {
-                                  e.currentTarget.style.boxShadow = overlapping 
-                                    ? '0 8px 16px rgba(255, 77, 79, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.6)' 
-                                    : '0 8px 16px rgba(82, 196, 26, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.6)';
-                                  e.currentTarget.style.transform = 'translateY(-3px)';
-                                }
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.boxShadow = cellDisabled 
-                                  ? '0 2px 4px rgba(0, 0, 0, 0.08)'
-                                  : overlapping
-                                  ? '0 4px 12px rgba(255, 77, 79, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.6)'
-                                  : '0 4px 12px rgba(82, 196, 26, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.6)';
-                                e.currentTarget.style.transform = 'translateY(0)';
-                              }}
-                            >
-                              {overlapping && <span style={{ fontSize: 9, marginBottom: 1 }}>●</span>}
-                              <span style={{ fontSize: 7 }}>{b.start.split(':')[0]}:{b.start.split(':')[1]}</span>
-                            </div>
-                          </Tooltip>
-                        );
-                      })}
-                    </div>
-                    <div style={{ fontSize: 12, color: '#8c8c8c', textAlign: 'center' }}>
-                      {list.length > 0 ? `${list.length} appointment${list.length !== 1 ? 's' : ''}` : 'No appointments'}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+              if (!list.length) return 'No appointments';
+              return `${list.length} appointment(s)`;
+            })()} />
+          </List.Item>
+        );
+      }} />
 
       <Modal title={detailDate ? `Schedule for ${detailDate}` : ''} visible={!!detailDate} onCancel={closeDetail} footer={null} width={720}>
         {detailDate && (
