@@ -76,7 +76,7 @@ interface Announcement {
   imagePath?: string;
 }
 
-const AdminDashboard: React.FC = () => {
+const AdminDashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -88,18 +88,23 @@ const AdminDashboard: React.FC = () => {
     completedRequests: 0,
     unreadMessages: 0
   } as DashboardStats);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [staffAccessNotifs, setStaffAccessNotifs] = useState<Notification[]>([]);
-  const [, setRecentActivity] = useState<Activity[]>([]);
-  const [verifs, setVerifs] = useState<VerificationRequest[]>([]);
+  const [notifications, setNotifications] = useState([] as Notification[]);
+  const [staffAccessNotifs, setStaffAccessNotifs] = useState([] as Notification[]);
+  const [, setRecentActivity] = useState([] as Activity[]);
+  const [verifs, setVerifs] = useState([] as VerificationRequest[]);
   const [verifsLoading, setVerifsLoading] = useState(false);
   const [verifModalVisible, setVerifModalVisible] = useState(false);
-  const [selectedVerif, setSelectedVerif] = useState<VerificationRequest | null>(null);
-  const [, setInquiries] = useState<Inquiry[]>([]);
-  const [, setInboxInquiries] = useState<Inquiry[]>([]);
+  const [selectedVerif, setSelectedVerif] = useState(null as VerificationRequest | null);
+  const [, setInquiries] = useState([] as Inquiry[]);
+  const [, setInboxInquiries] = useState([] as Inquiry[]);
   const [documentsModalVisible, setDocumentsModalVisible] = useState(false);
-  const [documentsData, setDocumentsData] = useState<DocumentData[]>([]);
+  const [documentsData, setDocumentsData] = useState([] as DocumentData[]);
   const [templatesCount, setTemplatesCount] = useState(0);
+  // Mini announcements viewer to replace Recent Activity
+  const [miniAnns, setMiniAnns] = useState([] as Announcement[]);
+  const [miniLoading, setMiniLoading] = useState(false);
+  const [miniSelected, setMiniSelected] = useState(null as Announcement | null);
+  const [drawerVisible, setDrawerVisible] = useState(false);
   // Demo data for mini charts
   const usersTrend = [3, 5, 4, 6, 7, 8, 10]; // last 7 days
   const requestsByType = [
@@ -120,12 +125,13 @@ const AdminDashboard: React.FC = () => {
 
 
   const fetchDashboardData = useCallback(async () => {
+    let docs: any = [];
     try {
       setLoading(true);
       const statsRes = await adminAPI.getSystemStatistics();
       // Fetch document requests for modal
       try {
-        const docs = await documentsAPI.getDocumentRecords();
+        docs = await documentsAPI.getDocumentRecords();
 
         // Process documents for modal table
         const categorized = docs.reduce((acc: any, doc: any) => {
@@ -753,12 +759,6 @@ const AdminDashboard: React.FC = () => {
       </Modal>
     </Card>
   );
-
-  // Mini announcements viewer to replace Recent Activity
-  const [miniAnns, setMiniAnns] = useState<Announcement[]>([]);
-  const [miniLoading, setMiniLoading] = useState(false);
-  const [miniSelected, setMiniSelected] = useState<Announcement | null>(null);
-  const [drawerVisible, setDrawerVisible] = useState(false);
 
   const fetchMiniAnnouncements = async () => {
     setMiniLoading(true);

@@ -120,7 +120,7 @@ export async function sendAppointmentNotification(residentId: any, type: 'create
         await sendMail(resident.email, emailSubject, emailHtml, [], 'appointment');
       }
     } catch (e) {
-      console.warn('Failed to send appointment email', (e && (e.message || e)));
+      console.warn('Failed to send appointment email', (e && ((e as any).message || e)));
     }
   } catch (err) {
     // ensure this function never throws to callers

@@ -301,25 +301,30 @@ export default function ResidentPortal() {
 				if (pending) {
 					// There's a pending verification request
 					const filesMeta: any[] = pending.filesMeta || [];
-					// Map upto three files into proof, govId, selfie by index
-					const makeFileEntry = (fm: any, idx: number) => {
+					// Map files by their fileType instead of index for reliability
+					const makeFileEntry = (fm: any) => {
 						if (!fm || !fm.gridFileId) return null;
 						const url = verificationAPI.getFileUrl(fm.gridFileId);
 						return {
-							uid: `remote-${idx}-${fm.gridFileId}`,
-							name: fm.filename || `file-${idx+1}`,
+							uid: `remote-${fm.fileType || 'unknown'}-${fm.gridFileId}`,
+							name: fm.filename || `file-${fm.fileType || 'unknown'}`,
 							status: 'done',
 							url,
 							thumbUrl: fm.filename && /\.(png|jpe?g|gif|webp)$/i.test(fm.filename) ? url : undefined,
 						};
 					};
-					setProofList(filesMeta[0] ? [makeFileEntry(filesMeta[0], 0)].filter(Boolean) as any[] : []);
-					setGovIdList(filesMeta[1] ? [makeFileEntry(filesMeta[1], 1)].filter(Boolean) as any[] : []);
-					setSelfieList(filesMeta[2] ? [makeFileEntry(filesMeta[2], 2)].filter(Boolean) as any[] : []);
+					// Find files by type
+					const proofFile = filesMeta.find((fm: any) => fm.fileType === 'proof');
+					const govIdFile = filesMeta.find((fm: any) => fm.fileType === 'govid');
+					const selfieFile = filesMeta.find((fm: any) => fm.fileType === 'selfie');
+					setProofList(proofFile ? [makeFileEntry(proofFile)].filter(Boolean) as any[] : []);
+					setGovIdList(govIdFile ? [makeFileEntry(govIdFile)].filter(Boolean) as any[] : []);
+					setSelfieList(selfieFile ? [makeFileEntry(selfieFile)].filter(Boolean) as any[] : []);
 				}
 			}
 		} catch (e) {
-			// ignore — no pending verification found or request failed
+			console.error('Failed to load verification documents:', e);
+			message.error('Failed to load your verification documents. Please try refreshing the page.');
 		}
 	})();
 
@@ -448,20 +453,24 @@ useEffect(() => {
 				if (Array.isArray(reqs) && reqs.length > 0) {
 					const pending = reqs.find((r: any) => r.status === 'pending') || reqs[0];
 					const filesMeta: any[] = pending.filesMeta || [];
-					const makeFileEntry = (fm: any, idx: number) => {
+					const makeFileEntry = (fm: any) => {
 						if (!fm || !fm.gridFileId) return null;
 						const url = verificationAPI.getFileUrl(fm.gridFileId);
 						return {
-							uid: `remote-${idx}-${fm.gridFileId}`,
-							name: fm.filename || `file-${idx+1}`,
+							uid: `remote-${fm.fileType || 'unknown'}-${fm.gridFileId}`,
+							name: fm.filename || `file-${fm.fileType || 'unknown'}`,
 							status: 'done',
 							url,
 							thumbUrl: fm.filename && /\.(png|jpe?g|gif|webp)$/i.test(fm.filename) ? url : undefined,
 						};
 					};
-					setProofList(filesMeta[0] ? [makeFileEntry(filesMeta[0], 0)].filter(Boolean) as any[] : []);
-					setGovIdList(filesMeta[1] ? [makeFileEntry(filesMeta[1], 1)].filter(Boolean) as any[] : []);
-					setSelfieList(filesMeta[2] ? [makeFileEntry(filesMeta[2], 2)].filter(Boolean) as any[] : []);
+					// Find files by type
+					const proofFile = filesMeta.find((fm: any) => fm.fileType === 'proof');
+					const govIdFile = filesMeta.find((fm: any) => fm.fileType === 'govid');
+					const selfieFile = filesMeta.find((fm: any) => fm.fileType === 'selfie');
+					setProofList(proofFile ? [makeFileEntry(proofFile)].filter(Boolean) as any[] : []);
+					setGovIdList(govIdFile ? [makeFileEntry(govIdFile)].filter(Boolean) as any[] : []);
+					setSelfieList(selfieFile ? [makeFileEntry(selfieFile)].filter(Boolean) as any[] : []);
 					// clear local pending File objects since we are now showing server versions
 					setProofFile(null); setGovIdFile(null); setSelfieFile(null);
 				}

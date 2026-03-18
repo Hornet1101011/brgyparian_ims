@@ -280,7 +280,7 @@ router.get('/requests/:id', auth, async (req, res) => {
 });
 
 // Handle CORS preflight for file endpoint
-router.options('/file/:id', auth, authorize('admin'), (req, res) => {
+router.options('/file/:id', auth, (req, res) => {
   const origin = req.headers.origin || req.headers.referer;
   if (origin) {
     res.setHeader('Access-Control-Allow-Origin', origin);
@@ -291,8 +291,8 @@ router.options('/file/:id', auth, authorize('admin'), (req, res) => {
   res.status(200).end();
 });
 
-// Admin: stream/download a verification file from GridFS by id
-router.get('/file/:id', auth, authorize('admin'), async (req, res) => {
+// Admin or Owner: stream/download a verification file from GridFS by id
+router.get('/file/:id', auth, async (req, res) => {
   try {
     // If verifications disabled, don't allow file download
     try {
@@ -301,6 +301,7 @@ router.get('/file/:id', auth, authorize('admin'), async (req, res) => {
         if (settingsAny && settingsAny.enableVerifications === false) return res.status(404).send('Not found');
     } catch (se) {}
     
+    const user = (req as any).user;
     const { id } = req.params;
     const db = (mongoose.connection.db as any);
     const mongodb = await import('mongodb');
@@ -322,6 +323,22 @@ router.get('/file/:id', auth, authorize('admin'), async (req, res) => {
     }
     
     const file = files[0];
+    
+    // Check if user is admin or owns this file (via their verification request)
+    const isAdmin = user.role === 'admin';
+    let isOwner = false;
+    if (!isAdmin) {
+      // Check if this file belongs to the user's verification request
+      const userRequests = await VerificationRequest.find({ userId: user._id });
+      isOwner = userRequests.some((req: any) => 
+        (req.gridFileIds && req.gridFileIds.some((gid: any) => gid.toString() === id)) ||
+        (req.filesMeta && req.filesMeta.some((fm: any) => fm.gridFileId && fm.gridFileId.toString() === id))
+      );
+    }
+    
+    if (!isAdmin && !isOwner) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
     
     // Set appropriate headers for viewing/downloading
     const contentType = file.contentType || 'application/octet-stream';
