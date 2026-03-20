@@ -3,6 +3,7 @@ import { Modal, Descriptions, Divider, Button, Space, message, Typography } from
 import { Select } from 'antd';
 import DateSelectionSection from './staff/appointments/DateSelectionSection';
 import AppointmentDetails from './staff/appointments/AppointmentDetails';
+import { residentsListAPI } from '../services/api';
 import './staff/appointments/scheduling.css';
 import appointmentsAPI from '../api/appointments';
 import { useAppointmentsQuery, useSubmitScheduleMutation } from '../hooks/useAppointments';
@@ -86,6 +87,38 @@ function AppointmentDetailsModal({ visible, record, onClose, prefill }: Props) {
   const [cancelLoading, setCancelLoading] = useState(false);
   const appointmentsQuery = useAppointmentsQuery();
   const submitSchedule = useSubmitScheduleMutation();
+
+  // Resident/contact info state
+  const [residentInfo, setResidentInfo] = useState(null);
+  const [contactInfo, setContactInfo] = useState(null);
+    // Fetch all residents and resolve resident/contact info by barangayID
+    useEffect(() => {
+      let ignore = false;
+      async function fetchResidents() {
+        try {
+          const residents = await residentsListAPI.getAllResidents();
+          if (!residents || !Array.isArray(residents)) return;
+          // Resident: use record.createdBy?.barangayID or record.barangayID
+          let residentBarangayId = record?.createdBy?.barangayID || record?.barangayID;
+          let contactBarangayId = record?.contactBarangayID || null;
+          // Fallback: if contactBarangayID not present, use residentBarangayId
+          if (!contactBarangayId) contactBarangayId = residentBarangayId;
+          const foundResident = residents.find((r: any) => r.barangayID === residentBarangayId);
+          const foundContact = residents.find((r: any) => r.barangayID === contactBarangayId);
+          if (!ignore) {
+            setResidentInfo(foundResident || null);
+            setContactInfo(foundContact || null);
+          }
+        } catch (e) {
+          if (!ignore) {
+            setResidentInfo(null);
+            setContactInfo(null);
+          }
+        }
+      }
+      if (visible && record) fetchResidents();
+      return () => { ignore = true; };
+    }, [visible, record]);
   
 
   // derive existing scheduled map from appointments query data
@@ -437,7 +470,7 @@ function AppointmentDetailsModal({ visible, record, onClose, prefill }: Props) {
   return (
     <Modal open={visible} onCancel={onClose} footer={null} width={720} className="schedulingModal" title={<Typography.Title level={4}>Appointment Details</Typography.Title>}>
       <Descriptions column={1} bordered>
-        <AppointmentDetails record={record} />
+        <AppointmentDetails record={record} residentInfo={residentInfo} contactInfo={contactInfo} />
         <Descriptions.Item label="Number to Schedule">
           <Select
             value={state.maxToSchedule || undefined}
