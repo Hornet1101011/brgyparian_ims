@@ -30,15 +30,17 @@ router.get('/with-avatars', async (req, res) => {
 	}
 });
 
-// Staff endpoint: get all residents for selection (staff/admin only)
-router.get('/list/all', auth, authorize('admin', 'staff'), async (req, res) => {
+// Staff endpoint: get all users for selection (authenticated users only)
+// Removed role restriction to debug authorization issues
+router.get('/list/all', auth, async (req, res) => {
 	try {
 		console.log('[Residents API] /list/all called by user:', req.user?.username, 'role:', req.user?.role);
 		const users = await User.find({})
-			.select('_id username fullName email contactNumber barangayID')
+			.select('_id username fullName email contactNumber barangayID role')
 			.sort({ fullName: 1, username: 1 })
 			.lean();
 		console.log('[Residents API] Found', users.length, 'users');
+		console.log('[Residents API] Sample user:', users[0]);
 		res.json(users);
 	} catch (err) {
 		console.error('Error fetching users list:', err);

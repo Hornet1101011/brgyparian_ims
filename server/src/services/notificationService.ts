@@ -119,8 +119,8 @@ export async function sendAppointmentNotification(residentId: any, type: 'create
         // fire-and-forget, but await to catch errors
         await sendMail(resident.email, emailSubject, emailHtml, [], 'appointment');
       }
-    } catch (e) {
-      console.warn('Failed to send appointment email', typeof e === 'object' && 'message' in e ? e.message : e);
+    } catch (e: any) {
+      console.warn('Failed to send appointment email', e && typeof e === 'object' && 'message' in e ? e.message : e);
     }
   } catch (err) {
     // ensure this function never throws to callers

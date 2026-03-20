@@ -107,12 +107,19 @@ export const residentsListAPI = {
     try {
       console.log('Fetching residents from /resident/list/all');
       const resp = await axiosInstance.get('/resident/list/all');
-      console.log('Residents response:', resp.data);
-      return resp.data || [];
+      console.log('Residents response status:', resp.status);
+      console.log('Residents response data:', resp.data);
+      const data = Array.isArray(resp.data) ? resp.data : [];
+      console.log('Parsed residents array length:', data.length);
+      return data;
     } catch (err: any) {
-      console.error('Failed to fetch residents list:', err);
-      console.error('Error response:', err?.response?.data);
-      console.error('Error status:', err?.response?.status);
+      console.error('Failed to fetch residents list:', {
+        message: err?.message,
+        status: err?.response?.status,
+        statusText: err?.response?.statusText,
+        data: err?.response?.data,
+        fullError: err
+      });
       return [];
     }
   },
