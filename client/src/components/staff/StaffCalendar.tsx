@@ -181,25 +181,36 @@ const StaffCalendar = () => {
       }
       setSingleLoading(true);
       try {
-        // Create inquiry for appointment
+        // Step 1: Create inquiry for appointment
         const payload = {
           username: singleResident.username,
           type: 'SCHEDULE_APPOINTMENT',
           status: 'scheduled',
-          scheduledDates: [{ date: singleDate, startTime: singleStartTime, endTime: singleEndTime }],
           locationType: singleLocationType,
           location: singleLocation,
           description: singleDescription,
           urgency: singleUrgency,
         };
+        console.log('[StaffCalendar] Creating inquiry with payload:', payload);
         const created = await contactAPI.submitInquiry(payload);
-        if (created && created._id) {
-          // Optionally, call scheduleAppointment or scheduleInquiry if needed
-          alert('Appointment scheduled and resident will be notified by email.');
-          setSingleModalVisible(false);
+        console.log('[StaffCalendar] Inquiry created:', created);
+        
+        if (!created || !created._id) {
+          alert('Failed to create appointment inquiry.');
+          return;
         }
+
+        // Step 2: Schedule appointment (create AppointmentSlots)
+        console.log('[StaffCalendar] Scheduling appointment with inquiry ID:', created._id);
+        const scheduledDates = [{ date: singleDate, startTime: singleStartTime, endTime: singleEndTime }];
+        const scheduled = await contactAPI.scheduleInquiry(created._id, scheduledDates);
+        console.log('[StaffCalendar] Appointment scheduled:', scheduled);
+
+        alert('Appointment scheduled and resident will be notified by email.');
+        setSingleModalVisible(false);
       } catch (err) {
-        alert('Failed to schedule appointment.');
+        console.error('[StaffCalendar] Error scheduling appointment:', err);
+        alert('Failed to schedule appointment. ' + (err instanceof Error ? err.message : ''));
       } finally {
         setSingleLoading(false);
       }
