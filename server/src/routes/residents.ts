@@ -3,7 +3,7 @@ import { Resident } from '../models/Resident';
 import { User } from '../models/User';
 import { DocumentRequest } from '../models/DocumentRequest';
 import { Request as ServiceRequest } from '../models/Request';
-import { auth } from '../middleware/auth';
+import { auth, authorize } from '../middleware/auth';
 import { Notification } from '../models/Notification';
 import multer from 'multer';
 import fs from 'fs';
@@ -27,6 +27,22 @@ router.get('/with-avatars', async (req, res) => {
 		res.json(residents);
 	} catch (err) {
 		res.status(500).json({ message: 'Failed to fetch resident avatars', error: String(err) });
+	}
+});
+
+// Staff endpoint: get all residents for selection (staff/admin only)
+router.get('/list/all', auth, authorize('admin', 'staff'), async (req, res) => {
+	try {
+		console.log('[Residents API] /list/all called by user:', req.user?.username, 'role:', req.user?.role);
+		const users = await User.find({})
+			.select('_id username fullName email contactNumber barangayID')
+			.sort({ fullName: 1, username: 1 })
+			.lean();
+		console.log('[Residents API] Found', users.length, 'users');
+		res.json(users);
+	} catch (err) {
+		console.error('Error fetching users list:', err);
+		res.status(500).json({ message: 'Failed to fetch users list', error: String(err) });
 	}
 });
 

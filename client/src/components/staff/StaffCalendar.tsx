@@ -1,32 +1,12 @@
-
-
 import React, { useEffect, useMemo, useState } from 'react';
-import { Card, Row, Col, Button, Tooltip, Modal, List, Grid, Popover, Badge, Empty, Space, Spin, Tag, DatePicker, Input } from 'antd';
+import { Card, Row, Col, Button, Tooltip, Modal, List, Grid, Popover, Badge, Empty, Space, Spin, Tag, DatePicker } from 'antd';
 import { LeftOutlined, RightOutlined, ClockCircleOutlined, UserOutlined } from '@ant-design/icons';
 import { getSlotsForRange, getAppointmentWithSlots, getAppointmentInquiries } from '../../api/appointments';
 import AppointmentDetailsModal from '../AppointmentDetailsModal';
-import { contactAPI } from '../../services/api';
-import { Space as AntSpace, Calendar as AntCalendar } from 'antd';
+import { contactAPI, residentsListAPI } from '../../services/api';
+import { Input, Space as AntSpace, Calendar as AntCalendar } from 'antd';
 import { DISABLED_BG, AVAILABLE_GREEN, BOOKED_RED, LIMITED_GOLD, TODAY_BLUE } from '../../theme/colors';
 import dayjs from 'dayjs';
-
-// Helper to parse fullName to LN, FN, MN
-function parseResidentName(info: any) {
-  if (!info) return '—';
-  // If lastName, firstName, middleName exist, use them
-  if (info.lastName || info.firstName || info.middleName) {
-    return `${info.lastName || ''}, ${info.firstName || ''}${info.middleName ? ', ' + info.middleName : ''}`;
-  }
-  // If fullName exists, try to parse
-  if (info.fullName) {
-    const parts = info.fullName.trim().split(/\s+/);
-    if (parts.length === 1) return parts[0];
-    if (parts.length === 2) return `${parts[1]}, ${parts[0]}`;
-    if (parts.length >= 3) return `${parts[parts.length-1]}, ${parts[0]}, ${parts.slice(1, parts.length-1).join(' ')}`;
-  }
-  // fallback to username
-  return info.username || '—';
-}
 
 // Simple helpers
 const toMinutes = (t: string) => {
@@ -138,6 +118,92 @@ const StaffCalendar = () => {
   const [quickInquiries, setQuickInquiries] = useState([]);
   const [quickSelected, setQuickSelected] = useState([]);
   const [quickCreateVisible, setQuickCreateVisible] = useState(false);
+    // Single appointment modal state
+  const [singleModalVisible, setSingleModalVisible] = useState(false);
+  const [singleResident, setSingleResident] = useState(null);
+  const [singleStartTime, setSingleStartTime] = useState('08:00 AM');
+  const [singleEndTime, setSingleEndTime] = useState('09:00 AM');
+  const [singleLocationType, setSingleLocationType] = useState('on-site');
+  const [singleLocation, setSingleLocation] = useState('');
+  const [singleDescription, setSingleDescription] = useState('');
+  const [singleUrgency, setSingleUrgency] = useState('normal');
+  const [singleDate, setSingleDate] = useState('');
+  const [singleLoading, setSingleLoading] = useState(false);
+  const [residentOptions, setResidentOptions] = useState([]);
+  const [residentSelectModal, setResidentSelectModal] = useState(false);
+  const [residentSearch, setResidentSearch] = useState('');
+
+    // Fetch residents for selection
+  // Retrieve from MongoDB users collection via API
+  const fetchResidents = async () => {
+    try {
+      console.log('Fetching residents list...');
+      const residents = await residentsListAPI.getAllResidents();
+      console.log('Retrieved residents:', residents);
+      setResidentOptions(residents);
+    } catch (err) {
+      console.error('Failed to fetch residents:', err);
+      // Fallback to empty list on error
+      setResidentOptions([]);
+    }
+  };
+
+    // Open single appointment modal
+    const openSingleAppointment = (dateStr: string) => {
+      setSingleDate(dateStr);
+      setSingleModalVisible(true);
+      fetchResidents();
+    };
+
+    // Validate and save single appointment
+    const saveSingleAppointment = async () => {
+      if (!singleResident || !singleStartTime || !singleEndTime || !singleLocation || !singleDescription) {
+        alert('Please fill all required fields.');
+        return;
+      }
+      // Validate time
+      const parseTime = (t: string) => {
+        const [time, meridian] = t.split(' ');
+        let [h, m] = time.split(':').map(Number);
+        if (meridian === 'PM' && h !== 12) h += 12;
+        if (meridian === 'AM' && h === 12) h = 0;
+        return h * 60 + m;
+      };
+      const startMin = parseTime(singleStartTime);
+      const endMin = parseTime(singleEndTime);
+      if (endMin <= startMin) {
+        alert('End time must be after start time.');
+        return;
+      }
+      if (startMin < 8 * 60 || endMin > 17 * 60) {
+        alert('Time must be between 8:00 AM and 5:00 PM.');
+        return;
+      }
+      setSingleLoading(true);
+      try {
+        // Create inquiry for appointment
+        const payload = {
+          username: singleResident.username,
+          type: 'SCHEDULE_APPOINTMENT',
+          status: 'scheduled',
+          scheduledDates: [{ date: singleDate, startTime: singleStartTime, endTime: singleEndTime }],
+          locationType: singleLocationType,
+          location: singleLocation,
+          description: singleDescription,
+          urgency: singleUrgency,
+        };
+        const created = await contactAPI.submitInquiry(payload);
+        if (created && created._id) {
+          // Optionally, call scheduleAppointment or scheduleInquiry if needed
+          alert('Appointment scheduled and resident will be notified by email.');
+          setSingleModalVisible(false);
+        }
+      } catch (err) {
+        alert('Failed to schedule appointment.');
+      } finally {
+        setSingleLoading(false);
+      }
+    };
   const [quickCreateUsername, setQuickCreateUsername] = useState('');
   const [quickCreateSubject, setQuickCreateSubject] = useState('Quick appointment');
   const [quickCreateLoading, setQuickCreateLoading] = useState(false);
@@ -364,6 +430,12 @@ const StaffCalendar = () => {
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {/* Quick Schedule Buttons */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+          <Button type="primary" onClick={() => openSingleAppointment(todayIso)}>Single Appointment</Button>
+          <Button onClick={() => alert('Multiple appointment scheduling coming soon!')}>Multiple Appointments</Button>
+          <Button onClick={() => alert('Mass appointment scheduling coming soon!')}>Mass Appointments</Button>
+        </div>
         {/* Weekday headers */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8, marginBottom: 8 }}>
           {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
@@ -407,8 +479,8 @@ const StaffCalendar = () => {
                           <Button size="small" type="primary" block onClick={() => { openDetail(dateStr); }} disabled={isClosed || isPast}>
                             View Details
                           </Button>
-                          <Button size="small" block onClick={() => { openQuickSchedule(dateStr, '08:00', '09:00'); }} disabled={isClosed || isPast}>
-                            Quick Schedule
+                          <Button size="small" block onClick={() => { openSingleAppointment(dateStr); }} disabled={isClosed || isPast}>
+                            Single Appointment
                           </Button>
                         </Space>
                       </div>
@@ -497,6 +569,145 @@ const StaffCalendar = () => {
       styles={{ body: { padding: 20 } }}
     >
       {/* Month Navigation */}
+      {/* Single Appointment Modal */}
+      <Modal
+        open={singleModalVisible}
+        onCancel={() => setSingleModalVisible(false)}
+        title={<span style={{ fontWeight: 700, fontSize: 18 }}>Schedule Single Appointment</span>}
+        footer={null}
+        width={480}
+        bodyStyle={{ padding: 32 }}
+      >
+        <div style={{ maxWidth: 420, margin: '0 auto' }}>
+          <Space direction="vertical" size={20} style={{ width: '100%' }}>
+            <div>
+              <label style={{ fontWeight: 600 }}>Resident</label>
+              <br />
+              <Button
+                icon={<UserOutlined />}
+                style={{ width: '100%', textAlign: 'left', padding: 8, borderRadius: 6, border: '1px solid #d9d9d9', fontSize: 15, background: '#fff' }}
+                onClick={() => setResidentSelectModal(true)}
+              >
+                {singleResident ? (singleResident.fullName || singleResident.username) : 'Select resident'}
+              </Button>
+              <Modal
+                open={residentSelectModal}
+                onCancel={() => setResidentSelectModal(false)}
+                title="Select Resident"
+                footer={null}
+                width={400}
+              >
+                <Input
+                  placeholder="Search resident..."
+                  value={residentSearch}
+                  onChange={e => setResidentSearch(e.target.value)}
+                  style={{ marginBottom: 12 }}
+                  allowClear
+                />
+                <List
+                  dataSource={residentOptions.filter(r =>
+                    r.fullName?.toLowerCase().includes(residentSearch.toLowerCase()) ||
+                    r.username?.toLowerCase().includes(residentSearch.toLowerCase())
+                  )}
+                  renderItem={r => (
+                    <List.Item
+                      key={r.username}
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => {
+                        setSingleResident(r);
+                        setResidentSelectModal(false);
+                      }}
+                    >
+                      <UserOutlined style={{ marginRight: 8 }} />
+                      {r.fullName || r.username}
+                    </List.Item>
+                  )}
+                  locale={{ emptyText: 'No residents found' }}
+                  style={{ maxHeight: 300, overflowY: 'auto' }}
+                />
+              </Modal>
+            </div>
+            <Row gutter={12}>
+              <Col span={12}>
+                <label style={{ fontWeight: 600 }}>Start Time</label>
+                <Input
+                  type="time"
+                  value={singleStartTime.replace(' AM','').replace(' PM','')}
+                  onChange={e => setSingleStartTime(e.target.value + (parseInt(e.target.value.split(':')[0]) < 12 ? ' AM' : ' PM'))}
+                  min="08:00"
+                  max="17:00"
+                  step="1"
+                  style={{ width: '100%' }}
+                />
+              </Col>
+              <Col span={12}>
+                <label style={{ fontWeight: 600 }}>End Time</label>
+                <Input
+                  type="time"
+                  value={singleEndTime.replace(' AM','').replace(' PM','')}
+                  onChange={e => setSingleEndTime(e.target.value + (parseInt(e.target.value.split(':')[0]) < 12 ? ' AM' : ' PM'))}
+                  min="08:00"
+                  max="17:00"
+                  step="1"
+                  style={{ width: '100%' }}
+                />
+              </Col>
+            </Row>
+            <div>
+              <label style={{ fontWeight: 600 }}>Location Type</label>
+              <br />
+              <select
+                value={singleLocationType}
+                onChange={e => setSingleLocationType(e.target.value)}
+                style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #d9d9d9', fontSize: 15 }}
+              >
+                <option value="on-site">On-site</option>
+                <option value="online">Online</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ fontWeight: 600 }}>{singleLocationType === 'online' ? 'Meeting Link' : 'Address'}</label>
+              <Input
+                value={singleLocation}
+                onChange={e => setSingleLocation(e.target.value)}
+                placeholder={singleLocationType === 'online' ? 'Enter meeting link' : 'Enter address'}
+                style={{ width: '100%' }}
+              />
+            </div>
+            <div>
+              <label style={{ fontWeight: 600 }}>Description</label>
+              <Input.TextArea
+                value={singleDescription}
+                onChange={e => setSingleDescription(e.target.value)}
+                rows={3}
+                style={{ width: '100%' }}
+                placeholder="Enter appointment description"
+              />
+            </div>
+            <div>
+              <label style={{ fontWeight: 600 }}>Urgency</label>
+              <br />
+              <select
+                value={singleUrgency}
+                onChange={e => setSingleUrgency(e.target.value)}
+                style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #d9d9d9', fontSize: 15 }}
+              >
+                <option value="normal">Normal</option>
+                <option value="urgent">Urgent</option>
+                <option value="emergency">Emergency</option>
+              </select>
+            </div>
+            <Button
+              type="primary"
+              loading={singleLoading}
+              onClick={saveSingleAppointment}
+              style={{ width: '100%', height: 44, fontSize: 16, fontWeight: 600, borderRadius: 8 }}
+            >
+              Save Appointment
+            </Button>
+          </Space>
+        </div>
+      </Modal>
       <div style={{ 
         display: 'flex', 
         justifyContent: 'space-between', 
@@ -672,13 +883,7 @@ const StaffCalendar = () => {
                   title={`${s.startTime} - ${s.endTime}`}
                   description={(
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <div><strong>{parseResidentName({
-                        lastName: s.lastName,
-                        firstName: s.firstName,
-                        middleName: s.middleName,
-                        fullName: s.residentName,
-                        username: s.residentUsername
-                      })}</strong> — {s.staffName || 'Staff'}</div>
+                      <div><strong>{s.residentName || s.residentUsername || 'Resident'}</strong> — {s.staffName || 'Staff'}</div>
                       {s.subject && <div><em>{s.subject}</em></div>}
                       {s.status && <div>Status: {s.status}</div>}
                       {s.notes && <div style={{ color: '#444' }}>{s.notes}</div>}
@@ -694,13 +899,7 @@ const StaffCalendar = () => {
         {slotDetail && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div><strong>Time</strong>: {slotDetail.startTime} — {slotDetail.endTime}</div>
-            <div><strong>Resident</strong>: {parseResidentName({
-              lastName: slotDetail.lastName,
-              firstName: slotDetail.firstName,
-              middleName: slotDetail.middleName,
-              fullName: slotDetail.residentName,
-              username: slotDetail.residentUsername
-            })}</div>
+            <div><strong>Resident</strong>: {slotDetail.residentName || slotDetail.residentUsername || 'Unknown'}</div>
             {slotDetail.residentPhone && <div><strong>Phone</strong>: {slotDetail.residentPhone}</div>}
             {slotDetail.residentEmail && <div><strong>Email</strong>: {slotDetail.residentEmail}</div>}
             <div><strong>Staff</strong>: {slotDetail.staffName || 'Staff'}</div>
@@ -739,13 +938,7 @@ const StaffCalendar = () => {
                 />
                 <List.Item.Meta
                   title={inq.subject || inq.username || `Inquiry ${inq._id}`}
-                  description={<div>{parseResidentName({
-                    lastName: inq.createdBy?.lastName,
-                    firstName: inq.createdBy?.firstName,
-                    middleName: inq.createdBy?.middleName,
-                    fullName: inq.createdBy?.fullName,
-                    username: inq.username
-                  })}</div>}
+                  description={<div>{inq.createdBy?.fullName || inq.username || 'Unknown resident'}</div>}
                 />
               </List.Item>
             );
@@ -766,7 +959,7 @@ const StaffCalendar = () => {
         </Space>
       </Modal>
 
-        {/* <AppointmentDetailsModal visible={editorVisible} record={editorRecord} onClose={closeEditor} prefill={editorPrefill} /> */}
+        <AppointmentDetailsModal visible={editorVisible} record={editorRecord} onClose={closeEditor} prefill={editorPrefill} />
     </Card>
   );
 };

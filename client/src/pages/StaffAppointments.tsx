@@ -1,21 +1,22 @@
 import React, { useMemo, useState } from 'react';
-import { Table, Button, Card, Tag, Space, Typography, message, Input, Empty, Spin } from 'antd';
+import { Table, Button, Card, Tag, Space, Typography, message, Input, Empty, Spin, Tooltip, Modal } from 'antd';
 import { useAppointmentsQuery } from '../hooks/useAppointments';
 import '../components/staff/appointments/scheduling.css';
 import dayjs from 'dayjs';
 import AppointmentDetailsModal from '../components/AppointmentDetailsModal';
 import InquiryDetailsModal from '../components/InquiryDetailsModal';
-import { CalendarOutlined, ClockCircleOutlined, CheckCircleOutlined, SearchOutlined } from '@ant-design/icons';
+import { CalendarOutlined, ClockCircleOutlined, CheckCircleOutlined, SearchOutlined, ClockCircleTwoTone, EyeOutlined } from '@ant-design/icons';
 
 const { Text } = Typography;
 
-const StaffAppointments: React.FC = () => {
-  const [selectedRecord, setSelectedRecord] = useState<any | null>(null);
+const StaffAppointments = () => {
+  const [viewIdModal, setViewIdModal] = useState({ visible: false, id: null } as { visible: boolean; id: string | null });
+  const [selectedRecord, setSelectedRecord] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [inquiryModalVisible, setInquiryModalVisible] = useState(false);
   const [query, setQuery] = useState('');
-  const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
-  const [isMobile, setIsMobile] = useState<boolean>(window.innerWidth <= 720);
+  const [viewMode, setViewMode] = useState('table');
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 720);
 
   React.useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth <= 720);
@@ -28,7 +29,181 @@ const StaffAppointments: React.FC = () => {
     message.error('Failed to fetch appointments');
   }
 
-  const columns = useMemo(() => [
+  // Helper to determine if a scheduled appointment is past
+  const isPast = (record: any) => {
+    if (record.status !== 'scheduled') return false;
+    const date = record.appointmentDates && record.appointmentDates.length > 0 ? record.appointmentDates[0] : null;
+    if (!date) return false;
+    return dayjs(date).isBefore(dayjs(), 'day');
+  };
+
+  // Filtered inquiries based on search query
+  const filteredInquiries = useMemo(() => {
+    const q = query.toLowerCase();
+    return inquiries.filter((record: any) => {
+      const name = record.createdBy?.fullName || record.username || '';
+      const id = record._id || '';
+      const status = record.status || '';
+      return (
+        name.toLowerCase().includes(q) ||
+        id.toLowerCase().includes(q) ||
+        status.toLowerCase().includes(q)
+      );
+    });
+  }, [inquiries, query]);
+
+  // CardView component
+  const CardView = () => {
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(380px, 1fr))', gap: 16 }}>
+        {filteredInquiries.map(record => {
+          const dates = record.appointmentDates || [];
+          let statusConfig = { color: '#0a66c2', bgColor: '#e6f4ff', border: '#0a66c2', text: 'Pending', icon: <ClockCircleOutlined /> };
+          if (record.status === 'scheduled') {
+            if (isPast(record)) {
+              statusConfig = { color: '#888', bgColor: '#f5f5f5', border: '#bdbdbd', text: 'Past', icon: <ClockCircleTwoTone twoToneColor="#bdbdbd" /> };
+            } else {
+              statusConfig = { color: '#52c41a', bgColor: '#f6ffed', border: '#52c41a', text: 'Scheduled', icon: <CheckCircleOutlined /> };
+            }
+          } else if (record.status === 'resolved') {
+            statusConfig = { color: '#8c8c8c', bgColor: '#fafafa', border: '#8c8c8c', text: 'Resolved', icon: <CheckCircleOutlined /> };
+          } else if (record.status === 'canceled') {
+            statusConfig = { color: '#cf1322', bgColor: '#fff2f0', border: '#cf1322', text: 'Canceled', icon: <ClockCircleOutlined /> };
+          }
+          return (
+            <Card
+              key={record._id}
+              style={{
+                borderRadius: 12,
+                border: '1px solid rgba(114, 46, 209, 0.12)',
+                boxShadow: '0 4px 16px rgba(114, 46, 209, 0.1)',
+                transition: 'all 0.3s ease',
+                overflow: 'hidden'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.boxShadow = '0 12px 32px rgba(114, 46, 209, 0.2)';
+                e.currentTarget.style.transform = 'translateY(-4px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.boxShadow = '0 4px 16px rgba(114, 46, 209, 0.1)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    {/* Header */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, width: '100%' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
+                        <div style={{
+                          width: 48,
+                          height: 48,
+                          borderRadius: '10px',
+                          background: 'linear-gradient(135deg, #722ed1 0%, #1890ff 50%, #13c2c2 100%)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#fff',
+                          fontWeight: 700,
+                          fontSize: 16,
+                          flexShrink: 0,
+                          boxShadow: '0 4px 12px rgba(114, 46, 209, 0.25)'
+                        }}>
+                          {(record.createdBy?.fullName || record.username || 'R').charAt(0).toUpperCase()}
+                        </div>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ fontWeight: 700, fontSize: 14, background: 'linear-gradient(135deg, #722ed1 0%, #1890ff 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>
+                            {record.createdBy?.fullName || record.username}
+                          </div>
+                          <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>
+                            📅 {dayjs(record.createdAt).format('MMM DD, YYYY')}
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{
+                        padding: '6px 12px',
+                        background: statusConfig.bgColor,
+                        color: statusConfig.color,
+                        borderRadius: 6,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 4,
+                        flexShrink: 0,
+                        border: `2px solid ${statusConfig.border}`,
+                        whiteSpace: 'nowrap',
+                        minWidth: 100,
+                        height: 28
+                      }}>
+                        {statusConfig.icon}
+                        {statusConfig.text}
+                      </div>
+                    </div>
+
+                    {/* Requested Dates Section */}
+                    <div style={{ 
+                      background: 'linear-gradient(135deg, #f9f5ff 0%, #f0e6ff 50%, #e6f7ff 100%)',
+                      padding: 12,
+                      borderRadius: 10,
+                      border: '1px solid rgba(114, 46, 209, 0.15)'
+                    }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#722ed1', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                        📋 Requested Dates
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {dates.slice(0, 3).map((d, idx) => (
+                          <div key={idx} style={{ fontSize: 12, color: '#1f2937', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <CalendarOutlined style={{ fontSize: 12, color: '#1890ff', flexShrink: 0 }} />
+                            {dayjs(d).format('MMM DD, YYYY')}
+                          </div>
+                        ))}
+                        {dates.length > 3 && <div style={{ fontSize: 11, color: '#666', marginTop: 4, fontWeight: 600 }}>+{dates.length - 3} more date{dates.length > 4 ? 's' : ''}</div>}
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                      <Button 
+                        block
+                        size="small"
+                        onClick={() => { setSelectedRecord(record); setInquiryModalVisible(true); }}
+                        style={{
+                          borderRadius: 6,
+                          fontSize: 12,
+                          fontWeight: 600,
+                          border: '1px solid rgba(114, 46, 209, 0.2)',
+                          color: '#722ed1',
+                          height: 36
+                        }}
+                      >
+                        View Details
+                      </Button>
+                      <Button 
+                        type="primary"
+                        block
+                        size="small"
+                        onClick={() => { setSelectedRecord(record); setModalVisible(true); }}
+                        style={{
+                          borderRadius: 6,
+                          fontSize: 12,
+                          fontWeight: 600,
+                          background: record.status === 'scheduled' ? 'linear-gradient(135deg, #722ed1 0%, #1890ff 100%)' : 'linear-gradient(135deg, #1890ff 0%, #13c2c2 100%)',
+                          border: 'none',
+                          height: 36
+                        }}
+                      >
+                        {record.status === 'scheduled' ? 'Edit' : 'Schedule'}
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+          );
+        };
+
+          const columns = useMemo(() => [
     { 
       title: '👤 Resident Name', 
       dataIndex: ['createdBy', 'fullName'], 
@@ -59,7 +234,20 @@ const StaffAppointments: React.FC = () => {
       title: '🔖 Inquiry ID', 
       dataIndex: '_id', 
       key: '_id', 
-      render: (id: string) => <Text copyable style={{ fontSize: 12, color: '#666', fontFamily: 'monospace' }}>{id.substring(0, 8)}...</Text> 
+      render: (id: string) => (
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Text copyable style={{ fontSize: 12, color: '#666', fontFamily: 'monospace' }}>{id.substring(0, 8)}...</Text>
+          <Tooltip title="View full ID" placement="top">
+            <EyeOutlined 
+              style={{ color: '#722ed1', cursor: 'pointer', fontSize: 15 }} 
+              onClick={e => {
+                e.stopPropagation();
+                setViewIdModal({ visible: true, id });
+              }}
+            />
+          </Tooltip>
+        </span>
+      )
     },
     { 
       title: '📅 Submitted On', 
@@ -92,13 +280,17 @@ const StaffAppointments: React.FC = () => {
       title: '✓ Status', 
       dataIndex: 'status', 
       key: 'status', 
-      render: (s: string) => {
+      render: (_: string, record: any) => {
         let config = { color: '#0a66c2', bgColor: '#e6f4ff', border: '#0a66c2', text: 'Pending', icon: <ClockCircleOutlined /> };
-        if (s === 'scheduled') {
-          config = { color: '#52c41a', bgColor: '#f6ffed', border: '#52c41a', text: 'Scheduled', icon: <CheckCircleOutlined /> };
-        } else if (s === 'resolved') {
+        if (record.status === 'scheduled') {
+          if (isPast(record)) {
+            config = { color: '#888', bgColor: '#f5f5f5', border: '#bdbdbd', text: 'Past', icon: <ClockCircleTwoTone twoToneColor="#bdbdbd" /> };
+          } else {
+            config = { color: '#52c41a', bgColor: '#f6ffed', border: '#52c41a', text: 'Scheduled', icon: <CheckCircleOutlined /> };
+          }
+        } else if (record.status === 'resolved') {
           config = { color: '#8c8c8c', bgColor: '#fafafa', border: '#8c8c8c', text: 'Resolved', icon: <CheckCircleOutlined /> };
-        } else if (s === 'canceled') {
+        } else if (record.status === 'canceled') {
           config = { color: '#cf1322', bgColor: '#fff2f0', border: '#cf1322', text: 'Canceled', icon: <ClockCircleOutlined /> };
         }
         return (
@@ -112,10 +304,7 @@ const StaffAppointments: React.FC = () => {
             color: config.color,
             border: `2px solid ${config.border}`,
             borderRadius: 6,
-            fontSize: 12,
-            fontWeight: 700,
-            minWidth: 100,
-            height: 28
+            fontSize: 12
           }}>
             {config.icon}
             {config.text}
@@ -123,358 +312,214 @@ const StaffAppointments: React.FC = () => {
         );
       }
     },
-    { 
-      title: '⚙️ Actions', 
-      key: 'actions', 
-      width: 240,
+    {
+      title: '⚡ Actions',
+      key: 'actions',
       render: (_: any, record: any) => (
-        <Space size={8} style={{ display: 'flex' }}>
+        <div style={{ display: 'flex', gap: 8 }}>
           <Button 
+            block
             size="small"
             onClick={() => { setSelectedRecord(record); setInquiryModalVisible(true); }}
             style={{
               borderRadius: 6,
               fontSize: 12,
-              fontWeight: 500,
-              flex: 1,
-              minWidth: 100,
+              fontWeight: 600,
               border: '1px solid rgba(114, 46, 209, 0.2)',
-              color: '#722ed1'
+              color: '#722ed1',
+              height: 36
             }}
           >
             View Details
           </Button>
           <Button 
-            type="primary" 
+            type="primary"
+            block
             size="small"
             onClick={() => { setSelectedRecord(record); setModalVisible(true); }}
             style={{
               borderRadius: 6,
               fontSize: 12,
-              fontWeight: 500,
-              flex: 1,
-              minWidth: 100,
-              background: record && record.status === 'scheduled' ? 'linear-gradient(135deg, #722ed1 0%, #1890ff 100%)' : 'linear-gradient(135deg, #1890ff 0%, #13c2c2 100%)',
-              border: 'none'
+              fontWeight: 600,
+              background: record.status === 'scheduled' ? 'linear-gradient(135deg, #722ed1 0%, #1890ff 100%)' : 'linear-gradient(135deg, #1890ff 0%, #13c2c2 100%)',
+              border: 'none',
+              height: 36
             }}
           >
-            {record && record.status === 'scheduled' ? 'Edit' : 'Schedule'}
+            {record.status === 'scheduled' ? 'Edit' : 'Schedule'}
           </Button>
-        </Space>
+        </div>
       )
     }
-  ], []);
+  ]);
 
-  const filteredInquiries = useMemo(() => {
-    try {
-      const q = (query || '').trim().toLowerCase();
-      if (!q) return inquiries;
-      return (inquiries || []).filter((r: any) => {
-        const name = (r?.createdBy?.fullName || r?.username || '').toString().toLowerCase();
-        const id = (r?._id || '').toString().toLowerCase();
-        const status = (r?.status || '').toString().toLowerCase();
-        return name.includes(q) || id.includes(q) || status.includes(q);
-      });
-    } catch (e) {
-      return inquiries;
-    }
-  }, [inquiries, query]);
+  // Main return follows
 
-  // Card view render
-  const CardView = () => (
-    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(380px, 1fr))', gap: 16 }}>
-      {filteredInquiries.map(record => {
-        const dates = record.appointmentDates || [];
-        let statusConfig = { color: '#0a66c2', bgColor: '#e6f4ff', border: '#0a66c2', text: 'Pending', icon: <ClockCircleOutlined /> };
-        if (record.status === 'scheduled') {
-          statusConfig = { color: '#52c41a', bgColor: '#f6ffed', border: '#52c41a', text: 'Scheduled', icon: <CheckCircleOutlined /> };
-        } else if (record.status === 'resolved') {
-          statusConfig = { color: '#8c8c8c', bgColor: '#fafafa', border: '#8c8c8c', text: 'Resolved', icon: <CheckCircleOutlined /> };
-        } else if (record.status === 'canceled') {
-          statusConfig = { color: '#cf1322', bgColor: '#fff2f0', border: '#cf1322', text: 'Canceled', icon: <ClockCircleOutlined /> };
-        }
 
-        return (
-          <Card
-            key={record._id}
-            style={{
-              borderRadius: 12,
-              border: '1px solid rgba(114, 46, 209, 0.12)',
-              boxShadow: '0 4px 16px rgba(114, 46, 209, 0.1)',
-              transition: 'all 0.3s ease',
-              overflow: 'hidden'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.boxShadow = '0 12px 32px rgba(114, 46, 209, 0.2)';
-              e.currentTarget.style.transform = 'translateY(-4px)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.boxShadow = '0 4px 16px rgba(114, 46, 209, 0.1)';
-              e.currentTarget.style.transform = 'translateY(0)';
-            }}
-          >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {/* Header */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, width: '100%' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
-                  <div style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: '10px',
-                    background: 'linear-gradient(135deg, #722ed1 0%, #1890ff 50%, #13c2c2 100%)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#fff',
-                    fontWeight: 700,
-                    fontSize: 16,
-                    flexShrink: 0,
-                    boxShadow: '0 4px 12px rgba(114, 46, 209, 0.25)'
-                  }}>
-                    {(record.createdBy?.fullName || record.username || 'R').charAt(0).toUpperCase()}
-                  </div>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14, background: 'linear-gradient(135deg, #722ed1 0%, #1890ff 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>
-                      {record.createdBy?.fullName || record.username}
-                    </div>
-                    <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>
-                      📅 {dayjs(record.createdAt).format('MMM DD, YYYY')}
-                    </div>
-                  </div>
-                </div>
+  return (
+    <>
+      <Spin spinning={isLoading} tip="Loading appointments...">
+        <div style={{ 
+          minHeight: '100vh', 
+          background: 'linear-gradient(135deg, #fafbfc 0%, #f5f8fc 100%)',
+          padding: '16px'
+        }}>
+          {/* Shiny Container */}
+          <div style={{
+            background: '#ffffff',
+            borderRadius: '12px',
+            boxShadow: '0 4px 20px rgba(24, 144, 255, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.6)',
+            border: '1px solid rgba(24, 144, 255, 0.1)',
+            padding: '24px'
+          }}>
+            {/* Header Section */}
+            <div style={{ marginBottom: 28 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
                 <div style={{
-                  padding: '6px 12px',
-                  background: statusConfig.bgColor,
-                  color: statusConfig.color,
-                  borderRadius: 6,
-                  fontSize: 11,
-                  fontWeight: 700,
+                  width: 64,
+                  height: 64,
+                  borderRadius: '14px',
+                  background: 'linear-gradient(135deg, #722ed1 0%, #1890ff 50%, #13c2c2 100%)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 4,
-                  flexShrink: 0,
-                  border: `2px solid ${statusConfig.border}`,
-                  whiteSpace: 'nowrap',
-                  minWidth: 100,
-                  height: 28
+                  boxShadow: '0 6px 20px rgba(114, 46, 209, 0.35)',
+                  flexShrink: 0
                 }}>
-                  {statusConfig.icon}
-                  {statusConfig.text}
+                  <CalendarOutlined style={{ fontSize: 32, color: '#ffffff' }} />
+                </div>
+                <div>
+                  <h2 style={{ margin: 0, background: 'linear-gradient(135deg, #722ed1 0%, #1890ff 50%, #13c2c2 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', fontSize: 28, fontWeight: 700, letterSpacing: '-0.5px' }}>
+                    Appointment Requests
+                  </h2>
+                  <p style={{ margin: '8px 0 0 0', background: 'linear-gradient(90deg, #722ed1 0%, #1890ff 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', fontSize: 13, fontWeight: 600 }}>
+                    Manage and schedule appointment requests
+                  </p>
                 </div>
               </div>
-
-              {/* Requested Dates Section */}
-              <div style={{ 
-                background: 'linear-gradient(135deg, #f9f5ff 0%, #f0e6ff 50%, #e6f7ff 100%)',
-                padding: 12,
-                borderRadius: 10,
-                border: '1px solid rgba(114, 46, 209, 0.15)'
-              }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#722ed1', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                  📋 Requested Dates
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {dates.slice(0, 3).map((d, idx) => (
-                    <div key={idx} style={{ fontSize: 12, color: '#1f2937', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <CalendarOutlined style={{ fontSize: 12, color: '#1890ff', flexShrink: 0 }} />
-                      {dayjs(d).format('MMM DD, YYYY')}
-                    </div>
-                  ))}
-                  {dates.length > 3 && <div style={{ fontSize: 11, color: '#666', marginTop: 4, fontWeight: 600 }}>+{dates.length - 3} more date{dates.length > 4 ? 's' : ''}</div>}
-                </div>
-              </div>
-
-              {/* Actions */}
-              <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                <Button 
-                  block
-                  size="small"
-                  onClick={() => { setSelectedRecord(record); setInquiryModalVisible(true); }}
-                  style={{ 
-                    borderRadius: 6, 
-                    fontSize: 12, 
-                    fontWeight: 600,
-                    border: '1px solid rgba(114, 46, 209, 0.2)',
-                    color: '#722ed1',
-                    height: 36
-                  }}
-                >
-                  View Details
-                </Button>
-                <Button 
-                  type="primary"
-                  block
-                  size="small"
-                  onClick={() => { setSelectedRecord(record); setModalVisible(true); }}
-                  style={{ 
-                    borderRadius: 6, 
-                    fontSize: 12, 
-                    fontWeight: 600,
-                    background: record.status === 'scheduled' ? 'linear-gradient(135deg, #722ed1 0%, #1890ff 100%)' : 'linear-gradient(135deg, #1890ff 0%, #13c2c2 100%)',
-                    border: 'none',
-                    height: 36
-                  }}
-                >
-                  {record.status === 'scheduled' ? 'Edit' : 'Schedule'}
-                </Button>
-              </div>
             </div>
-          </Card>
-        );
-      })}
-    </div>
-  );
 
-  return (
-    <Spin spinning={isLoading} tip="Loading appointments...">
-      <div style={{ 
-        minHeight: '100vh', 
-        background: 'linear-gradient(135deg, #fafbfc 0%, #f5f8fc 100%)',
-        padding: '16px'
-      }}>
-        {/* Shiny Container */}
-        <div style={{
-          background: '#ffffff',
-          borderRadius: '12px',
-          boxShadow: '0 4px 20px rgba(24, 144, 255, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.6)',
-          border: '1px solid rgba(24, 144, 255, 0.1)',
-          padding: '24px'
-        }}>
-          {/* Header Section */}
-          <div style={{ marginBottom: 28 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
-              <div style={{
-                width: 64,
-                height: 64,
-                borderRadius: '14px',
-                background: 'linear-gradient(135deg, #722ed1 0%, #1890ff 50%, #13c2c2 100%)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: '0 6px 20px rgba(114, 46, 209, 0.35)',
-                flexShrink: 0
-              }}>
-                <CalendarOutlined style={{ fontSize: 32, color: '#ffffff' }} />
-              </div>
-              <div>
-                <h2 style={{ margin: 0, background: 'linear-gradient(135deg, #722ed1 0%, #1890ff 50%, #13c2c2 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', fontSize: 28, fontWeight: 700, letterSpacing: '-0.5px' }}>
-                  Appointment Requests
-                </h2>
-                <p style={{ margin: '8px 0 0 0', background: 'linear-gradient(90deg, #722ed1 0%, #1890ff 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', fontSize: 13, fontWeight: 600 }}>
-                  Manage and schedule appointment requests
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Search and View Mode Controls */}
-          <div style={{
-            background: 'linear-gradient(135deg, #f9f5ff 0%, #f0e6ff 50%, #e6f7ff 100%)',
-            borderRadius: 12,
-            padding: 16,
-            marginBottom: 20,
-            border: '1px solid rgba(114, 46, 209, 0.15)',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            gap: 16,
-            flexWrap: isMobile ? 'wrap' : 'nowrap'
-          }}>
-            <div style={{ flex: 1, minWidth: isMobile ? '100%' : 260 }}>
-              <Input
-                allowClear
-                placeholder="🔍 Search resident name, inquiry ID, or status..."
-                prefix={<SearchOutlined style={{ color: '#722ed1' }} />}
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                style={{ 
-                  borderRadius: 8,
-                  border: '1px solid rgba(114, 46, 209, 0.2)',
-                  fontSize: 13
-                }}
-                size="large"
-              />
-            </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <Button 
-                onClick={() => setViewMode('table')}
-                type={viewMode === 'table' ? 'primary' : 'default'}
-                style={{ 
-                  borderRadius: 8,
-                  fontWeight: 600,
-                  fontSize: 12,
-                  background: viewMode === 'table' ? 'linear-gradient(135deg, #722ed1 0%, #1890ff 100%)' : 'transparent',
-                  border: viewMode === 'table' ? 'none' : '1px solid rgba(114, 46, 209, 0.2)',
-                  color: viewMode === 'table' ? '#fff' : '#722ed1'
-                }}
-              >
-                📊 Table
-              </Button>
-              <Button 
-                onClick={() => setViewMode('card')}
-                type={viewMode === 'card' ? 'primary' : 'default'}
-                style={{ 
-                  borderRadius: 8,
-                  fontWeight: 600,
-                  fontSize: 12,
-                  background: viewMode === 'card' ? 'linear-gradient(135deg, #722ed1 0%, #1890ff 100%)' : 'transparent',
-                  border: viewMode === 'card' ? 'none' : '1px solid rgba(114, 46, 209, 0.2)',
-                  color: viewMode === 'card' ? '#fff' : '#722ed1'
-                }}
-              >
-                📇 Cards
-              </Button>
-            </div>
-          </div>
-
-          {/* Content */}
-          {filteredInquiries.length === 0 ? (
-            <Card style={{
-              borderRadius: 12,
-              border: '2px dashed rgba(114, 46, 209, 0.4)',
-              boxShadow: '0 6px 24px rgba(114, 46, 209, 0.12)',
+            {/* Search and View Mode Controls */}
+            <div style={{
               background: 'linear-gradient(135deg, #f9f5ff 0%, #f0e6ff 50%, #e6f7ff 100%)',
-              padding: 60,
-              textAlign: 'center'
+              borderRadius: 12,
+              padding: 16,
+              marginBottom: 20,
+              border: '1px solid rgba(114, 46, 209, 0.15)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 16,
+              flexWrap: isMobile ? 'wrap' : 'nowrap'
             }}>
-              <Empty description={query ? "No appointments found" : "No appointment requests"} style={{ color: '#722ed1' }} />
-            </Card>
-          ) : viewMode === 'table' ? (
-            <Table 
-              rowKey={(r:any) => r._id} 
-              dataSource={filteredInquiries} 
-              columns={columns} 
-              loading={isLoading}
-              scroll={{ x: 'max-content' }}
-              pagination={{ pageSize: 10 }}
-              style={{
-                background: '#ffffff',
-                borderRadius: 8
-              }}
-            />
-          ) : (
-            <CardView />
-          )}
+              <div style={{ flex: 1, minWidth: isMobile ? '100%' : 260 }}>
+                <Input
+                  allowClear
+                  placeholder="🔍 Search resident name, inquiry ID, or status..."
+                  prefix={<SearchOutlined style={{ color: '#722ed1' }} />}
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  style={{ 
+                    borderRadius: 8,
+                    border: '1px solid rgba(114, 46, 209, 0.2)',
+                    fontSize: 13
+                  }}
+                  size="large"
+                />
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <Button 
+                  onClick={() => setViewMode('table')}
+                  type={viewMode === 'table' ? 'primary' : 'default'}
+                  style={{ 
+                    borderRadius: 8,
+                    fontWeight: 600,
+                    fontSize: 12,
+                    background: viewMode === 'table' ? 'linear-gradient(135deg, #722ed1 0%, #1890ff 100%)' : 'transparent',
+                    border: viewMode === 'table' ? 'none' : '1px solid rgba(114, 46, 209, 0.2)',
+                    color: viewMode === 'table' ? '#fff' : '#722ed1'
+                  }}
+                >
+                  📊 Table
+                </Button>
+                <Button 
+                  onClick={() => setViewMode('card')}
+                  type={viewMode === 'card' ? 'primary' : 'default'}
+                  style={{ 
+                    borderRadius: 8,
+                    fontWeight: 600,
+                    fontSize: 12,
+                    background: viewMode === 'card' ? 'linear-gradient(135deg, #722ed1 0%, #1890ff 100%)' : 'transparent',
+                    border: viewMode === 'card' ? 'none' : '1px solid rgba(114, 46, 209, 0.2)',
+                    color: viewMode === 'card' ? '#fff' : '#722ed1'
+                  }}
+                >
+                  📇 Cards
+                </Button>
+              </div>
+            </div>
 
-          {selectedRecord && (
-            <AppointmentDetailsModal
-              visible={modalVisible}
-              record={selectedRecord}
-              onClose={() => { setModalVisible(false); setSelectedRecord(null); }}
-            />
-          )}
-          {selectedRecord && (
-            <InquiryDetailsModal
-              visible={inquiryModalVisible}
-              inquiryId={selectedRecord?._id || null}
-              onClose={() => { setInquiryModalVisible(false); setSelectedRecord(null); }}
-              onChanged={() => { window.dispatchEvent(new Event('appointments-updated')); }}
-            />
-          )}
-        </div>
-      </div>
-    </Spin>
+            {/* Content */}
+            {filteredInquiries.length === 0 ? (
+              <Card style={{
+                borderRadius: 12,
+                border: '2px dashed rgba(114, 46, 209, 0.4)',
+                boxShadow: '0 6px 24px rgba(114, 46, 209, 0.12)',
+                background: 'linear-gradient(135deg, #f9f5ff 0%, #f0e6ff 50%, #e6f7ff 100%)',
+                padding: 60,
+                textAlign: 'center'
+              }}>
+                <Empty description={query ? "No appointments found" : "No appointment requests"} style={{ color: '#722ed1' }} />
+              </Card>
+            ) : viewMode === 'table' ? (
+              <Table 
+                rowKey={(r:any) => r._id} 
+                dataSource={filteredInquiries} 
+                columns={columns} 
+                loading={isLoading}
+                scroll={{ x: 'max-content' }}
+                pagination={{ pageSize: 10 }}
+                style={{
+                  background: '#ffffff',
+                  borderRadius: 8
+                }}
+              />
+            ) : (
+              <CardView />
+            )}
+
+            {selectedRecord && (
+              <AppointmentDetailsModal
+                visible={modalVisible}
+                record={selectedRecord}
+                onClose={() => { setModalVisible(false); setSelectedRecord(null); }}
+              />
+            )}
+            {selectedRecord && (
+              <InquiryDetailsModal
+                visible={inquiryModalVisible}
+                inquiryId={selectedRecord?._id || null}
+                onClose={() => { setInquiryModalVisible(false); setSelectedRecord(null); }}
+                onChanged={() => { window.dispatchEvent(new Event('appointments-updated')); }}
+              />
+            )}
+          </div> {/* End shiny container */}
+        </div> {/* End outer gradient container */}
+      </Spin>
+      <Modal
+        open={viewIdModal.visible}
+        onCancel={() => setViewIdModal({ visible: false, id: null })}
+        footer={null}
+        centered
+        width={420}
+        title={<span style={{ fontWeight: 700 }}>Full Inquiry ID</span>}
+        bodyStyle={{ textAlign: 'center', padding: 24 }}
+      >
+        {viewIdModal.id && (
+          <Text copyable style={{ fontSize: 16, color: '#722ed1', fontFamily: 'monospace', wordBreak: 'break-all' }}>{viewIdModal.id}</Text>
+        )}
+      </Modal>
+    </>
   );
 };
 

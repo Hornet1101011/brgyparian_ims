@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+
+import React, { useState, useEffect, useCallback, useRef, createContext } from 'react';
 import { Tabs } from 'antd';
 import AppointmentListTable from './staff/appointments/AppointmentListTable';
 // If you want to use React.FC, uncomment the next line:
@@ -31,6 +32,10 @@ import { documentsAPI, contactAPI, getAbsoluteApiUrl, axiosInstance } from '../s
 import DailyAppointmentsCard from './staff/DailyAppointmentsCard';
 import StaffCalendar from './staff/StaffCalendar';
 import AppointmentDetailsModal from './AppointmentDetailsModal';
+import MiniAppointmentsOverview from './MiniAppointmentsOverview';
+
+// Context to provide calendar ref
+export const CalendarScrollContext = createContext({ scrollToCalendar: () => {} });
 
 
 interface DocumentRequest {
@@ -174,13 +179,11 @@ const StaffDashboard = () => {
   // Download processed document (handles both metadata id and direct GridFS file id)
   const handleDownloadProcessed = async (rec: any) => {
     try {
-      // Follow TemplatesManager behavior: fetch the raw endpoint, convert to blob, and save using the server-provided filename when available.
-      // Try metadata id first, then fall back to gridFsFileId if present and the first attempt 404s.
+      // Normalize possible id fields
       const normalizeId = (v: any): string | null => {
         if (!v && v !== 0) return null;
         if (typeof v === 'string') return v;
         if (typeof v === 'object') {
-          // Mongoose ObjectId-like objects may expose $oid (BSON) or toString()
           if (typeof v.$oid === 'string') return v.$oid;
           try {
             const s = (v as any).toString();
@@ -191,23 +194,20 @@ const StaffDashboard = () => {
         return String(v);
       };
 
-      const tryIds = [] as string[];
+      const tryIds: string[] = [];
       const nid = normalizeId(rec && rec._id);
       const ngfid = normalizeId(rec && rec.gridFsFileId);
       if (nid) tryIds.push(nid);
       if (ngfid) tryIds.push(ngfid);
-      // de-dupe
       const ids = Array.from(new Set(tryIds));
-      
+
       let usedId: string | null = null;
       let lastError: any = null;
-
-      console.debug('[handleDownloadProcessed] record:', rec, 'candidateIds:', ids);
       let finalBlob: Blob | null = null;
       let finalHeaders: any = null;
+
       for (const id of ids) {
         try {
-          console.debug('[handleDownloadProcessed] attempting id=', id);
           const r = await (await import('../services/api')).axiosInstance.get(`/processed-documents/${id}/raw`, { responseType: 'blob' });
           if (r && r.status >= 200 && r.status < 300) {
             finalBlob = r.data as Blob;
@@ -233,8 +233,6 @@ const StaffDashboard = () => {
       }
 
       const blob = finalBlob;
-
-      // Prefer filename from Content-Disposition header if provided
       let filename: string | null = null;
       const cd = (finalHeaders && (finalHeaders['content-disposition'] || finalHeaders['Content-Disposition'])) || null;
       if (cd) {
@@ -245,14 +243,12 @@ const StaffDashboard = () => {
           if (m2 && m2[1]) filename = m2[1];
         }
       }
-      // Fallback to X-Processed headers or record fields
       if (!filename) filename = (finalHeaders && (finalHeaders['x-processed-transactioncode'] || finalHeaders['X-Processed-TransactionCode'])) || rec.filename || rec.name || `document_${usedId || rec._id}.docx`;
 
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      const downloadName = filename || `document_${usedId || rec._id}.docx`;
-      a.download = downloadName;
+      a.download = filename || `document_${usedId || rec._id}.docx`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -477,21 +473,34 @@ const StaffDashboard = () => {
 
   // No replacement needed - removing the duplicate function
 
-  return (
-    <Spin spinning={loading} tip="Loading...">
-      <div style={{ padding: '24px', background: '#f8fafb', minHeight: '100vh' }}>
-        {/* Header */}
-        <div style={{ marginBottom: 32 }}>
-          <Typography.Title level={2} style={{ margin: 0, color: '#0f172a', fontWeight: 700 }}>
-            Staff Dashboard
-          </Typography.Title>
-          <Typography.Text type="secondary" style={{ fontSize: 14, marginTop: 4, display: 'block' }}>
-            Welcome back. Here's your overview for today.
-          </Typography.Text>
-        </div>
+  // Ref for calendar
+  const calendarRef = useRef(null);
+  const scrollToCalendar = () => {
+    if (calendarRef.current) {
+      calendarRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
 
-        {/* KPI Stats Row - Modern Card Design */}
-        <Row gutter={[16, 16]} style={{ marginBottom: 28 }}>
+  return (
+    <CalendarScrollContext.Provider value={{ scrollToCalendar }}>
+      <Spin spinning={loading} tip="Loading...">
+        <div style={{ padding: '24px', background: '#f8fafb', minHeight: '100vh' }}>
+          {/* Header */}
+
+          <div style={{ marginBottom: 32 }}>
+            <Typography.Title level={2} style={{ margin: 0, color: '#0f172a', fontWeight: 700 }}>
+              Staff Dashboard
+            </Typography.Title>
+            <Typography.Text type="secondary" style={{ fontSize: 14, marginTop: 4, display: 'block' }}>
+              Welcome back. Here's your overview for today.
+            </Typography.Text>
+          </div>
+
+          {/* Mini Appointments Overview */}
+          <MiniAppointmentsOverview />
+
+          {/* KPI Stats Row - Modern Card Design */}
+          <Row gutter={[16, 16]} style={{ marginBottom: 28 }}>
           <Col xs={24} sm={12} md={6}>
             <Card 
               hoverable 
@@ -653,6 +662,7 @@ const StaffDashboard = () => {
         {/* Staff Calendar */}
         <Row style={{ marginBottom: 32 }}>
           <Col xs={24}>
+            <div ref={calendarRef} />
             <Card
               bordered={false}
               style={{
@@ -674,40 +684,11 @@ const StaffDashboard = () => {
               styles={{ body: { padding: 20 } }}
             >
               <StaffCalendar />
-              {/* Overhauled Appointments Section */}
-              <div style={{ marginTop: 32 }}>
-                <Typography.Title level={4}>Appointments Overview</Typography.Title>
-                <Tabs defaultActiveKey="scheduled" style={{ marginBottom: 16 }}>
-                  <Tabs.TabPane tab="Scheduled" key="scheduled">
-                    <AppointmentListTable
-                      onSelect={rec => setSelectedDocument(rec)}
-                      data={documentRequests.filter(dr => dr.status === 'scheduled')}
-                    />
-                  </Tabs.TabPane>
-                  <Tabs.TabPane tab="Past" key="past">
-                    <AppointmentListTable
-                      onSelect={rec => setSelectedDocument(rec)}
-                      data={documentRequests.filter(dr => dr.status === 'completed' || dr.status === 'approved')}
-                    />
-                  </Tabs.TabPane>
-                  <Tabs.TabPane tab="Canceled" key="canceled">
-                    <AppointmentListTable
-                      onSelect={rec => setSelectedDocument(rec)}
-                      data={documentRequests.filter(dr => dr.status === 'canceled')}
-                    />
-                  </Tabs.TabPane>
-                </Tabs>
-                <AppointmentDetailsModal
-                  visible={!!selectedDocument}
-                  record={selectedDocument}
-                  onClose={() => setSelectedDocument(null)}
-                />
-              </div>
             </Card>
           </Col>
         </Row>
 
-        {/* Main Content Grid */}
+      {/* Main Content Grid */}
         <Row gutter={[20, 20]}>
           <Col xs={24} lg={7}>
             <Card 
@@ -739,7 +720,9 @@ const StaffDashboard = () => {
                 border: '1px solid #e0f2f1',
                 borderTop: '4px solid #0f766e',
                 background: '#ffffff',
-                height: '100%',
+                height: 700,
+                minHeight: 700,
+                maxHeight: 700,
                 overflow: 'hidden'
               }}
               onMouseEnter={(e) => {
@@ -1113,33 +1096,6 @@ const StaffDashboard = () => {
                       />
                     </div>
                   )}
-                  <Button 
-                    type="primary"
-                    size="small"
-                    style={{ 
-                      position: 'absolute', 
-                      right: 16, 
-                      bottom: 16,
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      background: '#0891b2',
-                      borderColor: '#0891b2',
-                      height: 32,
-                      transition: 'all 0.2s ease'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = '#0678a0';
-                      e.currentTarget.style.borderColor = '#0678a0';
-                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(8, 145, 178, 0.2)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = '#0891b2';
-                      e.currentTarget.style.borderColor = '#0891b2';
-                      e.currentTarget.style.boxShadow = 'none';
-                    }}
-                  >
-                    View All Announcements
-                  </Button>
                 </Card>
                 <Drawer 
                   open={drawerVisible} 
@@ -1870,8 +1826,8 @@ const StaffDashboard = () => {
           </div>
         </Modal>
       </div>
-    </Spin>
-
+      </Spin>
+    </CalendarScrollContext.Provider>
   );
 }
 

@@ -3,8 +3,15 @@ import { Card, List, Typography, Spin, Empty } from 'antd';
 import { useQuery } from '@tanstack/react-query';
 import appointmentsAPI from '../../api/appointments';
 
-const DailyAppointmentsCard: React.FC = () => {
-  const { data, isLoading, error } = useQuery({
+type DailySummary = {
+  totalScheduledToday: number;
+  totalAvailableSlotsToday: number;
+  nextAppointments: { residentName: string; startTime: string; endTime: string }[];
+  todaysAppointments: { residentName: string; startTime: string; endTime: string }[];
+};
+
+const DailyAppointmentsCard = () => {
+  const { data, isLoading, error } = useQuery<DailySummary>({
     queryKey: ['appointments', 'dailySummary'],
     queryFn: async () => appointmentsAPI.getDailySummary(),
     refetchInterval: 90_000, // refresh every 90 seconds
@@ -50,12 +57,12 @@ const DailyAppointmentsCard: React.FC = () => {
           
           <div>
             <Typography.Text strong style={{ fontSize: '12px', color: '#1f2937', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              Upcoming (Next 2 Hours)
+              All Scheduled Today
             </Typography.Text>
-            {Array.isArray(data.nextAppointments) && data.nextAppointments.length > 0 ? (
+            {Array.isArray(data.todaysAppointments) && data.todaysAppointments.length > 0 ? (
               <List
                 size="small"
-                dataSource={data.nextAppointments}
+                dataSource={data.todaysAppointments}
                 split={false}
                 style={{ marginTop: 8 }}
                 renderItem={item => (
@@ -81,10 +88,17 @@ const DailyAppointmentsCard: React.FC = () => {
                     <div style={{ width: '100%' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Typography.Text strong style={{ fontSize: '13px', color: '#0f172a' }}>
-                          {item.residentName}
+                          {item.residentName && item.residentName !== 'Unknown' ? item.residentName : 'TBD'}
+                          {item.date ? (
+                            <span style={{ color: '#64748b', fontWeight: 400, fontSize: '12px', marginLeft: 8 }}>
+                              ({item.date})
+                            </span>
+                          ) : null}
                         </Typography.Text>
                         <Typography.Text type="secondary" style={{ fontSize: '12px', color: '#8b5cf6', fontWeight: 600 }}>
-                          {item.startTime}–{item.endTime}
+                          {item.startTime && item.startTime !== 'Unknown' ? item.startTime : ''}
+                          {(item.startTime && item.startTime !== 'Unknown' && item.endTime && item.endTime !== 'Unknown') ? '–' : ''}
+                          {item.endTime && item.endTime !== 'Unknown' ? item.endTime : ''}
                         </Typography.Text>
                       </div>
                     </div>

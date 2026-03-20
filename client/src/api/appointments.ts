@@ -50,7 +50,12 @@ export async function getSlotsByDate(date: string): Promise<{ slots: { date: str
   }
 }
 
-export async function getDailySummary(): Promise<{ totalScheduledToday: number; totalAvailableSlotsToday: number; nextAppointments: { residentName: string; startTime: string; endTime: string }[] }> {
+export async function getDailySummary(): Promise<{
+  totalScheduledToday: number;
+  totalAvailableSlotsToday: number;
+  nextAppointments: { residentName: string; startTime: string; endTime: string }[];
+  todaysAppointments: { residentName: string; startTime: string; endTime: string }[];
+}> {
   try {
     const resp = await axiosInstance.get('/appointments/summary/today');
     return resp.data;

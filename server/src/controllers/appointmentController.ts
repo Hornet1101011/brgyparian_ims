@@ -42,6 +42,14 @@ export const getTodaySummary = async (req: Request, res: Response) => {
     const freeMinutes = Math.max(0, OFFICE_TOTAL_MINUTES - reservedMinutes);
     const totalAvailableSlotsToday = Math.floor(freeMinutes / SLOT_BLOCK_MIN);
 
+    // All scheduled appointments for today
+    const todaysAppointments = (slots || []).map((s: any) => ({
+      residentName: s.residentName || s.residentUsername || s.resident || 'Unknown',
+      startTime: s.startTime,
+      endTime: s.endTime,
+      date: s.date ? (new Date(s.date)).toISOString().slice(0,10) : null
+    }));
+
     // Upcoming in next 2 hours (only today's slots)
     const nowUtc = new Date();
     const nowMinutes = toMinutes(nowUtc.toISOString().slice(11, 16));
@@ -53,7 +61,7 @@ export const getTodaySummary = async (req: Request, res: Response) => {
       })
       .map((s: any) => ({ residentName: s.residentName || s.residentUsername || s.resident || 'Unknown', startTime: s.startTime, endTime: s.endTime }));
 
-    res.json({ totalScheduledToday, totalAvailableSlotsToday, nextAppointments });
+    res.json({ totalScheduledToday, totalAvailableSlotsToday, nextAppointments, todaysAppointments });
   } catch (error) {
     console.error('Error in getTodaySummary:', error);
     res.status(500).json({ message: 'Error computing summary' });

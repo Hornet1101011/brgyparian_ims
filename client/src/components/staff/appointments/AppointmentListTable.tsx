@@ -18,31 +18,20 @@ const AppointmentListTable = ({ onSelect, data = [] }: Props) => {
     {
       title: 'Resident',
       key: 'resident',
-      render: (rec: any) => {
-        const info = rec.createdBy || {};
-        const ln = info.lastName || '';
-        const fn = info.firstName || '';
-        const mn = info.middleName || '';
-        if (ln || fn || mn) {
-          return `${ln}, ${fn}${mn ? ', ' + mn : ''}`;
-        }
-        // fallback to fullName or username
-        return info.fullName || rec.username || '—';
-      },
-      sorter: (a: any, b: any) => {
-        const infoA = a.createdBy || {};
-        const infoB = b.createdBy || {};
-        const nameA = `${infoA.lastName || ''}, ${infoA.firstName || ''}${infoA.middleName ? ', ' + infoA.middleName : ''}` || infoA.fullName || a.username || '';
-        const nameB = `${infoB.lastName || ''}, ${infoB.firstName || ''}${infoB.middleName ? ', ' + infoB.middleName : ''}` || infoB.fullName || b.username || '';
-        return nameA.localeCompare(nameB);
-      },
+      render: (rec: any) => rec.createdBy?.fullName || rec.username || '—',
+      sorter: (a: any, b: any) => ((a.createdBy?.fullName || a.username || '').localeCompare(b.createdBy?.fullName || b.username || '')),
       sortOrder: undefined
     },
     { title: 'Username', dataIndex: 'username', key: 'username', sorter: (a: any, b: any) => (a.username || '').localeCompare(b.username || ''), sortOrder: undefined },
-    { title: 'Requested Dates', dataIndex: 'appointmentDates', key: 'dates', render: (d: any) => (Array.isArray(d) ? d.join(', ') : ''), sorter: (a: any, b: any) => {
-      const ad = Array.isArray(a.appointmentDates) ? a.appointmentDates[0] : '';
-      const bd = Array.isArray(b.appointmentDates) ? b.appointmentDates[0] : '';
-      return ad.localeCompare(bd);
+    { title: 'Scheduled Dates', dataIndex: 'scheduledDates', key: 'scheduledDates', render: (d: any) => {
+      if (Array.isArray(d)) {
+        return d.map((s: any) => s.date ? `${s.date} (${s.startTime || ''}${s.endTime ? '–' + s.endTime : ''})` : '').join(', ');
+      }
+      return '';
+    }, sorter: (a: any, b: any) => {
+      const ad = Array.isArray(a.scheduledDates) && a.scheduledDates[0] ? a.scheduledDates[0].date : '';
+      const bd = Array.isArray(b.scheduledDates) && b.scheduledDates[0] ? b.scheduledDates[0].date : '';
+      return (ad || '').localeCompare(bd || '');
     }, sortOrder: undefined },
     { title: 'Status', dataIndex: 'status', key: 'status', filters: [
       { text: 'Scheduled', value: 'scheduled' },

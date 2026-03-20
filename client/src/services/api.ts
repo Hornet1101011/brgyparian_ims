@@ -101,6 +101,23 @@ export const residentPersonalInfoAPI = {
   },
 };
 
+// Residents List API (for staff to select residents)
+export const residentsListAPI = {
+  getAllResidents: async () => {
+    try {
+      console.log('Fetching residents from /resident/list/all');
+      const resp = await axiosInstance.get('/resident/list/all');
+      console.log('Residents response:', resp.data);
+      return resp.data || [];
+    } catch (err: any) {
+      console.error('Failed to fetch residents list:', err);
+      console.error('Error response:', err?.response?.data);
+      console.error('Error status:', err?.response?.status);
+      return [];
+    }
+  },
+};
+
 // Fetch template text for a document type
 export const getTemplateText = (type: string) => {
   return axiosInstance.get(`/templates/${type}`).then(res => res.data.text);
