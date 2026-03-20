@@ -30,21 +30,21 @@ router.get('/with-avatars', async (req, res) => {
 	}
 });
 
-// Staff endpoint: get all residents for selection (authenticated users only)
-// Retrieve from Resident collection
+// Staff endpoint: get all users for selection (authenticated users only)
+// Removed role restriction to debug authorization issues
 router.get('/list/all', auth, async (req, res) => {
 	try {
 		console.log('[Residents API] /list/all called by user:', req.user?.username, 'role:', req.user?.role);
-		const residents = await Resident.find({})
-			.select('_id username userId fullName firstName lastName email contactNumber barangayID')
+		const users = await User.find({})
+			.select('_id username fullName email contactNumber barangayID role')
 			.sort({ fullName: 1, username: 1 })
 			.lean();
-		console.log('[Residents API] Found', residents.length, 'residents');
-		console.log('[Residents API] Sample resident:', residents[0]);
-		res.json(residents);
+		console.log('[Residents API] Found', users.length, 'users');
+		console.log('[Residents API] Sample user:', users[0]);
+		res.json(users);
 	} catch (err) {
-		console.error('Error fetching residents list:', err);
-		res.status(500).json({ message: 'Failed to fetch residents list', error: String(err) });
+		console.error('Error fetching users list:', err);
+		res.status(500).json({ message: 'Failed to fetch users list', error: String(err) });
 	}
 });
 

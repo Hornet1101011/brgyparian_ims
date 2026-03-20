@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Card, Row, Col, Button, Tooltip, Modal, List, Grid, Popover, Badge, Empty, Space, Spin, Tag, DatePicker } from 'antd';
-import { LeftOutlined, RightOutlined, ClockCircleOutlined, UserOutlined } from '@ant-design/icons';
+import { LeftOutlined, RightOutlined, ClockCircleOutlined, UserOutlined, CalendarOutlined } from '@ant-design/icons';
 import { getSlotsForRange, getAppointmentWithSlots, getAppointmentInquiries } from '../../api/appointments';
 import AppointmentDetailsModal from '../AppointmentDetailsModal';
 import { contactAPI, residentsListAPI } from '../../services/api';
@@ -157,8 +157,8 @@ const StaffCalendar = () => {
 
     // Validate and save single appointment
     const saveSingleAppointment = async () => {
-      if (!singleResident || !singleStartTime || !singleEndTime || !singleLocation || !singleDescription) {
-        alert('Please fill all required fields.');
+      if (!singleDate || !singleResident || !singleStartTime || !singleEndTime || !singleLocation || !singleDescription) {
+        alert('Please fill all required fields including appointment date.');
         return;
       }
       // Validate time
@@ -572,7 +572,19 @@ const StaffCalendar = () => {
       {/* Single Appointment Modal */}
       <Modal
         open={singleModalVisible}
-        onCancel={() => setSingleModalVisible(false)}
+        onCancel={() => {
+          setSingleModalVisible(false);
+          // Reset form
+          setSingleResident(null);
+          setSingleDate('');
+          setSingleStartTime('08:00 AM');
+          setSingleEndTime('09:00 AM');
+          setSingleLocationType('on-site');
+          setSingleLocation('');
+          setSingleDescription('');
+          setSingleUrgency('normal');
+          setResidentSearch('');
+        }}
         title={<span style={{ fontWeight: 700, fontSize: 18 }}>Schedule Single Appointment</span>}
         footer={null}
         width={480}
@@ -580,6 +592,23 @@ const StaffCalendar = () => {
       >
         <div style={{ maxWidth: 420, margin: '0 auto' }}>
           <Space direction="vertical" size={20} style={{ width: '100%' }}>
+            <div>
+              <label style={{ fontWeight: 600 }}>Appointment Date</label>
+              <br />
+              <DatePicker
+                value={singleDate ? dayjs(singleDate) : null}
+                onChange={(date) => setSingleDate(date ? date.format('YYYY-MM-DD') : '')}
+                style={{ width: '100%', marginBottom: 12 }}
+                format="YYYY-MM-DD"
+                placeholder="Select appointment date"
+                disabledDate={(current) => {
+                  if (!current) return false;
+                  const day = current.day();
+                  const isPast = current.isBefore(dayjs(), 'day');
+                  return isPast || day === 0 || day === 6; // Disable past dates and weekends
+                }}
+              />
+            </div>
             <div>
               <label style={{ fontWeight: 600 }}>Resident</label>
               <br />
