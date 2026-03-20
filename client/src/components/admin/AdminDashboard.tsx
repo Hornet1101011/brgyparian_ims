@@ -9,11 +9,16 @@ import {
   CheckOutlined,
   ExclamationCircleOutlined
 } from '@ant-design/icons';
-import { adminAPI, notificationAPI, contactAPI, verificationAPI, getAbsoluteApiUrl } from '../../services/api';
-import { documentsAPI } from '../../services/api';
+import { adminAPI, contactAPI, verificationAPI, notificationAPI, documentsAPI } from '../../services/api';
 import { initNotificationSocket, onNotificationEvent, offNotificationEvent } from '../../services/notificationSocket';
 import { Notification } from '../../types/notification';
 import { useAuth } from '../../contexts/AuthContext';
+
+// Helper function to get absolute API URL
+const getAbsoluteApiUrl = (path: string): string => {
+  const baseUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+  return `${baseUrl}${path}`;
+};
 
 // Color palette for SVG pie chart slices
 const pieColors = [
@@ -691,9 +696,14 @@ const AdminDashboard = () => {
                   : (Array.isArray(record.gridFileIds) ? record.gridFileIds.map((id: string) => ({ filename: id, gridFileId: id })) : []);
                 return (
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    {files.map((f: any, i: number) => (
-                      <a key={i} href={getAbsoluteApiUrl(`/verification/file/${f.gridFileId || f.filename}`)} target="_blank" rel="noreferrer" style={{ color: '#3b82f6', fontWeight: 600, fontSize: 13 }}>{f.fileType ? `${f.fileType}` : 'Open'}</a>
-                    ))}
+                    {files.map((f: any, i: number) => {
+                      const userId = typeof record.userId === 'object' ? record.userId._id : record.userId;
+                      const fileType = f.fileType || 'unknown';
+                      const fileUrl = verificationAPI.getFileUrlByUserType(userId, fileType);
+                      return (
+                        <a key={i} href={fileUrl} target="_blank" rel="noreferrer" style={{ color: '#3b82f6', fontWeight: 600, fontSize: 13 }}>{fileType}</a>
+                      );
+                    })}
                   </div>
                 );
               }
@@ -731,9 +741,10 @@ const AdminDashboard = () => {
             <p><strong>Resident:</strong> {(selectedVerif.userId && (selectedVerif.userId.fullName || selectedVerif.userId.username)) || 'Unknown'}</p>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
               {((selectedVerif.filesMeta && selectedVerif.filesMeta.length) ? selectedVerif.filesMeta : (selectedVerif.gridFileIds || []).map((id: string) => ({ filename: id, gridFileId: id }))).map((f: any, idx: number) => {
-                const fid = f.gridFileId || f.filename;
-                const fileUrl = getAbsoluteApiUrl(`/verification/file/${fid}`);
-                const label = f.fileType ? (f.fileType.charAt(0).toUpperCase() + f.fileType.slice(1)) : (f.filename || 'File');
+                const userId = typeof selectedVerif.userId === 'object' ? selectedVerif.userId._id : selectedVerif.userId;
+                const fileType = f.fileType || 'unknown';
+                const fileUrl = verificationAPI.getFileUrlByUserType(userId, fileType);
+                const label = fileType.charAt(0).toUpperCase() + fileType.slice(1);
                 return (
                   <div key={idx} style={{ border: '1px solid #f0f0f0', padding: 12, borderRadius: 8, background: '#fff' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -746,7 +757,7 @@ const AdminDashboard = () => {
                     <div style={{ textAlign: 'center' }}>
                       {/* try to render image preview, otherwise show filename */}
                       <img src={fileUrl} alt={label} style={{ maxWidth: '100%', maxHeight: 360 }} onError={(e) => { const el = e.currentTarget as HTMLImageElement; el.style.display = 'none'; }} />
-                      <div style={{ marginTop: 8, color: '#666', fontSize: 13 }}>{f.filename || fid}</div>
+                      <div style={{ marginTop: 8, color: '#666', fontSize: 13 }}>{f.filename || fileType}</div>
                     </div>
                   </div>
                 );

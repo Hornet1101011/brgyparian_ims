@@ -1,3 +1,4 @@
+// import React from 'react';
 import React from 'react';
 import { Descriptions } from 'antd';
 
@@ -5,7 +6,7 @@ type Props = {
   record: any;
 };
 
-const AppointmentDetails: React.FC<Props> = ({ record }) => {
+function AppointmentDetails({ record }: Props) {
   return (
     <>
       <Descriptions.Item label="Resident">{record?.createdBy?.fullName || record?.username}</Descriptions.Item>
@@ -17,6 +18,6 @@ const AppointmentDetails: React.FC<Props> = ({ record }) => {
       )}
     </>
   );
-};
+}
 
 export default AppointmentDetails;

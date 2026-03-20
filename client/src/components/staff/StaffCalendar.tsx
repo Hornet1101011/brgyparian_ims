@@ -1,11 +1,32 @@
+
+
 import React, { useEffect, useMemo, useState } from 'react';
-import { Card, Row, Col, Button, Tooltip, Modal, List, Grid } from 'antd';
-import { LeftOutlined, RightOutlined } from '@ant-design/icons';
+import { Card, Row, Col, Button, Tooltip, Modal, List, Grid, Popover, Badge, Empty, Space, Spin, Tag, DatePicker, Input } from 'antd';
+import { LeftOutlined, RightOutlined, ClockCircleOutlined, UserOutlined } from '@ant-design/icons';
 import { getSlotsForRange, getAppointmentWithSlots, getAppointmentInquiries } from '../../api/appointments';
 import AppointmentDetailsModal from '../AppointmentDetailsModal';
-import { contact } from '../../services/api';
-import { Input, Space } from 'antd';
+import { contactAPI } from '../../services/api';
+import { Space as AntSpace, Calendar as AntCalendar } from 'antd';
 import { DISABLED_BG, AVAILABLE_GREEN, BOOKED_RED, LIMITED_GOLD, TODAY_BLUE } from '../../theme/colors';
+import dayjs from 'dayjs';
+
+// Helper to parse fullName to LN, FN, MN
+function parseResidentName(info: any) {
+  if (!info) return '—';
+  // If lastName, firstName, middleName exist, use them
+  if (info.lastName || info.firstName || info.middleName) {
+    return `${info.lastName || ''}, ${info.firstName || ''}${info.middleName ? ', ' + info.middleName : ''}`;
+  }
+  // If fullName exists, try to parse
+  if (info.fullName) {
+    const parts = info.fullName.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0];
+    if (parts.length === 2) return `${parts[1]}, ${parts[0]}`;
+    if (parts.length >= 3) return `${parts[parts.length-1]}, ${parts[0]}, ${parts.slice(1, parts.length-1).join(' ')}`;
+  }
+  // fallback to username
+  return info.username || '—';
+}
 
 // Simple helpers
 const toMinutes = (t: string) => {
@@ -63,7 +84,7 @@ function parseLocalDate(dateStr: string) {
 
 interface SlotItem { _id: string; date: string; startTime: string; endTime: string; residentName?: string; staffName?: string }
 
-const Legend: React.FC = () => (
+const Legend = () => (
   <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
     <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
       <div style={{ width: 12, height: 12, background: AVAILABLE_GREEN, borderRadius: 3, border: '1px solid rgba(0,0,0,0.06)' }} />
@@ -85,14 +106,14 @@ const Legend: React.FC = () => (
 );
 
 // Small square + label badge used for legend and per-column status
-const SmallBadge: React.FC<{ color: string; label: React.ReactNode; muted?: boolean }> = ({ color, label, muted }) => (
+const SmallBadge = ({ color, label, muted }: { color: string; label: any; muted?: boolean }) => (
   <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12, color: muted ? '#666' : '#222' }}>
     <div style={{ width: 12, height: 12, background: color, borderRadius: 3, border: '1px solid rgba(0,0,0,0.06)' }} />
     <div>{label}</div>
   </div>
 );
 
-const StaffCalendar: React.FC = () => {
+const StaffCalendar = () => {
   const screens = Grid.useBreakpoint();
   const isMobile = !screens.md;
 
@@ -105,21 +126,22 @@ const StaffCalendar: React.FC = () => {
     return `${y}-${m}-${dd}`;
   }, [today]);
 
-  const [anchorDate, setAnchorDate] = useState<Date>(() => { const d = new Date(); d.setHours(0,0,0,0); return d; });
-  const [slots, setSlots] = useState<SlotItem[]>([]);
+  const [anchorDate, setAnchorDate] = useState(() => { const d = new Date(); d.setHours(0,0,0,0); return d; });
+  const [slots, setSlots] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [detailDate, setDetailDate] = useState<string | null>(null);
+  const [detailDate, setDetailDate] = useState(null);
   const [editorVisible, setEditorVisible] = useState(false);
-  const [editorRecord, setEditorRecord] = useState<any | null>(null);
-  const [editorPrefill, setEditorPrefill] = useState<{ date?: string; startTime?: string; endTime?: string } | null>(null);
+  const [editorRecord, setEditorRecord] = useState(null);
+  const [editorPrefill, setEditorPrefill] = useState(null);
   const [quickModalVisible, setQuickModalVisible] = useState(false);
   const [quickLoading, setQuickLoading] = useState(false);
-  const [quickInquiries, setQuickInquiries] = useState<any[]>([]);
+  const [quickInquiries, setQuickInquiries] = useState([]);
+  const [quickSelected, setQuickSelected] = useState([]);
   const [quickCreateVisible, setQuickCreateVisible] = useState(false);
   const [quickCreateUsername, setQuickCreateUsername] = useState('');
   const [quickCreateSubject, setQuickCreateSubject] = useState('Quick appointment');
   const [quickCreateLoading, setQuickCreateLoading] = useState(false);
-  const [slotDetail, setSlotDetail] = useState<any | null>(null);
+  const [slotDetail, setSlotDetail] = useState(null);
 
   // Compute week range (Mon..Sun) containing anchorDate
   const weekStart = useMemo(() => {
@@ -245,7 +267,7 @@ const StaffCalendar: React.FC = () => {
     setQuickCreateLoading(true);
     try {
       const payload = { subject: quickCreateSubject, message: 'Created from calendar quick-schedule', type: 'SCHEDULE_APPOINTMENT', username: quickCreateUsername };
-      const created = await contact.submitInquiry(payload);
+      const created = await contactAPI.submitInquiry(payload);
       if (created && created._id) {
         // open editor for created inquiry
         const resp = await getAppointmentWithSlots(created._id);
@@ -273,6 +295,24 @@ const StaffCalendar: React.FC = () => {
     setQuickModalVisible(false);
   };
 
+  // Mass schedule selected inquiries (open each in editor one by one)
+  const massScheduleSelected = async () => {
+    if (!quickSelected.length) return;
+    // For demo: open the first, then remove from selection as each is scheduled
+    for (const id of quickSelected) {
+      const inq = quickInquiries.find((q: any) => q._id === id);
+      if (inq) {
+        setEditorRecord(inq);
+        setEditorVisible(true);
+        // Wait for modal to close before continuing (user must close to proceed)
+        // In real app, you might want to batch schedule via API
+        break;
+      }
+    }
+    // After all, clear selection
+    // setQuickSelected([]);
+  };
+
   // Disabled dates: weekend
   const isOfficeClosed = (d: Date) => {
     const wk = d.getDay();
@@ -283,6 +323,153 @@ const StaffCalendar: React.FC = () => {
     const dd = new Date(d);
     dd.setHours(0,0,0,0);
     return dd < today;
+  };
+
+  // Month view state
+  const [viewMode, setViewMode] = useState('month');
+  const [currentMonth, setCurrentMonth] = useState(dayjs());
+  const [showWeekView, setShowWeekView] = useState(false);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
+
+  // Get day status color for calendar cell
+  const getDateStatusColor = (dateStr: string) => {
+    const status = dayStatus(dateStr);
+    if (status === 'available') return { color: AVAILABLE_GREEN, label: 'Available', bg: '#f0fdf4' };
+    if (status === 'partial') return { color: LIMITED_GOLD, label: 'Limited', bg: '#fffbeb' };
+    if (status === 'full') return { color: BOOKED_RED, label: 'Full', bg: '#fef2f2' };
+    return { color: DISABLED_BG, label: 'Disabled', bg: '#f5f5f5' };
+  };
+
+  // Render month calendar grid
+  const renderMonthCalendar = () => {
+    const year = currentMonth.year();
+    const month = currentMonth.month();
+    const firstDay = dayjs(`${year}-${String(month + 1).padStart(2, '0')}-01`);
+    const lastDay = firstDay.endOf('month');
+    const daysInMonth = lastDay.date();
+    const startOfWeek = firstDay.day();
+
+    const days = [];
+    for (let i = 0; i < startOfWeek; i++) {
+      days.push(null);
+    }
+    for (let i = 1; i <= daysInMonth; i++) {
+      days.push(i);
+    }
+
+    const weeks = [];
+    for (let i = 0; i < days.length; i += 7) {
+      weeks.push(days.slice(i, i + 7));
+    }
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {/* Weekday headers */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8, marginBottom: 8 }}>
+          {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
+            <div key={day} style={{ textAlign: 'center', fontWeight: 600, color: '#6b7280', fontSize: 12, paddingBottom: 8, borderBottom: '1px solid #e5e7eb' }}>
+              {day}
+            </div>
+          ))}
+        </div>
+
+        {/* Calendar grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8 }}>
+          {weeks.map((week, weekIdx) =>
+            week.map((dayNum, dayIdx) => {
+              if (!dayNum) {
+                return <div key={`empty-${weekIdx}-${dayIdx}`} />;
+              }
+
+              const dateStr = dayjs(`${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`).format('YYYY-MM-DD');
+              const dateObj = dayjs(dateStr).toDate();
+              const isToday = dateStr === todayIso;
+              const isPast = isPastDate(dateObj);
+              const isClosed = isOfficeClosed(dateObj);
+              const statusInfo = getDateStatusColor(dateStr);
+              const appointmentsCount = (slotsByDate.get(dateStr) || []).length;
+
+              return (
+                <Popover
+                  key={dateStr}
+                  title={`${dateStr} (${dayjs(dateStr).format('dddd')})`}
+                  content={
+                    isClosed ? (
+                      <div style={{ fontSize: 13, color: '#666' }}>Office Closed</div>
+                    ) : isPast ? (
+                      <div style={{ fontSize: 13, color: '#666' }}>Past Date</div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600 }}>
+                          {appointmentsCount} Appointment{appointmentsCount !== 1 ? 's' : ''}
+                        </div>
+                        <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                          <Button size="small" type="primary" block onClick={() => { openDetail(dateStr); }} disabled={isClosed || isPast}>
+                            View Details
+                          </Button>
+                          <Button size="small" block onClick={() => { openQuickSchedule(dateStr, '08:00', '09:00'); }} disabled={isClosed || isPast}>
+                            Quick Schedule
+                          </Button>
+                        </Space>
+                      </div>
+                    )
+                  }
+                  trigger="hover"
+                >
+                  <div
+                    onClick={() => !isClosed && !isPast && openDetail(dateStr)}
+                    style={{
+                      padding: 8,
+                      minHeight: 80,
+                      border: isToday ? `2px solid ${TODAY_BLUE}` : `1px solid #e5e7eb`,
+                      borderRadius: 8,
+                      background: isToday ? `${TODAY_BLUE}08` : statusInfo.bg,
+                      cursor: isClosed || isPast ? 'not-allowed' : 'pointer',
+                      opacity: isClosed || isPast ? 0.5 : 1,
+                      transition: 'all 0.2s ease',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 4
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isClosed && !isPast) {
+                        (e.currentTarget as HTMLDivElement).style.boxShadow = `0 4px 12px ${statusInfo.color}20`;
+                        (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLDivElement).style.boxShadow = 'none';
+                      (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)';
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>
+                      {dayNum}
+                    </div>
+                    {isToday && (
+                      <Tag color="blue" style={{ width: 'fit-content', fontSize: 10 }}>Today</Tag>
+                    )}
+                    <div
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        background: statusInfo.color,
+                        marginTop: 4
+                      }}
+                    />
+                    {appointmentsCount > 0 && (
+                      <div style={{ fontSize: 11, color: '#6b7280', marginTop: 'auto' }}>
+                        {appointmentsCount} slot{appointmentsCount !== 1 ? 's' : ''}
+                      </div>
+                    )}
+                  </div>
+                </Popover>
+              );
+            })
+          )}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -302,43 +489,129 @@ const StaffCalendar: React.FC = () => {
           }}>
             📅
           </div>
-          <span style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>Staff Calendar</span>
+          <span style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>Staff Calendar & Appointments</span>
         </div>
       }
-      extra={<Legend />} 
+      extra={<div style={{ display: 'flex', gap: 12, alignItems: 'center' }}><Legend /></div>}
       style={{ width: '100%', borderRadius: 14, border: '1px solid #e0f2f1' }}
       styles={{ body: { padding: 20 } }}
     >
-      {/* Navigation Header */}
+      {/* Month Navigation */}
       <div style={{ 
         display: 'flex', 
         justifyContent: 'space-between', 
         alignItems: 'center', 
-        marginBottom: 20,
+        marginBottom: 24,
         padding: 16,
-        background: '#f0fdf4',
+        background: 'linear-gradient(135deg, #f0fdf4 0%, #f0f9ff 100%)',
         borderRadius: 12,
         border: '1px solid #d1e7dd',
         transition: 'all 0.2s ease'
       }}>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
           <Button 
             icon={<LeftOutlined />} 
-            onClick={() => { const d = new Date(anchorDate); d.setDate(d.getDate() - 7); setAnchorDate(d); }}
+            onClick={() => setCurrentMonth(currentMonth.subtract(1, 'month'))}
             style={{ borderRadius: 8, transition: 'all 0.2s ease' }}
-          />
+          >
+            Previous
+          </Button>
+          <Popover
+            content={
+              <DatePicker 
+                picker="month"
+                value={currentMonth}
+                onChange={(date) => {
+                  if (date) {
+                    setCurrentMonth(date);
+                    setDatePickerOpen(false);
+                  }
+                }}
+                style={{ width: 200 }}
+              />
+            }
+            title="Select Month and Year"
+            trigger="click"
+            open={datePickerOpen}
+            onOpenChange={setDatePickerOpen}
+          >
+            <div 
+              style={{ 
+                fontSize: 16, 
+                fontWeight: 700, 
+                color: '#0891b2', 
+                letterSpacing: '0.5px',
+                cursor: 'pointer',
+                padding: '4px 12px',
+                borderRadius: 6,
+                transition: 'all 0.2s ease',
+                backgroundColor: datePickerOpen ? '#e0f7fa' : 'transparent'
+              }}
+              onClick={() => setDatePickerOpen(!datePickerOpen)}
+            >
+              {currentMonth.format('MMMM YYYY')}
+            </div>
+          </Popover>
+        </div>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginLeft: 'auto' }}>
+          <Button onClick={() => setCurrentMonth(dayjs())} size="small">Today</Button>
+          <Button 
+            type={showWeekView ? 'primary' : 'default'}
+            onClick={() => setShowWeekView(!showWeekView)}
+            size="small"
+          >
+            {showWeekView ? 'Hide Week View' : 'Show Week View'}
+          </Button>
           <Button 
             icon={<RightOutlined />} 
-            onClick={() => { const d = new Date(anchorDate); d.setDate(d.getDate() + 7); setAnchorDate(d); }}
+            onClick={() => setCurrentMonth(currentMonth.add(1, 'month'))}
             style={{ borderRadius: 8, transition: 'all 0.2s ease' }}
-          />
-        </div>
-        <div style={{ fontSize: 15, fontWeight: 700, color: '#0891b2', letterSpacing: '0.5px' }}>
-          {isoDate(weekDates[0])} — {isoDate(weekDates[6])}
+          >
+            Next
+          </Button>
         </div>
       </div>
 
-      {/* Always render as a list view (vertical) for both desktop and mobile */}
+      {/* Loading state */}
+      <Spin spinning={loading} tip="Loading appointments...">
+        {/* Month Calendar Grid View */}
+        {renderMonthCalendar()}
+      </Spin>
+
+      {/* Week View Section - Toggleable */}
+      {showWeekView && (
+        <div style={{ marginTop: 32 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: '#0f172a', marginBottom: 16 }}>Week View</div>
+        
+        {/* Week Navigation Header */}
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          marginBottom: 16,
+          padding: 12,
+          background: '#f0fdf4',
+          borderRadius: 8,
+          border: '1px solid #d1e7dd'
+        }}>
+          <Button 
+            icon={<LeftOutlined />} 
+            onClick={() => { const d = new Date(anchorDate); d.setDate(d.getDate() - 7); setAnchorDate(d); }}
+            size="small"
+            style={{ borderRadius: 6 }}
+          />
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#0891b2' }}>
+            {isoDate(weekDates[0])} — {isoDate(weekDates[6])}
+          </span>
+          <Button 
+            icon={<RightOutlined />} 
+            onClick={() => { const d = new Date(anchorDate); d.setDate(d.getDate() + 7); setAnchorDate(d); }}
+            size="small"
+            style={{ borderRadius: 6 }}
+          />
+        </div>
+
+        {/* Week list view */}
       <List loading={loading} dataSource={weekDates} renderItem={(d) => {
         const ds = isoDate(d);
         const isToday = ds === todayIso;
@@ -385,6 +658,8 @@ const StaffCalendar: React.FC = () => {
           </List.Item>
         );
       }} />
+        </div>
+      )}
 
       <Modal title={detailDate ? `Schedule for ${detailDate}` : ''} visible={!!detailDate} onCancel={closeDetail} footer={null} width={720}>
         {detailDate && (
@@ -397,7 +672,13 @@ const StaffCalendar: React.FC = () => {
                   title={`${s.startTime} - ${s.endTime}`}
                   description={(
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <div><strong>{s.residentName || s.residentUsername || 'Resident'}</strong> — {s.staffName || 'Staff'}</div>
+                      <div><strong>{parseResidentName({
+                        lastName: s.lastName,
+                        firstName: s.firstName,
+                        middleName: s.middleName,
+                        fullName: s.residentName,
+                        username: s.residentUsername
+                      })}</strong> — {s.staffName || 'Staff'}</div>
                       {s.subject && <div><em>{s.subject}</em></div>}
                       {s.status && <div>Status: {s.status}</div>}
                       {s.notes && <div style={{ color: '#444' }}>{s.notes}</div>}
@@ -413,7 +694,13 @@ const StaffCalendar: React.FC = () => {
         {slotDetail && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div><strong>Time</strong>: {slotDetail.startTime} — {slotDetail.endTime}</div>
-            <div><strong>Resident</strong>: {slotDetail.residentName || slotDetail.residentUsername || 'Unknown'}</div>
+            <div><strong>Resident</strong>: {parseResidentName({
+              lastName: slotDetail.lastName,
+              firstName: slotDetail.firstName,
+              middleName: slotDetail.middleName,
+              fullName: slotDetail.residentName,
+              username: slotDetail.residentUsername
+            })}</div>
             {slotDetail.residentPhone && <div><strong>Phone</strong>: {slotDetail.residentPhone}</div>}
             {slotDetail.residentEmail && <div><strong>Email</strong>: {slotDetail.residentEmail}</div>}
             <div><strong>Staff</strong>: {slotDetail.staffName || 'Staff'}</div>
@@ -427,14 +714,47 @@ const StaffCalendar: React.FC = () => {
       </Modal>
 
       <Modal title="Quick Schedule" visible={quickModalVisible} onCancel={closeQuickModal} footer={null} width={720}>
-        <div style={{ marginBottom: 8 }}><small>Pick an inquiry to schedule at the selected time. Or create a new appointment from the Inquiries page.</small></div>
-        <List loading={quickLoading} dataSource={quickInquiries} renderItem={(inq: any) => (
-          <List.Item actions={[<Button key="s" type="primary" onClick={() => scheduleInquiryFromQuick(inq)}>Schedule</Button>]}> 
-            <List.Item.Meta title={inq.subject || inq.username || `Inquiry ${inq._id}`} description={<div>{inq.createdBy?.fullName || inq.username || 'Unknown resident'}</div>} />
-          </List.Item>
-        )} locale={{ emptyText: 'No appointment inquiries available' }} />
-        <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+        <div style={{ marginBottom: 8 }}><small>Select one or more inquiries to schedule at the selected time. You can also create a new appointment from the Inquiries page.</small></div>
+        <List
+          loading={quickLoading}
+          dataSource={quickInquiries}
+          renderItem={(inq: any) => {
+            const checked = quickSelected.includes(inq._id);
+            return (
+              <List.Item
+                actions={[
+                  <Button key="s" type="primary" onClick={() => scheduleInquiryFromQuick(inq)}>Schedule</Button>
+                ]}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={e => {
+                    setQuickSelected(sel => e.target.checked
+                      ? [...sel, inq._id]
+                      : sel.filter(id => id !== inq._id)
+                    );
+                  }}
+                  style={{ marginRight: 12 }}
+                />
+                <List.Item.Meta
+                  title={inq.subject || inq.username || `Inquiry ${inq._id}`}
+                  description={<div>{parseResidentName({
+                    lastName: inq.createdBy?.lastName,
+                    firstName: inq.createdBy?.firstName,
+                    middleName: inq.createdBy?.middleName,
+                    fullName: inq.createdBy?.fullName,
+                    username: inq.username
+                  })}</div>}
+                />
+              </List.Item>
+            );
+          }}
+          locale={{ emptyText: 'No appointment inquiries available' }}
+        />
+        <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
           <Button onClick={() => setQuickCreateVisible(true)}>Create New Inquiry</Button>
+          <Button type="primary" disabled={!quickSelected.length} onClick={massScheduleSelected}>Schedule Selected ({quickSelected.length})</Button>
         </div>
       </Modal>
 
@@ -446,7 +766,7 @@ const StaffCalendar: React.FC = () => {
         </Space>
       </Modal>
 
-        <AppointmentDetailsModal visible={editorVisible} record={editorRecord} onClose={closeEditor} prefill={editorPrefill} />
+        {/* <AppointmentDetailsModal visible={editorVisible} record={editorRecord} onClose={closeEditor} prefill={editorPrefill} /> */}
     </Card>
   );
 };

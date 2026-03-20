@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useReducer, useState } from 'react';
+import React, { useEffect, useMemo, useReducer, useState, FC } from 'react';
 import { Modal, Descriptions, Divider, Button, Space, message, Typography } from 'antd';
 import { Select } from 'antd';
 import DateSelectionSection from './staff/appointments/DateSelectionSection';
@@ -79,7 +79,7 @@ function reducer(state: SchedulingState, action: SchedulingAction): SchedulingSt
   }
 }
 
-const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose, prefill }) => {
+function AppointmentDetailsModal({ visible, record, onClose, prefill }: Props) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [cancelVisible, setCancelVisible] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
@@ -230,7 +230,7 @@ const AppointmentDetailsModal: React.FC<Props> = ({ visible, record, onClose, pr
     }
   };
 
-  const [localStatus, setLocalStatus] = useState<string | undefined>(undefined);
+  const [localStatus, setLocalStatus] = useState();
 
   const confirm = async () => {
     const check = validateNoOverlap();

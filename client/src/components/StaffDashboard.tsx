@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Tabs } from 'antd';
+import AppointmentListTable from './staff/appointments/AppointmentListTable';
 // If you want to use React.FC, uncomment the next line:
 // import type { FC } from 'react';
 import { Card, Row, Col, Statistic, List, Typography, Space, Spin, Button, Modal, Input, Collapse, Tag, Empty, Badge, Drawer, Table, notification, Grid } from 'antd';
@@ -28,6 +30,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { documentsAPI, contactAPI, getAbsoluteApiUrl, axiosInstance } from '../services/api';
 import DailyAppointmentsCard from './staff/DailyAppointmentsCard';
 import StaffCalendar from './staff/StaffCalendar';
+import AppointmentDetailsModal from './AppointmentDetailsModal';
 
 
 interface DocumentRequest {
@@ -337,9 +340,23 @@ const StaffDashboard = () => {
     }
   }, []);
 
+  const fetchPastAppointments = useCallback(async () => {
+    setMiniLoading(true);
+    try {
+      const data = await contactAPI.getAnnouncements();
+      setMiniAnns(Array.isArray(data) ? data.slice(0, 6) : []);
+    } catch (err) {
+      console.error('Failed to load mini announcements', err);
+      setMiniAnns([]);
+    } finally {
+      setMiniLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchData();
     fetchMiniAnnouncements();
+    fetchPastAppointments(); // Fetch past appointments
   }, [fetchData, fetchMiniAnnouncements]);
 
   // Fetch processed documents (from documents collection) and open modal
@@ -657,6 +674,35 @@ const StaffDashboard = () => {
               styles={{ body: { padding: 20 } }}
             >
               <StaffCalendar />
+              {/* Overhauled Appointments Section */}
+              <div style={{ marginTop: 32 }}>
+                <Typography.Title level={4}>Appointments Overview</Typography.Title>
+                <Tabs defaultActiveKey="scheduled" style={{ marginBottom: 16 }}>
+                  <Tabs.TabPane tab="Scheduled" key="scheduled">
+                    <AppointmentListTable
+                      onSelect={rec => setSelectedDocument(rec)}
+                      data={documentRequests.filter(dr => dr.status === 'scheduled')}
+                    />
+                  </Tabs.TabPane>
+                  <Tabs.TabPane tab="Past" key="past">
+                    <AppointmentListTable
+                      onSelect={rec => setSelectedDocument(rec)}
+                      data={documentRequests.filter(dr => dr.status === 'completed' || dr.status === 'approved')}
+                    />
+                  </Tabs.TabPane>
+                  <Tabs.TabPane tab="Canceled" key="canceled">
+                    <AppointmentListTable
+                      onSelect={rec => setSelectedDocument(rec)}
+                      data={documentRequests.filter(dr => dr.status === 'canceled')}
+                    />
+                  </Tabs.TabPane>
+                </Tabs>
+                <AppointmentDetailsModal
+                  visible={!!selectedDocument}
+                  record={selectedDocument}
+                  onClose={() => setSelectedDocument(null)}
+                />
+              </div>
             </Card>
           </Col>
         </Row>

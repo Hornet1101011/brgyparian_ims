@@ -168,6 +168,88 @@
   opacity: 1;
 }
 
+/* Appointment Request Cards Grid Styling */
+.appointmentRequestsGrid {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+}
+
+.appointmentRequestsGrid.mobile {
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.appointmentRequestsGrid.tablet {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.appointmentRequestsGrid.desktop {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.appointmentRequestsGrid.large {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.appointmentCard {
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100% !important;
+  min-height: 300px;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+.appointmentCard:hover {
+  transform: translateY(-4px) !important;
+}
+
+.appointmentCardBody {
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100% !important;
+  padding: 16px !important;
+  gap: 12px;
+}
+
+.appointmentCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.appointmentCardContent {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 100px;
+}
+
+.appointmentCardDates {
+  padding: 12px;
+  background-color: #ffffff;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #6b7280;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  justify-content: flex-start;
+}
+
+.appointmentCardButton {
+  height: 36px !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  border-radius: 6px !important;
+  margin-top: auto !important;
+  flex-shrink: 0;
+}
+
 /* Table Styling */
 .ant-table {
   font-size: 13px;
@@ -211,11 +293,85 @@
   opacity: 0.6;
 }
 
-/* Responsive adjustments */
+/* Dashboard 3-Column Grid Layout */
+.dashboardGrid {
+  display: grid;
+  grid-template-columns: 280px 1fr 320px;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.dashboardLeftSidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.dashboardMainContent {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.dashboardRightSidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Ensure cards fill available space without internal scrollbars */
+.dashboardGrid .ant-card {
+  height: auto;
+  min-height: auto;
+}
+
+.dashboardGrid .ant-card-body {
+  overflow: visible !important;
+  height: auto !important;
+}
+
+/* Responsive Grid */
+@media (max-width: 1400px) {
+  .dashboardGrid {
+    grid-template-columns: 260px 1fr 300px;
+    gap: 20px;
+  }
+}
+
+@media (max-width: 1200px) {
+  .dashboardGrid {
+    grid-template-columns: 1fr 320px;
+    gap: 20px;
+  }
+
+  .dashboardLeftSidebar {
+    order: 3;
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 1024px) {
+  .dashboardGrid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .dashboardLeftSidebar,
+  .dashboardMainContent,
+  .dashboardRightSidebar {
+    order: initial;
+    grid-column: auto;
+  }
+}
+
 @media (max-width: 768px) {
   :root {
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
     --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .dashboardGrid {
+    gap: 16px;
   }
 
   .ant-card {

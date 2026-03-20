@@ -15,93 +15,116 @@ import { syncService } from './syncService';
 import type { ScheduledAppointment, ConflictItem } from '../types/appointments';
 import { getFileExtension, getFileTypeLabel } from '../utils/fileTypeDetector';
 
-// Type definition for admin API methods
 interface AdminAPI {
+  createUser: (userData: any) => Promise<void>;
+  updateUser: (userId: string, userData: any) => Promise<void>;
+  demoteUser: (userId: string) => Promise<any>;
+  getSystemSettings: () => Promise<SystemSettings>;
+  updateSystemSettings: (settings: SystemSettings) => Promise<void>;
+  testSmtp: (testEmail: string, emailConfig?: any) => Promise<any>;
+  getUsers: () => Promise<User[]>;
+  updateUserStatus: (userId: string, status: string) => Promise<void>;
+  deleteUser: (userId: string) => Promise<void>;
+  getActivityLogs: (filters: { startDate?: string; endDate?: string; module?: string; userId?: string }) => Promise<ActivityLog[]>;
+  getSystemStatistics: () => Promise<SystemStatistics>;
+  getStaffApplicants: () => Promise<{ count: number; applicants: any[] }>;
+  getUserWithResident: (userId: string) => Promise<any>;
+  getResidentByBarangayID: (barangayID: string) => Promise<any>;
+  getResident: (residentId: string) => Promise<any>;
+  updateResident: (residentId: string, data: any) => Promise<any>;
+  uploadResidentAvatar: (residentId: string, file: File) => Promise<any>;
+  getOfficials: () => Promise<any>;
+  createOfficial: (data: any) => Promise<any>;
+  updateOfficial: (id: string, data: any) => Promise<any>;
+  deleteOfficial: (id: string) => Promise<any>;
+  reorderOfficials: (order: string[]) => Promise<any>;
+  disableUser: (userId: string, data?: { suspendedUntil?: string }) => Promise<any>;
+  enableUser: (userId: string) => Promise<any>;
+  uploadOfficialPhoto: (id: string, file: File) => Promise<any>;
+  approveStaffApplicant: (applicantId: string) => Promise<any>;
+  createAnnouncement: (formData: FormData) => Promise<any>;
+  listAdminAnnouncements: () => Promise<any>;
+  deleteAnnouncement: (id: string) => Promise<any>;
+  updateAnnouncement: (id: string, formData: FormData) => Promise<any>;
+  getAnalyticsSummary: (params?: { startDate?: string; endDate?: string; residentType?: string }) => Promise<any>;
+  getGenderAnalytics: () => Promise<any>;
+  getAgeAnalytics: () => Promise<any>;
+  getCivilStatusAnalytics: () => Promise<any>;
+  getEducationAnalytics: () => Promise<any>;
+  getMonthlyDocumentsAnalytics: () => Promise<any>;
+  getAllAnalytics: () => Promise<any>;
   get: (path: string, config?: any) => Promise<any>;
   patch: (path: string, data?: any, config?: any) => Promise<any>;
   post: (path: string, data?: any, config?: any) => Promise<any>;
-  [key: string]: any;
 }
+export const axiosInstance = axios.create({
+  baseURL: process.env.REACT_APP_API_URL || '/api',
+  withCredentials: true,
+});
 
-// Fetch template text for a document type
-export const getTemplateText = (type: string) =>
-  axiosInstance.get(`/templates/${type}`).then(res => res.data.text);
+export const axiosPublic = axios.create({
+  baseURL: process.env.REACT_APP_API_URL || '/api',
+  withCredentials: false,
+});
 
-// Notification API
-const notificationAPI = {
-  // Get all notifications for current admin
-  getNotifications: async (): Promise<Notification[]> => {
-    try {
-      const response = await axiosInstance.get('/notifications');
-      // Normalize response to array
-      const data = Array.isArray(response.data) ? response.data : (response.data && response.data.data) ? response.data.data : [];
-      return data;
-    } catch (err: any) {
-      // If the primary endpoint fails (404 or auth), attempt public fallback which returns [] in server routes
+// API_URL constant for absolute URL construction
+export const API_URL = process.env.REACT_APP_API_URL || '/api';
+
+// Resident Personal Info API
+export const residentPersonalInfoAPI = {
+  getPersonalInfo: async () => {
+    // Try several common endpoints used across versions of the server
+    const candidates = ['/resident/my-info', '/resident/personal-info', '/resident/profile'];
+    for (const path of candidates) {
       try {
-        const fallback = await axiosInstance.get('/notifications/fallback');
-        return Array.isArray(fallback.data) ? fallback.data : (fallback.data && fallback.data.data) ? fallback.data.data : [];
-      } catch (err2) {
-        // As a last resort, return empty array so UI remains functional
-        console.error('notificationAPI.getNotifications failed:', err);
-        return [];
+        const resp = await axiosInstance.get(path);
+        if (resp && resp.data) return resp.data;
+      } catch (e) {
+        // continue to next candidate
       }
     }
+    // Last-resort: hit absolute API_URL to avoid using client origin (avoids 3000 -> 404)
+    try {
+      const resp = await axiosInstance.get('/resident/personal-info');
+      if (resp && resp.data) return resp.data;
+    } catch (e) {
+      // ignore and throw below
+    }
+    const err: any = new Error('Resident personal info not found');
+    // attach a pseudo-response to aid callers checking err.response?.status
+    err.response = { status: 404 };
+    throw err;
   },
-  // Approve staff request
-  approveStaff: async (userId: string, notificationId: string) => {
-    const response = await axiosInstance.post('/notifications/approve', { userId, notificationId });
-    return response.data;
-  },
-  // Reject staff request
-  rejectStaff: async (notificationId: string, reason?: string) => {
-    const response = await axiosInstance.post('/notifications/reject', { notificationId, reason });
-    return response.data;
-  },
-  // Mark notification as read
-  markAsRead: async (notificationId: string) => {
-    const response = await axiosInstance.post('/notifications/read', { notificationId });
+  updatePersonalInfo: async (data: any) => {
+    const response = await axiosInstance.put('/resident/my-info', data);
     return response.data;
   },
 };
+
+// Fetch template text for a document type
+export const getTemplateText = (type: string) => {
+  return axiosInstance.get(`/templates/${type}`).then(res => res.data.text);
+};
+
+// Notification API
+export const notificationAPI = {
+  getNotifications: async () => {
+    return axiosInstance.get('/notifications').then(res => (res.data || []).filter(item => item != null));
+  },
+  approveStaff: async (userId: string, notifId: string) => {
+    return axiosInstance.post(`/notifications/approve-staff/${userId}/${notifId}`);
+  },
+  rejectStaff: async (notifId: string, reason?: string) => {
+    return axiosInstance.post(`/notifications/reject-staff/${notifId}`, { reason });
+  },
+};
+
 
 // Staff registration API
 export const staffRegister = async (data: any) => {
   const response = await axiosInstance.post('/auth/register/staff', data);
   return response.data;
 };
-
-// Use a relative API base so the dev server proxy and production deployment
-// both route requests correctly (avoids hard-coded localhost which can
-// cause CORS or incorrect-host issues). The CRA dev server has a proxy
-// set to http://localhost:5000 in client/package.json, so using '/api'
-// will be forwarded to the backend during development.
-// Allow an override via REACT_APP_API_URL for cases where the API is hosted
-// on a different origin (useful for staging). Default to the relative `/api`
-// so the CRA dev proxy forwards requests to the backend in development.
-// Resolve API URL in this order:
-// 1. runtime config served from /config.json (globalThis.__APP_CONFIG__.API_BASE)
-// 2. build-time env var REACT_APP_API_URL
-// 3. fallback to relative '/api' so dev proxy works
-const runtimeCfg = (globalThis as any).__APP_CONFIG__;
-export const API_URL = (runtimeCfg && runtimeCfg.API_BASE) || process.env.REACT_APP_API_URL || '/api';
-
-export const axiosInstance = axios.create({
-  baseURL: API_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  withCredentials: true, // Send cookies with every request
-});
-
-// Public axios instance (no credentials) that uses the same resolved API base.
-// Use this for public endpoints (guest views) so we don't send auth cookies
-// and avoid 401/redirect HTML pages that the client may try to parse as JSON.
-export const axiosPublic = axios.create({
-  baseURL: API_URL,
-  headers: { 'Content-Type': 'application/json' },
-  withCredentials: false,
-});
 
 // Build an absolute URL to the API given a path (path may start with '/').
 // This normalizes the configured API base (runtime config -> REACT_APP_API_URL -> '/api')
@@ -216,6 +239,8 @@ export const getInbox = async () => {
 
 // Verification API for admin actions
 export const verificationAPI = {
+  // Get file URL by userId and fileType (for new route)
+  getFileUrlByUserType: (userId: string, fileType: string) => `${API_URL.replace(/\/$/, '')}/verification/file/${userId}/${fileType}`,
   getRequests: async () => axiosInstance.get('/verification/admin/requests').then(res => res.data),
   verifyUser: async (userId: string, verified: boolean) => axiosInstance.post(`/verification/admin/verify-user/${userId}`, { verified }).then(res => res.data),
   // Function to get file URL with proper authentication headers (for img src)
@@ -416,7 +441,7 @@ export const documentsAPI = {
     axiosInstance.post('/document-requests/preview-filled', data).then(response => response.data),
 };
 
-export const contact = {
+export const contactAPI = {
   submitInquiry: (data: any) => {
     // Support FormData (multipart) or JSON payloads
     if (typeof FormData !== 'undefined' && data instanceof FormData) {
@@ -491,7 +516,7 @@ export const requestsAPI = {
 };
 
 // Admin API
-const admin: AdminAPI = {
+export const adminAPI: AdminAPI = {
   createUser: async (userData: any): Promise<void> => {
     try {
       const response = await axiosInstance.post('/admin/users', userData);
@@ -995,35 +1020,6 @@ const admin: AdminAPI = {
 };
 
 // Resident Personal Info API
-const residentPersonalInfoAPI = {
-  getPersonalInfo: async () => {
-    // Try several common endpoints used across versions of the server
-    const candidates = ['/resident/my-info', '/resident/personal-info', '/resident/profile'];
-    for (const path of candidates) {
-      try {
-        const resp = await axiosInstance.get(path);
-        if (resp && resp.data) return resp.data;
-      } catch (e) {
-        // continue to next candidate
-      }
-    }
-    // Last-resort: hit absolute API_URL to avoid using client origin (avoids 3000 -> 404)
-    try {
-      const resp = await axiosInstance.get('/resident/personal-info');
-      if (resp && resp.data) return resp.data;
-    } catch (e) {
-      // ignore and throw below
-    }
-    const err: any = new Error('Resident personal info not found');
-    // attach a pseudo-response to aid callers checking err.response?.status
-    err.response = { status: 404 };
-    throw err;
-  },
-  updatePersonalInfo: async (data: any) => {
-    const response = await axiosInstance.put('/resident/my-info', data);
-    return response.data;
-  },
-};
 
 export const authAPI = {
   ...auth,
@@ -1103,10 +1099,4 @@ export const analyticsAPI = {
     axiosInstance.get('/analytics').then(res => res.data),
 };
 
-export { 
-  contact as contactAPI, 
-  admin as adminAPI,
-  notificationAPI,
-  residentPersonalInfoAPI,
-  axiosInstance as default
-};
+
