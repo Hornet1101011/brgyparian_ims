@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Card, Row, Col, Button, Tooltip, Modal, List, Grid, Popover, Badge, Empty, Space, Spin, Tag, DatePicker } from 'antd';
-import { LeftOutlined, RightOutlined, ClockCircleOutlined, UserOutlined, CalendarOutlined } from '@ant-design/icons';
+import { Card, Row, Col, Button, Tooltip, Modal, List, Grid, Popover, Badge, Empty, Space, Spin, Tag, DatePicker, Descriptions, Divider, Avatar, Timeline, Statistic } from 'antd';
+import { LeftOutlined, RightOutlined, ClockCircleOutlined, UserOutlined, CalendarOutlined, MailOutlined, PhoneOutlined, TeamOutlined } from '@ant-design/icons';
 import { getSlotsForRange, getAppointmentWithSlots, getAppointmentInquiries } from '../../api/appointments';
 import AppointmentDetailsModal from '../AppointmentDetailsModal';
 import { contactAPI, residentsListAPI } from '../../services/api';
@@ -182,8 +182,14 @@ const StaffCalendar = () => {
       setSingleLoading(true);
       try {
         // Step 1: Create inquiry for appointment
+        const appointmentDate = dayjs(singleDate).format('MMMM DD, YYYY');
         const payload = {
+          subject: `Appointment Scheduled - ${appointmentDate}`,
+          message: `Appointment scheduled with barangay at ${singleLocation}. Time: ${singleStartTime} - ${singleEndTime}. Details: ${singleDescription}`,
           username: singleResident.username,
+          residentName: singleResident.fullName || singleResident.username,
+          residentEmail: singleResident.email,
+          residentPhone: singleResident.contactNumber,
           type: 'SCHEDULE_APPOINTMENT',
           status: 'scheduled',
           locationType: singleLocationType,
@@ -625,10 +631,15 @@ const StaffCalendar = () => {
               <br />
               <Button
                 icon={<UserOutlined />}
-                style={{ width: '100%', textAlign: 'left', padding: 8, borderRadius: 6, border: '1px solid #d9d9d9', fontSize: 15, background: '#fff' }}
+                style={{ width: '100%', textAlign: 'left', padding: 8, borderRadius: 6, border: '1px solid #d9d9d9', fontSize: 15, background: '#fff', height: 'auto', whiteSpace: 'normal' }}
                 onClick={() => setResidentSelectModal(true)}
               >
-                {singleResident ? (singleResident.fullName || singleResident.username) : 'Select resident'}
+                <div style={{ textAlign: 'left' }}>
+                  <div>{singleResident ? (singleResident.fullName || singleResident.username) : 'Select resident'}</div>
+                  {singleResident && singleResident.email && (
+                    <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>{singleResident.email}</div>
+                  )}
+                </div>
               </Button>
               <Modal
                 open={residentSelectModal}
@@ -638,7 +649,7 @@ const StaffCalendar = () => {
                 width={400}
               >
                 <Input
-                  placeholder="Search resident..."
+                  placeholder="Search resident by name, username, or email..."
                   value={residentSearch}
                   onChange={e => setResidentSearch(e.target.value)}
                   style={{ marginBottom: 12 }}
@@ -647,19 +658,27 @@ const StaffCalendar = () => {
                 <List
                   dataSource={residentOptions.filter(r =>
                     r.fullName?.toLowerCase().includes(residentSearch.toLowerCase()) ||
-                    r.username?.toLowerCase().includes(residentSearch.toLowerCase())
+                    r.username?.toLowerCase().includes(residentSearch.toLowerCase()) ||
+                    r.email?.toLowerCase().includes(residentSearch.toLowerCase())
                   )}
                   renderItem={r => (
                     <List.Item
                       key={r.username}
-                      style={{ cursor: 'pointer' }}
+                      style={{ cursor: 'pointer', padding: '8px 0' }}
                       onClick={() => {
                         setSingleResident(r);
                         setResidentSelectModal(false);
                       }}
                     >
-                      <UserOutlined style={{ marginRight: 8 }} />
-                      {r.fullName || r.username}
+                      <div style={{ width: '100%' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <UserOutlined />
+                          <span style={{ fontWeight: 500 }}>{r.fullName || r.username}</span>
+                        </div>
+                        {r.email && (
+                          <div style={{ fontSize: 12, color: '#666', marginLeft: 28, marginTop: 4 }}>{r.email}</div>
+                        )}
+                      </div>
                     </List.Item>
                   )}
                   locale={{ emptyText: 'No residents found' }}
@@ -912,42 +931,195 @@ const StaffCalendar = () => {
         </div>
       )}
 
-      <Modal title={detailDate ? `Schedule for ${detailDate}` : ''} visible={!!detailDate} onCancel={closeDetail} footer={null} width={720}>
+      <Modal 
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <CalendarOutlined />
+            <span>Schedule for {detailDate}</span>
+          </div>
+        } 
+        open={!!detailDate} 
+        onCancel={closeDetail} 
+        footer={null} 
+        width={800}
+        bodyStyle={{ padding: '20px' }}
+      >
         {detailDate && (
-          <List dataSource={slotsByDate.get(detailDate) || []} renderItem={(s: any) => (
-              <List.Item actions={[
-                s.inquiryId ? <Button key="open" onClick={() => openEditorForInquiry(s.inquiryId)}>Open</Button>
-                : <Button key="details" onClick={() => setSlotDetail(s)}>Details</Button>
-              ]}>
-                <List.Item.Meta
-                  title={`${s.startTime} - ${s.endTime}`}
-                  description={(
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <div><strong>{s.residentName || s.residentUsername || 'Resident'}</strong> — {s.staffName || 'Staff'}</div>
-                      {s.subject && <div><em>{s.subject}</em></div>}
-                      {s.status && <div>Status: {s.status}</div>}
-                      {s.notes && <div style={{ color: '#444' }}>{s.notes}</div>}
-                    </div>
-                  )}
-                />
-              </List.Item>
-          )} locale={{ emptyText: 'No appointments' }} />
+          <div>
+            {(slotsByDate.get(detailDate) || []).length > 0 ? (
+              <List 
+                dataSource={slotsByDate.get(detailDate) || []} 
+                renderItem={(s: any) => (
+                  <Card 
+                    style={{ marginBottom: 16 }} 
+                    hoverable
+                    onClick={() => setSlotDetail(s)}
+                  >
+                    <Row gutter={16} align="middle">
+                      <Col flex="auto">
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <ClockCircleOutlined style={{ fontSize: 18, color: '#1890ff' }} />
+                            <span style={{ fontSize: 16, fontWeight: 600 }}>{s.startTime} - {s.endTime}</span>
+                            {s.status && <Tag color={s.status === 'scheduled' ? 'green' : 'orange'}>{s.status}</Tag>}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Avatar icon={<UserOutlined />} />
+                            <div>
+                              <div style={{ fontWeight: 600 }}>{s.residentName || s.residentUsername || 'Resident'}</div>
+                              <div style={{ fontSize: 12, color: '#666' }}>Resident</div>
+                            </div>
+                          </div>
+                          {s.subject && (
+                            <div style={{ fontSize: 13, color: '#666', fontStyle: 'italic' }}>
+                              "{s.subject}"
+                            </div>
+                          )}
+                          {s.staffName && (
+                            <div style={{ fontSize: 12, color: '#999' }}>
+                              Assigned by: <strong>{s.staffName}</strong>
+                            </div>
+                          )}
+                          {s.notes && (
+                            <div style={{ fontSize: 12, color: '#666', padding: '8px', background: '#fafafa', borderRadius: 4, borderLeft: '3px solid #1890ff' }}>
+                              {s.notes}
+                            </div>
+                          )}
+                        </div>
+                      </Col>
+                      <Col>
+                        <Space direction="vertical">
+                          {s.inquiryId && (
+                            <Button 
+                              type="primary" 
+                              onClick={(e) => { e.stopPropagation(); openEditorForInquiry(s.inquiryId); }}
+                            >
+                              Open Inquiry
+                            </Button>
+                          )}
+                          <Button 
+                            onClick={(e) => { e.stopPropagation(); setSlotDetail(s); }}
+                          >
+                            Details
+                          </Button>
+                        </Space>
+                      </Col>
+                    </Row>
+                  </Card>
+                )} 
+                locale={{ emptyText: <Empty description="No appointments scheduled" style={{ marginTop: 40 }} /> }} 
+              />
+            ) : (
+              <Empty description="No appointments scheduled for this date" style={{ marginTop: 40 }} />
+            )}
+          </div>
         )}
       </Modal>
 
-      <Modal title={slotDetail ? `Appointment Details` : ''} visible={!!slotDetail} onCancel={() => setSlotDetail(null)} footer={null} width={640}>
+      <Modal 
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <ClockCircleOutlined />
+            <span>Appointment Details</span>
+            {slotDetail?.status && <Tag color={slotDetail.status === 'scheduled' ? 'green' : 'orange'}>{slotDetail.status}</Tag>}
+          </div>
+        } 
+        open={!!slotDetail} 
+        onCancel={() => setSlotDetail(null)} 
+        footer={null} 
+        width={700}
+        bodyStyle={{ padding: '20px' }}
+      >
         {slotDetail && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div><strong>Time</strong>: {slotDetail.startTime} — {slotDetail.endTime}</div>
-            <div><strong>Resident</strong>: {slotDetail.residentName || slotDetail.residentUsername || 'Unknown'}</div>
-            {slotDetail.residentPhone && <div><strong>Phone</strong>: {slotDetail.residentPhone}</div>}
-            {slotDetail.residentEmail && <div><strong>Email</strong>: {slotDetail.residentEmail}</div>}
-            <div><strong>Staff</strong>: {slotDetail.staffName || 'Staff'}</div>
-            {slotDetail.subject && <div><strong>Subject</strong>: {slotDetail.subject}</div>}
-            {slotDetail.status && <div><strong>Status</strong>: {slotDetail.status}</div>}
-            {slotDetail.notes && <div><strong>Notes</strong>: <div style={{ whiteSpace: 'pre-wrap' }}>{slotDetail.notes}</div></div>}
-            <div style={{ fontSize: 12, color: '#666' }}>Slot ID: {slotDetail._id}{slotDetail.inquiryId ? ` — Inquiry: ${slotDetail.inquiryId}` : ''}</div>
-            {slotDetail.inquiryId && <div><Button type="primary" onClick={() => { setSlotDetail(null); openEditorForInquiry(slotDetail.inquiryId); }}>Open Inquiry</Button></div>}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            {/* Time Card */}
+            <Card 
+              style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', border: 'none' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 18 }}>
+                <ClockCircleOutlined style={{ fontSize: 24 }} />
+                <div>
+                  <div style={{ fontWeight: 600 }}>{slotDetail.startTime} — {slotDetail.endTime}</div>
+                  <div style={{ fontSize: 12, opacity: 0.9 }}>Appointment Time</div>
+                </div>
+              </div>
+            </Card>
+
+            {/* Resident Information */}
+            <Card title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><UserOutlined /> Resident Information</span>}>
+              <Descriptions 
+                column={1}
+                size="small"
+                items={[
+                  {
+                    label: 'Name',
+                    children: slotDetail.residentName || slotDetail.residentUsername || 'Unknown',
+                    span: 1
+                  },
+                  ...(slotDetail.residentEmail ? [{
+                    label: 'Email',
+                    children: (
+                      <Space>
+                        <MailOutlined />
+                        <a href={`mailto:${slotDetail.residentEmail}`}>{slotDetail.residentEmail}</a>
+                      </Space>
+                    ),
+                    span: 1
+                  }] : []),
+                  ...(slotDetail.residentPhone ? [{
+                    label: 'Phone',
+                    children: (
+                      <Space>
+                        <PhoneOutlined />
+                        <a href={`tel:${slotDetail.residentPhone}`}>{slotDetail.residentPhone}</a>
+                      </Space>
+                    ),
+                    span: 1
+                  }] : [])
+                ]}
+              />
+            </Card>
+
+            {/* Staff Information */}
+            {slotDetail.staffName && (
+              <Card title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><TeamOutlined /> Staff Information</span>}>
+                <Descriptions column={1} size="small">
+                  <Descriptions.Item label="Assigned By">{slotDetail.staffName}</Descriptions.Item>
+                </Descriptions>
+              </Card>
+            )}
+
+            {/* Appointment Details */}
+            <Card title="Appointment Details">
+              <Descriptions column={1} size="small">
+                {slotDetail.subject && <Descriptions.Item label="Subject">{slotDetail.subject}</Descriptions.Item>}
+                {slotDetail.notes && (
+                  <Descriptions.Item label="Notes">
+                    <div style={{ whiteSpace: 'pre-wrap', background: '#fafafa', padding: 8, borderRadius: 4, marginTop: 8 }}>
+                      {slotDetail.notes}
+                    </div>
+                  </Descriptions.Item>
+                )}
+              </Descriptions>
+            </Card>
+
+            {/* Metadata */}
+            <div style={{ fontSize: 12, color: '#999', padding: '12px', background: '#fafafa', borderRadius: 4, borderLeft: '3px solid #d9d9d9' }}>
+              <div>Slot ID: <code>{slotDetail._id}</code></div>
+              {slotDetail.inquiryId && <div style={{ marginTop: 4 }}>Inquiry ID: <code>{slotDetail.inquiryId}</code></div>}
+            </div>
+
+            {/* Action Buttons */}
+            {slotDetail.inquiryId && (
+              <Button 
+                type="primary" 
+                size="large" 
+                block
+                onClick={() => { setSlotDetail(null); openEditorForInquiry(slotDetail.inquiryId); }}
+              >
+                Open Full Inquiry
+              </Button>
+            )}
           </div>
         )}
       </Modal>

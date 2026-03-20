@@ -110,6 +110,16 @@ const inquirySchema = new mongoose.Schema({
       message: 'Invalid barangayID format'
     }
   },
+  // Store resident contact info for appointment details display
+  residentName: {
+    type: String,
+  },
+  residentEmail: {
+    type: String,
+  },
+  residentPhone: {
+    type: String,
+  },
   assignedTo: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

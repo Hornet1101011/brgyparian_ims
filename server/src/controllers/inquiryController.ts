@@ -162,6 +162,29 @@ export const createInquiry = async (req: any, res: Response, next: NextFunction)
       // ignore
     }
 
+    // Extract resident contact info from payload if provided
+    let residentName = req.body?.residentName;
+    let residentEmail = req.body?.residentEmail;
+    let residentPhone = req.body?.residentPhone;
+
+    // If contact info not provided, try to fetch from User collection
+    if (resolvedUsername && (!residentName || !residentEmail || !residentPhone)) {
+      try {
+        const resident = await User.findOne({
+          username: resolvedUsername,
+          barangayID: resolvedBarangayID,
+          role: 'resident'
+        }).lean();
+        if (resident) {
+          residentName = residentName || resident.fullName || resident.username;
+          residentEmail = residentEmail || resident.email;
+          residentPhone = residentPhone || resident.contactNumber;
+        }
+      } catch (e) {
+        console.warn('Failed to fetch resident contact info:', e);
+      }
+    }
+
     const inquiry = new Inquiry({
       subject,
       message,
@@ -172,6 +195,9 @@ export const createInquiry = async (req: any, res: Response, next: NextFunction)
       // Use resolvedUsername/barangayID if available; otherwise fall back to staff user (legacy behavior)
       username: resolvedUsername || user?.username || 'Unknown',
       barangayID: resolvedBarangayID || user?.barangayID || 'Unknown',
+      residentName,
+      residentEmail,
+      residentPhone,
       // If a resident created the inquiry, mark it as 'pending' so staff know it needs review.
       // Other creators (staff/admin/system) will default to 'open'.
       status: (user && user.role && String(user.role).toLowerCase() === 'resident') ? 'pending' : 'open'
