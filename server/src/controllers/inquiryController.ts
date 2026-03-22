@@ -77,7 +77,26 @@ async function findConflictsForRange(date: string, startTime: string, endTime: s
 export const createInquiry = async (req: any, res: Response, next: NextFunction) => {
   try {
     // Accept assignedTo (array of user IDs) and/or assignedRole
-    const { subject, message, type, assignedTo, assignedRole, username: targetUsername, barangayID: targetBarangayID } = req.body;
+    const {
+      subject,
+      message,
+      type,
+      assignedTo,
+      assignedRole,
+      username: targetUsername,
+      barangayID: targetBarangayID,
+      residentName: bodyResidentName,
+      residentEmail: bodyResidentEmail,
+      residentPhone: bodyResidentPhone,
+      recipients,
+      recipientEmails,
+      quick_appointment_type,
+      locationType,
+      location,
+      description,
+      urgency,
+      status: bodyStatus
+    } = req.body;
     const user = (req as any).user;
 
     // Resolve recipient username/barangayID. Prefer explicit client-provided fields.
@@ -163,9 +182,9 @@ export const createInquiry = async (req: any, res: Response, next: NextFunction)
     }
 
     // Extract resident contact info from payload if provided
-    let residentName = req.body?.residentName;
-    let residentEmail = req.body?.residentEmail;
-    let residentPhone = req.body?.residentPhone;
+    let residentName = bodyResidentName || req.body?.residentName;
+    let residentEmail = bodyResidentEmail || req.body?.residentEmail;
+    let residentPhone = bodyResidentPhone || req.body?.residentPhone;
 
     // If contact info not provided, try to fetch from User collection
     if (resolvedUsername && (!residentName || !residentEmail || !residentPhone)) {
@@ -192,15 +211,20 @@ export const createInquiry = async (req: any, res: Response, next: NextFunction)
       assignedTo: Array.isArray(assignedTo) ? assignedTo : [],
       assignedRole: assignedRole || 'staff',
       createdBy: user?._id,
-      // Use resolvedUsername/barangayID if available; otherwise fall back to staff user (legacy behavior)
       username: resolvedUsername || user?.username || 'Unknown',
       barangayID: resolvedBarangayID || user?.barangayID || 'Unknown',
+      // resident contact points (client-provided preferred, fallback to user lookup)
       residentName,
       residentEmail,
       residentPhone,
-      // If a resident created the inquiry, mark it as 'pending' so staff know it needs review.
-      // Other creators (staff/admin/system) will default to 'open'.
-      status: (user && user.role && String(user.role).toLowerCase() === 'resident') ? 'pending' : 'open'
+      recipients: Array.isArray(recipients) ? recipients : (recipients ? [recipients] : []),
+      recipientEmails: Array.isArray(recipientEmails) ? recipientEmails : (recipientEmails ? [recipientEmails] : []),
+      quick_appointment_type: quick_appointment_type || undefined,
+      locationType: locationType || undefined,
+      location: location || undefined,
+      description: description || undefined,
+      urgency: urgency || undefined,
+      status: bodyStatus || ((user && user.role && String(user.role).toLowerCase() === 'resident') ? 'pending' : 'open')
     });
     // Parse optional appointmentDates sent as form fields (supports `appointmentDates[]` or `appointmentDates`)
     try {
