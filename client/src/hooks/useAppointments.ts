@@ -29,12 +29,24 @@ export function useAppointmentDetailsQuery(inquiryId?: string) {
 export function useSubmitScheduleMutation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, scheduledDates }: { id: string; scheduledDates: ScheduledAppointment[] }) => {
-      return appointmentsAPI.scheduleAppointment({ id, scheduledDates });
+    mutationFn: async ({ id, scheduledDates, type, recipient, recipientContact }: { id: string; scheduledDates: ScheduledAppointment[]; type?: 'SCHEDULE_APPOINTMENT' | 'QUICK_APPOINTMENT'; recipient?: string; recipientContact?: string }) => {
+      return appointmentsAPI.scheduleAppointment({ id, scheduledDates, type, recipient, recipientContact });
     },
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: ['appointments'] });
       if (variables && variables.id) qc.invalidateQueries({ queryKey: ['appointment', variables.id] });
+    }
+  });
+}
+
+export function useDeleteAppointmentMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      return appointmentsAPI.deleteAppointment(id);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['appointments'] });
     }
   });
 }

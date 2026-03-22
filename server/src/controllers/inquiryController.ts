@@ -900,3 +900,24 @@ export const closeInquiry = async (req: any, res: Response, next: NextFunction) 
     return res.status(500).json({ message: 'Error closing inquiry', error: err });
   }
 };
+
+export const deleteInquiry = async (req: any, res: Response, next: NextFunction) => {
+  try {
+    const id = req.params.id;
+    const inquiry = await Inquiry.findById(id);
+    if (!inquiry) return res.status(404).json({ message: 'Inquiry not found' });
+
+    await Inquiry.deleteOne({ _id: id });
+
+    return res.json({ success: true, message: 'Inquiry deleted' });
+  } catch (err) {
+    console.error('Error in deleteInquiry:', err);
+    return res.status(500).json({ message: 'Error deleting inquiry', error: err });
+  }
+};
+
+// Debug: this route exists and is ready on server side
+export const pingDeleteInquiry = (req: any, res: Response) => {
+  console.log(`DELETE /api/inquiries/${req.params.id} called by user`, req.user?.username || 'unknown');
+  res.status(200).json({ status: 'ok', id: req.params.id });
+};

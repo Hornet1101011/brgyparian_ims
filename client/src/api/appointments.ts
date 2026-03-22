@@ -91,11 +91,11 @@ export async function getScheduledAppointmentsByDate(date: string): Promise<Sche
   }
 }
 
-export async function scheduleAppointment(payload: { id: string; scheduledDates: ScheduledAppointment[] }): Promise<{ success?: boolean; conflicts?: ConflictItem[] } | any> {
+export async function scheduleAppointment(payload: { id: string; scheduledDates: ScheduledAppointment[]; type?: 'SCHEDULE_APPOINTMENT' | 'QUICK_APPOINTMENT'; recipient?: string; recipientContact?: string }): Promise<{ success?: boolean; conflicts?: ConflictItem[] } | any> {
   try {
-    const { id, scheduledDates } = payload;
+    const { id, scheduledDates, type, recipient, recipientContact } = payload;
     // Use dedicated schedule endpoint for clarity and to support edit mode
-    const resp = await axiosInstance.put(`/inquiries/${id}/schedule`, { scheduledDates, status: 'scheduled' });
+    const resp = await axiosInstance.put(`/inquiries/${id}/schedule`, { scheduledDates, status: 'scheduled', type, recipient, recipientContact });
     return resp.data;
   } catch (err: any) {
     return handleError(err);
@@ -138,6 +138,15 @@ export async function postMessage(inquiryId: string, message: string): Promise<{
   }
 }
 
+export async function deleteAppointment(inquiryId: string): Promise<any> {
+  try {
+    const resp = await axiosInstance.delete(`/inquiries/${inquiryId}`);
+    return resp.data;
+  } catch (err: any) {
+    return handleError(err);
+  }
+}
+
 export default {
   getAppointmentInquiries,
   getAppointmentDetails,
@@ -148,6 +157,7 @@ export default {
   cancelAppointment,
   postStaffNote,
   postMessage,
+  deleteAppointment,
   getDailySummary,
   getSlotsByDate,
   getSlotsForRange,

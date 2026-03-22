@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Modal, Descriptions, Tag, Spin, Button, Divider, List, Typography, message, Input } from 'antd';
 import { useAppointmentDetailsQuery } from '../hooks/useAppointments';
 import appointmentsAPI from '../api/appointments';
 import AppointmentDetailsModal from './AppointmentDetailsModal';
+import { residentsListAPI } from '../services/api';
 
 type Props = {
   visible: boolean;
@@ -11,7 +12,7 @@ type Props = {
   onChanged?: () => void; // called after cancellation/scheduling
 };
 
-const InquiryDetailsModal: React.FC<Props> = ({ visible, inquiryId, onClose, onChanged }) => {
+function InquiryDetailsModal({ visible, inquiryId, onClose, onChanged }: Props) {
   const query = useAppointmentDetailsQuery(inquiryId || undefined);
   const loading = query.isLoading;
   const data = query.data as any | null;
@@ -20,6 +21,57 @@ const InquiryDetailsModal: React.FC<Props> = ({ visible, inquiryId, onClose, onC
   const [savingNote, setSavingNote] = useState(false);
   const [newMessage, setNewMessage] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
+
+  // Resident/contact info state
+  const [residentInfo, setResidentInfo] = useState(null);
+  const [contactInfo, setContactInfo] = useState(null);
+  useEffect(() => {
+    let ignore = false;
+    async function fetchResidents() {
+      try {
+        const residents = await residentsListAPI.getAllResidents();
+        if (!residents || !Array.isArray(residents)) return;
+        let residentBarangayId = data?.createdBy?.barangayID || data?.barangayID;
+        let contactBarangayId = data?.contactBarangayID || null;
+        if (!contactBarangayId) contactBarangayId = residentBarangayId;
+        const foundResident = residents.find((r: any) => r.barangayID === residentBarangayId);
+        const foundContact = residents.find((r: any) => r.barangayID === contactBarangayId);
+        if (!ignore) {
+          setResidentInfo(foundResident || null);
+          setContactInfo(foundContact || null);
+        }
+      } catch (e) {
+        if (!ignore) {
+          setResidentInfo(null);
+          setContactInfo(null);
+        }
+      }
+    }
+    if (visible && data) fetchResidents();
+    return () => { ignore = true; };
+  }, [visible, data]);
+
+  // Helper to render resident name only
+  const renderResident = (info: any) => {
+    if (!info) return '—';
+    return (
+      <div>
+        {info.fullName && <div><b>{info.fullName}</b></div>}
+        {!info.fullName && <div>—</div>}
+      </div>
+    );
+  };
+  // Helper to render contact email and contact number
+  const renderContact = (info: any) => {
+    if (!info) return '—';
+    return (
+      <div>
+        {info.email && <div>Email: {info.email}</div>}
+        {info.contactNumber && <div>Contact: {info.contactNumber}</div>}
+        {!info.email && !info.contactNumber && <div>—</div>}
+      </div>
+    );
+  };
 
   const handleCancel = async () => {
     if (!inquiryId) return;
@@ -53,8 +105,8 @@ const InquiryDetailsModal: React.FC<Props> = ({ visible, inquiryId, onClose, onC
         <>
           <Descriptions bordered column={1} size="middle">
             <Descriptions.Item label="Type">{data?.type || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Resident">{data?.createdBy?.fullName || data?.username}</Descriptions.Item>
-            <Descriptions.Item label="Contact">{data?.username || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Resident">{renderResident(residentInfo)}</Descriptions.Item>
+            <Descriptions.Item label="Contact">{renderContact(contactInfo)}</Descriptions.Item>
             <Descriptions.Item label="Submitted At">{data?.createdAt ? new Date(data.createdAt).toLocaleString() : '—'}</Descriptions.Item>
             <Descriptions.Item label="Message">{data?.message || '—'}</Descriptions.Item>
             <Descriptions.Item label="Requested Dates">{(data?.appointmentDates || []).length ? (data.appointmentDates.map((d: string) => <div key={d}>{d}</div>)) : 'None'}</Descriptions.Item>
@@ -193,6 +245,6 @@ const InquiryDetailsModal: React.FC<Props> = ({ visible, inquiryId, onClose, onC
       )}
     </Modal>
   );
-};
+}
 
 export default InquiryDetailsModal;

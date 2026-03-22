@@ -1,11 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { Table, Button, Card, Tag, Space, Typography, message, Input, Empty, Spin, Tooltip, Modal } from 'antd';
-import { useAppointmentsQuery } from '../hooks/useAppointments';
+import { useAppointmentsQuery, useDeleteAppointmentMutation } from '../hooks/useAppointments';
 import '../components/staff/appointments/scheduling.css';
 import dayjs from 'dayjs';
 import AppointmentDetailsModal from '../components/AppointmentDetailsModal';
 import InquiryDetailsModal from '../components/InquiryDetailsModal';
-import { CalendarOutlined, ClockCircleOutlined, CheckCircleOutlined, SearchOutlined, ClockCircleTwoTone, EyeOutlined } from '@ant-design/icons';
+import { CalendarOutlined, ClockCircleOutlined, CheckCircleOutlined, SearchOutlined, ClockCircleTwoTone, EyeOutlined, DeleteOutlined } from '@ant-design/icons';
 
 const { Text } = Typography;
 
@@ -28,6 +28,26 @@ const StaffAppointments = () => {
   if (isError) {
     message.error('Failed to fetch appointments');
   }
+
+  const deleteAppointment = useDeleteAppointmentMutation();
+
+  const handleDelete = (record: any) => {
+    Modal.confirm({
+      title: 'Delete Appointment',
+      content: `Are you sure you want to delete the appointment for ${record.createdBy?.fullName || record.username}? This action cannot be undone.`,
+      okText: 'Delete',
+      okType: 'danger',
+      cancelText: 'Cancel',
+      onOk: async () => {
+        try {
+          await deleteAppointment.mutateAsync(String(record._id));
+          message.success('Appointment deleted successfully');
+        } catch (err: any) {
+          message.error('Failed to delete appointment');
+        }
+      },
+    });
+  };
 
   // Helper to determine if a scheduled appointment is past
   const isPast = (record: any) => {
@@ -194,6 +214,21 @@ const StaffAppointments = () => {
                       >
                         {record.status === 'scheduled' ? 'Edit' : 'Schedule'}
                       </Button>
+                      <Button 
+                        danger
+                        block
+                        size="small"
+                        onClick={() => handleDelete(record)}
+                        icon={<DeleteOutlined />}
+                        style={{
+                          borderRadius: 6,
+                          fontSize: 12,
+                          fontWeight: 600,
+                          height: 36
+                        }}
+                      >
+                        Delete
+                      </Button>
                     </div>
                   </div>
                 </Card>
@@ -347,6 +382,21 @@ const StaffAppointments = () => {
             }}
           >
             {record.status === 'scheduled' ? 'Edit' : 'Schedule'}
+          </Button>
+          <Button 
+            danger
+            block
+            size="small"
+            onClick={() => handleDelete(record)}
+            icon={<DeleteOutlined />}
+            style={{
+              borderRadius: 6,
+              fontSize: 12,
+              fontWeight: 600,
+              height: 36
+            }}
+          >
+            Delete
           </Button>
         </div>
       )

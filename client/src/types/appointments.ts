@@ -33,12 +33,14 @@ export interface StaffUser {
 
 export interface AppointmentInquiry {
   _id: string | number;
-  type?: string;
+  type?: 'SCHEDULE_APPOINTMENT' | 'QUICK_APPOINTMENT';
   status?: string;
   appointmentDates?: string[]; // requested dates (ISO strings)
   scheduledDates?: Array<{ date: string; startTime: string; endTime: string }>;
   username?: string;
   createdBy?: ResidentInfo;
+  recipient?: string;
+  recipientContact?: string;
   // allow other server-provided fields as optional
   [k: string]: any;
 }

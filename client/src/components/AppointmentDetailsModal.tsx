@@ -345,7 +345,15 @@ function AppointmentDetailsModal({ visible, record, onClose, prefill }: Props) {
 
       // Proceed to schedule (server is authoritative). If availability endpoint was not present, this is the primary attempt.
         try {
-          await submitSchedule.mutateAsync({ id: String(record._id), scheduledDates });
+          let type: 'SCHEDULE_APPOINTMENT' | 'QUICK_APPOINTMENT' | undefined;
+          let recipient: string | undefined;
+          let recipientContact: string | undefined;
+          if (state.selectedDates.length === 1) {
+            type = 'QUICK_APPOINTMENT';
+            recipient = residentInfo?.fullName;
+            recipientContact = residentInfo?.email;
+          }
+          await submitSchedule.mutateAsync({ id: String(record._id), scheduledDates, type, recipient, recipientContact });
           message.success('Appointment scheduled');
           // update UI state: mark as scheduled and change button label
           setLocalStatus('scheduled');

@@ -213,6 +213,7 @@ try {
 
 app.use('/api/inbox', (req, res, next) => { console.log('Received request to /api/inbox'); next(); }, inboxRoutes);
 app.use('/api/inquiries', inquiryRoutes);
+app.use('/api/inquiry', inquiryRoutes); // fallback singular form for compatibility
 app.use('/api/messages', messageRoutes);
 app.use('/api/logs', logsRoutes);
 app.use('/api/notifications', notificationRoutes);

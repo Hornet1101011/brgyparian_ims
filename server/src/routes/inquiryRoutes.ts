@@ -75,6 +75,11 @@ router.patch('/:id/cancel', auth, authorize('admin', 'staff'), (req: any, res: R
 // Close an inquiry (staff only) - marks as 'closed'
 router.patch('/:id/close', auth, authorize('admin', 'staff'), (req: any, res: Response, next: NextFunction) => closeInquiry(req, res, next));
 
+// Delete an inquiry (staff/admin only)
+router.delete('/:id', auth, authorize('admin', 'staff'), (req: any, res: Response, next: NextFunction) => deleteInquiry(req, res, next));
+// Debug ping for delete route (can be removed once confirmed working)
+router.get('/:id/delete-ping', auth, authorize('admin', 'staff'), (req: any, res: Response, next: NextFunction) => pingDeleteInquiry(req, res));
+
 // Add a response to an inquiry (allow resident and staff replies)
 // Allow file attachments with responses as well
 router.post('/:id/responses', auth, upload.array('attachments'), (req: any, res: Response, next: NextFunction) => addResponse(req, res, next));

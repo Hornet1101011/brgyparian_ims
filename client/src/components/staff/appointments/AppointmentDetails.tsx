@@ -11,21 +11,22 @@ type Props = {
 
 const AppointmentDetails = ({ record, residentInfo, contactInfo }: Props) => {
   // Helper to render resident/contact info
-  const renderPerson = (info: any, fallback: string) => {
-    if (!info) return fallback;
-    // Only show username if fullName is not available
+  const renderPerson = (info: any) => {
+    if (!info) return '—';
+    // Only show fullName, email, and contactNumber. Never show username.
     return (
       <div>
-        <div><b>{info.fullName ? info.fullName : (info.email || info.contactNumber ? '' : fallback)}</b></div>
+        {info.fullName && <div><b>{info.fullName}</b></div>}
         {info.email && <div>Email: {info.email}</div>}
         {info.contactNumber && <div>Contact: {info.contactNumber}</div>}
+        {!info.fullName && !info.email && !info.contactNumber && <div>—</div>}
       </div>
     );
   };
   return (
     <>
-      <Descriptions.Item label="Resident">{renderPerson(residentInfo, '—')}</Descriptions.Item>
-      <Descriptions.Item label="Contact">{renderPerson(contactInfo, '—')}</Descriptions.Item>
+      <Descriptions.Item label="Resident">{renderPerson(residentInfo)}</Descriptions.Item>
+      <Descriptions.Item label="Contact">{renderPerson(contactInfo)}</Descriptions.Item>
       <Descriptions.Item label="Message">{record?.message}</Descriptions.Item>
       <Descriptions.Item label="Requested Dates">{(record?.appointmentDates || []).join(', ') || 'None'}</Descriptions.Item>
       <Descriptions.Item label="Status">{(record?.status || '').toString()}</Descriptions.Item>
