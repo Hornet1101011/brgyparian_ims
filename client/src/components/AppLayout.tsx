@@ -23,6 +23,7 @@ import {
   CloseOutlined,
   CheckOutlined,
   DeliveredProcedureOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons';
 import './AppLayoutSidebar.css';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -142,6 +143,11 @@ const navConfig: {
       key: '/staff/appointments',
       icon: <CalendarOutlined />,
       label: 'Appointments',
+    },
+    {
+      key: '/staff/quick-appointments',
+      icon: <ThunderboltOutlined />,
+      label: 'Quick Appointments',
     },
     {
       key: '/templates-manager',

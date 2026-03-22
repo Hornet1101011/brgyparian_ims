@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Card, Row, Col, Button, Tooltip, Modal, List, Grid, Popover, Badge, Empty, Space, Spin, Tag, DatePicker, Descriptions, Divider, Avatar, Timeline, Statistic } from 'antd';
 import { LeftOutlined, RightOutlined, ClockCircleOutlined, UserOutlined, CalendarOutlined, MailOutlined, PhoneOutlined, TeamOutlined } from '@ant-design/icons';
-import { getSlotsForRange, getAppointmentWithSlots, getAppointmentInquiries } from '../../api/appointments';
+import { getSlotsForRange, getAppointmentWithSlots, getAppointmentInquiries, getScheduledAppointmentsByDate, cancelAppointment } from '../../api/appointments';
 import AppointmentDetailsModal from '../AppointmentDetailsModal';
 import { contactAPI, residentsListAPI } from '../../services/api';
 import { Input, Space as AntSpace, Calendar as AntCalendar } from 'antd';
@@ -161,41 +161,106 @@ const StaffCalendar = () => {
         alert('Please fill all required fields including appointment date.');
         return;
       }
-      // Validate time
-      const parseTime = (t: string) => {
-        const [time, meridian] = t.split(' ');
-        let [h, m] = time.split(':').map(Number);
-        if (meridian === 'PM' && h !== 12) h += 12;
-        if (meridian === 'AM' && h === 12) h = 0;
-        return h * 60 + m;
+      // Validate/normalize time input from TimePicker:
+      // supports "08:00 AM", "08:00:00 am", "08:00", "08:00:00", etc.
+      const normalizeTime = (t: string) => {
+        if (!t || typeof t !== 'string') return null;
+        const raw = t.trim();
+        if (raw === '') return null;
+
+        // Break into time and optional AM/PM (case-insensitive)
+        const match = raw.match(/^\s*(\d{1,2}:\d{2}(?::\d{2})?)\s*([aApP][mM])?\s*$/);
+        if (!match) return null;
+
+        let hrMinSec = match[1];
+        const meridiem = match[2] ? match[2].toUpperCase() : undefined;
+
+        const parts = hrMinSec.split(':').map(Number);
+        if (parts.length < 2) return null;
+        let [hour, minute] = parts;
+
+        if (Number.isNaN(hour) || Number.isNaN(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+
+        if (meridiem) {
+          if (meridiem === 'PM' && hour < 12) hour += 12;
+          if (meridiem === 'AM' && hour === 12) hour = 0;
+        }
+
+        // Ensure hour in 0..23 range
+        hour = ((hour % 24) + 24) % 24;
+
+        return {
+          minutes: hour * 60 + minute,
+          iso: `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+        };
       };
-      const startMin = parseTime(singleStartTime);
-      const endMin = parseTime(singleEndTime);
-      if (endMin <= startMin) {
+      const startObj = normalizeTime(singleStartTime);
+      const endObj = normalizeTime(singleEndTime);
+      if (!startObj || !endObj) {
+        alert('Please supply valid start and end time values (e.g. 08:00 AM).');
+        return;
+      }
+      if (endObj.minutes <= startObj.minutes) {
         alert('End time must be after start time.');
         return;
       }
-      if (startMin < 8 * 60 || endMin > 17 * 60) {
+      if (startObj.minutes < 8 * 60 || endObj.minutes > 17 * 60) {
         alert('Time must be between 8:00 AM and 5:00 PM.');
         return;
       }
+      // Pre-flight conflict scan using existing scheduled slots by day
+      const scheduledAppointments = await getScheduledAppointmentsByDate(singleDate);
+      const targetStart = toMinutes(startObj.iso);
+      const targetEnd = toMinutes(endObj.iso);
+      const conflicts = (scheduledAppointments || []).filter((existing: any) => {
+        const exStart = toMinutes(existing.startTime);
+        const exEnd = toMinutes(existing.endTime);
+        return rangesOverlap(targetStart, targetEnd, exStart, exEnd);
+      });
+
+      if (conflicts.length > 0) {
+        const summary = conflicts.map((c: any) => `${c.date} ${c.startTime}-${c.endTime} (${c.residentName || c.residentUsername || 'unknown'})`).join('\n');
+        const overwrite = window.confirm(`An existing schedule overlaps this timeslot:\n${summary}\n\nPress OK to overwrite (cancel conflicting slot(s)), or Cancel to abort.`);
+        if (!overwrite) {
+          setSingleLoading(false);
+          return;
+        }
+
+        // auto-cancel conflicting schedule(s) before saving
+        for (const conflict of conflicts) {
+          if (conflict.inquiryId) {
+            try {
+              await cancelAppointment(conflict.inquiryId, 'Replaced by staff calendar quick appointment');
+            } catch (cancelErr) {
+              console.warn('Failed to cancel existing conflicting inquiry', conflict.inquiryId, cancelErr);
+            }
+          }
+        }
+      }
+
       setSingleLoading(true);
       try {
         // Step 1: Create inquiry for appointment
         const appointmentDate = dayjs(singleDate).format('MMMM DD, YYYY');
         const payload = {
           subject: `Appointment Scheduled - ${appointmentDate}`,
-          message: `Appointment scheduled with barangay at ${singleLocation}. Time: ${singleStartTime} - ${singleEndTime}. Details: ${singleDescription}`,
+          message: `Appointment scheduled at ${singleLocation}. Time: ${singleStartTime} - ${singleEndTime}.`,
           username: singleResident.username,
           residentName: singleResident.fullName || singleResident.username,
           residentEmail: singleResident.email,
           residentPhone: singleResident.contactNumber,
-          type: 'SCHEDULE_APPOINTMENT',
+          type: 'QUICK_APPOINTMENT',
           status: 'scheduled',
+          // Quick appointment specific fields
           locationType: singleLocationType,
           location: singleLocation,
           description: singleDescription,
           urgency: singleUrgency,
+          // Recipients as arrays (for future multi-recipient support)
+          recipients: [singleResident.username],
+          recipientEmails: [singleResident.email],
+          // Quick appointment mode (single, multiple, mass)
+          quick_appointment_type: 'single',
         };
         console.log('[StaffCalendar] Creating inquiry with payload:', payload);
         const created = await contactAPI.submitInquiry(payload);
@@ -203,20 +268,25 @@ const StaffCalendar = () => {
         
         if (!created || !created._id) {
           alert('Failed to create appointment inquiry.');
+          setSingleLoading(false);
           return;
         }
 
         // Step 2: Schedule appointment (create AppointmentSlots)
         console.log('[StaffCalendar] Scheduling appointment with inquiry ID:', created._id);
-        const scheduledDates = [{ date: singleDate, startTime: singleStartTime, endTime: singleEndTime }];
+        const scheduledDates = [{ date: singleDate, startTime: startObj.iso, endTime: endObj.iso }];
+        console.log('[StaffCalendar] Scheduling payload:', scheduledDates);
         const scheduled = await contactAPI.scheduleInquiry(created._id, scheduledDates);
         console.log('[StaffCalendar] Appointment scheduled:', scheduled);
 
         alert('Appointment scheduled and resident will be notified by email.');
         setSingleModalVisible(false);
-      } catch (err) {
+      } catch (err: any) {
         console.error('[StaffCalendar] Error scheduling appointment:', err);
-        alert('Failed to schedule appointment. ' + (err instanceof Error ? err.message : ''));
+        if (err?.response?.data) {
+          console.error('[StaffCalendar] Error details', err.response.data);
+        }
+        alert('Failed to schedule appointment. ' + (err?.response?.data?.message || (err instanceof Error ? err.message : '')));
       } finally {
         setSingleLoading(false);
       }
@@ -349,7 +419,17 @@ const StaffCalendar = () => {
     if (!quickCreateUsername) return;
     setQuickCreateLoading(true);
     try {
-      const payload = { subject: quickCreateSubject, message: 'Created from calendar quick-schedule', type: 'SCHEDULE_APPOINTMENT', username: quickCreateUsername };
+      const payload = { 
+        subject: quickCreateSubject, 
+        message: 'Created from calendar quick-schedule', 
+        type: 'QUICK_APPOINTMENT', 
+        username: quickCreateUsername,
+        // Recipients as arrays
+        recipients: [quickCreateUsername],
+        recipientEmails: [],
+        // Quick appointment mode
+        quick_appointment_type: 'single',
+      };
       const created = await contactAPI.submitInquiry(payload);
       if (created && created._id) {
         // open editor for created inquiry

@@ -58,6 +58,14 @@ export interface IInquiry extends Document {
   canceledAt?: Date;
   staffNotes?: IStaffNote[];
   messages?: IStaffMessage[];
+  // Quick appointment fields
+  recipients?: string[]; // Array of usernames for multi-recipient appointments
+  recipientEmails?: string[]; // Array of emails for multi-recipient appointments
+  quick_appointment_type?: string; // 'single' | 'multiple' | 'mass'
+  locationType?: string; // 'on-site' | 'virtual' | 'hybrid'
+  location?: string; // Address or location details
+  description?: string; // Appointment description
+  urgency?: string; // 'normal' | 'high' | 'low'
   createdAt: Date;
   updatedAt: Date;
 }
@@ -180,6 +188,14 @@ const inquirySchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now },
     visibleToResident: { type: Boolean, default: true }
   }],
+  // Quick appointment fields
+  recipients: [{ type: String }], // Array of usernames for multi-recipient appointments
+  recipientEmails: [{ type: String }], // Array of emails for multi-recipient appointments
+  quick_appointment_type: { type: String }, // 'single' | 'multiple' | 'mass'
+  locationType: { type: String }, // 'on-site' | 'virtual' | 'hybrid'
+  location: { type: String }, // Address or location details
+  description: { type: String }, // Appointment description
+  urgency: { type: String }, // 'normal' | 'high' | 'low'
 }, {
   timestamps: true,
 });

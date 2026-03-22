@@ -109,7 +109,17 @@ function InquiryDetailsModal({ visible, inquiryId, onClose, onChanged }: Props) 
             <Descriptions.Item label="Contact">{renderContact(contactInfo)}</Descriptions.Item>
             <Descriptions.Item label="Submitted At">{data?.createdAt ? new Date(data.createdAt).toLocaleString() : '—'}</Descriptions.Item>
             <Descriptions.Item label="Message">{data?.message || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Requested Dates">{(data?.appointmentDates || []).length ? (data.appointmentDates.map((d: string) => <div key={d}>{d}</div>)) : 'None'}</Descriptions.Item>
+            {data?.type === 'QUICK_APPOINTMENT' && (
+              <>
+                <Descriptions.Item label="Location Type">{data?.locationType || '—'}</Descriptions.Item>
+                <Descriptions.Item label="Address/Location">{data?.location || '—'}</Descriptions.Item>
+                <Descriptions.Item label="Description">{data?.description || '—'}</Descriptions.Item>
+                <Descriptions.Item label="Urgency">{data?.urgency || '—'}</Descriptions.Item>
+              </>
+            )}
+            {data?.type !== 'QUICK_APPOINTMENT' && (
+              <Descriptions.Item label="Requested Dates">{(data?.appointmentDates || []).length ? (data.appointmentDates.map((d: string) => <div key={d}>{d}</div>)) : 'None'}</Descriptions.Item>
+            )}
             <Descriptions.Item label="Status">
               {data?.status ? <Tag color={data.status === 'scheduled' ? 'green' : data.status === 'canceled' ? 'red' : 'orange'}>{String(data.status)}</Tag> : '—'}
             </Descriptions.Item>
