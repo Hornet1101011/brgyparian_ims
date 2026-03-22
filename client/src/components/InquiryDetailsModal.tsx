@@ -111,6 +111,9 @@ function InquiryDetailsModal({ visible, inquiryId, onClose, onChanged }: Props) 
             <Descriptions.Item label="Message">{data?.message || '—'}</Descriptions.Item>
             {data?.type === 'QUICK_APPOINTMENT' && (
               <>
+                <Descriptions.Item label="Quick Appointment Type">{data?.quick_appointment_type || '—'}</Descriptions.Item>
+                <Descriptions.Item label="Recipients">{(data?.recipients && data.recipients.length) ? data.recipients.join(', ') : '—'}</Descriptions.Item>
+                <Descriptions.Item label="Recipient Emails">{(data?.recipientEmails && data.recipientEmails.length) ? data.recipientEmails.join(', ') : '—'}</Descriptions.Item>
                 <Descriptions.Item label="Location Type">{data?.locationType || '—'}</Descriptions.Item>
                 <Descriptions.Item label="Address/Location">{data?.location || '—'}</Descriptions.Item>
                 <Descriptions.Item label="Description">{data?.description || '—'}</Descriptions.Item>

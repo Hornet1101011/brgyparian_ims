@@ -244,20 +244,22 @@ const Dashboard: React.FC = () => {
         // Get all inquiries
         const allInquiries = Array.isArray(res) ? res : (res && res.data) ? res.data : [];
         
-        // Keep only inquiries that have scheduledDates or status 'scheduled'
+        // Keep only inquiries that have scheduledDates or status 'scheduled' (include quick appointments too)
         const list = allInquiries.filter((r: any) => (r.scheduledDates && r.scheduledDates.length) || (r.status === 'scheduled'));
         
         // Categorize by status - filter by SCHEDULE_APPOINTMENT type
+        const quickAppointmentTypes = ['SCHEDULE_APPOINTMENT', 'QUICK_APPOINTMENT'];
+
         const scheduledList = allInquiries.filter((r: any) => 
-          (r.type === 'SCHEDULE_APPOINTMENT') && 
+          quickAppointmentTypes.includes(r.type) && 
           ((r.status === 'scheduled' || (r.scheduledDates && r.scheduledDates.length)) && r.status !== 'resolved' && r.status !== 'canceled')
         );
         const pendingList = allInquiries.filter((r: any) => 
-          (r.type === 'SCHEDULE_APPOINTMENT') && 
+          quickAppointmentTypes.includes(r.type) && 
           r.status === 'pending'
         );
         const canceledList = allInquiries.filter((r: any) => 
-          (r.type === 'SCHEDULE_APPOINTMENT') && 
+          quickAppointmentTypes.includes(r.type) && 
           r.status === 'canceled'
         );
         

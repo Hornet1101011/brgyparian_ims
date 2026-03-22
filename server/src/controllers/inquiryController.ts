@@ -4,8 +4,37 @@ export const getMyInquiries = async (req: any, res: Response, next: NextFunction
     if (!user) {
       return res.status(401).json({ message: 'Unauthorized' });
     }
-    // Find inquiries by username and barangayID
-    const inquiries = await Inquiry.find({ username: user.username, barangayID: user.barangayID })
+    // Find inquiries by username/barangayID or recipient membership (quick appointments) for this resident
+    const conditions: any[] = [
+      { username: user.username },
+      { recipients: user.username },
+      { recipientEmails: user.email }
+    ];
+
+    if (user.fullName) {
+      const escapedFullName = String(user.fullName).replace(/[.*+?^${}()|[\\]\\]/g, '$\\$&');
+      conditions.push({ recipients: { $in: [new RegExp(`^${escapedFullName}$`, 'i')] } });
+      if (user.barangayID) {
+        const formatted = `${user.fullName}(${user.barangayID})`;
+        const escapedFormatted = formatted.replace(/[.*+?^${}()|[\\]\\]/g, '$\\$&');
+        conditions.push({ recipients: { $in: [new RegExp(`^${escapedFormatted}$`, 'i')] } });
+      }
+    }
+
+    if (user.email) {
+      const escapedEmail = String(user.email).replace(/[.*+?^${}()|[\\]\\]/g, '$\\$&');
+      conditions.push({ recipientEmails: { $in: [new RegExp(`^${escapedEmail}$`, 'i')] } });
+    }
+
+    if (user.barangayID) {
+      const escapedBarangayID = String(user.barangayID).replace(/[.*+?^${}()|[\\]\\]/g, '$\\$&');
+      conditions.push({ recipients: { $in: [new RegExp(`\\(${escapedBarangayID}\\)$`, 'i')] } });
+    }
+
+    const inquiries = await Inquiry.find({
+      barangayID: user.barangayID,
+      $or: conditions
+    })
       .sort({ createdAt: -1 }).lean();
     // Remove staffNotes for residents (this endpoint is for residents)
     const sanitized = (inquiries || []).map((iq: any) => {
@@ -144,18 +173,31 @@ export const createInquiry = async (req: any, res: Response, next: NextFunction)
       }
     }
 
-    // Normalize recipients into full names where possible (for quick appointment display consistency)
+    // Normalize recipients into fullName(barangayID) for quick-appointment display and lookup.
     let normalizedRecipients: string[] | undefined;
     if (recipients) {
       const recipientArray = Array.isArray(recipients) ? recipients : [recipients];
-      const userDocs = await User.find({ username: { $in: recipientArray } }).lean();
-      const nameMap = new Map<string, string>();
+      const strings = recipientArray.map((r: any) => String(r).trim()).filter(Boolean);
+      const userDocs = await User.find({
+        role: 'resident',
+        $or: [
+          { username: { $in: strings } },
+          { fullName: { $in: strings } }
+        ]
+      }).lean();
+      const recipientMap = new Map<string, string>();
       for (const u of userDocs) {
-        if (u.username) {
-          nameMap.set(u.username, u.fullName || u.username);
+        if (u.fullName && u.barangayID) {
+          const formatted = `${u.fullName}(${u.barangayID})`;
+          recipientMap.set(u.username || '', formatted);
+          recipientMap.set(u.fullName || '', formatted);
         }
       }
-      normalizedRecipients = recipientArray.map((r: string) => nameMap.get(r) || r);
+      normalizedRecipients = strings.map((r: string) => {
+        if (recipientMap.has(r)) return recipientMap.get(r)!;
+        // If value already uses parenthesis-style identifier, keep it.
+        return r;
+      });
     }
 
     // Last-ditch: try to find a resident by matching a name in the subject/message to a user record
