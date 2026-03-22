@@ -257,7 +257,7 @@ const StaffCalendar = () => {
           description: singleDescription,
           urgency: singleUrgency,
           // Recipients as arrays (for future multi-recipient support)
-          recipients: [singleResident.username],
+          recipients: [singleResident.fullName || singleResident.username],
           recipientEmails: [singleResident.email],
           // Quick appointment mode (single, multiple, mass)
           quick_appointment_type: 'single',
@@ -424,7 +424,7 @@ const StaffCalendar = () => {
         message: 'Created from calendar quick-schedule', 
         type: 'QUICK_APPOINTMENT', 
         username: quickCreateUsername,
-        // Recipients as arrays
+        // Recipients as arrays (use full name where available via server mapping)
         recipients: [quickCreateUsername],
         recipientEmails: [],
         // Quick appointment mode

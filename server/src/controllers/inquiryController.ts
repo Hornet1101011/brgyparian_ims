@@ -144,6 +144,20 @@ export const createInquiry = async (req: any, res: Response, next: NextFunction)
       }
     }
 
+    // Normalize recipients into full names where possible (for quick appointment display consistency)
+    let normalizedRecipients: string[] | undefined;
+    if (recipients) {
+      const recipientArray = Array.isArray(recipients) ? recipients : [recipients];
+      const userDocs = await User.find({ username: { $in: recipientArray } }).lean();
+      const nameMap = new Map<string, string>();
+      for (const u of userDocs) {
+        if (u.username) {
+          nameMap.set(u.username, u.fullName || u.username);
+        }
+      }
+      normalizedRecipients = recipientArray.map((r: string) => nameMap.get(r) || r);
+    }
+
     // Last-ditch: try to find a resident by matching a name in the subject/message to a user record
     if (!resolvedUsername && (subject || message)) {
       try {
@@ -217,7 +231,7 @@ export const createInquiry = async (req: any, res: Response, next: NextFunction)
       residentName,
       residentEmail,
       residentPhone,
-      recipients: Array.isArray(recipients) ? recipients : (recipients ? [recipients] : []),
+      recipients: normalizedRecipients || (Array.isArray(recipients) ? recipients : (recipients ? [recipients] : [])),
       recipientEmails: Array.isArray(recipientEmails) ? recipientEmails : (recipientEmails ? [recipientEmails] : []),
       quick_appointment_type: quick_appointment_type || undefined,
       locationType: locationType || undefined,
@@ -930,6 +944,9 @@ export const deleteInquiry = async (req: any, res: Response, next: NextFunction)
     const id = req.params.id;
     const inquiry = await Inquiry.findById(id);
     if (!inquiry) return res.status(404).json({ message: 'Inquiry not found' });
+
+    // remove corresponding appointment slot entries for this inquiry
+    await AppointmentSlot.deleteMany({ inquiryId: id });
 
     await Inquiry.deleteOne({ _id: id });
 
