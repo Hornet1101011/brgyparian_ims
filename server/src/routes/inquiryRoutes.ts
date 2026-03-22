@@ -18,6 +18,8 @@ import {
   addStaffNote,
   addMessage,
   closeInquiry,
+  deleteInquiry,
+  pingDeleteInquiry,
 } from '../controllers/inquiryController';
 import { Request, Response, NextFunction } from 'express';
 
