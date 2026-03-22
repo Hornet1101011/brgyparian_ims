@@ -4,31 +4,36 @@ export const getMyInquiries = async (req: any, res: Response, next: NextFunction
     if (!user) {
       return res.status(401).json({ message: 'Unauthorized' });
     }
-    // Find inquiries by username/barangayID or recipient membership (quick appointments) for this resident
-    const conditions: any[] = [
-      { username: user.username },
-      { recipients: user.username },
-      { recipientEmails: user.email }
-    ];
+    // Find inquiries by username or recipient membership (quick appointments) for this resident
+    const conditions: any[] = [];
+
+    if (user.username) {
+      conditions.push({ username: user.username });
+      conditions.push({ recipients: user.username });
+    }
 
     if (user.fullName) {
-      const escapedFullName = String(user.fullName).replace(/[.*+?^${}()|[\\]\\]/g, '$\\$&');
-      conditions.push({ recipients: { $in: [new RegExp(`^${escapedFullName}$`, 'i')] } });
+      conditions.push({ recipients: user.fullName });
       if (user.barangayID) {
         const formatted = `${user.fullName}(${user.barangayID})`;
-        const escapedFormatted = formatted.replace(/[.*+?^${}()|[\\]\\]/g, '$\\$&');
-        conditions.push({ recipients: { $in: [new RegExp(`^${escapedFormatted}$`, 'i')] } });
+        conditions.push({ recipients: formatted });
+      }
+      // also accept case-insensitive forms (e.g. pre-existing exact values or system variants)
+      const escapedFullName = String(user.fullName).replace(/[.*+?^${}()|[\\]\\]/g, '$\\$&');
+      conditions.push({ recipients: new RegExp(`^${escapedFullName}$`, 'i') });
+      if (user.barangayID) {
+        const escapedFormatted = String(`${user.fullName}(${user.barangayID})`).replace(/[.*+?^${}()|[\\]\\]/g, '$\\$&');
+        conditions.push({ recipients: new RegExp(`^${escapedFormatted}$`, 'i') });
+      }
+      if (user.barangayID) {
+        const escapedBarangayID = String(user.barangayID).replace(/[.*+?^${}()|[\\]\\]/g, '$\\$&');
+        conditions.push({ recipients: new RegExp(`\\(${escapedBarangayID}\\)$`, 'i') });
       }
     }
 
     if (user.email) {
-      const escapedEmail = String(user.email).replace(/[.*+?^${}()|[\\]\\]/g, '$\\$&');
-      conditions.push({ recipientEmails: { $in: [new RegExp(`^${escapedEmail}$`, 'i')] } });
-    }
-
-    if (user.barangayID) {
-      const escapedBarangayID = String(user.barangayID).replace(/[.*+?^${}()|[\\]\\]/g, '$\\$&');
-      conditions.push({ recipients: { $in: [new RegExp(`\\(${escapedBarangayID}\\)$`, 'i')] } });
+      conditions.push({ recipientEmails: user.email });
+      conditions.push({ recipientEmails: new RegExp(`^${String(user.email).replace(/[.*+?^${}()|[\\]\\]/g, '$\\$&')}$`, 'i') });
     }
 
     const inquiries = await Inquiry.find({

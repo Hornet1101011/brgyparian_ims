@@ -20,36 +20,36 @@ interface DocumentRequest {
   };
 }
 
-const Dashboard: React.FC = () => {
+const Dashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [residentImageSrc, setResidentImageSrc] = useState<string | null>(null);
-  const [, setCurrentTime] = useState<string>(() => new Date().toLocaleString());
-  const [documents, setDocuments] = useState<DocumentRequest[]>([]);
+  const [residentImageSrc, setResidentImageSrc] = useState(null as string | null);
+  const [, setCurrentTime] = useState(() => new Date().toLocaleString());
+  const [documents, setDocuments] = useState([] as DocumentRequest[]);
   const [, setLoading] = useState(true);
-  const [announcementsCount, setAnnouncementsCount] = useState<number>(0);
-  const [, setAnnouncementsLoading] = useState<boolean>(false);
-  const [announcementsLatestAt, setAnnouncementsLatestAt] = useState<string | null>(null);
-  const [hasUnreadAnnouncements, setHasUnreadAnnouncements] = useState<boolean>(false);
-  const [announcementsUnreadCount, setAnnouncementsUnreadCount] = useState<number>(0);
-  const [inquiriesLatestAt, setInquiriesLatestAt] = useState<string | null>(null);
-  const [hasUnreadInquiries, setHasUnreadInquiries] = useState<boolean>(false);
-  const [inquiriesCount, setInquiriesCount] = useState<number>(0);
-  const [inquiriesUnreadCount, setInquiriesUnreadCount] = useState<number>(0);
+  const [announcementsCount, setAnnouncementsCount] = useState(0);
+  const [, setAnnouncementsLoading] = useState(false);
+  const [announcementsLatestAt, setAnnouncementsLatestAt] = useState(null as string | null);
+  const [hasUnreadAnnouncements, setHasUnreadAnnouncements] = useState(false);
+  const [announcementsUnreadCount, setAnnouncementsUnreadCount] = useState(0);
+  const [inquiriesLatestAt, setInquiriesLatestAt] = useState(null as string | null);
+  const [hasUnreadInquiries, setHasUnreadInquiries] = useState(false);
+  const [inquiriesCount, setInquiriesCount] = useState(0);
+  const [inquiriesUnreadCount, setInquiriesUnreadCount] = useState(0);
   const [pendingModalVisible, setPendingModalVisible] = useState(false);
-  const [pendingRequestsList, setPendingRequestsList] = useState<any[]>([]);
+  const [pendingRequestsList, setPendingRequestsList] = useState([] as any[]);
   const [pendingLoading, setPendingLoading] = useState(false);
   const [approvedModalVisible, setApprovedModalVisible] = useState(false);
-  const [approvedRequestsList, setApprovedRequestsList] = useState<any[]>([]);
+  const [approvedRequestsList, setApprovedRequestsList] = useState([] as any[]);
   const [approvedLoading, setApprovedLoading] = useState(false);
-  const [pendingLatestAt, setPendingLatestAt] = useState<string | null>(null);
-  const [approvedLatestAt, setApprovedLatestAt] = useState<string | null>(null);
-  const [hasUnreadPending, setHasUnreadPending] = useState<boolean>(false);
-  const [hasUnreadApproved, setHasUnreadApproved] = useState<boolean>(false);
-  const [pendingUnreadCount, setPendingUnreadCount] = useState<number>(0);
-  const [approvedUnreadCount, setApprovedUnreadCount] = useState<number>(0);
+  const [pendingLatestAt, setPendingLatestAt] = useState(null as string | null);
+  const [approvedLatestAt, setApprovedLatestAt] = useState(null as string | null);
+  const [hasUnreadPending, setHasUnreadPending] = useState(false);
+  const [hasUnreadApproved, setHasUnreadApproved] = useState(false);
+  const [pendingUnreadCount, setPendingUnreadCount] = useState(0);
+  const [approvedUnreadCount, setApprovedUnreadCount] = useState(0);
   const [tipsModalVisible, setTipsModalVisible] = useState(false);
-  const [hideTips, setHideTips] = useState<boolean>(() => {
+  const [hideTips, setHideTips] = useState(() => {
     try {
       return localStorage.getItem('residentTips.hide') === 'true';
     } catch (err) {
@@ -58,18 +58,18 @@ const Dashboard: React.FC = () => {
   });
   const [helpHover, setHelpHover] = useState(false);
   // Resident appointments
-  const [appointments, setAppointments] = useState<any[]>([]);
+  const [appointments, setAppointments] = useState([] as any[]);
   const [appointmentsLoading, setAppointmentsLoading] = useState(false);
   const [apptModalVisible, setApptModalVisible] = useState(false);
-  const [selectedAppt, setSelectedAppt] = useState<any | null>(null);
-  const [appointmentsSortBy, setAppointmentsSortBy] = useState<'latest' | 'upcoming'>('upcoming');
-  const [appointmentsScheduledCount, setAppointmentsScheduledCount] = useState<number>(0);
-  const [appointmentsPendingCount, setAppointmentsPendingCount] = useState<number>(0);
-  const [appointmentsCanceledCount, setAppointmentsCanceledCount] = useState<number>(0);
+  const [selectedAppt, setSelectedAppt] = useState(null as any | null);
+  const [appointmentsSortBy, setAppointmentsSortBy] = useState('upcoming' as 'latest' | 'upcoming');
+  const [appointmentsScheduledCount, setAppointmentsScheduledCount] = useState(0);
+  const [appointmentsPendingCount, setAppointmentsPendingCount] = useState(0);
+  const [appointmentsCanceledCount, setAppointmentsCanceledCount] = useState(0);
   const [appointmentsCategoryModalVisible, setAppointmentsCategoryModalVisible] = useState(false);
-  const [appointmentsScheduled, setAppointmentsScheduled] = useState<any[]>([]);
-  const [appointmentsPending, setAppointmentsPending] = useState<any[]>([]);
-  const [appointmentsCanceled, setAppointmentsCanceled] = useState<any[]>([]);
+  const [appointmentsScheduled, setAppointmentsScheduled] = useState([] as any[]);
+  const [appointmentsPending, setAppointmentsPending] = useState([] as any[]);
+  const [appointmentsCanceled, setAppointmentsCanceled] = useState([] as any[]);
 
   const formatDate = (val?: any) => {
     if (!val) return '';
@@ -177,7 +177,7 @@ const Dashboard: React.FC = () => {
         // If no resident image, try the user profile endpoint via axios instance
         try {
           const api = await import('../services/api');
-          const r2 = await api.default.get('/resident/profile');
+          const r2 = await api.axiosInstance.get('/resident/profile');
           const data2 = r2.data;
           if (data2?.profileImage) {
             const url2 = data2.profileImage.startsWith('http') ? data2.profileImage : getAbsoluteApiUrl(data2.profileImage);
@@ -299,7 +299,7 @@ const Dashboard: React.FC = () => {
   }, [user]);
 
   // Resident verification status: check backend for pending verification requests
-  const [hasPendingVerification, setHasPendingVerification] = useState<boolean>(false);
+  const [hasPendingVerification, setHasPendingVerification] = useState(false);
   useEffect(() => {
     let mounted = true;
     (async () => {
