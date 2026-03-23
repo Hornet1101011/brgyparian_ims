@@ -244,24 +244,27 @@ const Dashboard = () => {
         // Get all inquiries
         const allInquiries = Array.isArray(res) ? res : (res && res.data) ? res.data : [];
         
-        // Keep only inquiries that have scheduledDates or status 'scheduled' (include quick appointments too)
-        const list = allInquiries.filter((r: any) => (r.scheduledDates && r.scheduledDates.length) || (r.status === 'scheduled'));
-        
-        // Categorize by status - filter by SCHEDULE_APPOINTMENT type
-        const quickAppointmentTypes = ['SCHEDULE_APPOINTMENT', 'QUICK_APPOINTMENT'];
+        // Keep quick appointments (by type) for resident view; includes open/pending/scheduled/canceled.
+        const quickAppointmentTypes = ['SCHEDULE_APPOINTMENT', 'QUICK_APPOINTMENT', 'APPOINTMENT', 'SCHEDULED_APPOINTMENT'];
+        const list = allInquiries.filter((r: any) => {
+          const type = String(r?.type || '').toUpperCase();
+          return quickAppointmentTypes.includes(type);
+        });
 
-        const scheduledList = allInquiries.filter((r: any) => 
-          quickAppointmentTypes.includes(r.type) && 
-          ((r.status === 'scheduled' || (r.scheduledDates && r.scheduledDates.length)) && r.status !== 'resolved' && r.status !== 'canceled')
-        );
-        const pendingList = allInquiries.filter((r: any) => 
-          quickAppointmentTypes.includes(r.type) && 
-          r.status === 'pending'
-        );
-        const canceledList = allInquiries.filter((r: any) => 
-          quickAppointmentTypes.includes(r.type) && 
-          r.status === 'canceled'
-        );
+        const scheduledList = allInquiries.filter((r: any) => {
+          const type = String(r?.type || '').toUpperCase();
+          const status = String(r?.status || '').toLowerCase();
+          return quickAppointmentTypes.includes(type) && 
+          ((status === 'scheduled' || (r.scheduledDates && r.scheduledDates.length)) && status !== 'resolved' && status !== 'canceled')
+        });
+        const pendingList = allInquiries.filter((r: any) => {
+          const type = String(r?.type || '').toUpperCase();
+          return quickAppointmentTypes.includes(type) && (String(r?.status || '').toLowerCase() === 'pending');
+        });
+        const canceledList = allInquiries.filter((r: any) => {
+          const type = String(r?.type || '').toUpperCase();
+          return quickAppointmentTypes.includes(type) && (String(r?.status || '').toLowerCase() === 'canceled');
+        });
         
         setAppointmentsScheduledCount(scheduledList.length);
         setAppointmentsPendingCount(pendingList.length);

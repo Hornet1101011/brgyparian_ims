@@ -4,43 +4,57 @@ export const getMyInquiries = async (req: any, res: Response, next: NextFunction
     if (!user) {
       return res.status(401).json({ message: 'Unauthorized' });
     }
-    // Find inquiries by username or recipient membership (quick appointments) for this resident
-    const conditions: any[] = [];
 
-    if (user.username) {
-      conditions.push({ username: user.username });
-      conditions.push({ recipients: user.username });
+    const recipientCandidates: any[] = [];
+    const sanitizedId = String(user.username || '').trim();
+    const email = String(user.email || '').trim();
+    const fullName = String(user.fullName || '').trim();
+    const barangayID = String(user.barangayID || '').trim();
+
+    if (sanitizedId) {
+      recipientCandidates.push({ username: sanitizedId });
+      recipientCandidates.push({ recipients: sanitizedId });
     }
 
-    if (user.fullName) {
-      conditions.push({ recipients: user.fullName });
-      if (user.barangayID) {
-        const formatted = `${user.fullName}(${user.barangayID})`;
-        conditions.push({ recipients: formatted });
-      }
-      // also accept case-insensitive forms (e.g. pre-existing exact values or system variants)
-      const escapedFullName = String(user.fullName).replace(/[.*+?^${}()|[\\]\\]/g, '$\\$&');
-      conditions.push({ recipients: new RegExp(`^${escapedFullName}$`, 'i') });
-      if (user.barangayID) {
-        const escapedFormatted = String(`${user.fullName}(${user.barangayID})`).replace(/[.*+?^${}()|[\\]\\]/g, '$\\$&');
-        conditions.push({ recipients: new RegExp(`^${escapedFormatted}$`, 'i') });
-      }
-      if (user.barangayID) {
-        const escapedBarangayID = String(user.barangayID).replace(/[.*+?^${}()|[\\]\\]/g, '$\\$&');
-        conditions.push({ recipients: new RegExp(`\\(${escapedBarangayID}\\)$`, 'i') });
-      }
+    if (email) {
+      recipientCandidates.push({ recipientEmails: email });
+      recipientCandidates.push({ recipientEmails: new RegExp(`^${email.replace(/[.*+?^${}()|[\\]\\]/g, '$\\$&')}$`, 'i') });
     }
 
-    if (user.email) {
-      conditions.push({ recipientEmails: user.email });
-      conditions.push({ recipientEmails: new RegExp(`^${String(user.email).replace(/[.*+?^${}()|[\\]\\]/g, '$\\$&')}$`, 'i') });
+    if (fullName) {
+      recipientCandidates.push({ recipients: fullName });
+      recipientCandidates.push({ recipients: new RegExp(`^${fullName.replace(/[.*+?^${}()|[\\]\\]/g, '$\\$&')}$`, 'i') });
     }
+
+    if (fullName && barangayID) {
+      const formattedFn = `${fullName}(${barangayID})`;
+      const formattedFnWithSpace = `${fullName} (${barangayID})`;
+
+      recipientCandidates.push({ recipients: formattedFn });
+      recipientCandidates.push({ recipients: formattedFnWithSpace });
+      recipientCandidates.push({ recipients: new RegExp(`^${formattedFn.replace(/[.*+?^${}()|[\\]\\]/g, '$\\$&')}$`, 'i') });
+      recipientCandidates.push({ recipients: new RegExp(`^(?:${formattedFnWithSpace.replace(/[.*+?^${}()|[\\]\\]/g, '$\\$&')})$`, 'i') });
+      recipientCandidates.push({ recipients: new RegExp(`\\(${barangayID.replace(/[.*+?^${}()|[\\]\\]/g, '$\\$&')}\\)$`, 'i') });
+    }
+
+    const queryOr = [
+      ...recipientCandidates,
+      { barangayID: barangayID, username: sanitizedId },
+      { barangayID: barangayID, recipients: sanitizedId },
+    ].filter(Boolean);
+
+    console.info('[getMyInquiries] resident lookup', {
+      user: { username: sanitizedId, email, fullName, barangayID },
+      conditions: queryOr
+    });
 
     const inquiries = await Inquiry.find({
-      barangayID: user.barangayID,
-      $or: conditions
+      $or: queryOr
     })
       .sort({ createdAt: -1 }).lean();
+
+    console.info('[getMyInquiries] found inquiries count:', (inquiries || []).length);
+
     // Remove staffNotes for residents (this endpoint is for residents)
     const sanitized = (inquiries || []).map((iq: any) => {
       if (iq && iq.staffNotes) delete iq.staffNotes;
@@ -191,18 +205,41 @@ export const createInquiry = async (req: any, res: Response, next: NextFunction)
         ]
       }).lean();
       const recipientMap = new Map<string, string>();
+      const recipientByName = new Map<string, { username?: string; fullName?: string; formatted?: string }>();
       for (const u of userDocs) {
-        if (u.fullName && u.barangayID) {
-          const formatted = `${u.fullName}(${u.barangayID})`;
-          recipientMap.set(u.username || '', formatted);
-          recipientMap.set(u.fullName || '', formatted);
+        if (!u) continue;
+        const fullNameValue = (u.fullName || '').trim();
+        const usernameValue = (u.username || '').trim();
+        const barangayVal = (u.barangayID || '').trim();
+
+        if (fullNameValue && barangayVal) {
+          const formatted = `${fullNameValue}(${barangayVal})`;
+          recipientMap.set(usernameValue, formatted);
+          recipientMap.set(fullNameValue, formatted);
+          recipientByName.set(usernameValue, { username: usernameValue, fullName: fullNameValue, formatted });
+          recipientByName.set(fullNameValue, { username: usernameValue, fullName: fullNameValue, formatted });
+        } else {
+          if (usernameValue) recipientMap.set(usernameValue, usernameValue);
+          if (fullNameValue) recipientMap.set(fullNameValue, fullNameValue);
+          recipientByName.set(usernameValue, { username: usernameValue, fullName: fullNameValue });
+          recipientByName.set(fullNameValue, { username: usernameValue, fullName: fullNameValue });
         }
       }
-      normalizedRecipients = strings.map((r: string) => {
-        if (recipientMap.has(r)) return recipientMap.get(r)!;
-        // If value already uses parenthesis-style identifier, keep it.
-        return r;
-      });
+
+      const normalizedSet = new Set<string>();
+      for (const r of strings) {
+        const trimmed = String(r).trim();
+        const mapped = recipientMap.has(trimmed) ? recipientMap.get(trimmed)! : trimmed;
+        normalizedSet.add(mapped);
+
+        const details = recipientByName.get(trimmed);
+        if (details) {
+          if (details.username) normalizedSet.add(details.username);
+          if (details.fullName) normalizedSet.add(details.fullName);
+          if (details.formatted) normalizedSet.add(details.formatted);
+        }
+      }
+      normalizedRecipients = Array.from(normalizedSet).filter(Boolean);
     }
 
     // Last-ditch: try to find a resident by matching a name in the subject/message to a user record
