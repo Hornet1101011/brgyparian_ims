@@ -21,6 +21,7 @@ function InquiryDetailsModal({ visible, inquiryId, onClose, onChanged }: Props) 
   const [savingNote, setSavingNote] = useState(false);
   const [newMessage, setNewMessage] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
+  const [recipientPage, setRecipientPage] = useState(0);
 
   // Resident/contact info state
   const [residentInfo, setResidentInfo] = useState(null);
@@ -47,7 +48,10 @@ function InquiryDetailsModal({ visible, inquiryId, onClose, onChanged }: Props) 
         }
       }
     }
-    if (visible && data) fetchResidents();
+    if (visible && data) {
+      setRecipientPage(0);
+      fetchResidents();
+    }
     return () => { ignore = true; };
   }, [visible, data]);
 
@@ -69,6 +73,68 @@ function InquiryDetailsModal({ visible, inquiryId, onClose, onChanged }: Props) 
         {info.email && <div>Email: {info.email}</div>}
         {info.contactNumber && <div>Contact: {info.contactNumber}</div>}
         {!info.email && !info.contactNumber && <div>—</div>}
+      </div>
+    );
+  };
+
+  // Render recipients and emails with pagination (max 10 per page)
+  const renderRecipientsWithPagination = (recipients: any[], emails: any[]) => {
+    if (!recipients || !emails || recipients.length === 0) {
+      return <div>—</div>;
+    }
+
+    const ITEMS_PER_PAGE = 10;
+    const totalPages = Math.ceil(recipients.length / ITEMS_PER_PAGE);
+    const startIdx = recipientPage * ITEMS_PER_PAGE;
+    const endIdx = Math.min(startIdx + ITEMS_PER_PAGE, recipients.length);
+    const pageRecipients = recipients.slice(startIdx, endIdx);
+    const pageEmails = emails.slice(startIdx, endIdx);
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 16 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 500, marginBottom: 8 }}>Recipients</div>
+            <ol style={{ margin: 0, paddingLeft: 20 }}>
+              {pageRecipients.map((recipient, idx) => (
+                <li key={startIdx + idx} style={{ marginBottom: 4 }}>
+                  {recipient}
+                </li>
+              ))}
+            </ol>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 500, marginBottom: 8 }}>Emails</div>
+            <ol style={{ margin: 0, paddingLeft: 20 }}>
+              {pageEmails.map((email, idx) => (
+                <li key={startIdx + idx} style={{ marginBottom: 4 }}>
+                  {email}
+                </li>
+              ))}
+            </ol>
+          </div>
+        </div>
+        {totalPages > 1 && (
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 8 }}>
+            <Button 
+              size="small" 
+              disabled={recipientPage === 0} 
+              onClick={() => setRecipientPage(Math.max(0, recipientPage - 1))}
+            >
+              Previous
+            </Button>
+            <span style={{ alignSelf: 'center', fontSize: 12 }}>
+              Page {recipientPage + 1} of {totalPages}
+            </span>
+            <Button 
+              size="small" 
+              disabled={recipientPage === totalPages - 1} 
+              onClick={() => setRecipientPage(Math.min(totalPages - 1, recipientPage + 1))}
+            >
+              Next
+            </Button>
+          </div>
+        )}
       </div>
     );
   };
@@ -112,8 +178,7 @@ function InquiryDetailsModal({ visible, inquiryId, onClose, onChanged }: Props) 
             {data?.type === 'QUICK_APPOINTMENT' && (
               <>
                 <Descriptions.Item label="Quick Appointment Type">{data?.quick_appointment_type || '—'}</Descriptions.Item>
-                <Descriptions.Item label="Recipients">{(data?.recipients && data.recipients.length) ? data.recipients.join(', ') : '—'}</Descriptions.Item>
-                <Descriptions.Item label="Recipient Emails">{(data?.recipientEmails && data.recipientEmails.length) ? data.recipientEmails.join(', ') : '—'}</Descriptions.Item>
+                <Descriptions.Item label="Recipients & Emails">{renderRecipientsWithPagination(data?.recipients || [], data?.recipientEmails || [])}</Descriptions.Item>
                 <Descriptions.Item label="Location Type">{data?.locationType || '—'}</Descriptions.Item>
                 <Descriptions.Item label="Address/Location">{data?.location || '—'}</Descriptions.Item>
                 <Descriptions.Item label="Description">{data?.description || '—'}</Descriptions.Item>

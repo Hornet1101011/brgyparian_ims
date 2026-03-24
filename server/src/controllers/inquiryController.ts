@@ -216,6 +216,7 @@ export const createInquiry = async (req: any, res: Response, next: NextFunction)
           const formatted = `${fullNameValue}(${barangayVal})`;
           recipientMap.set(usernameValue, formatted);
           recipientMap.set(fullNameValue, formatted);
+          recipientMap.set(formatted, formatted); // Also map the formatted version to itself
           recipientByName.set(usernameValue, { username: usernameValue, fullName: fullNameValue, formatted });
           recipientByName.set(fullNameValue, { username: usernameValue, fullName: fullNameValue, formatted });
         } else {
@@ -230,14 +231,8 @@ export const createInquiry = async (req: any, res: Response, next: NextFunction)
       for (const r of strings) {
         const trimmed = String(r).trim();
         const mapped = recipientMap.has(trimmed) ? recipientMap.get(trimmed)! : trimmed;
+        // Only add the mapped (formatted or as-is) version, don't expand to username/fullName
         normalizedSet.add(mapped);
-
-        const details = recipientByName.get(trimmed);
-        if (details) {
-          if (details.username) normalizedSet.add(details.username);
-          if (details.fullName) normalizedSet.add(details.fullName);
-          if (details.formatted) normalizedSet.add(details.formatted);
-        }
       }
       normalizedRecipients = Array.from(normalizedSet).filter(Boolean);
     }

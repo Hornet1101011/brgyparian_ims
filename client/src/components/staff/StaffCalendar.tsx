@@ -118,6 +118,18 @@ const StaffCalendar = () => {
   const [quickInquiries, setQuickInquiries] = useState([]);
   const [quickSelected, setQuickSelected] = useState([]);
   const [quickCreateVisible, setQuickCreateVisible] = useState(false);
+  // Multiple appointment modal state
+  const [multipleModalVisible, setMultipleModalVisible] = useState(false);
+  const [multipleResidents, setMultipleResidents] = useState([]);
+  const [multipleStartTime, setMultipleStartTime] = useState('08:00 AM');
+  const [multipleEndTime, setMultipleEndTime] = useState('09:00 AM');
+  const [multipleLocationType, setMultipleLocationType] = useState('on-site');
+  const [multipleLocation, setMultipleLocation] = useState('');
+  const [multipleDescription, setMultipleDescription] = useState('');
+  const [multipleUrgency, setMultipleUrgency] = useState('normal');
+  const [multipleDate, setMultipleDate] = useState('');
+  const [multipleLoading, setMultipleLoading] = useState(false);
+  const [multipleResidentSearch, setMultipleResidentSearch] = useState('');
     // Single appointment modal state
   const [singleModalVisible, setSingleModalVisible] = useState(false);
   const [singleResident, setSingleResident] = useState(null);
@@ -143,10 +155,164 @@ const StaffCalendar = () => {
       setResidentOptions(residents);
     } catch (err) {
       console.error('Failed to fetch residents:', err);
-      // Fallback to empty list on error
       setResidentOptions([]);
     }
   };
+
+  // Open multiple appointment modal (move to top-level)
+  const openMultipleAppointment = (dateStr: string) => {
+    setMultipleDate(dateStr);
+    setMultipleModalVisible(true);
+    fetchResidents();
+  };
+
+  // Validate and save multiple appointments
+  const saveMultipleAppointments = async () => {
+        if (!multipleDate || !multipleResidents.length || !multipleStartTime || !multipleEndTime || !multipleLocation || !multipleDescription) {
+          alert('Please fill all required fields including appointment date and at least one resident.');
+          return;
+        }
+        // Reuse normalizeTime from single
+        const normalizeTime = (t: string) => {
+          if (!t || typeof t !== 'string') return null;
+          const raw = t.trim();
+          if (raw === '') return null;
+          const match = raw.match(/^\s*(\d{1,2}:\d{2}(?::\d{2})?)\s*([aApP][mM])?\s*$/);
+          if (!match) return null;
+          let hrMinSec = match[1];
+          const meridiem = match[2] ? match[2].toUpperCase() : undefined;
+          const parts = hrMinSec.split(':').map(Number);
+          if (parts.length < 2) return null;
+          let [hour, minute] = parts;
+          if (Number.isNaN(hour) || Number.isNaN(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+          if (meridiem) {
+            if (meridiem === 'PM' && hour < 12) hour += 12;
+            if (meridiem === 'AM' && hour === 12) hour = 0;
+          }
+          hour = ((hour % 24) + 24) % 24;
+          return {
+            minutes: hour * 60 + minute,
+            iso: `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+          };
+        };
+        const startObj = normalizeTime(multipleStartTime);
+        const endObj = normalizeTime(multipleEndTime);
+        if (!startObj || !endObj) {
+          alert('Please supply valid start and end time values (e.g. 08:00 AM).');
+          return;
+        }
+        if (endObj.minutes <= startObj.minutes) {
+          alert('End time must be after start time.');
+          return;
+        }
+        if (startObj.minutes < 8 * 60 || endObj.minutes > 17 * 60) {
+          alert('Time must be between 8:00 AM and 5:00 PM.');
+          return;
+        }
+        // Pre-flight conflict scan for each resident
+        setMultipleLoading(true);
+        try {
+          // Check for conflicts for all residents
+          const conflictMap = new Map();
+          for (const resident of multipleResidents) {
+            const scheduledAppointments = await getScheduledAppointmentsByDate(multipleDate);
+            const targetStart = toMinutes(startObj.iso);
+            const targetEnd = toMinutes(endObj.iso);
+            const conflicts = (scheduledAppointments || []).filter((existing: any) => {
+              if (existing.username !== resident.username) return false;
+              const exStart = toMinutes(existing.startTime);
+              const exEnd = toMinutes(existing.endTime);
+              return rangesOverlap(targetStart, targetEnd, exStart, exEnd);
+            });
+            if (conflicts.length > 0) {
+              conflictMap.set(resident.username, conflicts);
+            }
+          }
+
+          // Show conflicts if any and ask for confirmation
+          if (conflictMap.size > 0) {
+            const conflictDetails = Array.from(conflictMap.entries())
+              .map(([username, conflicts]) => {
+                const summary = conflicts.map((c: any) => `${c.date} ${c.startTime}-${c.endTime}`).join(', ');
+                return `${username}: ${summary}`;
+              })
+              .join('\n');
+            const overwrite = window.confirm(`Conflicts found for these residents:\n${conflictDetails}\n\nPress OK to overwrite (cancel conflicting slot(s)), or Cancel to abort.`);
+            if (!overwrite) {
+              setMultipleLoading(false);
+              return;
+            }
+
+            // Cancel all conflicting appointments
+            const conflictsList = Array.from(conflictMap.values());
+            for (const conflicts of conflictsList) {
+              for (const conflict of conflicts) {
+                if (conflict.inquiryId) {
+                  try {
+                    await cancelAppointment(conflict.inquiryId, 'Replaced by staff calendar quick appointment (multiple)');
+                  } catch (cancelErr) {
+                    console.warn('Failed to cancel existing conflicting inquiry', conflict.inquiryId, cancelErr);
+                  }
+                }
+              }
+            }
+          }
+
+          // Step 1: Create single inquiry with all residents as recipients
+          const appointmentDate = dayjs(multipleDate).format('MMMM DD, YYYY');
+          const recipientsList = multipleResidents.map(r => (r.fullName || r.username) + (r.barangayId ? `(${r.barangayId})` : '')).filter(Boolean);
+          const recipientEmailsList = multipleResidents.map(r => r.email);
+          const payload = {
+            subject: `Appointment Scheduled - ${appointmentDate}`,
+            message: `Appointment scheduled at ${multipleLocation}. Time: ${multipleStartTime} - ${multipleEndTime}.`,
+            username: multipleResidents[0].username, // For API validation/inquiry ownership only
+            type: 'QUICK_APPOINTMENT',
+            status: 'scheduled',
+            locationType: multipleLocationType,
+            location: multipleLocation,
+            description: multipleDescription,
+            urgency: multipleUrgency,
+            recipients: recipientsList,
+            recipientEmails: recipientEmailsList,
+            quick_appointment_type: 'multiple',
+          };
+          console.log('[StaffCalendar] Creating group inquiry with payload:', payload);
+          const created = await contactAPI.submitInquiry(payload);
+          console.log('[StaffCalendar] Inquiry created:', created);
+          
+          if (!created || !created._id) {
+            alert('Failed to create appointment inquiry.');
+            setMultipleLoading(false);
+            return;
+          }
+
+          // Step 2: Schedule appointment for each resident (create AppointmentSlots)
+          for (const resident of multipleResidents) {
+            console.log('[StaffCalendar] Scheduling appointment for resident:', resident.username);
+            const scheduledDates = [{ date: multipleDate, startTime: startObj.iso, endTime: endObj.iso }];
+            await contactAPI.scheduleInquiry(created._id, scheduledDates);
+          }
+
+          alert('Group appointment scheduled for all residents. Notifications will be sent to all email addresses.');
+          setMultipleModalVisible(false);
+          // Reset form
+          setMultipleResidents([]);
+          setMultipleDate('');
+          setMultipleStartTime('08:00 AM');
+          setMultipleEndTime('09:00 AM');
+          setMultipleLocationType('on-site');
+          setMultipleLocation('');
+          setMultipleDescription('');
+          setMultipleUrgency('normal');
+          setMultipleResidentSearch('');
+        } catch (err: any) {
+          console.error('[StaffCalendar] Error scheduling multiple appointments:', err);
+          alert('Failed to schedule one or more appointments. ' + (err?.response?.data?.message || (err instanceof Error ? err.message : '')));
+        } finally {
+          setMultipleLoading(false);
+        }
+      };
+
 
     // Open single appointment modal
     const openSingleAppointment = (dateStr: string) => {
@@ -257,7 +423,7 @@ const StaffCalendar = () => {
           description: singleDescription,
           urgency: singleUrgency,
           // Recipients as arrays (for future multi-recipient support)
-          recipients: [singleResident.fullName || singleResident.username],
+          recipients: [(singleResident.fullName || singleResident.username) + (singleResident.barangayId ? `(${singleResident.barangayId})` : '')],
           recipientEmails: [singleResident.email],
           // Quick appointment mode (single, multiple, mass)
           quick_appointment_type: 'single',
@@ -530,7 +696,7 @@ const StaffCalendar = () => {
         {/* Quick Schedule Buttons */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
           <Button type="primary" onClick={() => openSingleAppointment(todayIso)}>Single Appointment</Button>
-          <Button onClick={() => alert('Multiple appointment scheduling coming soon!')}>Multiple Appointments</Button>
+          <Button onClick={() => openMultipleAppointment(todayIso)}>Multiple Appointments</Button>
           <Button onClick={() => alert('Mass appointment scheduling coming soon!')}>Mass Appointments</Button>
         </div>
         {/* Weekday headers */}
@@ -847,6 +1013,184 @@ const StaffCalendar = () => {
           </Space>
         </div>
       </Modal>
+
+      {/* Multiple Appointment Modal */}
+      <Modal
+        open={multipleModalVisible}
+        onCancel={() => {
+          setMultipleModalVisible(false);
+          setMultipleResidents([]);
+          setMultipleDate('');
+          setMultipleStartTime('08:00 AM');
+          setMultipleEndTime('09:00 AM');
+          setMultipleLocationType('on-site');
+          setMultipleLocation('');
+          setMultipleDescription('');
+          setMultipleUrgency('normal');
+          setMultipleResidentSearch('');
+        }}
+        title={<span style={{ fontWeight: 700, fontSize: 18 }}>Schedule Multiple Appointments</span>}
+        footer={null}
+        width={520}
+        bodyStyle={{ padding: 32 }}
+      >
+        <div style={{ maxWidth: 440, margin: '0 auto' }}>
+          <Space direction="vertical" size={20} style={{ width: '100%' }}>
+            <div>
+              <label style={{ fontWeight: 600 }}>Appointment Date</label>
+              <br />
+              <DatePicker
+                value={multipleDate ? dayjs(multipleDate) : null}
+                onChange={(date) => setMultipleDate(date ? date.format('YYYY-MM-DD') : '')}
+                style={{ width: '100%', marginBottom: 12 }}
+                format="YYYY-MM-DD"
+                placeholder="Select appointment date"
+                disabledDate={(current) => {
+                  if (!current) return false;
+                  const day = current.day();
+                  const isPast = current.isBefore(dayjs(), 'day');
+                  return isPast || day === 0 || day === 6;
+                }}
+              />
+            </div>
+            <div>
+              <label style={{ fontWeight: 600 }}>Residents</label>
+              <br />
+              <Button
+                icon={<UserOutlined />}
+                style={{ width: '100%', textAlign: 'left', padding: 8, borderRadius: 6, border: '1px solid #d9d9d9', fontSize: 15, background: '#fff', height: 'auto', whiteSpace: 'normal' }}
+                onClick={() => setResidentSelectModal(true)}
+              >
+                <div style={{ textAlign: 'left' }}>
+                  <div>{multipleResidents.length ? `${multipleResidents.length} resident(s) selected` : 'Select residents'}</div>
+                </div>
+              </Button>
+              <Modal
+                open={residentSelectModal}
+                onCancel={() => setResidentSelectModal(false)}
+                onOk={() => setResidentSelectModal(false)}
+                okText="Confirm"
+                title="Select Residents"
+                width={400}
+              >
+                <Input
+                  placeholder="Search resident by name, username, or email..."
+                  value={multipleResidentSearch}
+                  onChange={e => setMultipleResidentSearch(e.target.value)}
+                  style={{ marginBottom: 12 }}
+                  allowClear
+                />
+                <List
+                  dataSource={residentOptions.filter(r =>
+                    r.fullName?.toLowerCase().includes(multipleResidentSearch.toLowerCase()) ||
+                    r.username?.toLowerCase().includes(multipleResidentSearch.toLowerCase()) ||
+                    r.email?.toLowerCase().includes(multipleResidentSearch.toLowerCase())
+                  )}
+                  renderItem={r => {
+                    const checked = multipleResidents.some((res: any) => res.username === r.username);
+                    return (
+                      <List.Item
+                        key={r.username}
+                        style={{ cursor: 'pointer', padding: '8px 0' }}
+                        onClick={() => {
+                          setMultipleResidents(sel => checked ? sel.filter((res: any) => res.username !== r.username) : [...sel, r]);
+                        }}
+                      >
+                        <input type="checkbox" checked={checked} readOnly style={{ marginRight: 8 }} />
+                        <span style={{ fontWeight: 500 }}>{r.fullName || r.username}</span>
+                        {r.email && (
+                          <div style={{ fontSize: 12, color: '#666', marginLeft: 12 }}>{r.email}</div>
+                        )}
+                      </List.Item>
+                    );
+                  }}
+                  locale={{ emptyText: 'No residents found' }}
+                  style={{ maxHeight: 300, overflowY: 'auto' }}
+                />
+              </Modal>
+            </div>
+            <Row gutter={12}>
+              <Col span={12}>
+                <label style={{ fontWeight: 600 }}>Start Time</label>
+                <Input
+                  type="time"
+                  value={multipleStartTime.replace(' AM','').replace(' PM','')}
+                  onChange={e => setMultipleStartTime(e.target.value + (parseInt(e.target.value.split(':')[0]) < 12 ? ' AM' : ' PM'))}
+                  min="08:00"
+                  max="17:00"
+                  step="1"
+                  style={{ width: '100%' }}
+                />
+              </Col>
+              <Col span={12}>
+                <label style={{ fontWeight: 600 }}>End Time</label>
+                <Input
+                  type="time"
+                  value={multipleEndTime.replace(' AM','').replace(' PM','')}
+                  onChange={e => setMultipleEndTime(e.target.value + (parseInt(e.target.value.split(':')[0]) < 12 ? ' AM' : ' PM'))}
+                  min="08:00"
+                  max="17:00"
+                  step="1"
+                  style={{ width: '100%' }}
+                />
+              </Col>
+            </Row>
+            <div>
+              <label style={{ fontWeight: 600 }}>Location Type</label>
+              <br />
+              <select
+                value={multipleLocationType}
+                onChange={e => setMultipleLocationType(e.target.value)}
+                style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #d9d9d9', fontSize: 15 }}
+              >
+                <option value="on-site">On-site</option>
+                <option value="online">Online</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ fontWeight: 600 }}>{multipleLocationType === 'online' ? 'Meeting Link' : 'Address'}</label>
+              <Input
+                value={multipleLocation}
+                onChange={e => setMultipleLocation(e.target.value)}
+                placeholder={multipleLocationType === 'online' ? 'Enter meeting link' : 'Enter address'}
+                style={{ width: '100%' }}
+              />
+            </div>
+            <div>
+              <label style={{ fontWeight: 600 }}>Description</label>
+              <Input.TextArea
+                value={multipleDescription}
+                onChange={e => setMultipleDescription(e.target.value)}
+                rows={3}
+                style={{ width: '100%' }}
+                placeholder="Enter appointment description"
+              />
+            </div>
+            <div>
+              <label style={{ fontWeight: 600 }}>Urgency</label>
+              <br />
+              <select
+                value={multipleUrgency}
+                onChange={e => setMultipleUrgency(e.target.value)}
+                style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #d9d9d9', fontSize: 15 }}
+              >
+                <option value="normal">Normal</option>
+                <option value="urgent">Urgent</option>
+                <option value="emergency">Emergency</option>
+              </select>
+            </div>
+            <Button
+              type="primary"
+              loading={multipleLoading}
+              onClick={saveMultipleAppointments}
+              style={{ width: '100%', height: 44, fontSize: 16, fontWeight: 600, borderRadius: 8 }}
+            >
+              Save Appointments
+            </Button>
+          </Space>
+        </div>
+      </Modal>
+
       <div style={{ 
         display: 'flex', 
         justifyContent: 'space-between', 

@@ -173,10 +173,10 @@ const AdminDashboard = () => {
 
   // Only show unread notifications in the dashboard
   const unreadNotifs = notificationsRes.filter((n: Notification) => !n.read);
-  setNotifications(unreadNotifs.slice(0, 10)); // show up to 10 unread notifications
+  setNotifications(unreadNotifs); // store all unread notifications
 
   // Define staff access notifications for pendingRequests calculation
-  // Only include explicit `staff_approval` notification types here
+  // Only include explicit `staff_approval` notification types here, and only unread
   const staffApprovalNotifs = unreadNotifs.filter((n: Notification) => (n.type || '').toString().toLowerCase() === 'staff_approval');
   setStaffAccessNotifs(staffApprovalNotifs);
 
@@ -409,7 +409,8 @@ const AdminDashboard = () => {
     },
     {
       label: 'Notifications',
-      value: stats.unreadMessages,
+      // Show the number of unread notification messages (not just staff approvals)
+      value: notifications.length,
       icon: '🔔',
       bg: 'linear-gradient(90deg, #722ed1 0%, #b37feb 100%)',
       color: '#722ed1',
@@ -509,49 +510,47 @@ const AdminDashboard = () => {
     >
   {/* Render a dedicated table for unread staff access approval requests */}
       {/* Show staff approval notifications (type === 'staff_approval') if present */}
-      {staffAccessNotifs && staffAccessNotifs.length > 0 && (
-        <div style={{ maxHeight: 360, overflowY: 'auto', paddingRight: 6, paddingBottom: 12 }}>
-          <Table
-            size="small"
-            pagination={{ pageSize: 100, hideOnSinglePage: true, position: ['bottomCenter'] }}
-            dataSource={staffAccessNotifs.filter((n: any) => n != null)}
-            rowKey={(r: any) => r?._id || String(r?.createdAt || '') || 'unknown'}
-            style={{ borderRadius: 8 }}
-            rowClassName={() => 'staff-access-row'}
-            columns={[
-              {
-                title: 'Name',
-                key: 'requestedBy',
-                render: (_: any, record: Notification) => {
-                  const d: any = record.data || {};
-                  const nameFromData = d.fullName || (d.userId && (d.userId.fullName || d.userId.username));
-                  const requestedByName = (record as any).requestedByName;
-                  const displayName = nameFromData || (requestedByName || record.message) || 'Unknown';
-                  return <span style={{ fontWeight: 700, color: '#1f2937', fontSize: 14, display: 'block', padding: '6px 0' }}>{displayName}</span>;
-                }
-              },
-              {
-                title: 'Requested At',
-                dataIndex: 'createdAt',
-                key: 'createdAt',
-                render: (val: any, record: Notification) => <span style={{ fontSize: 14, color: '#6b7280', display: 'block', padding: '6px 0' }}>{new Date(record.createdAt || val).toLocaleString()}</span>
-              },
-              {
-                title: 'Actions',
-                key: 'actions',
-                render: (_: any, record: Notification) => (
-                  <Space size="small">
-                    {!record.read && (
-                      <Button type="primary" size="small" onClick={() => handleApproveStaff(record)} icon={<CheckOutlined />} style={{ background: '#10b981', border: 'none', fontWeight: 600 }}>Approve</Button>
-                    )}
-                    <Button danger size="small" onClick={() => handleRejectStaff(record)} icon={<ExclamationCircleOutlined />} style={{ fontWeight: 600 }}>Reject</Button>
-                  </Space>
-                )
+      <div style={{ maxHeight: 360, overflowY: 'auto', paddingRight: 6, paddingBottom: 12 }}>
+        <Table
+          size="small"
+          pagination={{ pageSize: 100, hideOnSinglePage: true, position: ['bottomCenter'] }}
+          dataSource={staffAccessNotifs.filter((n: any) => n != null)}
+          rowKey={(r: any) => r?._id || String(r?.createdAt || '') || 'unknown'}
+          style={{ borderRadius: 8 }}
+          rowClassName={() => 'staff-access-row'}
+          columns={[
+            {
+              title: 'Name',
+              key: 'requestedBy',
+              render: (_: any, record: Notification) => {
+                const d: any = record.data || {};
+                const nameFromData = d.fullName || (d.userId && (d.userId.fullName || d.userId.username));
+                const requestedByName = (record as any).requestedByName;
+                const displayName = nameFromData || (requestedByName || record.message) || 'Unknown';
+                return <span style={{ fontWeight: 700, color: '#1f2937', fontSize: 14, display: 'block', padding: '6px 0' }}>{displayName}</span>;
               }
-            ]}
-          />
-        </div>
-      )}
+            },
+            {
+              title: 'Requested At',
+              dataIndex: 'createdAt',
+              key: 'createdAt',
+              render: (val: any, record: Notification) => <span style={{ fontSize: 14, color: '#6b7280', display: 'block', padding: '6px 0' }}>{new Date(record.createdAt || val).toLocaleString()}</span>
+            },
+            {
+              title: 'Actions',
+              key: 'actions',
+              render: (_: any, record: Notification) => (
+                <Space size="small">
+                  {!record.read && (
+                    <Button type="primary" size="small" onClick={() => handleApproveStaff(record)} icon={<CheckOutlined />} style={{ background: '#10b981', border: 'none', fontWeight: 600 }}>Approve</Button>
+                  )}
+                  <Button danger size="small" onClick={() => handleRejectStaff(record)} icon={<ExclamationCircleOutlined />} style={{ fontWeight: 600 }}>Reject</Button>
+                </Space>
+              )
+            }
+          ]}
+        />
+      </div>
 
       {/* Notifications removed from this container to avoid duplicate admin entries */}
   <Button type="link" style={{ position: 'absolute', right: 16, bottom: 8, fontSize: 13, color: '#1890ff' }} onClick={() => navigate('/admin/notifications')}>View all</Button>
@@ -699,7 +698,7 @@ const AdminDashboard = () => {
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     {files.map((f: any, i: number) => {
                       if (!f) return null;
-                      const userId = typeof record.userId === 'object' && record.userId ? record.userId._id : record.userId;
+                      const userId = (typeof record.userId === 'object' && record.userId ? record.userId._id : record.userId) as string;
                       const fileType = f.fileType || 'unknown';
                       const fileUrl = verificationAPI.getFileUrlByUserType(userId, fileType);
                       return (
@@ -744,7 +743,7 @@ const AdminDashboard = () => {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
               {((selectedVerif.filesMeta && selectedVerif.filesMeta.filter((f: any) => f != null).length) ? selectedVerif.filesMeta.filter((f: any) => f != null) : (selectedVerif.gridFileIds || []).filter((id: any) => id != null).map((id: string) => ({ filename: id, gridFileId: id }))).map((f: any, idx: number) => {
                 if (!f) return null;
-                const userId = typeof selectedVerif.userId === 'object' && selectedVerif.userId ? selectedVerif.userId._id : selectedVerif.userId;
+                const userId = (typeof selectedVerif.userId === 'object' && selectedVerif.userId ? selectedVerif.userId._id : selectedVerif.userId) as string;
                 const fileType = f.fileType || 'unknown';
                 const fileUrl = verificationAPI.getFileUrlByUserType(userId, fileType);
                 const label = fileType.charAt(0).toUpperCase() + fileType.slice(1);
