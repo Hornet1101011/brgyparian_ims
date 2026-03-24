@@ -392,11 +392,12 @@ const VerificationRequests = () => {
       key: 'files',
       width: 150,
       render: (_: any, record: any) => {
-        const files = (Array.isArray(record.filesMeta) && record.filesMeta.length)
-          ? record.filesMeta
-          : ((Array.isArray(record.gridFileIds) && record.gridFileIds.length)
-              ? record.gridFileIds.map((id: string) => ({ filename: id, gridFileId: id }))
-              : []);
+        if (!record) return null;
+        const filesMeta = Array.isArray(record.filesMeta) ? record.filesMeta.filter((f: any) => f != null) : [];
+        const gridFileIds = Array.isArray(record.gridFileIds) ? record.gridFileIds.filter((id: any) => id != null) : [];
+        const files = filesMeta.length > 0 
+          ? filesMeta
+          : gridFileIds.map((id: string) => ({ filename: id, gridFileId: id }));
         
         if (!files || files.length === 0) {
           return <span style={{ color: '#94a3b8' }}>-</span>;
@@ -625,10 +626,11 @@ const VerificationRequests = () => {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 20 }}>
-              {((selectedReq.filesMeta && selectedReq.filesMeta.length)
-                ? selectedReq.filesMeta
-                : (selectedReq.gridFileIds || []).map((id: string) => ({ filename: id, gridFileId: id }))
+              {((selectedReq.filesMeta && selectedReq.filesMeta.filter((f: any) => f != null).length)
+                ? selectedReq.filesMeta.filter((f: any) => f != null)
+                : (selectedReq.gridFileIds || []).filter((id: any) => id != null).map((id: string) => ({ filename: id, gridFileId: id }))
               ).map((f: any) => {
+                if (!f) return null;
                 const fileId = f.gridFileId || f.filename;
                 const filename = f.filename || 'file';
                 return (

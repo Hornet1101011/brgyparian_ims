@@ -691,12 +691,15 @@ const AdminDashboard = () => {
               title: 'Files',
               key: 'files',
               render: (_: any, record: VerificationRequest) => {
-                const files = Array.isArray(record.filesMeta) && record.filesMeta.length ? record.filesMeta
-                  : (Array.isArray(record.gridFileIds) ? record.gridFileIds.filter((id: any) => id != null).map((id: string) => ({ filename: id, gridFileId: id })) : []);
+                if (!record) return null;
+                const filesMeta = Array.isArray(record.filesMeta) ? record.filesMeta.filter((f: any) => f != null) : [];
+                const gridFileIds = Array.isArray(record.gridFileIds) ? record.gridFileIds.filter((id: any) => id != null) : [];
+                const files = filesMeta.length > 0 ? filesMeta : gridFileIds.map((id: string) => ({ filename: id, gridFileId: id }));
                 return (
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    {files.filter((f: any) => f != null).map((f: any, i: number) => {
-                      const userId = typeof record.userId === 'object' ? record.userId._id : record.userId;
+                    {files.map((f: any, i: number) => {
+                      if (!f) return null;
+                      const userId = typeof record.userId === 'object' && record.userId ? record.userId._id : record.userId;
                       const fileType = f.fileType || 'unknown';
                       const fileUrl = verificationAPI.getFileUrlByUserType(userId, fileType);
                       return (
@@ -739,8 +742,9 @@ const AdminDashboard = () => {
           <div>
             <p><strong>Resident:</strong> {(selectedVerif.userId && (selectedVerif.userId.fullName || selectedVerif.userId.username)) || 'Unknown'}</p>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-              {((selectedVerif.filesMeta && selectedVerif.filesMeta.length) ? selectedVerif.filesMeta : (selectedVerif.gridFileIds || []).filter((id: any) => id != null).map((id: string) => ({ filename: id, gridFileId: id }))).filter((f: any) => f != null).map((f: any, idx: number) => {
-                const userId = typeof selectedVerif.userId === 'object' ? selectedVerif.userId._id : selectedVerif.userId;
+              {((selectedVerif.filesMeta && selectedVerif.filesMeta.filter((f: any) => f != null).length) ? selectedVerif.filesMeta.filter((f: any) => f != null) : (selectedVerif.gridFileIds || []).filter((id: any) => id != null).map((id: string) => ({ filename: id, gridFileId: id }))).map((f: any, idx: number) => {
+                if (!f) return null;
+                const userId = typeof selectedVerif.userId === 'object' && selectedVerif.userId ? selectedVerif.userId._id : selectedVerif.userId;
                 const fileType = f.fileType || 'unknown';
                 const fileUrl = verificationAPI.getFileUrlByUserType(userId, fileType);
                 const label = fileType.charAt(0).toUpperCase() + fileType.slice(1);
