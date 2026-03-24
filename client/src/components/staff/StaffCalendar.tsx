@@ -1434,17 +1434,19 @@ const StaffCalendar = () => {
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <Avatar icon={<UserOutlined />} />
                             <div>
-                              <div style={{ fontWeight: 600 }}>{s.title || s.subject || s.residentName || s.residentUsername || 'Appointment'}</div>
+                              <div style={{ fontWeight: 600 }}>
+                                {s.title || s.subject || s.residentName || s.residentUsername || 'Untitled Appointment'}
+                              </div>
+                              {s.location && (
+                                <div style={{ fontSize: 12, color: '#666' }}>
+                                  Location: {s.location}
+                                </div>
+                              )}
                               <div style={{ fontSize: 12, color: '#666' }}>
-                                {s.title ? `Title: ${s.title}` : s.subject ? `Subject: ${s.subject}` : s.residentName ? `Resident: ${s.residentName}` : s.residentUsername ? `Resident: ${s.residentUsername}` : 'Scheduled appointment'}
+                                {s.description || s.message || (s.subject ? `Subject: ${s.subject}` : 'No description')}
                               </div>
                             </div>
                           </div>
-                          {s.subject && (
-                            <div style={{ fontSize: 13, color: '#666', fontStyle: 'italic' }}>
-                              "{s.subject}"
-                            </div>
-                          )}
                           {s.staffName && (
                             <div style={{ fontSize: 12, color: '#999' }}>
                               Assigned by: <strong>{s.staffName}</strong>
