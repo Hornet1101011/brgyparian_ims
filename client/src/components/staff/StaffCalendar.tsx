@@ -1434,16 +1434,16 @@ const StaffCalendar = () => {
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <Avatar icon={<UserOutlined />} />
                             <div>
-                              <div style={{ fontWeight: 600 }}>
+                              <div style={{ fontWeight: 600, fontSize: 14 }}>
                                 {s.title || s.subject || s.residentName || s.residentUsername || 'Untitled Appointment'}
                               </div>
-                              {s.location && (
-                                <div style={{ fontSize: 12, color: '#666' }}>
-                                  Location: {s.location}
+                              {s.location ? (
+                                <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
+                                  {s.location}
                                 </div>
-                              )}
-                              <div style={{ fontSize: 12, color: '#666' }}>
-                                {s.description || s.message || (s.subject ? `Subject: ${s.subject}` : 'No description')}
+                              ) : null}
+                              <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
+                                {s.description || (s.subject ? s.subject : 'No description')}
                               </div>
                             </div>
                           </div>

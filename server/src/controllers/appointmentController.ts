@@ -83,7 +83,7 @@ export const getSlotsInRange = async (req: Request, res: Response) => {
     const inquiryIds = Array.from(new Set((slots || []).map((slt: any) => String(slt.inquiryId)).filter(Boolean)));
     let inquiryMap: Record<string, any> = {};
     if (inquiryIds.length > 0) {
-      const inquiries = await Inquiry.find({ _id: { $in: inquiryIds } }).select('title subject').lean();
+      const inquiries = await Inquiry.find({ _id: { $in: inquiryIds } }).select('title subject location description').lean();
       inquiryMap = (inquiries || []).reduce((acc: any, inq: any) => {
         if (inq && inq._id) acc[String(inq._id)] = inq;
         return acc;
@@ -93,6 +93,8 @@ export const getSlotsInRange = async (req: Request, res: Response) => {
     const out = (slots || []).map((slt: any) => {
       const inquiry = slt.inquiryId ? inquiryMap[String(slt.inquiryId)] : null;
       const slotTitle = (inquiry?.title || inquiry?.subject || '').trim();
+      const slotLocation = inquiry?.location || slt.location || null;
+      const slotDescription = inquiry?.description || slt.description || slt.message || ''; 
       return {
         _id: slt._id,
         inquiryId: slt.inquiryId,
@@ -104,7 +106,9 @@ export const getSlotsInRange = async (req: Request, res: Response) => {
         startTime: slt.startTime,
         endTime: slt.endTime,
         title: slotTitle || undefined,
-        subject: inquiry?.subject || undefined
+        subject: inquiry?.subject || undefined,
+        location: slotLocation || undefined,
+        description: slotDescription || undefined
       };
     }).filter((x: any) => x.date !== null);
     return res.json({ slots: out });
