@@ -1434,9 +1434,9 @@ const StaffCalendar = () => {
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <Avatar icon={<UserOutlined />} />
                             <div>
-                              <div style={{ fontWeight: 600 }}>{s.subject || s.title || s.residentName || s.residentUsername || 'Appointment'}</div>
+                              <div style={{ fontWeight: 600 }}>{s.title || s.subject || s.residentName || s.residentUsername || 'Appointment'}</div>
                               <div style={{ fontSize: 12, color: '#666' }}>
-                                {(s.title || s.subject) ? `Title: ${s.title || s.subject}` : s.residentName ? `Resident: ${s.residentName}` : s.residentUsername ? `Resident: ${s.residentUsername}` : 'Scheduled appointment'}
+                                {s.title ? `Title: ${s.title}` : s.subject ? `Subject: ${s.subject}` : s.residentName ? `Resident: ${s.residentName}` : s.residentUsername ? `Resident: ${s.residentUsername}` : 'Scheduled appointment'}
                               </div>
                             </div>
                           </div>

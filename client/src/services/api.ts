@@ -482,6 +482,8 @@ export const contactAPI = {
   // Staff-specific endpoints
   getAllInquiries: () =>
   axiosInstance.get('/inquiries').then(response => response.data),
+  updateInquiry: (id: string, data: any) =>
+    axiosInstance.patch(`/inquiries/${id}`, data).then(response => response.data),
   respondToInquiry: (id: string, data: { response: string }) =>
     axiosInstance.post(`/inquiries/${id}/responses`, data).then(response => response.data),
   // Mark an inquiry as resolved (admin/staff)

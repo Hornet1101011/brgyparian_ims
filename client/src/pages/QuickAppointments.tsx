@@ -258,7 +258,7 @@ const QuickAppointments = () => {
 
   const columns = useMemo(() => [
     { 
-      title: '👤 Resident Name', 
+      title: '👤 Organizer', 
       dataIndex: ['createdBy', 'fullName'], 
       key: 'resident', 
       render: (_: any, record: any) => (

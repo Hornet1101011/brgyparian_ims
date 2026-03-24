@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { AppointmentSlot } from '../models/AppointmentSlot';
+import { Inquiry } from '../models/Inquiry';
 import { toMinutes } from '../utils/scheduling';
 
 // Helper: build UTC midnight Date for a YYYY-MM-DD string
@@ -77,17 +78,35 @@ export const getSlotsInRange = async (req: Request, res: Response) => {
     if (!s || !e) return res.status(400).json({ message: 'Invalid date format; use YYYY-MM-DD' });
     // inclusive range: find slots with date >= s && date <= e
     const slots = await AppointmentSlot.find({ date: { $gte: s, $lte: e } }).lean();
-    const out = (slots || []).map((slt: any) => ({
-      _id: slt._id,
-      inquiryId: slt.inquiryId,
-      residentId: slt.residentId,
-      residentName: slt.residentName || slt.residentUsername || null,
-      staffId: slt.staffId || null,
-      staffName: slt.staffName || null,
-      date: slt.date ? (new Date(slt.date)).toISOString().slice(0,10) : null,
-      startTime: slt.startTime,
-      endTime: slt.endTime
-    })).filter((x: any) => x.date !== null);
+
+    // Resolve inquiry titles/subjects for each slot to show in calendar cards
+    const inquiryIds = Array.from(new Set((slots || []).map((slt: any) => String(slt.inquiryId)).filter(Boolean)));
+    let inquiryMap: Record<string, any> = {};
+    if (inquiryIds.length > 0) {
+      const inquiries = await Inquiry.find({ _id: { $in: inquiryIds } }).select('title subject').lean();
+      inquiryMap = (inquiries || []).reduce((acc: any, inq: any) => {
+        if (inq && inq._id) acc[String(inq._id)] = inq;
+        return acc;
+      }, {} as Record<string, any>);
+    }
+
+    const out = (slots || []).map((slt: any) => {
+      const inquiry = slt.inquiryId ? inquiryMap[String(slt.inquiryId)] : null;
+      const slotTitle = (inquiry?.title || inquiry?.subject || '').trim();
+      return {
+        _id: slt._id,
+        inquiryId: slt.inquiryId,
+        residentId: slt.residentId,
+        residentName: slt.residentName || slt.residentUsername || null,
+        staffId: slt.staffId || null,
+        staffName: slt.staffName || null,
+        date: slt.date ? (new Date(slt.date)).toISOString().slice(0,10) : null,
+        startTime: slt.startTime,
+        endTime: slt.endTime,
+        title: slotTitle || undefined,
+        subject: inquiry?.subject || undefined
+      };
+    }).filter((x: any) => x.date !== null);
     return res.json({ slots: out });
   } catch (error) {
     console.error('Error in getSlotsInRange:', error);
