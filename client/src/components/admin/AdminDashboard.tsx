@@ -279,7 +279,7 @@ const AdminDashboard = () => {
     setVerifsLoading(true);
     try {
       const res = await verificationAPI.getRequests();
-      setVerifs(Array.isArray(res) ? res : []);
+      setVerifs(Array.isArray(res) ? res.filter((item: any) => item != null) : []);
     } catch (err) {
       console.error('Failed to load verification requests', err);
       setVerifs([]);
@@ -514,8 +514,8 @@ const AdminDashboard = () => {
           <Table
             size="small"
             pagination={{ pageSize: 100, hideOnSinglePage: true, position: ['bottomCenter'] }}
-            dataSource={staffAccessNotifs}
-            rowKey={r => r._id || String(r.createdAt)}
+            dataSource={staffAccessNotifs.filter((n: any) => n != null)}
+            rowKey={(r: any) => r?._id || String(r?.createdAt || '') || 'unknown'}
             style={{ borderRadius: 8 }}
             rowClassName={() => 'staff-access-row'}
             columns={[
@@ -646,10 +646,9 @@ const AdminDashboard = () => {
         <Table
           size="small"
           pagination={{ pageSize: 6 }}
-          dataSource={verifs}
-          rowKey={(r: VerificationRequest) => r._id}
-          columns={[
-            {
+          dataSource={verifs.filter((v: any) => v != null)}
+          rowKey={(r: any) => r?._id || 'unknown'}
+          columns={[{
               title: 'Resident',
               key: 'resident',
               render: (_: any, record: VerificationRequest) => <span style={{ fontWeight: 700, color: '#1f2937', fontSize: 14 }}>{(record.userId && (record.userId.fullName || record.userId.username)) || 'Unknown Resident'}</span>
@@ -693,10 +692,10 @@ const AdminDashboard = () => {
               key: 'files',
               render: (_: any, record: VerificationRequest) => {
                 const files = Array.isArray(record.filesMeta) && record.filesMeta.length ? record.filesMeta
-                  : (Array.isArray(record.gridFileIds) ? record.gridFileIds.map((id: string) => ({ filename: id, gridFileId: id })) : []);
+                  : (Array.isArray(record.gridFileIds) ? record.gridFileIds.filter((id: any) => id != null).map((id: string) => ({ filename: id, gridFileId: id })) : []);
                 return (
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    {files.map((f: any, i: number) => {
+                    {files.filter((f: any) => f != null).map((f: any, i: number) => {
                       const userId = typeof record.userId === 'object' ? record.userId._id : record.userId;
                       const fileType = f.fileType || 'unknown';
                       const fileUrl = verificationAPI.getFileUrlByUserType(userId, fileType);
@@ -740,7 +739,7 @@ const AdminDashboard = () => {
           <div>
             <p><strong>Resident:</strong> {(selectedVerif.userId && (selectedVerif.userId.fullName || selectedVerif.userId.username)) || 'Unknown'}</p>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-              {((selectedVerif.filesMeta && selectedVerif.filesMeta.length) ? selectedVerif.filesMeta : (selectedVerif.gridFileIds || []).map((id: string) => ({ filename: id, gridFileId: id }))).map((f: any, idx: number) => {
+              {((selectedVerif.filesMeta && selectedVerif.filesMeta.length) ? selectedVerif.filesMeta : (selectedVerif.gridFileIds || []).filter((id: any) => id != null).map((id: string) => ({ filename: id, gridFileId: id }))).filter((f: any) => f != null).map((f: any, idx: number) => {
                 const userId = typeof selectedVerif.userId === 'object' ? selectedVerif.userId._id : selectedVerif.userId;
                 const fileType = f.fileType || 'unknown';
                 const fileUrl = verificationAPI.getFileUrlByUserType(userId, fileType);
@@ -815,8 +814,8 @@ const AdminDashboard = () => {
   <div style={{ maxHeight: 360, overflowY: 'auto', paddingRight: 6, paddingBottom: 48 }}>
           <List
             loading={miniLoading}
-            dataSource={miniAnns}
-            renderItem={(item) => (
+            dataSource={miniAnns.filter((item: any) => item && item._id)}
+            renderItem={(item: any) => (
               <List.Item style={{ cursor: 'pointer', padding: '16px 10px', alignItems: 'flex-start', borderBottom: '1px solid #f0f0f0', transition: 'background 0.2s' }} onClick={() => { setMiniSelected(item); setDrawerVisible(true); }} onMouseEnter={(e) => e.currentTarget.style.background = '#fafbfc'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
                 <List.Item.Meta
                   title={<div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, width: '100%' }}>

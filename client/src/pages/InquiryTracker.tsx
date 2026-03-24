@@ -91,7 +91,7 @@ const InquiryTracker: React.FC = () => {
         ) : (
           <Table
             dataSource={filtered.slice().sort((a,b) => (new Date(b.createdAt).getTime() || 0) - (new Date(a.createdAt).getTime() || 0))}
-            rowKey={(r:any) => r._id}
+            rowKey={(r:any) => r?._id || 'unknown'}
             pagination={{ pageSize: 12 }}
             onRow={(record) => ({
               onClick: () => {

@@ -21,7 +21,7 @@ const MessageInbox: React.FC<{ onRead?: (id: string) => void }> = ({ onRead }) =
 
   const markAsRead = async (id: string) => {
     await axiosInstance.patch(`/messages/${id}/read`);
-    setMessages(msgs => msgs.map(m => m._id === id ? { ...m, status: 'read' } : m));
+    setMessages(msgs => (msgs || []).map(m => m && m._id === id ? { ...m, status: 'read' } : m).filter((m: any) => m != null));
     if (onRead) onRead(id);
   };
 
@@ -38,7 +38,7 @@ const MessageInbox: React.FC<{ onRead?: (id: string) => void }> = ({ onRead }) =
           ALL MESSAGES
         </div>
       }
-      dataSource={messages}
+      dataSource={messages.filter((m: any) => m != null)}
       renderItem={msg => (
         <List.Item
           className="message-inbox-item"

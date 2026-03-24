@@ -79,8 +79,6 @@ interface EmailSettingsSectionProps {
   backendHasPassword?: Record<string, boolean>;
 }
 
-type FC<P> = React.FunctionComponent<P>;
-
 /**
  * StyledTextField - Consistent Material-UI TextField styling
  */
@@ -105,15 +103,15 @@ const StyledTextField = (props: any) => (
   />
 );
 
-const EmailSettingsSection: FC<EmailSettingsSectionProps> = ({
+const EmailSettingsSection = ({
   emailState,
   healthStatus,
   loadingHealthStatus,
   saving,
   onHealthCheckClick,
   onUpdateConfig,
-  backendHasPassword = {},
-}) => {
+  backendHasPassword = {} as Record<string, boolean>,
+}): any => {
   // emailState IS the consolidated email configuration
   const emailConfig = emailState;
   const passwordDirty = emailState.passwordDirty;

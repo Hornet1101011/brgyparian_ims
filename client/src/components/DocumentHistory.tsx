@@ -47,15 +47,12 @@ const DocumentHistory: React.FC = () => {
   }, []);
 
   const filteredAndSortedData = useMemo(() => {
-    let filtered = history.filter(item => {
-      const searchLower = searchTerm.toLowerCase();
-      return (
-        (item.username && item.username.toLowerCase().includes(searchLower)) ||
-        (item.type && item.type.toLowerCase().includes(searchLower)) ||
-        (item.transactionCode && item.transactionCode.toLowerCase().includes(searchLower)) ||
-        (item.status && item.status.toLowerCase().includes(searchLower))
-      );
-    });
+    let filtered = history.filter(item => item && item._id && (
+      (item.username && item.username.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (item.type && item.type.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (item.transactionCode && item.transactionCode.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (item.status && item.status.toLowerCase().includes(searchTerm.toLowerCase()))
+    ));
 
     const sorted = [...filtered].sort((a, b) => {
       let aVal = a[sortField];
@@ -219,7 +216,7 @@ const DocumentHistory: React.FC = () => {
                 <Empty description={searchTerm ? "No results found" : "No document history"} style={{ color: '#722ed1' }} />
               </Card>
             ) : (
-              paginatedData.map(h => (
+              paginatedData.filter((h: any) => h && h._id).map(h => (
                 <Card 
                   key={h._id} 
                   style={{
@@ -292,7 +289,7 @@ const DocumentHistory: React.FC = () => {
         ) : (
           <Table
             dataSource={paginatedData}
-            rowKey="_id"
+            rowKey={(record: any) => record?._id || 'unknown'}
             pagination={{
               current: currentPage,
               pageSize: pageSize,

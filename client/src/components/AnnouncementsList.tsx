@@ -30,7 +30,7 @@ const AnnouncementsList: React.FC = () => {
       ) : (
         <List
           loading={loading}
-          dataSource={anns}
+          dataSource={anns.filter((item: any) => item && item._id)}
           renderItem={item => (
             <List.Item style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }} onClick={() => setSelected(item)}>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -41,7 +41,7 @@ const AnnouncementsList: React.FC = () => {
                   description={<Paragraph ellipsis={{ rows: 2 }}>{item.text}</Paragraph>}
                 />
               </div>
-              {item.imagePath && (
+              {item?.imagePath && item?._id && (
                 <div style={{ marginLeft: 12, width: 80, display: 'flex', justifyContent: 'flex-end' }}>
                   <Image className="rounded-img" width={72} height={48} src={getAbsoluteApiUrl(`/announcements/${item._id}/image`)} alt="announcement" preview={false} />
                 </div>
@@ -55,7 +55,7 @@ const AnnouncementsList: React.FC = () => {
             {selected && (
               <div>
                 <Paragraph>{selected.text}</Paragraph>
-                {selected.imagePath && (
+                {selected?.imagePath && selected?._id && (
                   <Image className="rounded-img rounded-img-lg" src={getAbsoluteApiUrl(`/announcements/${selected._id}/image`)} alt="announcement" />
                 )}
               </div>

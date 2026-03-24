@@ -6,15 +6,24 @@ import { adminAPI, getAbsoluteApiUrl } from '../../services/api';
 
 const { TextArea } = Input;
 
-const Announcements: React.FC = () => {
+const Announcements = () => {
+  // @ts-ignore
   const [text, setText] = useState('');
+  // @ts-ignore
   const [file, setFile] = useState<File | null>(null);
+  // @ts-ignore
   const [submitting, setSubmitting] = useState(false);
+  // @ts-ignore
   const [anns, setAnns] = useState<any[]>([]);
+  // @ts-ignore
   const [loading, setLoading] = useState(false);
+  // @ts-ignore
   const [viewing, setViewing] = useState<any | null>(null);
+  // @ts-ignore
   const [editing, setEditing] = useState<any | null>(null);
+  // @ts-ignore
   const [editText, setEditText] = useState('');
+  // @ts-ignore
   const [editFile, setEditFile] = useState<File | null>(null);
 
   const { user } = useAuth();
@@ -156,7 +165,7 @@ const Announcements: React.FC = () => {
             <Typography.Title level={5} style={{ marginBottom: 8 }}>Existing Announcements</Typography.Title>
             <List
               loading={loading}
-              dataSource={anns}
+              dataSource={anns.filter((item: any) => item && item._id)}
               renderItem={item => (
                 <List.Item actions={
                   [

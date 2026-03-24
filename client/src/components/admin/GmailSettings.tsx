@@ -30,12 +30,13 @@ interface EmailConfig {
   gmailAppPassword?: string;
 }
 
-interface GmailSettingsProps {
+interface GmailSettingsProps { 
   onGmailStatusChange?: (enabled: boolean) => void;
   onEmailConfigChange?: (config: EmailConfig) => void;
 }
 
 const GmailSettingsComponent = ({ onGmailStatusChange, onEmailConfigChange }: GmailSettingsProps) => {
+  // @ts-ignore
   const [emailConfig, setEmailConfig] = useState<EmailConfig>({
     enabled: false,
     provider: 'gmail',

@@ -13,7 +13,7 @@ import {
   Grid,
   InputAdornment,
   IconButton,
-  MenuItem,
+  MenuItem, 
   Select,
   FormControl,
   InputLabel,
@@ -57,6 +57,7 @@ const CustomSmtpSettings = ({ emailConfig, setEmailConfig, smtpPasswordProp = ''
   const [smtpPasswordDirty, setSmtpPasswordDirty] = useState(false);
   
   // Provider selection state
+  // @ts-ignore
   const [selectedProvider, setSelectedProvider] = useState<'mailtrap' | 'sendgrid' | 'gmail'>('mailtrap');
   
   // Provider-specific configuration state

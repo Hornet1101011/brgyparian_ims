@@ -92,7 +92,7 @@ const Dashboard = () => {
         setDocuments(response);
         // compute latest timestamps for pending/approved to show unread indicators
         try {
-          const list = Array.isArray(response) ? response : (response && response.data) ? response.data : [];
+          const list = (Array.isArray(response) ? response : (response && response.data) ? response.data : []).filter((item: any) => item != null);
           // pending
           const pendingItems = (list || []).filter((d: any) => (d.status || '').toString().toLowerCase() === 'pending');
           if (pendingItems.length) {
@@ -240,9 +240,11 @@ const Dashboard = () => {
       setAppointmentsLoading(true);
       try {
         const res = await contactAPI.getMyInquiries();
+        console.info('[Dashboard] getMyInquiries result:', res);
         if (!mounted) return;
         // Get all inquiries
-        const allInquiries = Array.isArray(res) ? res : (res && res.data) ? res.data : [];
+        const allInquiries = (Array.isArray(res) ? res : (res && res.data) ? res.data : []).filter((item: any) => item != null);
+        console.info('[Dashboard] allInquiries normalized count:', allInquiries.length, allInquiries);
         
         // Keep quick appointments (by type) for resident view; includes open/pending/scheduled/canceled.
         const quickAppointmentTypes = ['SCHEDULE_APPOINTMENT', 'QUICK_APPOINTMENT', 'APPOINTMENT', 'SCHEDULED_APPOINTMENT'];
@@ -419,7 +421,7 @@ const Dashboard = () => {
   }, [user]);
 
   const getSortedAppointments = () => {
-    const sorted = [...appointments];
+    const sorted = appointments.filter((appt: any) => appt != null);
     if (appointmentsSortBy === 'latest') {
       // Sort by creation date (latest first)
       return sorted.sort((a: any, b: any) => {
@@ -808,6 +810,7 @@ const Dashboard = () => {
                   showTotal: (total, range) => `${range[0]}-${range[1]} of ${total}`,
                 }}
                 renderItem={(item: any) => {
+                  if (!item || !item._id) return null;
                   const next = item.nextAppointment;
                   const dateLabel = next ? new Date(next.date).toLocaleDateString() : 'N/A';
                   const timeLabel = next ? `${next.startTime} - ${next.endTime}` : '—';
@@ -826,7 +829,7 @@ const Dashboard = () => {
                                 message.success('Appointment cancelled');
                                 // refresh list
                                 const res = await contactAPI.getMyInquiries();
-                                const list = (Array.isArray(res) ? res : (res && res.data) ? res.data : []).filter((r: any) => (r.scheduledDates && r.scheduledDates.length) || (r.status === 'scheduled'));
+                                const list = (Array.isArray(res) ? res : (res && res.data) ? res.data : []).filter((r: any) => r != null && r._id);
                                 setAppointments(list);
                               } catch (err) {
                                 console.error('Failed to cancel appointment', err);
@@ -860,14 +863,14 @@ const Dashboard = () => {
           <Table
             dataSource={pendingRequestsList}
             loading={pendingLoading}
-            rowKey={(record: any) => record._id}
+            rowKey={(record: any) => record?._id || 'unknown'}
             pagination={{ pageSize: 8 }}
             columns={[
               {
                 title: 'First Name',
                 dataIndex: 'fieldValues',
                 key: 'firstName',
-                render: (fv: any, record: any) => fv?.firstName || record.username || 'Unknown'
+                render: (fv: any, record: any) => fv?.firstName || record?.username || 'Unknown'
               },
               {
                 title: 'Doc Type',
@@ -895,14 +898,14 @@ const Dashboard = () => {
           <Table
             dataSource={approvedRequestsList}
             loading={approvedLoading}
-            rowKey={(record: any) => record._id}
+            rowKey={(record: any) => record?._id || 'unknown'}
             pagination={{ pageSize: 8 }}
             columns={[
               {
                 title: 'First Name',
                 dataIndex: 'fieldValues',
                 key: 'firstName',
-                render: (fv: any, record: any) => fv?.firstName || record.username || 'Unknown'
+                render: (fv: any, record: any) => fv?.firstName || record?.username || 'Unknown'
               },
               {
                 title: 'Doc Type',
@@ -1058,13 +1061,13 @@ const Dashboard = () => {
                 <div style={{ marginTop: 16 }}>
                   <strong>Messages</strong>
                   <List
-                    dataSource={(selectedAppt.messages && selectedAppt.messages.length) ? selectedAppt.messages : selectedAppt.responses}
+                    dataSource={((selectedAppt.messages && selectedAppt.messages.length) ? selectedAppt.messages : selectedAppt.responses).filter((m: any) => m != null)}
                     renderItem={(m: any, idx: number) => (
                       <List.Item key={idx} style={{ paddingLeft: 0, paddingRight: 0 }}>
                         <div style={{ width: '100%' }}>
-                          <div style={{ fontWeight: 600 }}>{m.username || m.from || m.author || (m.sender && m.sender.username) || 'Staff'}</div>
-                          <div style={{ fontSize: 13, color: '#666' }}>{m.message || m.body || m.text || ''}</div>
-                          <div style={{ fontSize: 12, color: '#999', marginTop: 6 }}>{formatDate(m.createdAt || m.date || m.timestamp)}</div>
+                          <div style={{ fontWeight: 600 }}>{m?.username || m?.from || m?.author || (m?.sender && m.sender.username) || 'Staff'}</div>
+                          <div style={{ fontSize: 13, color: '#666' }}>{m?.message || m?.body || m?.text || ''}</div>
+                          <div style={{ fontSize: 12, color: '#999', marginTop: 6 }}>{formatDate(m?.createdAt || m?.date || m?.timestamp)}</div>
                         </div>
                       </List.Item>
                     )}
@@ -1101,7 +1104,7 @@ const Dashboard = () => {
             <Tabs.TabPane tab={`Scheduled (${appointmentsScheduledCount})`} key="scheduled">
               {appointmentsScheduled.length > 0 ? (
                 <List
-                  dataSource={appointmentsScheduled}
+                  dataSource={appointmentsScheduled.filter((item: any) => item != null && item._id)}
                   renderItem={(item: any) => (
                     <List.Item
                       key={item._id}
@@ -1128,7 +1131,7 @@ const Dashboard = () => {
             <Tabs.TabPane tab={`Pending (${appointmentsPendingCount})`} key="pending">
               {appointmentsPending.length > 0 ? (
                 <List
-                  dataSource={appointmentsPending}
+                  dataSource={appointmentsPending.filter((item: any) => item != null && item._id)}
                   renderItem={(item: any) => (
                     <List.Item
                       key={item._id}
@@ -1152,7 +1155,7 @@ const Dashboard = () => {
             <Tabs.TabPane tab={`Canceled (${appointmentsCanceledCount})`} key="canceled">
               {appointmentsCanceled.length > 0 ? (
                 <List
-                  dataSource={appointmentsCanceled}
+                  dataSource={appointmentsCanceled.filter((item: any) => item != null && item._id)}
                   renderItem={(item: any) => (
                     <List.Item
                       key={item._id}

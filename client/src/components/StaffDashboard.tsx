@@ -799,7 +799,7 @@ const StaffDashboard = () => {
                       
                       <List
                         size="small"
-                        dataSource={data.items.slice(0, 5)}
+                        dataSource={(data?.items || []).slice(0, 5).filter((item: any) => item && item._id)}
                         split={false}
                         style={{ marginTop: 8 }}
                         renderItem={request => {
@@ -1051,9 +1051,9 @@ const StaffDashboard = () => {
                     <div style={{ maxHeight: 320, overflowY: 'auto', paddingRight: 6 }}>
                       <List
                         loading={miniLoading}
-                        dataSource={miniAnns}
+                        dataSource={miniAnns.filter((item: any) => item && item._id)}
                         split={false}
-                        renderItem={(item) => (
+                        renderItem={(item: any) => (
                           <List.Item 
                             style={{ 
                               cursor: 'pointer',
@@ -1556,7 +1556,7 @@ const StaffDashboard = () => {
                 const candidates = [d.title, d.filename, d.name, d.transactionCode, d.transactioncode, (d.uploadedBy && (d.uploadedBy.username || d.uploadedBy.name)) || d.uploadedBy || ''];
                 return candidates.some((c: any) => c && String(c).toLowerCase().includes(q));
               })}
-              rowKey={(r: any) => r._id || r.id || r.filename}
+              rowKey={(r: any) => r?._id || r?.id || r?.filename || 'unknown'}
               pagination={{ pageSize: 10 }}
               scroll={{ x: 'max-content' }}
               columns={[
@@ -1640,14 +1640,16 @@ const StaffDashboard = () => {
           >
             <Table
               dataSource={manageTableData !== null ? manageTableData : sortByDateDesc(inquiries)}
-              rowKey={(r: any) => r._id}
+              rowKey={(r: any) => r?._id || 'unknown'}
               pagination={{ pageSize: 10 }}
               onRow={(record) => ({
                 onClick: () => {
                   // mark viewed and navigate to the thread
                   if (record && record._id) markInquiryViewed(String(record._id));
                   setManageModalVisible(false);
-                  navigate('/staff/inbox', { state: { openInquiryId: record._id } });
+                  if (record?._id) {
+                    navigate('/staff/inbox', { state: { openInquiryId: record._id } });
+                  }
                 }
               })}
             >
@@ -1655,7 +1657,7 @@ const StaffDashboard = () => {
                 title="Name"
                 dataIndex="username"
                 key="username"
-                render={(v: any, r: any) => v || r.residentName || r.subject || 'Unknown'}
+                render={(v: any, r: any) => v || r?.residentName || r?.subject || 'Unknown'}
               />
               <Table.Column
                 title="Type of Inquiry"
@@ -1772,7 +1774,7 @@ const StaffDashboard = () => {
             {/* Table of completed document requests (horizontally scrollable) */}
             <Table
               dataSource={documentRequests.filter(d => (d.status || '').toLowerCase() === 'approved' || (d.status || '').toLowerCase() === 'completed')}
-              rowKey={(record: any) => record._id}
+              rowKey={(record: any) => record?._id || 'unknown'}
               pagination={{ pageSize: 10 }}
               scroll={{ x: 1000 }}
               columns={[

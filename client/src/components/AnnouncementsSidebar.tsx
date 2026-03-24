@@ -31,7 +31,7 @@ const AnnouncementsSidebar: React.FC = () => {
         setAnnouncements(sliced);
 
         try {
-          const latestId = list && list.length ? list[0]._id : null;
+          const latestId = list && list.length && list[0] ? list[0]._id : null;
           const storedLastSeenId = localStorage.getItem('announcements.lastSeenId');
           const storedHidden = localStorage.getItem('announcements.sidebar.hidden') === 'true';
 
@@ -105,7 +105,7 @@ const AnnouncementsSidebar: React.FC = () => {
         aria-label="Close announcements"
         onClick={() => {
           try {
-            const latestId = announcements && announcements.length ? announcements[0]._id : '';
+            const latestId = announcements && announcements.length && announcements[0] ? announcements[0]._id : '';
             localStorage.setItem('announcements.sidebar.hidden', 'true');
             // store the last seen announcement id so we can detect new ones later
             if (latestId) localStorage.setItem('announcements.lastSeenId', latestId);
@@ -143,9 +143,9 @@ const AnnouncementsSidebar: React.FC = () => {
         />
       ) : (
             <List
-              dataSource={announcements}
+              dataSource={announcements.filter((item: any) => item && item._id)}
               split={false}
-              renderItem={(item) => (
+              renderItem={(item: any) => (
                 <div
                   key={item._id}
                   onClick={() => {

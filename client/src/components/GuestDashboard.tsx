@@ -319,14 +319,14 @@ const GuestDashboard: React.FC = () => {
 					<Table
 						dataSource={pendingRequestsList}
 						loading={pendingLoading}
-						rowKey={(record: any) => record._id}
+						rowKey={(record: any) => record?._id || 'unknown'}
 						pagination={{ pageSize: 8 }}
 						columns={[
 							{
 								title: 'First Name',
 								dataIndex: 'fieldValues',
 								key: 'firstName',
-								render: (fv: any, record: any) => fv?.firstName || record.username || 'Unknown'
+								render: (fv: any, record: any) => fv?.firstName || record?.username || 'Unknown'
 							},
 							{
 								title: 'Doc Type',
@@ -354,14 +354,14 @@ const GuestDashboard: React.FC = () => {
 					<Table
 						dataSource={approvedRequestsList}
 						loading={approvedLoading}
-						rowKey={(record: any) => record._id}
+						rowKey={(record: any) => record?._id || 'unknown'}
 						pagination={{ pageSize: 8 }}
 						columns={[
 							{
 								title: 'First Name',
 								dataIndex: 'fieldValues',
 								key: 'firstName',
-								render: (fv: any, record: any) => fv?.firstName || record.username || 'Unknown'
+								render: (fv: any, record: any) => fv?.firstName || record?.username || 'Unknown'
 							},
 							{
 								title: 'Doc Type',
@@ -373,13 +373,13 @@ const GuestDashboard: React.FC = () => {
 								title: 'Date Requested',
 								dataIndex: 'dateRequested',
 								key: 'dateRequested',
-								render: (_: any, record: any) => formatDate(record.dateRequested || record.requestedAt || record.createdAt)
+								render: (_: any, record: any) => formatDate(record?.dateRequested || record?.requestedAt || record?.createdAt)
 							},
 							{
 								title: 'Date Approved',
 								dataIndex: 'dateApproved',
 								key: 'dateApproved',
-								render: (_: any, record: any) => formatDate(record.dateApproved || record.approvedAt || record.approvedOn || record.updatedAt)
+								render: (_: any, record: any) => formatDate(record?.dateApproved || record?.approvedAt || record?.approvedOn || record?.updatedAt)
 							},
 							{
 								title: 'Status',

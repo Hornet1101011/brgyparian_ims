@@ -83,6 +83,7 @@ const QuickAppointments = () => {
   const filteredInquiries = useMemo(() => {
     const q = query.toLowerCase();
     return inquiries.filter((record: any) => {
+      if (!record) return false; // Filter out null records
       const name = record.createdBy?.fullName || record.username || '';
       const id = record._id || '';
       const status = record.status || '';
@@ -527,7 +528,7 @@ const QuickAppointments = () => {
               </Card>
             ) : viewMode === 'table' ? (
               <Table 
-                rowKey={(r:any) => r._id} 
+                rowKey={(r:any) => r?._id || 'unknown'}
                 dataSource={filteredInquiries} 
                 columns={columns} 
                 loading={isLoading}

@@ -56,7 +56,7 @@ const AppointmentListTable = ({ onSelect, data = [] }: Props) => {
 
   return (
     <Table
-      rowKey={(r: any) => r._id}
+      rowKey={(r: any) => r?._id || 'unknown'}
       dataSource={data}
       columns={cols}
       loading={loading}

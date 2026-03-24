@@ -628,7 +628,7 @@ const DocumentProcessing: React.FC = () => {
             }}
           >
             <Table
-              rowKey={(record) => record._id}
+              rowKey={(record: any) => record?._id || 'unknown'}
               dataSource={files.filter((file: any) => {
                 if (filterQuery && !(file.filename || '').toLowerCase().includes(filterQuery.toLowerCase())) return false;
                 if (filterType && ((file.type || '').toLowerCase() !== filterType.toLowerCase())) return false;

@@ -124,9 +124,9 @@ const EventsSidebar: React.FC = () => {
         <Empty description="No upcoming events" image={Empty.PRESENTED_IMAGE_SIMPLE} />
       ) : (
         <List
-          dataSource={events}
+          dataSource={events.filter((item: any) => item && item._id)}
           split={false}
-          renderItem={(item) => (
+          renderItem={(item: any) => (
             <div
               key={item._id}
               onClick={() => {

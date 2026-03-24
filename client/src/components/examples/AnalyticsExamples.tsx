@@ -304,7 +304,7 @@ export const SearchableResidentsTable: React.FC = () => {
         columns={columns}
         dataSource={filteredRecords}
         loading={isLoading}
-        rowKey="_id"
+        rowKey={(record: any) => record?._id || 'unknown'}
         pagination={{ pageSize: 20 }}
       />
     </Card>
