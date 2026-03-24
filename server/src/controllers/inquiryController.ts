@@ -127,6 +127,7 @@ export const createInquiry = async (req: any, res: Response, next: NextFunction)
     // Accept assignedTo (array of user IDs) and/or assignedRole
     const {
       subject,
+      title,
       message,
       type,
       assignedTo,
@@ -311,6 +312,7 @@ export const createInquiry = async (req: any, res: Response, next: NextFunction)
       residentEmail,
       residentPhone,
       recipients: normalizedRecipients || (Array.isArray(recipients) ? recipients : (recipients ? [recipients] : [])),
+      title: title || subject || undefined,
       recipientEmails: Array.isArray(recipientEmails) ? recipientEmails : (recipientEmails ? [recipientEmails] : []),
       quick_appointment_type: quick_appointment_type || undefined,
       locationType: locationType || undefined,

@@ -3,6 +3,7 @@ import { Card, Row, Col, Button, Tooltip, Modal, List, Grid, Popover, Badge, Emp
 import { LeftOutlined, RightOutlined, ClockCircleOutlined, UserOutlined, CalendarOutlined, MailOutlined, PhoneOutlined, TeamOutlined } from '@ant-design/icons';
 import { getSlotsForRange, getAppointmentWithSlots, getAppointmentInquiries, getScheduledAppointmentsByDate, cancelAppointment } from '../../api/appointments';
 import AppointmentDetailsModal from '../AppointmentDetailsModal';
+import InquiryDetailsModal from '../InquiryDetailsModal';
 import { contactAPI, residentsListAPI } from '../../services/api';
 import { Input, Space as AntSpace, Calendar as AntCalendar } from 'antd';
 import { DISABLED_BG, AVAILABLE_GREEN, BOOKED_RED, LIMITED_GOLD, TODAY_BLUE } from '../../theme/colors';
@@ -110,6 +111,8 @@ const StaffCalendar = () => {
   const [slots, setSlots] = useState([]);
   const [loading, setLoading] = useState(false);
   const [detailDate, setDetailDate] = useState(null);
+  const [selectedInquiryId, setSelectedInquiryId] = useState(null);
+  const [showInquiryDetailsModal, setShowInquiryDetailsModal] = useState(false);
   const [editorVisible, setEditorVisible] = useState(false);
   const [editorRecord, setEditorRecord] = useState(null);
   const [editorPrefill, setEditorPrefill] = useState(null);
@@ -128,10 +131,12 @@ const StaffCalendar = () => {
   const [multipleDescription, setMultipleDescription] = useState('');
   const [multipleUrgency, setMultipleUrgency] = useState('normal');
   const [multipleDate, setMultipleDate] = useState('');
+  const [multipleTitle, setMultipleTitle] = useState('');
   const [multipleLoading, setMultipleLoading] = useState(false);
   const [multipleResidentSearch, setMultipleResidentSearch] = useState('');
     // Single appointment modal state
   const [singleModalVisible, setSingleModalVisible] = useState(false);
+  const [singleTitle, setSingleTitle] = useState('');
   const [singleResident, setSingleResident] = useState(null);
   const [singleStartTime, setSingleStartTime] = useState('08:00 AM');
   const [singleEndTime, setSingleEndTime] = useState('09:00 AM');
@@ -168,8 +173,8 @@ const StaffCalendar = () => {
 
   // Validate and save multiple appointments
   const saveMultipleAppointments = async () => {
-        if (!multipleDate || !multipleResidents.length || !multipleStartTime || !multipleEndTime || !multipleLocation || !multipleDescription) {
-          alert('Please fill all required fields including appointment date and at least one resident.');
+        if (!multipleDate || !multipleTitle || !multipleResidents.length || !multipleStartTime || !multipleEndTime || !multipleLocation || !multipleDescription) {
+          alert('Please fill all required fields including appointment date, title, and at least one resident.');
           return;
         }
         // Reuse normalizeTime from single
@@ -263,7 +268,8 @@ const StaffCalendar = () => {
           const recipientsList = multipleResidents.map(r => (r.fullName || r.username) + (r.barangayId ? `(${r.barangayId})` : '')).filter(Boolean);
           const recipientEmailsList = multipleResidents.map(r => r.email);
           const payload = {
-            subject: `Appointment Scheduled - ${appointmentDate}`,
+            subject: multipleTitle,
+            title: multipleTitle,
             message: `Appointment scheduled at ${multipleLocation}. Time: ${multipleStartTime} - ${multipleEndTime}.`,
             username: multipleResidents[0].username, // For API validation/inquiry ownership only
             type: 'QUICK_APPOINTMENT',
@@ -297,6 +303,7 @@ const StaffCalendar = () => {
           setMultipleModalVisible(false);
           // Reset form
           setMultipleResidents([]);
+          setMultipleTitle('');
           setMultipleDate('');
           setMultipleStartTime('08:00 AM');
           setMultipleEndTime('09:00 AM');
@@ -323,8 +330,8 @@ const StaffCalendar = () => {
 
     // Validate and save single appointment
     const saveSingleAppointment = async () => {
-      if (!singleDate || !singleResident || !singleStartTime || !singleEndTime || !singleLocation || !singleDescription) {
-        alert('Please fill all required fields including appointment date.');
+      if (!singleDate || !singleTitle || !singleResident || !singleStartTime || !singleEndTime || !singleLocation || !singleDescription) {
+        alert('Please fill all required fields including appointment date and title.');
         return;
       }
       // Validate/normalize time input from TimePicker:
@@ -409,7 +416,8 @@ const StaffCalendar = () => {
         // Step 1: Create inquiry for appointment
         const appointmentDate = dayjs(singleDate).format('MMMM DD, YYYY');
         const payload = {
-          subject: `Appointment Scheduled - ${appointmentDate}`,
+          subject: singleTitle,
+          title: singleTitle,
           message: `Appointment scheduled at ${singleLocation}. Time: ${singleStartTime} - ${singleEndTime}.`,
           username: singleResident.username,
           residentName: singleResident.fullName || singleResident.username,
@@ -447,6 +455,16 @@ const StaffCalendar = () => {
 
         alert('Appointment scheduled and resident will be notified by email.');
         setSingleModalVisible(false);
+        setSingleTitle('');
+        setSingleResident(null);
+        setSingleDate('');
+        setSingleStartTime('08:00 AM');
+        setSingleEndTime('09:00 AM');
+        setSingleLocationType('on-site');
+        setSingleLocation('');
+        setSingleDescription('');
+        setSingleUrgency('normal');
+        setResidentSearch('');
       } catch (err: any) {
         console.error('[StaffCalendar] Error scheduling appointment:', err);
         if (err?.response?.data) {
@@ -460,7 +478,6 @@ const StaffCalendar = () => {
   const [quickCreateUsername, setQuickCreateUsername] = useState('');
   const [quickCreateSubject, setQuickCreateSubject] = useState('Quick appointment');
   const [quickCreateLoading, setQuickCreateLoading] = useState(false);
-  const [slotDetail, setSlotDetail] = useState(null);
 
   // Compute week range (Mon..Sun) containing anchorDate
   const weekStart = useMemo(() => {
@@ -542,6 +559,14 @@ const StaffCalendar = () => {
   };
 
   const openDetail = (dateStr: string) => setDetailDate(dateStr);
+  const openInquiryDetailsModal = (inquiryId: string) => {
+    setSelectedInquiryId(inquiryId);
+    setShowInquiryDetailsModal(true);
+  };
+  const closeInquiryDetailsModal = () => {
+    setShowInquiryDetailsModal(false);
+    setSelectedInquiryId(null);
+  };
   const openEditorForInquiry = async (inquiryId?: string) => {
     if (!inquiryId) return;
     try {
@@ -839,6 +864,7 @@ const StaffCalendar = () => {
           setSingleModalVisible(false);
           // Reset form
           setSingleResident(null);
+          setSingleTitle('');
           setSingleDate('');
           setSingleStartTime('08:00 AM');
           setSingleEndTime('09:00 AM');
@@ -870,6 +896,15 @@ const StaffCalendar = () => {
                   const isPast = current.isBefore(dayjs(), 'day');
                   return isPast || day === 0 || day === 6; // Disable past dates and weekends
                 }}
+              />
+            </div>
+            <div>
+              <label style={{ fontWeight: 600 }}>Title</label>
+              <Input
+                value={singleTitle}
+                onChange={e => setSingleTitle(e.target.value)}
+                placeholder="Enter appointment title"
+                style={{ width: '100%', marginBottom: 12 }}
               />
             </div>
             <div>
@@ -1020,6 +1055,7 @@ const StaffCalendar = () => {
         onCancel={() => {
           setMultipleModalVisible(false);
           setMultipleResidents([]);
+          setMultipleTitle('');
           setMultipleDate('');
           setMultipleStartTime('08:00 AM');
           setMultipleEndTime('09:00 AM');
@@ -1051,6 +1087,15 @@ const StaffCalendar = () => {
                   const isPast = current.isBefore(dayjs(), 'day');
                   return isPast || day === 0 || day === 6;
                 }}
+              />
+            </div>
+            <div>
+              <label style={{ fontWeight: 600 }}>Title</label>
+              <Input
+                value={multipleTitle}
+                onChange={e => setMultipleTitle(e.target.value)}
+                placeholder="Enter appointment title"
+                style={{ width: '100%', marginBottom: 12 }}
               />
             </div>
             <div>
@@ -1377,7 +1422,6 @@ const StaffCalendar = () => {
                   <Card 
                     style={{ marginBottom: 16 }} 
                     hoverable
-                    onClick={() => setSlotDetail(s)}
                   >
                     <Row gutter={16} align="middle">
                       <Col flex="auto">
@@ -1390,8 +1434,10 @@ const StaffCalendar = () => {
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <Avatar icon={<UserOutlined />} />
                             <div>
-                              <div style={{ fontWeight: 600 }}>{s.residentName || s.residentUsername || 'Resident'}</div>
-                              <div style={{ fontSize: 12, color: '#666' }}>Resident</div>
+                              <div style={{ fontWeight: 600 }}>{s.subject || s.title || s.residentName || s.residentUsername || 'Appointment'}</div>
+                              <div style={{ fontSize: 12, color: '#666' }}>
+                                {(s.title || s.subject) ? `Title: ${s.title || s.subject}` : s.residentName ? `Resident: ${s.residentName}` : s.residentUsername ? `Resident: ${s.residentUsername}` : 'Scheduled appointment'}
+                              </div>
                             </div>
                           </div>
                           {s.subject && (
@@ -1416,16 +1462,11 @@ const StaffCalendar = () => {
                           {s.inquiryId && (
                             <Button 
                               type="primary" 
-                              onClick={(e) => { e.stopPropagation(); openEditorForInquiry(s.inquiryId); }}
+                              onClick={(e) => { e.stopPropagation(); openInquiryDetailsModal(s.inquiryId); }}
                             >
-                              Open Inquiry
+                              View Details
                             </Button>
                           )}
-                          <Button 
-                            onClick={(e) => { e.stopPropagation(); setSlotDetail(s); }}
-                          >
-                            Details
-                          </Button>
                         </Space>
                       </Col>
                     </Row>
@@ -1435,114 +1476,6 @@ const StaffCalendar = () => {
               />
             ) : (
               <Empty description="No appointments scheduled for this date" style={{ marginTop: 40 }} />
-            )}
-          </div>
-        )}
-      </Modal>
-
-      <Modal 
-        title={
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <ClockCircleOutlined />
-            <span>Appointment Details</span>
-            {slotDetail?.status && <Tag color={slotDetail.status === 'scheduled' ? 'green' : 'orange'}>{slotDetail.status}</Tag>}
-          </div>
-        } 
-        open={!!slotDetail} 
-        onCancel={() => setSlotDetail(null)} 
-        footer={null} 
-        width={700}
-        bodyStyle={{ padding: '20px' }}
-      >
-        {slotDetail && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            {/* Time Card */}
-            <Card 
-              style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', border: 'none' }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 18 }}>
-                <ClockCircleOutlined style={{ fontSize: 24 }} />
-                <div>
-                  <div style={{ fontWeight: 600 }}>{slotDetail.startTime} — {slotDetail.endTime}</div>
-                  <div style={{ fontSize: 12, opacity: 0.9 }}>Appointment Time</div>
-                </div>
-              </div>
-            </Card>
-
-            {/* Resident Information */}
-            <Card title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><UserOutlined /> Resident Information</span>}>
-              <Descriptions 
-                column={1}
-                size="small"
-                items={[
-                  {
-                    label: 'Name',
-                    children: slotDetail.residentName || slotDetail.residentUsername || 'Unknown',
-                    span: 1
-                  },
-                  ...(slotDetail.residentEmail ? [{
-                    label: 'Email',
-                    children: (
-                      <Space>
-                        <MailOutlined />
-                        <a href={`mailto:${slotDetail.residentEmail}`}>{slotDetail.residentEmail}</a>
-                      </Space>
-                    ),
-                    span: 1
-                  }] : []),
-                  ...(slotDetail.residentPhone ? [{
-                    label: 'Phone',
-                    children: (
-                      <Space>
-                        <PhoneOutlined />
-                        <a href={`tel:${slotDetail.residentPhone}`}>{slotDetail.residentPhone}</a>
-                      </Space>
-                    ),
-                    span: 1
-                  }] : [])
-                ]}
-              />
-            </Card>
-
-            {/* Staff Information */}
-            {slotDetail.staffName && (
-              <Card title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><TeamOutlined /> Staff Information</span>}>
-                <Descriptions column={1} size="small">
-                  <Descriptions.Item label="Assigned By">{slotDetail.staffName}</Descriptions.Item>
-                </Descriptions>
-              </Card>
-            )}
-
-            {/* Appointment Details */}
-            <Card title="Appointment Details">
-              <Descriptions column={1} size="small">
-                {slotDetail.subject && <Descriptions.Item label="Subject">{slotDetail.subject}</Descriptions.Item>}
-                {slotDetail.notes && (
-                  <Descriptions.Item label="Notes">
-                    <div style={{ whiteSpace: 'pre-wrap', background: '#fafafa', padding: 8, borderRadius: 4, marginTop: 8 }}>
-                      {slotDetail.notes}
-                    </div>
-                  </Descriptions.Item>
-                )}
-              </Descriptions>
-            </Card>
-
-            {/* Metadata */}
-            <div style={{ fontSize: 12, color: '#999', padding: '12px', background: '#fafafa', borderRadius: 4, borderLeft: '3px solid #d9d9d9' }}>
-              <div>Slot ID: <code>{slotDetail._id}</code></div>
-              {slotDetail.inquiryId && <div style={{ marginTop: 4 }}>Inquiry ID: <code>{slotDetail.inquiryId}</code></div>}
-            </div>
-
-            {/* Action Buttons */}
-            {slotDetail.inquiryId && (
-              <Button 
-                type="primary" 
-                size="large" 
-                block
-                onClick={() => { setSlotDetail(null); openEditorForInquiry(slotDetail.inquiryId); }}
-              >
-                Open Full Inquiry
-              </Button>
             )}
           </div>
         )}
@@ -1596,6 +1529,7 @@ const StaffCalendar = () => {
       </Modal>
 
         <AppointmentDetailsModal visible={editorVisible} record={editorRecord} onClose={closeEditor} prefill={editorPrefill} />
+        <InquiryDetailsModal visible={showInquiryDetailsModal} inquiryId={selectedInquiryId} onClose={closeInquiryDetailsModal} onChanged={() => { closeInquiryDetailsModal(); setDetailDate(null); }} />
     </Card>
   );
 };

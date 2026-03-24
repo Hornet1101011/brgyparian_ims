@@ -18,6 +18,7 @@ export interface IStaffMessage {
 
 export interface IInquiry extends Document {
   subject: string;
+  title?: string;
   message: string;
   type?: string;
   status: 'open' | 'pending' | 'in-progress' | 'scheduled' | 'resolved' | 'canceled' | 'closed';
@@ -84,6 +85,10 @@ const inquirySchema = new mongoose.Schema({
   subject: {
     type: String,
     required: true,
+  },
+  title: {
+    type: String,
+    required: false,
   },
   type: {
     type: String,
