@@ -4,6 +4,7 @@ import { LeftOutlined, RightOutlined, ClockCircleOutlined, UserOutlined, Calenda
 import { getSlotsForRange, getAppointmentWithSlots, getAppointmentInquiries, getScheduledAppointmentsByDate, cancelAppointment } from '../../api/appointments';
 import AppointmentDetailsModal from '../AppointmentDetailsModal';
 import InquiryDetailsModal from '../InquiryDetailsModal';
+import AdvancedAppointmentModal from './AdvancedAppointmentModal';
 import { contactAPI, residentsListAPI } from '../../services/api';
 import { Input, Space as AntSpace, Calendar as AntCalendar } from 'antd';
 import { DISABLED_BG, AVAILABLE_GREEN, BOOKED_RED, LIMITED_GOLD, TODAY_BLUE } from '../../theme/colors';
@@ -606,6 +607,8 @@ const StaffCalendar = () => {
     setQuickCreateVisible(true);
   };
 
+  const [advancedModalVisible, setAdvancedModalVisible] = useState(false);
+
   const submitQuickCreate = async () => {
     if (!quickCreateUsername) return;
     setQuickCreateLoading(true);
@@ -722,7 +725,7 @@ const StaffCalendar = () => {
         <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
           <Button type="primary" onClick={() => openSingleAppointment(todayIso)}>Single Appointment</Button>
           <Button onClick={() => openMultipleAppointment(todayIso)}>Multiple Appointments</Button>
-          <Button onClick={() => alert('Mass appointment scheduling coming soon!')}>Mass Appointments</Button>
+          <Button onClick={() => setAdvancedModalVisible(true)}>Advanced Appointment Options</Button>
         </div>
         {/* Weekday headers */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8, marginBottom: 8 }}>
@@ -1532,6 +1535,7 @@ const StaffCalendar = () => {
 
         <AppointmentDetailsModal visible={editorVisible} record={editorRecord} onClose={closeEditor} prefill={editorPrefill} />
         <InquiryDetailsModal visible={showInquiryDetailsModal} inquiryId={selectedInquiryId} onClose={closeInquiryDetailsModal} onChanged={() => { closeInquiryDetailsModal(); setDetailDate(null); }} />
+        <AdvancedAppointmentModal visible={advancedModalVisible} onClose={() => setAdvancedModalVisible(false)} />
     </Card>
   );
 };

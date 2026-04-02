@@ -580,12 +580,43 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
           const sMin = normalizeToMinutes(sd.startTime);
           const eMin = normalizeToMinutes(sd.endTime);
           if (Number.isNaN(sMin) || Number.isNaN(eMin) || sMin >= eMin) return res.status(400).json({ message: 'Start time must be earlier than end time' });
-          normalized.push({ date: sd.date, startTime: sd.startTime, endTime: sd.endTime, sMin, eMin });
+          // include optional assignedUsernames (for cluster/multiples/manual assignment from client)
+          const assignedUsernames = Array.isArray(sd.assignedUsernames) ? sd.assignedUsernames.map((x:any) => String(x).trim()).filter(Boolean) : [];
+          normalized.push({ date: sd.date, startTime: sd.startTime, endTime: sd.endTime, sMin, eMin, assignedUsernames });
         }
 
         // Validate no internal overlaps within the payload
         const internal = schedulingService.validateScheduledDatesPayload(normalized.map((r: any) => ({ date: r.date, startTime: r.startTime, endTime: r.endTime })));
         if (!internal.ok) return res.status(400).json({ message: internal.message });
+
+        // Additional server-side validation for cluster/multiples/manual distribution logic
+        const schedulingOptions = updateBody.schedulingOptions || updateBody.scheduleOptions || {};
+        const mode = String(schedulingOptions.mode || '').toLowerCase();
+        const multiplesOf = Math.max(1, parseInt(String(schedulingOptions.multiplesOf || schedulingOptions.bundleSize || '1'), 10) || 1);
+        const participantsExpected = schedulingOptions.participants ? parseInt(String(schedulingOptions.participants), 10) : null;
+        // If mode === 'multiples', require each scheduled range to include assignedUsernames array of length multiplesOf
+        if (mode === 'multiples') {
+          for (const r of normalized) {
+            if (!Array.isArray(r.assignedUsernames) || r.assignedUsernames.length !== multiplesOf) {
+              return res.status(400).json({ message: `For multiples mode each scheduledDate must include assignedUsernames array of length ${multiplesOf}.` });
+            }
+          }
+        }
+        // If participantsExpected provided and assignedUsernames present, validate counts
+        const allAssigned = normalized.reduce((acc: string[], r: any) => acc.concat(Array.isArray(r.assignedUsernames) ? r.assignedUsernames : []), []);
+        const uniqueAssigned = Array.from(new Set(allAssigned));
+        if (participantsExpected !== null && uniqueAssigned.length > 0 && uniqueAssigned.length !== participantsExpected) {
+          return res.status(400).json({ message: `Mismatch: schedulingOptions.participants=${participantsExpected} but assignedUsernames contains ${uniqueAssigned.length} unique users.` });
+        }
+        // Validate assigned usernames exist as resident users
+        if (uniqueAssigned.length > 0) {
+          const foundUsers = await User.find({ role: 'resident', username: { $in: uniqueAssigned } }).lean();
+          const foundUsernames = new Set((foundUsers || []).map((u:any) => String(u.username)));
+          const missing = uniqueAssigned.filter((u:any) => !foundUsernames.has(u));
+          if (missing.length) {
+            return res.status(400).json({ message: `Unknown resident usernames in assignedUsernames: ${missing.join(', ')}` });
+          }
+        }
 
         // Validate each range against office hours and existing AppointmentSlot entries
         for (const r of normalized) {
@@ -606,14 +637,31 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
           // Replace AppointmentSlot copies for this inquiry
           try {
             await AppointmentSlot.deleteMany({ inquiryId: saved._id });
-            const slotDocs = normalized.map((d: any) => ({
-              inquiryId: saved._id,
-              residentId: (saved as any).residentId || (saved as any).createdBy || null,
-              staffId: (req as any).user?._id || null,
-              date: new Date(`${d.date}T00:00:00Z`),
-              startTime: d.startTime,
-              endTime: d.endTime,
-            }));
+            const slotDocs: any[] = [];
+            for (const d of normalized) {
+              // Allow scheduledDates to include a residentUsername/resident field to assign the slot to a specific resident
+              let residentId: any = (saved as any).residentId || (saved as any).createdBy || null;
+              let residentName: string | undefined = (saved as any).residentName || (saved as any).username || undefined;
+              try {
+                const possibleUsername = d.residentUsername || d.username || d.recipientUsername || d.recipient;
+                if (possibleUsername) {
+                  const found = await User.findOne({ $or: [{ username: possibleUsername }, { email: possibleUsername }] , role: 'resident' }).lean().catch(() => null);
+                  if (found) { residentId = found._id; residentName = found.fullName || found.username; }
+                }
+              } catch (e) {
+                // ignore lookup errors and fall back to inquiry-level resident
+              }
+
+              slotDocs.push({
+                inquiryId: saved._id,
+                residentId: residentId || null,
+                residentName: residentName || undefined,
+                staffId: (req as any).user?._id || null,
+                date: new Date(`${d.date}T00:00:00Z`),
+                startTime: d.startTime,
+                endTime: d.endTime,
+              });
+            }
             if (slotDocs.length) {
               await AppointmentSlot.insertMany(slotDocs);
             }
@@ -631,26 +679,42 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
                 } catch (e) { /* ignore */ }
               }
               const actionType = (String(beforeInquiry?.status) !== 'scheduled') ? 'CREATED_APPOINTMENT' : 'EDITED_APPOINTMENT';
-              for (const d of normalized) {
-                // log each range separately
-                await auditService.logAppointmentChange({
-                  staffId,
-                  staffName,
-                  residentId,
-                  residentName,
-                  inquiryId: saved._id,
-                  action: actionType as any,
-                  fromTimeRange: d.startTime,
-                  toTimeRange: d.endTime,
-                });
-              }
-              // Send resident notification (non-blocking) summarizing scheduled ranges
+              // For audit and notifications, group by resident if slots were assigned to multiple residents
               try {
                 const notifType = actionType === 'CREATED_APPOINTMENT' ? 'created' : 'edited';
-                await sendAppointmentNotification(residentId, notifType as any, { inquiryId: saved._id, scheduledDates: saved.scheduledDates });
-              } catch (e) {
-                // swallow notification errors - already handled inside helper but be defensive
-                console.warn('sendAppointmentNotification failed', (e as any)?.message || e);
+                // Log and gather per-resident scheduled ranges
+                const perResident = new Map<string, { residentId?: any; residentName?: string; ranges: any[] }>();
+                for (const d of normalized) {
+                  // find corresponding slot doc to extract resident assignment
+                  const matching = slotDocs.find(s => (new Date(s.date)).toISOString().slice(0,10) === d.date && s.startTime === d.startTime && s.endTime === d.endTime);
+                  const rid = matching?.residentId ? String(matching.residentId) : String(residentId || '') ;
+                  const rname = matching?.residentName || residentName;
+                  if (!perResident.has(rid)) perResident.set(rid, { residentId: matching?.residentId, residentName: rname, ranges: [] });
+                  perResident.get(rid)!.ranges.push({ date: d.date, startTime: d.startTime, endTime: d.endTime });
+                }
+
+                for (const [rid, info] of perResident.entries()) {
+                  for (const rng of info.ranges) {
+                    await auditService.logAppointmentChange({
+                      staffId,
+                      staffName,
+                      residentId: info.residentId,
+                      residentName: info.residentName,
+                      inquiryId: saved._id,
+                      action: actionType as any,
+                      fromTimeRange: rng.startTime,
+                      toTimeRange: rng.endTime,
+                    } as any);
+                  }
+                  // send notification per resident (best-effort)
+                  try {
+                    await sendAppointmentNotification(info.residentId, notifType as any, { inquiryId: saved._id, scheduledDates: info.ranges });
+                  } catch (e) {
+                    console.warn('sendAppointmentNotification failed for resident', info.residentId, (e as any)?.message || e);
+                  }
+                }
+              } catch (auditErr) {
+                console.warn('Failed to write appointment audit logs or send notifications', auditErr);
               }
             } catch (auditErr) {
               console.warn('Failed to write appointment audit logs', auditErr);
