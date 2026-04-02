@@ -47,6 +47,7 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
   const [submitProgress, setSubmitProgress] = useState(0);
   const previewTimer = React.useRef(null as any);
   const submitTimer = React.useRef(null as any);
+  const overallProgress = computingPreview ? previewProgress : (submitting ? submitProgress : 0);
 
   useEffect(() => {
     if (!visible) {
@@ -242,6 +243,11 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
 
   return (
     <Modal title="Advanced Appointment Options" open={visible} onCancel={onClose} footer={null} width={900}>
+      {overallProgress > 0 && overallProgress < 100 && (
+        <div style={{ margin: '8px 0 12px 0' }}>
+          <Progress percent={overallProgress} showInfo={false} strokeWidth={6} />
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 16 }}>
         <div style={{ flex: 1 }}>
           <div style={{ marginBottom: 8, fontWeight: 600 }}>Select Dates (max {defaultMaxDates})</div>
