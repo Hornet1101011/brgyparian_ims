@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, Button, Space, DatePicker, InputNumber, Radio, Input, List, Divider, Row, Col, Tag, Select, Spin } from 'antd';
+import { Modal, Button, Space, DatePicker, InputNumber, Radio, Input, List, Divider, Row, Col, Tag, Select, Spin, Progress, message } from 'antd';
 import dayjs from 'dayjs';
 import { contactAPI, residentsListAPI } from '../../services/api';
 import { getScheduledAppointmentsByDate, cancelAppointment } from '../../api/appointments';
@@ -43,6 +43,10 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
   const [preview, setPreview] = useState([] as Assignment[]);
   const [computingPreview, setComputingPreview] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [previewProgress, setPreviewProgress] = useState(0);
+  const [submitProgress, setSubmitProgress] = useState(0);
+  const previewTimer = React.useRef(null as any);
+  const submitTimer = React.useRef(null as any);
 
   useEffect(() => {
     if (!visible) {
@@ -85,10 +89,20 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
   // compute preview schedule based on mode + interval settings
   const computePreview = async () => {
     setComputingPreview(true);
+    setPreviewProgress(0);
+    if (previewTimer.current) clearInterval(previewTimer.current);
+    previewTimer.current = setInterval(() => {
+      setPreviewProgress(p => Math.min(95, p + Math.floor(Math.random() * 10) + 5));
+    }, 300);
+    let aborted = false;
     try {
       // basic validation
-      if (!selectedDates.length) { setPreview([]); return; }
-      if (selectedResidents.length < 1) { setPreview([]); return; }
+      if (!selectedDates.length) { setPreview([]); aborted = true; }
+      if (!aborted && selectedResidents.length < 1) { setPreview([]); aborted = true; }
+      if (aborted) {
+        // allow the progress bar to run briefly, then finish below
+        return;
+      }
 
       // build date windows
       const windows: {date:string; start:number; end:number}[] = selectedDates.map(ds => {
@@ -160,7 +174,13 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
       }
 
       setPreview(assignments);
-    } finally { setComputingPreview(false); }
+    } finally {
+      setComputingPreview(false);
+      // finish progress if timer exists
+      if (previewTimer.current) { clearInterval(previewTimer.current); previewTimer.current = null; }
+      setPreviewProgress(100);
+      setTimeout(() => setPreviewProgress(0), 600);
+    }
   };
 
   const formatHM = (minutes: number) => {
@@ -177,6 +197,11 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
     if (!preview.length) { if (!window.confirm('No computed assignments. Continue?')) return; }
 
     setSubmitting(true);
+    setSubmitProgress(0);
+    if (submitTimer.current) clearInterval(submitTimer.current);
+    submitTimer.current = setInterval(() => {
+      setSubmitProgress(p => Math.min(95, p + Math.floor(Math.random() * 8) + 2));
+    }, 400);
     try {
       // create inquiry
       const recipients = selectedResidents.slice(0, numParticipants).map(r => r.fullName || r.username);
@@ -210,6 +235,9 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
       console.error('Failed to submit advanced appointment', err);
       alert('Failed to submit advanced appointment.');
     } finally { setSubmitting(false); }
+    if (submitTimer.current) { clearInterval(submitTimer.current); submitTimer.current = null; }
+    setSubmitProgress(100);
+    setTimeout(() => setSubmitProgress(0), 600);
   };
 
   return (
@@ -312,6 +340,11 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
           <Divider />
 
           <div style={{ fontWeight: 600, marginBottom: 8 }}>Preview</div>
+          {previewProgress > 0 && previewProgress < 100 && (
+            <div style={{ marginBottom: 8 }}>
+              <Progress percent={previewProgress} showInfo={false} />
+            </div>
+          )}
           <div style={{ maxHeight: 300, overflowY: 'auto', border: '1px solid #eee', padding: 8 }}>
             {computingPreview ? <Spin /> : (
               preview.length ? (
@@ -327,6 +360,11 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
             )}
           </div>
 
+          {submitProgress > 0 && submitProgress < 100 && (
+            <div style={{ marginBottom: 8 }}>
+              <Progress percent={submitProgress} showInfo={false} />
+            </div>
+          )}
           <Space style={{ marginTop: 12 }}> 
             <Button onClick={computePreview}>Compute Preview</Button>
             <Button type="primary" loading={submitting} onClick={submit}>Submit Schedule</Button>
@@ -342,7 +380,6 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
               <List.Item onClick={() => {
                 setSelectedResidents(s => {
                   if (s.some(x => x.username === r.username)) return s.filter(x => x.username !== r.username);
-                  if (s.length >= numParticipants) return s; // enforce max
                   return [...s, r];
                 });
               }} style={{ cursor: 'pointer' }}>
@@ -352,7 +389,14 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
             )} />
           )}
           <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-            <Button onClick={() => setResidentPickerOpen(false)}>Done ({selectedResidents.length})</Button>
+            <Button onClick={() => {
+              if (selectedResidents.length > numParticipants) {
+                // Trim to allowed count and warn
+                setSelectedResidents(s => s.slice(0, numParticipants));
+                message.warning(`Selected more residents than participant count; trimmed to first ${numParticipants}.`);
+              }
+              setResidentPickerOpen(false);
+            }}>Done ({selectedResidents.length})</Button>
           </div>
         </div>
       </Modal>
