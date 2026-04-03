@@ -82,6 +82,7 @@ import { handleSaveError } from '../utils/handleSaveError';
 import { rangesOverlap } from '../utils/scheduling';
 import schedulingService from '../services/schedulingService';
 import auditService from '../services/auditService';
+import { sendMail } from '../services/EmailService';
 
 // Helper: convert HH:MM to minutes since midnight
 const normalizeToMinutes = (t?: string) => {
@@ -1158,10 +1159,6 @@ export const deleteInquiry = async (req: any, res: Response, next: NextFunction)
 
       // Send using the centralized email service (which will prefer SendGrid when configured)
       try {
-        // Dynamically require to avoid circular deps during module load
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const { sendMail } = require('../services/emailService');
-
         if (emails.length === 1) {
           await sendMail(emails[0], subject, html, [], 'appointment-invite');
         } else {
