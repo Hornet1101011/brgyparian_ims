@@ -1107,37 +1107,52 @@ export const deleteInquiry = async (req: any, res: Response, next: NextFunction)
   export const sendInvite = async (req: any, res: Response, next: NextFunction) => {
     try {
       const id = req.params.id;
+      console.log('[sendInvite] Starting for inquiry:', id);
+      
       const inquiry: any = await Inquiry.findById(id).lean();
       if (!inquiry) return res.status(404).json({ message: 'Inquiry not found' });
+      console.log('[sendInvite] Inquiry found, fetching emails...');
 
       // Collect recipient emails: prefer explicit recipientEmails, otherwise resolve recipients to user emails
       let emails: string[] = Array.isArray(inquiry.recipientEmails) ? inquiry.recipientEmails.map(String).filter(Boolean) : [];
+      console.log('[sendInvite] recipientEmails:', emails);
+      
       if ((!emails || emails.length === 0) && Array.isArray(inquiry.recipients) && inquiry.recipients.length) {
         // Try to normalize recipient entries (they may be "Full Name(barangayID)" or username)
         const normalized = inquiry.recipients.map((r: any) => String(r).replace(/\(.+\)$/, '').trim()).filter(Boolean);
+        console.log('[sendInvite] Resolving recipients:', normalized);
         try {
           const users = await User.find({ role: 'resident', $or: [{ username: { $in: normalized } }, { fullName: { $in: normalized } }] }).lean();
           emails = users.map((u: any) => String(u.email || '').trim()).filter(Boolean);
+          console.log('[sendInvite] Resolved emails from recipients:', emails);
         } catch (e) {
-          console.warn('Failed to resolve recipients to users', e);
+          console.warn('[sendInvite] Failed to resolve recipients to users', e);
         }
       }
 
       // As a fallback, if inquiry has residentEmail field, include it
       if ((!emails || emails.length === 0) && inquiry.residentEmail) {
+        console.log('[sendInvite] Using residentEmail:', inquiry.residentEmail);
         emails = [String(inquiry.residentEmail).trim()];
       }
 
       // Still no emails? try to resolve the inquiry's primary username/barangay to a resident user
       if ((!emails || emails.length === 0) && inquiry.username) {
+        console.log('[sendInvite] Resolving username:', inquiry.username, 'barangayID:', inquiry.barangayID);
         try {
           const possible = await User.findOne({ username: inquiry.username, barangayID: inquiry.barangayID, role: 'resident' }).lean().catch(() => null);
-          if (possible && possible.email) emails = [String(possible.email).trim()];
+          if (possible && possible.email) {
+            emails = [String(possible.email).trim()];
+            console.log('[sendInvite] Resolved email from username:', emails);
+          } else {
+            console.log('[sendInvite] No user found for username:', inquiry.username);
+          }
         } catch (e) {
-          console.warn('Failed to resolve inquiry.username to resident email', e);
+          console.warn('[sendInvite] Failed to resolve inquiry.username to resident email', e);
         }
       }
 
+      console.log('[sendInvite] Final emails array:', emails);
       if (!emails || emails.length === 0) return res.status(400).json({ message: 'No recipient emails found for this inquiry' });
 
       // Compose subject and HTML body
@@ -1158,6 +1173,7 @@ export const deleteInquiry = async (req: any, res: Response, next: NextFunction)
       html += `<p>Please log in to your account to view details and confirm your attendance.</p>`;
 
       // Send using the centralized email service (which will prefer SendGrid when configured)
+      console.log('[sendInvite] Calling sendMail with', emails.length, 'recipient(s)');
       try {
         if (emails.length === 1) {
           await sendMail(emails[0], subject, html, [], 'appointment-invite');
@@ -1168,14 +1184,15 @@ export const deleteInquiry = async (req: any, res: Response, next: NextFunction)
           await sendMail(to, subject, html, bcc, 'appointment-invite');
         }
 
+        console.log('[sendInvite] Successfully sent invites to', emails.length, 'recipient(s)');
         return res.json({ success: true, sent: emails.length });
       } catch (e: any) {
-        console.error('sendInvite failed', e && (e.stack || e.message || e));
+        console.error('[sendInvite] sendMail failed:', e instanceof Error ? e.stack : (e && (e.message || e)));
         return res.status(500).json({ message: 'Failed to send invites', error: e && e.message ? e.message : String(e) });
       }
-    } catch (err) {
-      console.error('Error in sendInvite:', err);
-      return res.status(500).json({ message: 'Internal server error' });
+    } catch (err: any) {
+      console.error('[sendInvite] Outer catch - Error in sendInvite:', err instanceof Error ? err.stack : (err && (err.message || err)));
+      return res.status(500).json({ message: 'Internal server error', error: err && err.message ? err.message : String(err) });
     }
   };
 
