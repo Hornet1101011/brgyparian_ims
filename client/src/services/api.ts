@@ -510,6 +510,16 @@ export const contactAPI = {
     const resp = await axiosInstance.post(`/inquiries/${id}`, payload);
     return resp.data as { success?: boolean; conflicts?: ConflictItem[] } | any;
   },
+  // Send invite/notification for an inquiry (server may implement to trigger emails/SMS)
+  sendInvite: async (id: string) => {
+    try {
+      const resp = await axiosInstance.post(`/inquiries/${id}/send-invite`);
+      return resp.data;
+    } catch (err: any) {
+      // If endpoint not implemented (404), throw for caller to handle
+      throw err;
+    }
+  },
   // Public announcements
   getAnnouncements: () =>
     axiosInstance.get('/announcements').then(response => response.data),

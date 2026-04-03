@@ -10,6 +10,7 @@ import {
   getInquiryAppointment,
   updateInquiry,
   addResponse,
+  sendInvite,
   getSlotsByDate,
   getMyInquiries,
   getAppointmentAuditLogs,
@@ -91,5 +92,7 @@ router.post('/:id/staff-notes', auth, authorize('admin', 'staff'), (req: any, re
 
 // Send message to resident (staff/admin only)
 router.post('/:id/messages', auth, authorize('admin', 'staff'), (req: any, res: Response, next: NextFunction) => addMessage(req, res, next));
+// Send invite/notification for an inquiry (staff only)
+router.post('/:id/send-invite', auth, authorize('admin', 'staff'), (req: any, res: Response, next: NextFunction) => sendInvite(req, res, next));
 
 export default router;

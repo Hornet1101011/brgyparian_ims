@@ -455,7 +455,7 @@ export const getInquiryById = async (req: any, res: Response, next: NextFunction
 export const getInquiryAppointment = async (req: any, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id;
-    const inquiry = await Inquiry.findById(id).lean();
+    const inquiry: any = await Inquiry.findById(id).lean();
     if (!inquiry) return res.status(404).json({ message: 'Inquiry not found' });
 
     // fetch appointment slot copies
@@ -1101,6 +1101,76 @@ export const deleteInquiry = async (req: any, res: Response, next: NextFunction)
     return res.status(500).json({ message: 'Error deleting inquiry', error: err });
   }
 };
+
+  // Send invite/notification email(s) for an inquiry (staff/admin only)
+  export const sendInvite = async (req: any, res: Response, next: NextFunction) => {
+    try {
+      const id = req.params.id;
+      const inquiry: any = await Inquiry.findById(id).lean();
+      if (!inquiry) return res.status(404).json({ message: 'Inquiry not found' });
+
+      // Collect recipient emails: prefer explicit recipientEmails, otherwise resolve recipients to user emails
+      let emails: string[] = Array.isArray(inquiry.recipientEmails) ? inquiry.recipientEmails.map(String).filter(Boolean) : [];
+      if ((!emails || emails.length === 0) && Array.isArray(inquiry.recipients) && inquiry.recipients.length) {
+        // Try to normalize recipient entries (they may be "Full Name(barangayID)" or username)
+        const normalized = inquiry.recipients.map((r: any) => String(r).replace(/\(.+\)$/, '').trim()).filter(Boolean);
+        try {
+          const users = await User.find({ role: 'resident', $or: [{ username: { $in: normalized } }, { fullName: { $in: normalized } }] }).lean();
+          emails = users.map((u: any) => String(u.email || '').trim()).filter(Boolean);
+        } catch (e) {
+          console.warn('Failed to resolve recipients to users', e);
+        }
+      }
+
+      // As a fallback, if inquiry has residentEmail field, include it
+      if ((!emails || emails.length === 0) && inquiry.residentEmail) {
+        emails = [String(inquiry.residentEmail).trim()];
+      }
+
+      if (!emails || emails.length === 0) return res.status(400).json({ message: 'No recipient emails found for this inquiry' });
+
+      // Compose subject and HTML body
+      const subject = inquiry.title || inquiry.subject || 'Appointment Invitation';
+      let html = `<p>Dear recipient,</p>`;
+      if (inquiry.scheduledDates && Array.isArray(inquiry.scheduledDates) && inquiry.scheduledDates.length) {
+        html += `<p>Your appointment has been scheduled for:</p><ul>`;
+        for (const s of inquiry.scheduledDates) {
+          html += `<li>${s.date} — ${s.startTime} to ${s.endTime}</li>`;
+        }
+        html += `</ul>`;
+      } else if (inquiry.appointmentDates && Array.isArray(inquiry.appointmentDates) && inquiry.appointmentDates.length) {
+        html += `<p>Preferred dates: ${inquiry.appointmentDates.map((d: string) => d).join(', ')}</p>`;
+      }
+      if (inquiry.location) html += `<p>Location: ${inquiry.location}</p>`;
+      if (inquiry.description) html += `<p>${inquiry.description}</p>`;
+      if (inquiry.message) html += `<p>Message: ${inquiry.message}</p>`;
+      html += `<p>Please log in to your account to view details and confirm your attendance.</p>`;
+
+      // Send using the centralized email service (which will prefer SendGrid when configured)
+      try {
+        // Dynamically require to avoid circular deps during module load
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { sendMail } = require('../services/emailService');
+
+        if (emails.length === 1) {
+          await sendMail(emails[0], subject, html, [], 'appointment-invite');
+        } else {
+          // Send with one 'to' and rest as BCC to avoid exposing recipient list
+          const to = emails[0];
+          const bcc = emails.slice(1);
+          await sendMail(to, subject, html, bcc, 'appointment-invite');
+        }
+
+        return res.json({ success: true, sent: emails.length });
+      } catch (e: any) {
+        console.error('sendInvite failed', e && (e.message || e));
+        return res.status(500).json({ message: 'Failed to send invites', error: e && e.message ? e.message : String(e) });
+      }
+    } catch (err) {
+      console.error('Error in sendInvite:', err);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  };
 
 // Debug: this route exists and is ready on server side
 export const pingDeleteInquiry = (req: any, res: Response) => {

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, Button, Space, DatePicker, InputNumber, Radio, Input, List, Divider, Row, Col, Tag, Select, Spin, Progress, message } from 'antd';
+import { Modal, Button, Space, DatePicker, InputNumber, Radio, Input, List, Divider, Row, Col, Tag, Select, Spin, Progress, message, Switch } from 'antd';
 import dayjs from 'dayjs';
 import { contactAPI, residentsListAPI } from '../../services/api';
 import { getScheduledAppointmentsByDate, cancelAppointment } from '../../api/appointments';
@@ -48,6 +48,8 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
   const previewTimer = React.useRef(null as any);
   const submitTimer = React.useRef(null as any);
   const overallProgress = computingPreview ? previewProgress : (submitting ? submitProgress : 0);
+  const timeModeTitle = timeMode === 'unified' ? 'Unified (same start/end for all dates)' : 'Individual per date';
+  const timeModeHint = timeMode === 'unified' ? 'Toggle to switch to Individual per date' : 'Toggle to switch to Unified (same start/end for all dates)';
 
   useEffect(() => {
     if (!visible) {
@@ -90,7 +92,7 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
   // compute preview schedule based on mode + interval settings
   const computePreview = async () => {
     setComputingPreview(true);
-    setPreviewProgress(0);
+    setPreviewProgress(1);
     if (previewTimer.current) clearInterval(previewTimer.current);
     previewTimer.current = setInterval(() => {
       setPreviewProgress(p => Math.min(95, p + Math.floor(Math.random() * 10) + 5));
@@ -198,7 +200,7 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
     if (!preview.length) { if (!window.confirm('No computed assignments. Continue?')) return; }
 
     setSubmitting(true);
-    setSubmitProgress(0);
+    setSubmitProgress(1);
     if (submitTimer.current) clearInterval(submitTimer.current);
     submitTimer.current = setInterval(() => {
       setSubmitProgress(p => Math.min(95, p + Math.floor(Math.random() * 8) + 2));
@@ -255,17 +257,30 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
             <DatePicker onChange={addDate} disabledDate={(cur) => !cur || cur.isBefore(dayjs(), 'day') || cur.day() === 0 || cur.day() === 6} />
             <div>Selected: {selectedDates.length}</div>
           </Space>
-          <List dataSource={selectedDates} renderItem={d => (
-            <List.Item actions={[<a key="rm" onClick={() => removeDate(d)}>Remove</a>]}> <List.Item.Meta title={d} /></List.Item>
-          )} style={{ maxHeight: 180, overflowY: 'auto' }} />
+          <div style={{ minHeight: 56, display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+            {selectedDates.length === 0 ? (
+              <div style={{ textAlign: 'center', width: '100%', color: '#999' }}>
+                <div style={{ height: 36 }} />
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {selectedDates.map(ds => (
+                  <Tag key={ds} closable onClose={() => removeDate(ds)}>{ds}</Tag>
+                ))}
+              </div>
+            )}
+          </div>
 
           <Divider />
 
           <div style={{ marginBottom: 8, fontWeight: 600 }}>Time Mode</div>
-          <Radio.Group value={timeMode} onChange={e => setTimeMode(e.target.value)}>
-            <Radio value="unified">Unified (same start/end for all dates)</Radio>
-            <Radio value="individual">Individual per date</Radio>
-          </Radio.Group>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600 }}>{timeModeTitle}</div>
+              <div style={{ color: '#666', fontSize: 12 }}>{timeModeHint}</div>
+            </div>
+            <Switch checked={timeMode === 'individual'} onChange={(checked) => setTimeMode(checked ? 'individual' : 'unified')} checkedChildren="Individual" unCheckedChildren="Unified" />
+          </div>
 
           {timeMode === 'unified' ? (
             <Row gutter={8} style={{ marginTop: 8 }}>
@@ -287,12 +302,14 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
           <Divider />
 
           <div style={{ marginBottom: 8, fontWeight: 600 }}>Participants</div>
-          <Row gutter={8} style={{ marginBottom: 8 }}>
-            <Col span={8}><InputNumber min={1} max={1000} value={numParticipants} onChange={(v:any) => setNumParticipants(v || 1)} /></Col>
-            <Col span={16}>
+          <div style={{ marginBottom: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div>
+              <InputNumber style={{ width: 140 }} min={1} max={1000} value={numParticipants} onChange={(v:any) => setNumParticipants(v || 1)} />
+            </div>
+            <div>
               <Button onClick={openResidentPicker}>Select Residents ({selectedResidents.length})</Button>
-            </Col>
-          </Row>
+            </div>
+          </div>
 
           <div style={{ marginBottom: 8, fontWeight: 600 }}>Participant Distribution</div>
           <Radio.Group value={participantDistribution} onChange={e => setParticipantDistribution(e.target.value)}>
@@ -301,16 +318,25 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
             <Radio value="manual">Manual clusters</Radio>
           </Radio.Group>
 
-          {participantDistribution === 'manual' && (
+          {participantDistribution === 'manual' && selectedDates.length > 0 && (
             <div style={{ marginTop: 8 }}>
               <div style={{ fontWeight: 600, marginBottom: 6 }}>Assign participants to dates</div>
               {selectedDates.map(ds => (
                 <div key={ds} style={{ marginBottom: 6 }}>
                   <div style={{ fontWeight: 600 }}>{ds}</div>
-                  <Select mode="multiple" style={{ width: '100%' }} placeholder="Select residents for this date" value={selectedResidents.filter((r:any) => r._assignedToDate === ds).map((r:any)=>r.username)} onChange={(vals:any) => {
-                    // simple: no persistent per-date assignment state in this first iteration
-                  }}>
-                    {residentOptions.map(r => <Select.Option key={r.username} value={r.username}>{r.fullName || r.username}</Select.Option>)}
+                  <Select
+                    mode="multiple"
+                    style={{ width: '100%' }}
+                    placeholder={selectedResidents.length === 0 ? 'Select residents first' : 'Select residents for this date'}
+                    disabled={selectedResidents.length === 0}
+                    value={selectedResidents.filter((r:any) => r._assignedToDate === ds).map((r:any)=>r.username)}
+                    onChange={(vals:any) => {
+                      // simple: no persistent per-date assignment state in this first iteration
+                    }}
+                  >
+                    {selectedResidents.slice(0, numParticipants).map(r => (
+                      <Select.Option key={r.username} value={r.username}>{r.fullName || r.username}</Select.Option>
+                    ))}
                   </Select>
                 </div>
               ))}

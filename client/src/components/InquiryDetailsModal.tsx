@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import dayjs from 'dayjs';
 import { UserOutlined } from '@ant-design/icons';
 import { Modal, Descriptions, Tag, Spin, Button, Divider, List, Typography, message, Input, Space, DatePicker } from 'antd';
+import { MailOutlined } from '@ant-design/icons';
 import { useAppointmentDetailsQuery } from '../hooks/useAppointments';
 import appointmentsAPI from '../api/appointments';
 import AppointmentDetailsModal from './AppointmentDetailsModal';
@@ -312,7 +313,27 @@ function InquiryDetailsModal({ visible, inquiryId, onClose, onChanged }: Props) 
       footer={null}
       width={800}
       bodyStyle={{ maxHeight: '70vh', overflowY: 'auto' }}
-      title={<Typography.Title level={4}>{data?.title || data?.subject || 'Inquiry Details'}</Typography.Title>}
+      title={(
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <Typography.Title level={4} style={{ margin: 0 }}>{data?.title || data?.subject || 'Inquiry Details'}</Typography.Title>
+          <div>
+            <Button icon={<MailOutlined />} onClick={async () => {
+              if (!inquiryId) return;
+              if (!window.confirm('Send invites/notifications for this quick appointment now?')) return;
+              try {
+                await contactAPI.sendInvite(inquiryId);
+                message.success('Invites sent (if configured)');
+                try { query.refetch(); if (onChanged) onChanged(); } catch (_) {}
+              } catch (err: any) {
+                console.error('Failed to send invite', err);
+                message.error((err && err.message) ? err.message : 'Failed to send invite');
+              }
+            }} style={{ marginRight: 8 }}>
+              Send Invite
+            </Button>
+          </div>
+        </div>
+      )}
     >
       {loading ? <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div> : (
         <>
