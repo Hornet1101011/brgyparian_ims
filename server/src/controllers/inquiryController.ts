@@ -1107,15 +1107,27 @@ export const deleteInquiry = async (req: any, res: Response, next: NextFunction)
   export const sendInvite = async (req: any, res: Response, next: NextFunction) => {
     try {
       const id = req.params.id;
-      console.log('[sendInvite] Starting for inquiry:', id);
+      console.log('[sendInvite] ===== STARTING =====');
+      console.log('[sendInvite] Inquiry ID:', id);
       
-      const inquiry: any = await Inquiry.findById(id).lean();
-      if (!inquiry) return res.status(404).json({ message: 'Inquiry not found' });
-      console.log('[sendInvite] Inquiry found, fetching emails...');
+      let inquiry: any;
+      try {
+        inquiry = await Inquiry.findById(id).lean();
+      } catch (e) {
+        console.error('[sendInvite] Database error finding inquiry:', e);
+        return res.status(500).json({ message: 'Database error finding inquiry', error: String(e) });
+      }
+      
+      if (!inquiry) {
+        console.warn('[sendInvite] Inquiry not found:', id);
+        return res.status(404).json({ message: 'Inquiry not found' });
+      }
+      
+      console.log('[sendInvite] Inquiry found, collecting emails...');
 
       // Collect recipient emails: prefer explicit recipientEmails, otherwise resolve recipients to user emails
       let emails: string[] = Array.isArray(inquiry.recipientEmails) ? inquiry.recipientEmails.map(String).filter(Boolean) : [];
-      console.log('[sendInvite] recipientEmails:', emails);
+      console.log('[sendInvite] recipientEmails from inquiry:', emails);
       
       if ((!emails || emails.length === 0) && Array.isArray(inquiry.recipients) && inquiry.recipients.length) {
         // Try to normalize recipient entries (they may be "Full Name(barangayID)" or username)
@@ -1126,7 +1138,7 @@ export const deleteInquiry = async (req: any, res: Response, next: NextFunction)
           emails = users.map((u: any) => String(u.email || '').trim()).filter(Boolean);
           console.log('[sendInvite] Resolved emails from recipients:', emails);
         } catch (e) {
-          console.warn('[sendInvite] Failed to resolve recipients to users', e);
+          console.error('[sendInvite] Error resolving recipients to users:', e);
         }
       }
 
@@ -1148,12 +1160,15 @@ export const deleteInquiry = async (req: any, res: Response, next: NextFunction)
             console.log('[sendInvite] No user found for username:', inquiry.username);
           }
         } catch (e) {
-          console.warn('[sendInvite] Failed to resolve inquiry.username to resident email', e);
+          console.error('[sendInvite] Error resolving inquiry username:', e);
         }
       }
 
       console.log('[sendInvite] Final emails array:', emails);
-      if (!emails || emails.length === 0) return res.status(400).json({ message: 'No recipient emails found for this inquiry' });
+      if (!emails || emails.length === 0) {
+        console.warn('[sendInvite] No recipient emails found');
+        return res.status(400).json({ message: 'No recipient emails found for this inquiry' });
+      }
 
       // Compose subject and HTML body
       const subject = inquiry.title || inquiry.subject || 'Appointment Invitation';
@@ -1172,27 +1187,54 @@ export const deleteInquiry = async (req: any, res: Response, next: NextFunction)
       if (inquiry.message) html += `<p>Message: ${inquiry.message}</p>`;
       html += `<p>Please log in to your account to view details and confirm your attendance.</p>`;
 
-      // Send using the centralized email service (which will prefer SendGrid when configured)
-      console.log('[sendInvite] Calling sendMail with', emails.length, 'recipient(s)');
+      // Send using the centralized email service
+      console.log('[sendInvite] About to call sendMail with', emails.length, 'email(s):', emails);
+      
+      let sendResult;
       try {
         if (emails.length === 1) {
-          await sendMail(emails[0], subject, html, [], 'appointment-invite');
+          console.log('[sendInvite] Sending to single recipient:', emails[0]);
+          sendResult = await sendMail(emails[0], subject, html, [], 'appointment-invite');
         } else {
           // Send with one 'to' and rest as BCC to avoid exposing recipient list
           const to = emails[0];
           const bcc = emails.slice(1);
-          await sendMail(to, subject, html, bcc, 'appointment-invite');
+          console.log('[sendInvite] Sending to', to, 'with', bcc.length, 'BCC recipients');
+          sendResult = await sendMail(to, subject, html, bcc, 'appointment-invite');
         }
-
-        console.log('[sendInvite] Successfully sent invites to', emails.length, 'recipient(s)');
-        return res.json({ success: true, sent: emails.length });
-      } catch (e: any) {
-        console.error('[sendInvite] sendMail failed:', e instanceof Error ? e.stack : (e && (e.message || e)));
-        return res.status(500).json({ message: 'Failed to send invites', error: e && e.message ? e.message : String(e) });
+        console.log('[sendInvite] sendMail returned successfully:', sendResult);
+      } catch (mailErr: any) {
+        console.error('[sendInvite] sendMail threw error:', {
+          message: mailErr?.message,
+          stack: mailErr?.stack,
+          full: String(mailErr)
+        });
+        // Check if this is a credentials error
+        if (mailErr?.message?.includes('email credentials') || mailErr?.message?.includes('Missing')) {
+          return res.status(503).json({ 
+            message: 'Email service not configured', 
+            details: 'Email sending is not available. Please configure email settings in admin panel.',
+            error: mailErr?.message 
+          });
+        }
+        return res.status(500).json({ 
+          message: 'Failed to send invites', 
+          details: mailErr?.message || String(mailErr)
+        });
       }
+
+      console.log('[sendInvite] ===== SUCCESS - sent to', emails.length, 'recipient(s) =====');
+      return res.json({ success: true, sent: emails.length, details: `Sent to ${emails.length} recipient(s)` });
     } catch (err: any) {
-      console.error('[sendInvite] Outer catch - Error in sendInvite:', err instanceof Error ? err.stack : (err && (err.message || err)));
-      return res.status(500).json({ message: 'Internal server error', error: err && err.message ? err.message : String(err) });
+      console.error('[sendInvite] ===== OUTER ERROR =====', {
+        message: err?.message,
+        stack: err?.stack,
+        full: String(err)
+      });
+      return res.status(500).json({ 
+        message: 'Internal server error', 
+        details: err?.message || String(err)
+      });
     }
   };
 
