@@ -1127,6 +1127,16 @@ export const deleteInquiry = async (req: any, res: Response, next: NextFunction)
         emails = [String(inquiry.residentEmail).trim()];
       }
 
+      // Still no emails? try to resolve the inquiry's primary username/barangay to a resident user
+      if ((!emails || emails.length === 0) && inquiry.username) {
+        try {
+          const possible = await User.findOne({ username: inquiry.username, barangayID: inquiry.barangayID, role: 'resident' }).lean().catch(() => null);
+          if (possible && possible.email) emails = [String(possible.email).trim()];
+        } catch (e) {
+          console.warn('Failed to resolve inquiry.username to resident email', e);
+        }
+      }
+
       if (!emails || emails.length === 0) return res.status(400).json({ message: 'No recipient emails found for this inquiry' });
 
       // Compose subject and HTML body
@@ -1163,7 +1173,7 @@ export const deleteInquiry = async (req: any, res: Response, next: NextFunction)
 
         return res.json({ success: true, sent: emails.length });
       } catch (e: any) {
-        console.error('sendInvite failed', e && (e.message || e));
+        console.error('sendInvite failed', e && (e.stack || e.message || e));
         return res.status(500).json({ message: 'Failed to send invites', error: e && e.message ? e.message : String(e) });
       }
     } catch (err) {
