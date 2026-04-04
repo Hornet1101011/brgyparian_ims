@@ -83,6 +83,9 @@ import { rangesOverlap } from '../utils/scheduling';
 import schedulingService from '../services/schedulingService';
 import auditService from '../services/auditService';
 import { sendMail } from '../services/EmailService';
+// Runtime require for sendGridService (used for direct email sending like forget password)
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const sendGridService: any = require('../../services/emailService.js');
 
 // Helper: convert HH:MM to minutes since midnight
 const normalizeToMinutes = (t?: string) => {
@@ -1187,44 +1190,46 @@ export const deleteInquiry = async (req: any, res: Response, next: NextFunction)
       if (inquiry.message) html += `<p>Message: ${inquiry.message}</p>`;
       html += `<p>Please log in to your account to view details and confirm your attendance.</p>`;
 
-      // Send using the centralized email service
-      console.log('[sendInvite] About to call sendMail with', emails.length, 'email(s):', emails);
+      // Send using sendGridService directly (same way forget password does it)
+      console.log('[sendInvite] Sending to', emails.length, 'recipient(s)');
       
-      let sendResult;
       try {
+        // Send individually to each recipient (or use BCC for multiple)
         if (emails.length === 1) {
-          console.log('[sendInvite] Sending to single recipient:', emails[0]);
-          sendResult = await sendMail(emails[0], subject, html, [], 'appointment-invite');
+          await sendGridService.sendEmail({
+            to: emails[0],
+            subject,
+            html,
+            emailType: 'appointment-invite'
+          });
+          console.log('[sendInvite] Successfully sent invite to', emails[0]);
         } else {
-          // Send with one 'to' and rest as BCC to avoid exposing recipient list
+          // Send with first recipient as 'to' and rest as BCC
           const to = emails[0];
           const bcc = emails.slice(1);
-          console.log('[sendInvite] Sending to', to, 'with', bcc.length, 'BCC recipients');
-          sendResult = await sendMail(to, subject, html, bcc, 'appointment-invite');
+          await sendGridService.sendEmail({
+            to,
+            subject,
+            html,
+            bcc,
+            emailType: 'appointment-invite'
+          });
+          console.log('[sendInvite] Successfully sent invite to', to, 'with', bcc.length, 'BCC recipients');
         }
-        console.log('[sendInvite] sendMail returned successfully:', sendResult);
+
+        console.log('[sendInvite] ===== SUCCESS - sent to', emails.length, 'recipient(s) =====');
+        return res.json({ success: true, sent: emails.length, details: `Sent to ${emails.length} recipient(s)` });
       } catch (mailErr: any) {
-        console.error('[sendInvite] sendMail threw error:', {
+        console.error('[sendInvite] sendGridService.sendEmail threw error:', {
           message: mailErr?.message,
           stack: mailErr?.stack,
           full: String(mailErr)
         });
-        // Check if this is a credentials error
-        if (mailErr?.message?.includes('email credentials') || mailErr?.message?.includes('Missing')) {
-          return res.status(503).json({ 
-            message: 'Email service not configured', 
-            details: 'Email sending is not available. Please configure email settings in admin panel.',
-            error: mailErr?.message 
-          });
-        }
         return res.status(500).json({ 
           message: 'Failed to send invites', 
           details: mailErr?.message || String(mailErr)
         });
       }
-
-      console.log('[sendInvite] ===== SUCCESS - sent to', emails.length, 'recipient(s) =====');
-      return res.json({ success: true, sent: emails.length, details: `Sent to ${emails.length} recipient(s)` });
     } catch (err: any) {
       console.error('[sendInvite] ===== OUTER ERROR =====', {
         message: err?.message,
