@@ -6,11 +6,12 @@ import { createGmailTransporter, decryptGmailPassword, sanitizeGmailConfig } fro
 // Attempt to integrate SendGrid when configured
 let sendGridService: any = null;
 try {
-  // require the CommonJS sendgrid service (compiled JS)
+  // require the CommonJS sendgrid service (compiled JS) - same directory
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  sendGridService = require('../emailService');
+  sendGridService = require('./emailService');
 } catch (e) {
   // ignore if not available
+  console.warn('[EmailService] Failed to load sendGridService:', e instanceof Error ? e.message : e);
   sendGridService = null;
 }
 
@@ -276,7 +277,9 @@ export async function sendMail(to: string, subject: string, html: string, bcc?: 
     // If SendGrid service is available and sendgrid is configured and enabled, prefer SendGrid
     try {
       if (sendGridService) {
-        const SendGridConfig = require('../../models/SendGridConfig');
+        // SendGridConfig is already in the dist folder after compilation
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const SendGridConfig = require('../models/SendGridConfig');
         const sgCfg = await SendGridConfig.getConfig();
         console.log('[EmailService] SendGrid branch check:', {
           sendGridServiceLoaded: !!sendGridService,
