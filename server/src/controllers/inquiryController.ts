@@ -1173,22 +1173,115 @@ export const deleteInquiry = async (req: any, res: Response, next: NextFunction)
         return res.status(400).json({ message: 'No recipient emails found for this inquiry' });
       }
 
-      // Compose subject and HTML body
+      // Compose professional HTML email with all details
       const subject = inquiry.title || inquiry.subject || 'Appointment Invitation';
-      let html = `<p>Dear recipient,</p>`;
+      
+      // Build date/time section
+      let dateTimeHtml = '';
       if (inquiry.scheduledDates && Array.isArray(inquiry.scheduledDates) && inquiry.scheduledDates.length) {
-        html += `<p>Your appointment has been scheduled for:</p><ul>`;
-        for (const s of inquiry.scheduledDates) {
-          html += `<li>${s.date} — ${s.startTime} to ${s.endTime}</li>`;
-        }
-        html += `</ul>`;
+        dateTimeHtml = `
+          <div style="margin: 20px 0; background: #f5f5f5; padding: 15px; border-radius: 5px; border-left: 4px solid #1890ff;">
+            <h3 style="margin-top: 0; color: #1890ff;">📅 Scheduled Date(s) & Time(s)</h3>
+            <ul style="list-style: none; padding: 0; margin: 10px 0;">
+              ${inquiry.scheduledDates.map((s: any) => `
+                <li style="margin: 8px 0; font-size: 14px;">
+                  <strong>${s.date}</strong> • ${s.startTime} to ${s.endTime}
+                </li>
+              `).join('')}
+            </ul>
+          </div>
+        `;
       } else if (inquiry.appointmentDates && Array.isArray(inquiry.appointmentDates) && inquiry.appointmentDates.length) {
-        html += `<p>Preferred dates: ${inquiry.appointmentDates.map((d: string) => d).join(', ')}</p>`;
+        dateTimeHtml = `
+          <div style="margin: 20px 0; background: #f5f5f5; padding: 15px; border-radius: 5px; border-left: 4px solid #1890ff;">
+            <h3 style="margin-top: 0; color: #1890ff;">📅 Preferred Dates</h3>
+            <p style="margin: 10px 0; font-size: 14px;">${inquiry.appointmentDates.map((d: string) => d).join(', ')}</p>
+          </div>
+        `;
       }
-      if (inquiry.location) html += `<p>Location: ${inquiry.location}</p>`;
-      if (inquiry.description) html += `<p>${inquiry.description}</p>`;
-      if (inquiry.message) html += `<p>Message: ${inquiry.message}</p>`;
-      html += `<p>Please log in to your account to view details and confirm your attendance.</p>`;
+
+      // Build location section
+      let locationHtml = '';
+      if (inquiry.location) {
+        locationHtml = `
+          <div style="margin: 20px 0; background: #f0f8f5; padding: 15px; border-radius: 5px; border-left: 4px solid #52c41a;">
+            <h3 style="margin-top: 0; color: #52c41a;">📍 Location</h3>
+            <p style="margin: 10px 0; font-size: 14px;">${inquiry.location}</p>
+          </div>
+        `;
+      }
+
+      // Build description/details section
+      let detailsHtml = '';
+      if (inquiry.description || inquiry.message) {
+        detailsHtml = `
+          <div style="margin: 20px 0; background: #fffbe6; padding: 15px; border-radius: 5px; border-left: 4px solid #faad14;">
+            <h3 style="margin-top: 0; color: #faad14;">ℹ️ Appointment Details</h3>
+            ${inquiry.description ? `<p style="margin: 10px 0; font-size: 14px;"><strong>Description:</strong> ${inquiry.description}</p>` : ''}
+            ${inquiry.message ? `<p style="margin: 10px 0; font-size: 14px;"><strong>Message:</strong> ${inquiry.message}</p>` : ''}
+          </div>
+        `;
+      }
+
+      // Complete professional email template
+      const html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #1890ff 0%, #096dd9 100%); color: white; padding: 20px; border-radius: 5px; text-align: center; }
+            .header h1 { margin: 0; font-size: 24px; }
+            .content { padding: 20px 0; }
+            .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #999; text-align: center; }
+            .cta-button { display: inline-block; background: #1890ff; color: white; padding: 12px 30px; border-radius: 5px; text-decoration: none; margin-top: 20px; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>✉️ Appointment Invitation</h1>
+              <p style="margin: 10px 0 0 0; font-size: 14px;">Barangay Service Request</p>
+            </div>
+
+            <div class="content">
+              <p style="font-size: 16px;">Dear Valued Resident,</p>
+              
+              <p style="font-size: 14px; margin: 15px 0;">
+                Your appointment request has been processed and a date/time has been scheduled. 
+                Please find the details below:
+              </p>
+
+              ${dateTimeHtml}
+              ${locationHtml}
+              ${detailsHtml}
+
+              <p style="margin-top: 30px; padding: 15px; background: #e6f7ff; border-radius: 5px; font-size: 14px;">
+                <strong>📌 Next Steps:</strong><br>
+                Please log in to your account to confirm your attendance. Your confirmation helps us 
+                plan accordingly and ensures the best service for you.
+              </p>
+
+              <div style="text-align: center;">
+                <a href="${process.env.FRONTEND_URL || 'https://alphaversion.onrender.com'}/resident/dashboard" class="cta-button">
+                  View Appointment Details
+                </a>
+              </div>
+            </div>
+
+            <div class="footer">
+              <p>
+                <strong>Barangay Information Management System</strong><br>
+                This is an automated message. Please do not reply to this email.<br>
+                For inquiries, please log in to your account or contact the barangay office.
+              </p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
 
       // Send using sendGridService directly (same way forget password does it)
       console.log('[sendInvite] Sending to', emails.length, 'recipient(s)');
