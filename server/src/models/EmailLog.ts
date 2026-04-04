@@ -33,7 +33,7 @@ const emailLogSchema = new mongoose.Schema({
   // Track email type for reporting
   emailType: {
     type: String,
-    enum: ['password-reset', 'otp', 'document-notification', 'announcement', 'generic'],
+    enum: ['password-reset', 'otp', 'document-notification', 'announcement', 'appointment-invite', 'generic'],
     default: 'generic',
   },
   // For BCC emails, we store the primary recipient here and count in a separate field

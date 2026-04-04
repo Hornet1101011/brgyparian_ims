@@ -3,17 +3,10 @@ import { Transporter } from 'nodemailer';
 import { EmailLog } from '../models/EmailLog';
 import SystemSetting from '../models/SystemSetting';
 import { createGmailTransporter, decryptGmailPassword, sanitizeGmailConfig } from '../utils/gmailHelper';
-// Attempt to integrate SendGrid when configured
+import sgMail from '@sendgrid/mail';
+
+// Don't load sendGridService on module init - will load config on demand
 let sendGridService: any = null;
-try {
-  // require the CommonJS sendgrid service (compiled JS) - same directory
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  sendGridService = require('./emailService');
-} catch (e) {
-  // ignore if not available
-  console.warn('[EmailService] Failed to load sendGridService:', e instanceof Error ? e.message : e);
-  sendGridService = null;
-}
 
 /**
  * Gmail SMTP Transporter
@@ -274,38 +267,47 @@ export async function sendMail(to: string, subject: string, html: string, bcc?: 
     
     const settings = await SystemSetting.findOne().lean();
 
-    // If SendGrid service is available and sendgrid is configured and enabled, prefer SendGrid
+    // If SendGrid is configured and enabled, prefer SendGrid
     try {
-      if (sendGridService) {
-        // SendGridConfig is already in the dist folder after compilation
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const SendGridConfig = require('../models/SendGridConfig');
-        const sgCfg = await SendGridConfig.getConfig();
-        console.log('[EmailService] SendGrid branch check:', {
-          sendGridServiceLoaded: !!sendGridService,
-          sgConfigPresent: !!sgCfg,
-          sgEnabled: !!(sgCfg && sgCfg.enabled),
-          hasApiKey: !!(sgCfg && sgCfg.apiKey),
-          fromEmail: sgCfg?.fromEmail || null
-        });
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const SendGridConfig = require('../models/SendGridConfig');
+      const sgCfg = await SendGridConfig.getConfig();
+      console.log('[EmailService] SendGrid branch check:', {
+        sgConfigPresent: !!sgCfg,
+        sgEnabled: !!(sgCfg && sgCfg.enabled),
+        hasApiKey: !!(sgCfg && sgCfg.apiKey),
+        fromEmail: sgCfg?.fromEmail || null
+      });
 
-        if (sgCfg && sgCfg.enabled) {
-          try {
-            console.log('[EmailService] Using SendGrid for sending email (password-reset integration)');
-            // Call the SendGrid service's sendEmail function which expects an options object
-            await sendGridService.sendEmail({ to, subject, html, settings: { email: { sendgrid: sgCfg } } });
+      if (sgCfg && sgCfg.enabled && sgCfg.apiKey) {
+        try {
+          console.log('[EmailService] Using SendGrid for sending email');
+          // Set SendGrid API key
+          sgMail.setApiKey(sgCfg.apiKey);
 
-            // Log email as sent
-            await logEmailToDb(to, subject, true, undefined, undefined, emailType || 'generic', bcc ? bcc.length : 0);
-            return { success: true, message: 'Email sent via SendGrid' };
-          } catch (innerSgErr: any) {
-            console.error('[EmailService] SendGrid sendEmail threw:', innerSgErr && (innerSgErr.message || innerSgErr));
-            // Let the outer catch/fallback handle continuing to SMTP
-            throw innerSgErr;
+          // Compose BCC string if needed
+          let sgMailOptions: any = {
+            to,
+            from: sgCfg.fromEmail || 'noreply@barangay.system',
+            subject,
+            html,
+          };
+
+          // Add BCC if provided
+          if (bcc && Array.isArray(bcc) && bcc.length > 0) {
+            sgMailOptions.bcc = bcc;
           }
+
+          await sgMail.send(sgMailOptions);
+
+          // Log email as sent
+          await logEmailToDb(to, subject, true, undefined, undefined, emailType || 'generic', bcc ? bcc.length : 0);
+          return { success: true, message: 'Email sent via SendGrid' };
+        } catch (innerSgErr: any) {
+          console.error('[EmailService] SendGrid send failed:', innerSgErr && (innerSgErr.message || innerSgErr));
+          // Let the outer catch/fallback handle continuing to SMTP
+          throw innerSgErr;
         }
-      } else {
-        console.log('[EmailService] sendGridService not available in this runtime');
       }
     } catch (sgErr: any) {
       console.warn('[EmailService] SendGrid send attempt failed, falling back to SMTP/Gmail transporter', sgErr instanceof Error ? sgErr.message : sgErr);
