@@ -270,7 +270,7 @@ export async function sendMail(to: string, subject: string, html: string, bcc?: 
     // If SendGrid is configured and enabled, prefer SendGrid
     try {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const SendGridConfig = require('../models/SendGridConfig');
+      const SendGridConfig = require('../models/SendGridConfig.js');
       const sgCfg = await SendGridConfig.getConfig();
       console.log('[EmailService] SendGrid branch check:', {
         sgConfigPresent: !!sgCfg,
