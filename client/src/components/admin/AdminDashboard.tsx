@@ -169,19 +169,19 @@ const AdminDashboard = () => {
         setTemplatesCount(0);
       }
 
-  const notificationsRes = await notificationAPI.getNotifications();
+      const notificationsRes = await notificationAPI.getNotifications();
 
-  // Only show unread notifications in the dashboard
-  const unreadNotifs = notificationsRes.filter((n: Notification) => !n.read);
-  setNotifications(unreadNotifs); // store all unread notifications
+      // Only show unread notifications in the dashboard
+      const unreadNotifs = notificationsRes.filter((n: Notification) => !n.read);
+      setNotifications(unreadNotifs); // store all unread notifications
 
-  // Define staff access notifications for pendingRequests calculation
-  // Only include explicit `staff_approval` notification types here, and only unread
-  const staffApprovalNotifs = unreadNotifs.filter((n: Notification) => (n.type || '').toString().toLowerCase() === 'staff_approval');
-  setStaffAccessNotifs(staffApprovalNotifs);
+      // Define staff access notifications for pendingRequests calculation
+      // Only include explicit `staff_approval` notification types here, and only unread
+      const staffApprovalNotifs = unreadNotifs.filter((n: Notification) => (n.type || '').toString().toLowerCase() === 'staff_approval');
+      setStaffAccessNotifs(staffApprovalNotifs);
 
-  // Transform system statistics
-  const systemPending = (statsRes.documents?.pending || 0) + staffApprovalNotifs.length;
+      // Transform system statistics
+      const systemPending = (statsRes.documents?.pending || 0) + staffApprovalNotifs.length;
       const systemTotalDocs = statsRes.documents?.total || 0;
 
       // Try to fetch document requests directly and derive pending count to ensure accuracy
