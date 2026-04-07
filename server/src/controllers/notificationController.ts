@@ -40,21 +40,36 @@ export const getNotifications = async (req: Request, res: Response) => {
     if (!req.user || !(req.user as any)._id) {
       return res.status(401).json({ message: 'Unauthorized: User not found in request' });
     }
+    const userId = (req.user as any)._id;
     const page = parseInt((req.query.page as string) || '1', 10);
     const limit = parseInt((req.query.limit as string) || '10', 10);
     const search = (req.query.search as string) || '';
     const type = (req.query.type as string) || 'all';
     const sort = (req.query.sort as string) || '-createdAt';
+    
+    console.log('[getNotifications] Fetching for user:', String(userId), {
+      page, limit, search, type, sort
+    });
+    
     const result = await notificationService.getNotifications({
-      userId: (req.user as any)._id,
+      userId,
       page,
       limit,
       search,
       type: type as 'documents' | 'inquiries' | 'system' | 'all',
       sort,
     });
+    
+    console.log('[getNotifications] Result:', {
+      total: result.total,
+      returned: result.data.length,
+      page: result.page,
+      pages: result.pages
+    });
+    
     res.json(result);
   } catch (error) {
+    console.error('[getNotifications] Error fetching notifications:', error);
     res.status(500).json({ message: 'Error fetching notifications', error });
   }
 };

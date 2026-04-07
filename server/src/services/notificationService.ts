@@ -20,11 +20,28 @@ export async function getNotifications({ userId, page = 1, limit = 10, search = 
       { message: { $regex: search, $options: 'i' } },
     ];
   }
+  
+  console.log('[notificationService] getNotifications filter:', JSON.stringify(filter, null, 2));
+  
   const total = await Notification.countDocuments(filter);
   const data = await Notification.find(filter)
     .sort(sort)
     .skip((page - 1) * limit)
     .limit(limit);
+    
+  console.log('[notificationService] Query results - total:', total, 'returned:', data.length);
+  
+  if (data.length > 0) {
+    console.log('[notificationService] First notification:', {
+      id: data[0]._id,
+      userId: data[0].userId,
+      user: data[0].user,
+      type: data[0].type,
+      message: data[0].message,
+      createdAt: data[0].createdAt
+    });
+  }
+  
   return {
     data,
     total,

@@ -212,15 +212,27 @@ export const register = async (req: Request, res: Response, next: unknown) => {
 
     // If staff request, create notification for admin
     if (staffRequest) {
-      // Find all admins
-      const admins = await User.find({ role: 'admin' });
-      for (const admin of admins) {
-        await Notification.create({
-          user: admin._id,
-          type: 'staff_approval',
-          message: `${fullName} (${email}) has requested staff access.`,
-          data: { userId: user._id, fullName, email, username },
-        });
+      try {
+        // Find all admins
+        const admins = await User.find({ role: 'admin' });
+        console.log('[register] Found admins for notification:', admins.length);
+        
+        for (const admin of admins) {
+          try {
+            const notif = await Notification.create({
+              user: admin._id,
+              userId: admin._id,  // Also set userId as backup
+              type: 'staff_approval',
+              message: `${fullName} (${email}) has requested staff access.`,
+              data: { userId: user._id, fullName, email, username },
+            });
+            console.log('[register] Notification created for admin', String(admin._id), '- notif ID:', String(notif._id));
+          } catch (notifErr) {
+            console.error('[register] Failed to create notification for admin', String(admin._id), ':', notifErr);
+          }
+        }
+      } catch (adminsErr) {
+        console.error('[register] Failed to find admins or create notifications:', adminsErr);
       }
     }
 
