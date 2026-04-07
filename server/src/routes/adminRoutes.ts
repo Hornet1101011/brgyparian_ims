@@ -39,7 +39,7 @@ router.get('/staff-applications', async (req, res) => {
 
 
 // Dashboard statistics endpoint
-import { Document } from '../models/Document';
+import { DocumentRequest } from '../models/DocumentRequest';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -59,16 +59,18 @@ router.get('/statistics', async (req, res) => {
 			staff: allUsers.filter(u => u.role === UserRole.STAFF).length,
 			resident: allUsers.filter(u => u.role === UserRole.RESIDENT).length
 		};
-		// Total documents, completed, and pending documents
-		const documents = await Document.find({});
+		// Total documents from DocumentRequest, completed, and pending documents
+		const docRequests = await DocumentRequest.find({});
 		const byType = {};
 		let completed = 0;
 		let pending = 0;
 		let rejected = 0;
-		documents.forEach(doc => {
-			if (doc.status === 'approved') completed++;
+		let processing = 0;
+		docRequests.forEach(doc => {
+			if (doc.status === 'approved' || doc.status === 'completed') completed++;
 			if (doc.status === 'pending') pending++;
 			if (doc.status === 'rejected') rejected++;
+			if (doc.status === 'processing') processing++;
 			byType[doc.type] = (byType[doc.type] || 0) + 1;
 		});
 		res.json({
@@ -77,10 +79,11 @@ router.get('/statistics', async (req, res) => {
 				byRole
 			},
 			documents: {
-				total: documents.length,
+				total: docRequests.length,
 				completed,
 				pending,
 				rejected,
+				processing,
 				byType
 			}
 		});
