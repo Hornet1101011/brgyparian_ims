@@ -17,7 +17,10 @@ const AdminNotifications: React.FC = () => {
   const load = async () => {
     setLoading(true);
     try {
-      const list = await notificationAPI.getNotifications();
+      const response = await notificationAPI.getNotifications();
+      // Handle both array response and paginated response with data property
+      const list = Array.isArray(response) ? response : (response?.data || []);
+      console.log('[AdminNotifications] Loaded', list.length, 'notifications:', list);
       setNotifs(Array.isArray(list) ? list : []);
     } catch (err) {
       console.error('Failed to load notifications', err);
@@ -27,7 +30,12 @@ const AdminNotifications: React.FC = () => {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { 
+    load(); 
+    // Poll for new notifications every 10 seconds
+    const interval = setInterval(load, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleApprove = async (n: NotificationType) => {
     if (!n._id) return;
@@ -114,6 +122,16 @@ const AdminNotifications: React.FC = () => {
           <BellOutlined style={{ fontSize: '14px' }} />
           Notifications
         </span>
+        <div style={{ marginLeft: 'auto' }}>
+          <Button 
+            type="text" 
+            size="small" 
+            onClick={load} 
+            loading={loading}
+          >
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Content */}
