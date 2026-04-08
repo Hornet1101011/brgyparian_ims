@@ -133,13 +133,38 @@ export const getTemplateText = (type: string) => {
 // Notification API
 export const notificationAPI = {
   getNotifications: async () => {
-    return axiosInstance.get('/notifications').then(res => (res.data || []).filter(item => item != null));
+    try {
+      const res = await axiosInstance.get('/notifications');
+      const d = res && res.data;
+      if (Array.isArray(d)) return d.filter((item: any) => item != null);
+      if (d && Array.isArray((d as any).data)) return (d as any).data.filter((item: any) => item != null);
+      // support other common shapes
+      if (d && Array.isArray((d as any).results)) return (d as any).results.filter((item: any) => item != null);
+      if (d && Array.isArray((d as any).docs)) return (d as any).docs.filter((item: any) => item != null);
+      return [];
+    } catch (err) {
+      console.error('notificationAPI.getNotifications failed:', err);
+      // try fallback endpoint if server exposes one
+      try {
+        const fallback = await axiosInstance.get('/notifications/fallback');
+        const fd = fallback && fallback.data;
+        if (Array.isArray(fd)) return fd.filter((item: any) => item != null);
+        if (fd && Array.isArray((fd as any).data)) return (fd as any).data.filter((item: any) => item != null);
+        return [];
+      } catch (err2) {
+        console.error('notificationAPI.getNotifications fallback failed:', err2);
+        return [];
+      }
+    }
   },
   approveStaff: async (userId: string, notifId: string) => {
     return axiosInstance.post(`/notifications/approve-staff/${userId}/${notifId}`);
   },
   rejectStaff: async (notifId: string, reason?: string) => {
     return axiosInstance.post(`/notifications/reject-staff/${notifId}`, { reason });
+  },
+  markAsRead: async (notifId: string) => {
+    return axiosInstance.patch(`/notifications/mark-read/${notifId}`);
   },
 };
 

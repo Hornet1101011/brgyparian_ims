@@ -36,6 +36,8 @@ const getNotifications = async (): Promise<GetNotificationsResponse> => {
     : res.data.data;
   if (!Array.isArray(notifications)) return [];
   return notifications.map((n: any) => ({
+    // normalize id vs _id so callers can reliably use `id`
+    id: n.id || (n._id ? String(n._id) : undefined),
     ...n,
     category: n.category || n.type,
     type: n.type || n.category,
@@ -43,12 +45,14 @@ const getNotifications = async (): Promise<GetNotificationsResponse> => {
 };
 
 const markAsRead = async (id: string): Promise<MarkAsReadResponse> => {
-  const res = await axiosInstance.post<MarkAsReadResponse>(`/notifications/${id}/read`);
+  const res = await axiosInstance.patch<MarkAsReadResponse>(`/notifications/mark-read/${id}`);
   return res.data;
 };
 
-const markAllAsRead = async (): Promise<MarkAllAsReadResponse> => {
-  const res = await axiosInstance.post<MarkAllAsReadResponse>(`/notifications/read-all`);
+// Accept an array of ids to mark as read. If empty/undefined, server will return 400.
+const markAllAsRead = async (ids?: string[]): Promise<MarkAllAsReadResponse> => {
+  const payload = { ids: Array.isArray(ids) ? ids : [] };
+  const res = await axiosInstance.patch<MarkAllAsReadResponse>(`/notifications/mark-read`, payload);
   return res.data;
 };
 

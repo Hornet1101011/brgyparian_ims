@@ -19,14 +19,18 @@ const NotificationBell: React.FC = () => {
     }
   }, [user]);
 
-  const unreadCount = notifications.filter(n => n.status === 'unread').length;
+  // server stores a boolean `read` flag; consider notification read when `read === true`
+  const unreadCount = notifications.filter(n => !n.read).length;
 
   const menu = (
     <List
       dataSource={notifications}
       renderItem={item => (
-        <List.Item style={{ background: item.status === 'unread' ? '#e6f7ff' : undefined }}>
-          {item.message}
+        <List.Item style={{ background: !item.read ? '#e6f7ff' : undefined }}>
+          <div style={{ padding: 6 }}>
+            <div style={{ fontWeight: !item.read ? 700 : 400 }}>{item.title || item.message}</div>
+            {item.title && <div style={{ color: '#666', fontSize: 12 }}>{item.message}</div>}
+          </div>
         </List.Item>
       )}
       locale={{ emptyText: loading ? <Spin /> : 'No notifications' }}

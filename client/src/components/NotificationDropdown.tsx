@@ -37,7 +37,8 @@ const NotificationDropdown: React.FC = () => {
     (async () => {
       try {
         setLoading(true);
-        await notificationService.markAllAsRead();
+        const ids = notifications.map(n => String(n.id || (n as any)._id)).filter(Boolean);
+        await notificationService.markAllAsRead(ids);
         // Optimistically mark local notifications as read
         setNotifications(prev => prev.map(n => ({ ...n, read: true })));
         message.success('All notifications marked as read');
