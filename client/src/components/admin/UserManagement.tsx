@@ -23,7 +23,7 @@ import {
   Upload,
 } from 'antd';
 import AppAvatar from '../AppAvatar';
-import { EditOutlined, DeleteOutlined, MoreOutlined, EyeOutlined, StopOutlined, CheckOutlined, ReloadOutlined, FormOutlined } from '@ant-design/icons';
+import { EditOutlined, DeleteOutlined, MoreOutlined, EyeOutlined, StopOutlined, CheckOutlined, ReloadOutlined, FormOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import type { SortOrder } from 'antd/es/table/interface';
 import { adminAPI } from '../../services/api';
 import dayjs from 'dayjs';
@@ -79,6 +79,8 @@ const UserManagement = () => {
           email: user.email,
           role: user.role,
           isActive: user.isActive,
+          restricted: !!user.restricted,
+          warning: !!user.warning,
           verified: !!user.verified,
           createdAt: user.createdAt,
           lastLogin: user.lastLogin,
@@ -168,6 +170,40 @@ const UserManagement = () => {
     } catch (err) {
       console.error('Failed to demote user', err);
       message.error('Failed to demote user');
+    }
+  };
+
+  // Restrict or remove restriction from a resident account
+  const handleRestrictUser = async (userId: string, restricted: boolean) => {
+    if (!userId) return;
+    try {
+      message.loading({ content: restricted ? 'Restricting user...' : 'Removing restriction...', key: 'restrict' });
+      const res: any = await adminAPI.restrictUser(userId, restricted);
+      message.success({ content: restricted ? 'User restricted' : 'Restriction removed', key: 'restrict', duration: 2 });
+      await fetchUsers();
+      if (selectedUser && selectedUser._id === userId) {
+        setSelectedUser(res.user || res);
+      }
+    } catch (err) {
+      console.error('Failed to update restriction', err);
+      message.error('Failed to update restriction');
+    }
+  };
+
+  // Warn or remove warning from a resident account
+  const handleWarnUser = async (userId: string, warning: boolean) => {
+    if (!userId) return;
+    try {
+      message.loading({ content: warning ? 'Setting warning...' : 'Removing warning...', key: 'warn' });
+      const res: any = await adminAPI.warnUser(userId, warning);
+      message.success({ content: warning ? 'Warning set' : 'Warning removed', key: 'warn', duration: 2 });
+      await fetchUsers();
+      if (selectedUser && selectedUser._id === userId) {
+        setSelectedUser(res.user || res);
+      }
+    } catch (err) {
+      console.error('Failed to update warning', err);
+      message.error('Failed to update warning');
     }
   };
 
@@ -410,6 +446,29 @@ const UserManagement = () => {
               }}>
                 Disable
               </Menu.Item>
+              {record.role === 'resident' && record.warning && (
+                <Menu.Item key="warn" icon={<ExclamationCircleOutlined style={{ color: '#f59e0b' }} />} style={{ color: '#1f2937' }} onClick={async () => {
+                  if (!record || !record._id) { message.error('No user selected'); return; }
+                  Modal.info({
+                    title: 'Violation Warning',
+                    content: (<div>you currently have a violation please go to the barangay to resolve this issue.thank you and godbless</div>),
+                  });
+                }}>
+                  View Warning
+                </Menu.Item>
+              )}
+              {record.role === 'resident' && (
+                <Menu.Item key="restrict" icon={<StopOutlined style={{ color: '#f97316' }} />} style={{ color: '#1f2937' }} onClick={async () => {
+                  if (!record || !record._id) { message.error('No user selected'); return; }
+                  Modal.confirm({
+                    title: record.restricted ? 'Remove restriction' : 'Restrict user',
+                    content: `Are you sure you want to ${record.restricted ? 'remove restriction from' : 'restrict'} ${record.fullName || record.email || record._id}?`,
+                    onOk: async () => { await handleRestrictUser(record._id, !record.restricted); }
+                  });
+                }}>
+                  {record.restricted ? 'Remove restriction' : 'Restrict account'}
+                </Menu.Item>
+              )}
               {record.role === 'staff' && (
                 <Menu.Item key="demote" icon={<ReloadOutlined style={{ color: '#8b5cf6' }} />} style={{ color: '#1f2937' }} onClick={async () => {
                   if (!record || !record._id) { message.error('No user selected'); return; }
@@ -439,7 +498,8 @@ const UserManagement = () => {
           )}
           trigger={['click']}
         >
-          <Button 
+            <Button 
+            className="no-open-drawer"
             icon={<MoreOutlined />} 
             size="small"
             style={{
@@ -459,7 +519,7 @@ const UserManagement = () => {
               e.currentTarget.style.borderColor = '#e5e7eb';
               e.currentTarget.style.color = '#6b7280';
             }}
-          />
+            />
         </Dropdown>
       ),
     },
@@ -606,7 +666,14 @@ const UserManagement = () => {
               style: { paddingTop: 24, paddingBottom: 24, paddingLeft: 24, paddingRight: 24 }
             }}
             onRow={record => ({
-              onClick: () => {
+              onClick: (event: any) => {
+                try {
+                  const target = event && event.target ? event.target as HTMLElement : null;
+                  if (target && target.closest && target.closest('.no-open-drawer')) {
+                    // clicked an action control (three-dots) — don't open drawer
+                    return;
+                  }
+                } catch (e) {}
                 setSelectedUser(record);
                 setDrawerOpen(true);
                 fetchResidentForUser(record);
@@ -693,6 +760,16 @@ const UserManagement = () => {
                     {(selectedUser.role ? (selectedUser.role.charAt(0).toUpperCase() + selectedUser.role.slice(1)) : '')}
                   </span>
                 </div>
+                {selectedUser.warning && (
+                  <div style={{ marginTop: 12, padding: 12, background: '#fff7ed', border: '1px solid #ffedd5', color: '#b45309', borderRadius: 8 }}>
+                    you currently have a violation please go to the barangay to resolve this issue.thank you and godbless
+                  </div>
+                )}
+                {selectedUser.restricted && (
+                  <div style={{ marginTop: 12, padding: 12, background: '#fff7ed', border: '1px solid #ffedd5', color: '#b45309', borderRadius: 8 }}>
+                    Please visit the barangay to resolve the restriction status
+                  </div>
+                )}
                 {selectedUser.barangayId && (
                   <div style={{ marginTop: 10 }}>
                     <Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Barangay ID</Typography.Text>
@@ -963,6 +1040,58 @@ const UserManagement = () => {
                 >
                   Edit Resident
                 </Button>
+              )}
+              {selectedUser && selectedUser.role === 'resident' && (
+                <Popconfirm
+                  title={selectedUser && selectedUser.restricted ? 'Remove restriction' : 'Restrict user'}
+                  description={`Are you sure you want to ${selectedUser && selectedUser.restricted ? 'remove restriction from' : 'restrict'} ${selectedUser && (selectedUser.fullName || selectedUser.email || selectedUser._id)}?`}
+                  onConfirm={async () => { if (selectedUser) await handleRestrictUser(selectedUser._id, !selectedUser.restricted); }}
+                  okText="Yes"
+                  cancelText="No"
+                >
+                  <Button
+                    icon={<StopOutlined />}
+                    style={{
+                      background: selectedUser && selectedUser.restricted ? '#f97316' : '#f97316',
+                      color: 'white',
+                      fontWeight: 600,
+                      border: 'none',
+                      height: window.innerWidth < 576 ? 40 : 36,
+                      paddingLeft: window.innerWidth < 576 ? 12 : 16,
+                      paddingRight: window.innerWidth < 576 ? 12 : 16,
+                      flex: window.innerWidth < 576 ? 1 : 'none',
+                      fontSize: window.innerWidth < 576 ? '14px' : '16px'
+                    }}
+                  >
+                    {selectedUser && selectedUser.restricted ? 'Unrestrict' : 'Restrict'}
+                  </Button>
+                </Popconfirm>
+              )}
+              {selectedUser && selectedUser.role === 'staff' && (
+                <Popconfirm
+                  title="Demote user"
+                  description={`Are you sure you want to demote ${selectedUser.fullName || selectedUser.email || selectedUser._id} to resident?`}
+                  onConfirm={async () => { if (selectedUser) await handleDemoteUser(selectedUser._id); }}
+                  okText="Yes"
+                  cancelText="No"
+                >
+                  <Button
+                    icon={<ReloadOutlined />}
+                    style={{
+                      background: '#8b5cf6',
+                      color: 'white',
+                      fontWeight: 600,
+                      border: 'none',
+                      height: window.innerWidth < 576 ? 40 : 36,
+                      paddingLeft: window.innerWidth < 576 ? 12 : 16,
+                      paddingRight: window.innerWidth < 576 ? 12 : 16,
+                      flex: window.innerWidth < 576 ? 1 : 'none',
+                      fontSize: window.innerWidth < 576 ? '14px' : '16px'
+                    }}
+                  >
+                    Demote
+                  </Button>
+                </Popconfirm>
               )}
               {selectedUser && selectedUser.isActive ? (
                 <Popconfirm 

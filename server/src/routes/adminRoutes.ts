@@ -431,7 +431,7 @@ router.put('/users/:id', isAdmin, async (req, res) => {
 		if (!user) return res.status(404).json({ message: 'User not found' });
 
 		// whitelist of editable fields via this admin endpoint
-		const allowed = ['role', 'email', 'barangayID', 'isActive', 'fullName'];
+		const allowed = ['role', 'email', 'barangayID', 'isActive', 'fullName', 'restricted', 'warning'];
 
 		// Prevent demoting an existing admin via this generic endpoint unless explicitly allowed
 		if (user.role === UserRole.ADMIN && req.body.role && req.body.role !== UserRole.ADMIN) {

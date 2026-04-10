@@ -633,6 +633,32 @@ export const adminAPI: AdminAPI = {
       throw error;
     }
   },
+  // Restrict or unrestrict a resident account (admin)
+  restrictUser: async (userId: string, restricted: boolean = true) => {
+    try {
+      const response = await axiosInstance.put(`/admin/users/${userId}`, { restricted });
+      return response.data;
+    } catch (error) {
+      if (!navigator.onLine) {
+        await syncService.performOperation('update', 'users', { _id: userId, restricted });
+        return;
+      }
+      throw error;
+    }
+  },
+  // Warn or remove warning from a resident account (admin)
+  warnUser: async (userId: string, warning: boolean = true) => {
+    try {
+      const response = await axiosInstance.put(`/admin/users/${userId}`, { warning });
+      return response.data;
+    } catch (error) {
+      if (!navigator.onLine) {
+        await syncService.performOperation('update', 'users', { _id: userId, warning });
+        return;
+      }
+      throw error;
+    }
+  },
   // System Settings
   getSystemSettings: async (): Promise<SystemSettings> => {
     try {

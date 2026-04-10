@@ -38,10 +38,12 @@ export interface IUser extends Document {
   department?: string;
   profileImage?: string;
   profileImageId?: string;
-  // Verification fields
+  // Verification and admin flags
   verified?: boolean;
   verifiedAt?: Date | null;
   verifiedBy?: string | null;
+  restricted?: boolean;
+  warning?: boolean;
   // Password reset handled by PasswordResetToken model
   userInfo?: {
     id: string;
@@ -143,10 +145,11 @@ const userSchema = new mongoose.Schema({
   profileImage: { type: String },
   profileImageId: { type: String },
   // Resident verification status
-  verified: {
-    type: Boolean,
-    default: false,
-  },
+  verified: { type: Boolean, default: false },
+  // Admin-applied restriction flag (special account state requiring manual resolution)
+  restricted: { type: Boolean, default: false },
+  // Admin-applied warning flag (informational violation requiring manual resolution)
+  warning: { type: Boolean, default: false },
   // Password reset token and expiry (for forgot/reset flow)
   resetPasswordToken: {
     type: String,
@@ -222,6 +225,8 @@ userSchema.virtual('userInfo').get(function(this: IUser) {
     address: this.address,
     department: this.department,
     status: this.status,
+    restricted: this.restricted,
+    warning: this.warning,
     createdAt: this.createdAt,
     lastLogin: this.lastLogin,
     deletedAt: this.deletedAt,
