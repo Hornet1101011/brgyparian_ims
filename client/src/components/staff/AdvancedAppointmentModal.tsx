@@ -65,17 +65,8 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
 
   // Keep the participant count in sync with selected residents
   useEffect(() => {
-    // Only sync participant count automatically when staff is in 'manual' selection mode
-    if (residentsSelectionMode === 'manual') {
-      try {
-        const count = Array.isArray(selectedResidents) ? selectedResidents.length : 0;
-        // ensure at least 1 participant
-        setNumParticipants(Math.max(1, count));
-      } catch (e) {
-        // best-effort — don't block UI on unexpected errors
-        console.warn('Failed to sync participant count with selected residents', e);
-      }
-    }
+    // NOTE: removed automatic syncing of participant count when selecting residents.
+    // Participants number is now authoritative and selecting residents will not overwrite it.
   }, [selectedResidents, residentsSelectionMode]);
 
   const addDate = (d: dayjs.Dayjs | null) => {
