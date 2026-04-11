@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Modal, Button, Space, DatePicker, InputNumber, Radio, Input, List, Divider, Row, Col, Tag, Select, Spin, Progress, message, Switch } from 'antd';
+import { CloseOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { contactAPI, residentsListAPI } from '../../services/api';
 // appointment helpers not required in this modal
@@ -378,14 +379,9 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
                 <Radio value="manual">Manual</Radio>
                 <Radio value="auto">Auto</Radio>
               </Radio.Group>
-              {residentsSelectionMode === 'manual' ? (
-                <Button onClick={openResidentPicker}>Select Residents ({selectedResidents.length})</Button>
-              ) : (
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <Select value={autoMethod} onChange={(v:any) => setAutoMethod(v)} style={{ width: 150 }} options={[{ label: 'First N', value: 'first' }, { label: 'Random N', value: 'random' }]} />
-                  <Button loading={autoSelecting} onClick={handleAutoSelect}>Auto Select</Button>
-                  <Button onClick={() => { setSelectedResidents([]); message.info('Cleared selected residents'); }}>Clear</Button>
-                </div>
+              <Button onClick={openResidentPicker}>Select Residents ({selectedResidents.length})</Button>
+              {residentsSelectionMode === 'auto' && (
+                <div style={{ color: '#666', fontSize: 12, marginLeft: 8 }}>Auto-select controls are available inside the resident picker</div>
               )}
             </div>
           </div>
@@ -486,6 +482,14 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
 
       <Modal title="Select Residents" open={residentPickerOpen} onCancel={() => setResidentPickerOpen(false)} footer={null} width={600}>
         <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+          <div style={{ marginBottom: 8, display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <Select value={autoMethod} onChange={(v:any) => setAutoMethod(v)} style={{ width: 160 }} options={[{ label: 'First N', value: 'first' }, { label: 'Random N', value: 'random' }]} disabled={loadingResidents} />
+              <Button loading={autoSelecting} onClick={handleAutoSelect} disabled={loadingResidents}>Auto Select</Button>
+              <Button onClick={() => { setSelectedResidents([]); message.info('Cleared selected residents'); }} disabled={loadingResidents}>Clear</Button>
+            </div>
+            <Button type="text" icon={<CloseOutlined />} onClick={() => setResidentPickerOpen(false)} />
+          </div>
           {loadingResidents ? <Spin /> : (
             <List dataSource={residentOptions} renderItem={(r: any) => (
               <List.Item onClick={() => {
@@ -496,16 +500,36 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
                 }
 
                 const newLen = (selectedResidents ? selectedResidents.length : 0) + 1;
-                // If manual mode and adding would exceed participants, warn and offer to increase participants
+                // If manual mode and adding would exceed participants, warn and offer choices
                 if (residentsSelectionMode === 'manual' && newLen > numParticipants) {
                   Modal.confirm({
                     title: 'Too many residents selected',
-                    content: `Participants is set to ${numParticipants} but selecting this resident would make ${newLen}.\n\nPress OK to increase Participants to ${newLen} and add this resident, or Cancel to keep the current Participants (resident will not be added).`,
-                    okText: 'Increase & Add',
+                    content: `Participants is set to ${numParticipants} but selecting this resident would make ${newLen}.\n\nPress \"Reselect\" to pick a different resident, or use the X in the top-right to exit the resident picker.`,
+                    okText: 'Reselect',
                     cancelText: 'Cancel',
+                    closable: true,
+                    closeIcon: <CloseOutlined />,
                     onOk: () => {
-                      setNumParticipants(newLen);
-                      setSelectedResidents(prev => [...(prev || []), r]);
+                      // Reselect: keep the resident picker open and do not add or change participants
+                      message.info('Please reselect a resident');
+                    },
+                    onCancel: (e?: any) => {
+                      try {
+                        // If the user clicked the top-right close icon, close the resident picker entirely.
+                        const target = e && (e.target as HTMLElement);
+                        let el: HTMLElement | null = target || null;
+                        while (el) {
+                          const cls = (el.className || '') as string;
+                          if (typeof cls === 'string' && cls.includes('ant-modal-close')) {
+                            setResidentPickerOpen(false);
+                            return;
+                          }
+                          el = el.parentElement;
+                        }
+                      } catch (_err) {
+                        // ignore DOM inspection errors
+                      }
+                      // Otherwise, the user clicked Cancel — keep the resident picker open but do not add the resident
                     }
                   });
                   return;
