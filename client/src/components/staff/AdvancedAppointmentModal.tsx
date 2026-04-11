@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Modal, Button, Space, DatePicker, InputNumber, Radio, Input, List, Divider, Row, Col, Tag, Select, Spin, Progress, message, Switch } from 'antd';
 import dayjs from 'dayjs';
 import { contactAPI, residentsListAPI } from '../../services/api';
-import { getScheduledAppointmentsByDate, cancelAppointment } from '../../api/appointments';
+// appointment helpers not required in this modal
 
 // Helpers (small duplicates of StaffCalendar utilities)
 const toMinutes = (t: string) => {
@@ -12,11 +12,7 @@ const toMinutes = (t: string) => {
   return hh * 60 + mm;
 };
 
-const rangesOverlap = (aStart: number, aEnd: number, bStart: number, bEnd: number) => {
-  return aStart < bEnd && bStart < aEnd;
-};
-
-const OFFICE_RANGES = [ { start: '08:00', end: '12:00' }, { start: '13:00', end: '17:00' } ];
+// (helper functions and office ranges omitted in this modal)
 
 type Resident = { username: string; fullName?: string; email?: string };
 
@@ -80,7 +76,7 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
         console.warn('Failed to sync participant count with selected residents', e);
       }
     }
-  }, [selectedResidents]);
+  }, [selectedResidents, residentsSelectionMode]);
 
   const addDate = (d: dayjs.Dayjs | null) => {
     if (!d) return;
