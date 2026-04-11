@@ -509,12 +509,21 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
                 return;
               }
               if (residentsSelectionMode === 'manual' && selectedResidents.length < numParticipants) {
+                // Warn the staff that selected residents are fewer than the entered participants.
+                // Do NOT close the resident picker so they can select more residents.
                 Modal.confirm({
                   title: 'Selected residents do not match participant count',
-                  content: `You set Participants = ${numParticipants} but selected only ${selectedResidents.length} residents. Adjust participants to ${selectedResidents.length}?`,
-                  okText: `Adjust to ${selectedResidents.length}`,
-                  cancelText: 'Cancel',
-                  onOk: () => { setNumParticipants(selectedResidents.length); setResidentPickerOpen(false); },
+                  content: `You set Participants = ${numParticipants} but selected only ${selectedResidents.length} residents. Please select additional residents or adjust the Participants number.`,
+                  okText: 'Select more',
+                  cancelText: `Adjust to ${selectedResidents.length}`,
+                  onOk: () => {
+                    // keep resident picker open for further selection
+                  },
+                  onCancel: () => {
+                    // adjust participants to the number actually selected and close picker
+                    setNumParticipants(selectedResidents.length);
+                    setResidentPickerOpen(false);
+                  }
                 });
                 return;
               }
