@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Modal, Button, Space, DatePicker, InputNumber, Radio, Input, List, Divider, Row, Col, Tag, Select, Spin, Progress, message, Switch } from 'antd';
-import { CloseOutlined } from '@ant-design/icons';
+import { CloseOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { contactAPI, residentsListAPI } from '../../services/api';
 // appointment helpers not required in this modal
@@ -47,7 +47,31 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
   const [submitProgress, setSubmitProgress] = useState(0);
   const previewTimer = React.useRef(null as any);
   const submitTimer = React.useRef(null as any);
-  const overallProgress = computingPreview ? previewProgress : (submitting ? submitProgress : 0);
+  // Staged progress configuration
+  const STAGES = [
+    { key: 'dates', label: 'Select Dates', weight: 10 },
+    { key: 'times', label: 'Set Times', weight: 10 },
+    { key: 'participants', label: 'Set Participants', weight: 10 },
+    { key: 'residents', label: 'Select Residents', weight: 20 },
+    { key: 'distribution', label: 'Assign Distribution', weight: 10 },
+    { key: 'preview', label: 'Compute Preview', weight: 20 },
+    { key: 'submit', label: 'Submit Scheduling', weight: 20 },
+  ];
+
+  const [stageProgresses, setStageProgresses] = useState(() => STAGES.reduce((acc, s) => { acc[s.key] = 0; return acc; }, {} as Record<string, number>));
+  const [stageCompleted, setStageCompleted] = useState(() => STAGES.reduce((acc, s) => { acc[s.key] = false; return acc; }, {} as Record<string, boolean>));
+
+  const setStageProgress = (key: string, pct: number) => {
+    const clamped = Math.max(0, Math.min(100, Math.round(pct)));
+    setStageProgresses(prev => ({ ...prev, [key]: clamped }));
+    setStageCompleted(prev => ({ ...prev, [key]: clamped >= 100 }));
+  };
+
+  // Aggregated overall progress computed from stage weights and per-stage progress
+  const overallProgress = STAGES.reduce((acc, s) => {
+    const p = stageProgresses[s.key] ?? 0;
+    return acc + (p / 100) * s.weight;
+  }, 0);
   const timeModeTitle = timeMode === 'unified' ? 'Unified (same start/end for all dates)' : 'Individual per date';
   const timeModeHint = timeMode === 'unified' ? 'Toggle to switch to Individual per date' : 'Toggle to switch to Unified (same start/end for all dates)';
 
@@ -69,6 +93,54 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
     // NOTE: removed automatic syncing of participant count when selecting residents.
     // Participants number is now authoritative and selecting residents will not overwrite it.
   }, [selectedResidents, residentsSelectionMode]);
+
+  // Helper: determine whether time settings are configured
+  const isTimesConfigured = () => {
+    if (timeMode === 'unified') {
+      const s = toMinutes(unifiedStart);
+      const e = toMinutes(unifiedEnd);
+      return !Number.isNaN(s) && !Number.isNaN(e) && e > s;
+    }
+    // individual per-date mode: ensure each selected date has a valid start/end
+    if (!selectedDates || selectedDates.length === 0) return false;
+    return selectedDates.every(ds => {
+      const tm = perDateTimes[ds] || { start: unifiedStart, end: unifiedEnd };
+      const s = toMinutes(tm.start);
+      const e = toMinutes(tm.end);
+      return !Number.isNaN(s) && !Number.isNaN(e) && e > s;
+    });
+  };
+
+  // Update stage progress from field changes
+  useEffect(() => {
+    setStageProgress('dates', selectedDates && selectedDates.length > 0 ? 100 : 0);
+  }, [selectedDates]);
+
+  useEffect(() => {
+    setStageProgress('times', isTimesConfigured() ? 100 : 0);
+  }, [timeMode, unifiedStart, unifiedEnd, perDateTimes, selectedDates]);
+
+  useEffect(() => {
+    setStageProgress('participants', (numParticipants && numParticipants > 0) ? 100 : 0);
+  }, [numParticipants]);
+
+  useEffect(() => {
+    const pct = Math.min(100, Math.floor((selectedResidents.length / Math.max(1, numParticipants)) * 100));
+    setStageProgress('residents', pct);
+  }, [selectedResidents, numParticipants]);
+
+  useEffect(() => {
+    setStageProgress('distribution', (participantDistribution ? 100 : 0));
+  }, [participantDistribution]);
+
+  // Map existing preview and submit progress into stage progresses
+  useEffect(() => {
+    setStageProgress('preview', previewProgress);
+  }, [previewProgress]);
+
+  useEffect(() => {
+    setStageProgress('submit', submitProgress);
+  }, [submitProgress]);
 
   const addDate = (d: dayjs.Dayjs | null) => {
     if (!d) return;
@@ -345,7 +417,21 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
     <Modal title="Advanced Appointment Options" open={visible} onCancel={onClose} footer={null} width={900}>
       {overallProgress > 0 && overallProgress < 100 && (
         <div style={{ margin: '8px 0 12px 0' }}>
-          <Progress percent={overallProgress} showInfo={false} strokeWidth={6} />
+          <Progress percent={Math.round(overallProgress)} showInfo={false} strokeWidth={6} />
+          <div style={{ display: 'flex', gap: 12, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {STAGES.map(s => (
+              <div key={s.key} style={{ display: 'flex', gap: 6, alignItems: 'center', opacity: stageCompleted[s.key] ? 1 : 0.6 }}>
+                <CheckCircleOutlined style={{ color: stageCompleted[s.key] ? '#52c41a' : '#ddd' }} />
+                <div style={{ fontSize: 12 }}>{s.label}</div>
+              </div>
+            ))}
+            <div style={{ marginLeft: 'auto', fontSize: 12, color: '#666' }}>
+              {(() => {
+                const next = STAGES.find(s => !stageCompleted[s.key]);
+                return next ? `Current: ${next.label}` : 'Ready';
+              })()}
+            </div>
+          </div>
         </div>
       )}
       <div style={{ display: 'flex', gap: 16 }}>
