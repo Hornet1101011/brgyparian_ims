@@ -114,6 +114,17 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
     });
   }, [selectedResidents]);
 
+  // Return residents available for assignment on a given date (exclude those already assigned to other dates)
+  const getAvailableResidentsForDate = (ds: string) => {
+    const assignedOthers = new Set<string>();
+    for (const [k, arr] of Object.entries(perDateAssignments)) {
+      if (k === ds) continue;
+      (arr || []).forEach(u => assignedOthers.add(u));
+    }
+    const currentAssigned = new Set(perDateAssignments[ds] || []);
+    return selectedResidents.slice(0, numParticipants).filter(r => !assignedOthers.has(r.username) || currentAssigned.has(r.username));
+  };
+
   // Keep the participant count in sync with selected residents
   useEffect(() => {
     // NOTE: removed automatic syncing of participant count when selecting residents.
@@ -597,10 +608,18 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
                     disabled={selectedResidents.length === 0}
                     value={perDateAssignments[ds] || []}
                     onChange={(vals:any) => {
-                      setPerDateAssignments(prev => ({ ...prev, [ds]: vals }));
+                      setPerDateAssignments(prev => {
+                        const next: Record<string,string[]> = {};
+                        // copy and remove these vals from other dates to keep exclusivity
+                        for (const k of Object.keys(prev)) {
+                          next[k] = (prev[k] || []).filter(u => !vals.includes(u));
+                        }
+                        next[ds] = vals;
+                        return next;
+                      });
                     }}
                   >
-                    {selectedResidents.slice(0, numParticipants).map(r => (
+                    {getAvailableResidentsForDate(ds).map(r => (
                       <Select.Option key={r.username} value={r.username}>{r.fullName || r.username}</Select.Option>
                     ))}
                   </Select>
