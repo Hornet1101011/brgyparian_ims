@@ -34,8 +34,8 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
   const [residentOptions, setResidentOptions] = useState([] as Resident[]);
   const [selectedResidents, setSelectedResidents] = useState([] as Resident[]);
   const [residentPickerOpen, setResidentPickerOpen] = useState(false);
-  const [residentsSelectionMode, setResidentsSelectionMode] = useState<'manual'|'auto'>('manual');
-  const [autoMethod, setAutoMethod] = useState<'first'|'random'>('first');
+  const [residentsSelectionMode, setResidentsSelectionMode] = useState('manual' as 'manual'|'auto');
+  const [autoMethod, setAutoMethod] = useState('first' as 'first'|'random');
   const [autoSelecting, setAutoSelecting] = useState(false);
 
   const [loadingResidents, setLoadingResidents] = useState(false);
