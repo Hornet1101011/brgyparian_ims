@@ -489,10 +489,30 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
           {loadingResidents ? <Spin /> : (
             <List dataSource={residentOptions} renderItem={(r: any) => (
               <List.Item onClick={() => {
-                setSelectedResidents(s => {
-                  if (s.some(x => x.username === r.username)) return s.filter(x => x.username !== r.username);
-                  return [...s, r];
-                });
+                // toggle selection: if already selected, remove; otherwise attempt to add
+                if (selectedResidents.some(x => x.username === r.username)) {
+                  setSelectedResidents(s => s.filter(x => x.username !== r.username));
+                  return;
+                }
+
+                const newLen = (selectedResidents ? selectedResidents.length : 0) + 1;
+                // If manual mode and adding would exceed participants, warn and offer to increase participants
+                if (residentsSelectionMode === 'manual' && newLen > numParticipants) {
+                  Modal.confirm({
+                    title: 'Too many residents selected',
+                    content: `Participants is set to ${numParticipants} but selecting this resident would make ${newLen}.\n\nPress OK to increase Participants to ${newLen} and add this resident, or Cancel to keep the current Participants (resident will not be added).`,
+                    okText: 'Increase & Add',
+                    cancelText: 'Cancel',
+                    onOk: () => {
+                      setNumParticipants(newLen);
+                      setSelectedResidents(prev => [...(prev || []), r]);
+                    }
+                  });
+                  return;
+                }
+
+                // Otherwise just add
+                setSelectedResidents(s => [...s, r]);
               }} style={{ cursor: 'pointer' }}>
                 <List.Item.Meta title={r.fullName || r.username} description={r.email} />
                 {selectedResidents.some(x => x.username === r.username) && <Tag>Selected</Tag>}
