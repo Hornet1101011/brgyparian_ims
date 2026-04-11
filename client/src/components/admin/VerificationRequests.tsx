@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Table, Button, Space, Tag, message, Spin, Modal, Empty, Card, Row, Col, Divider, Statistic, Badge, Tooltip } from 'antd';
-import { CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, EyeOutlined, DeleteOutlined, DownloadOutlined } from '@ant-design/icons';
-import { verificationAPI, API_URL } from '../../services/api';
+import { Table, Button, Space, Tag, message, Spin, Modal, Empty, Card, Row, Col, Divider, Statistic, Badge, Tooltip, Tabs, Popconfirm } from 'antd';
+import { CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, EyeOutlined, DeleteOutlined, DownloadOutlined, UserAddOutlined } from '@ant-design/icons';
+import { verificationAPI, API_URL, adminAPI } from '../../services/api';
 import { getFileExtension, getFileTypeLabel, isViewableFileType } from '../../utils/fileTypeDetector';
 
 interface IVReq {
@@ -48,7 +48,7 @@ const FileCard = ({
         .then((blob) => {
           const url = URL.createObjectURL(blob);
           setPreviewUrl(url);
-          setFilePreviewUrls({ ...filePreviewUrls, [fileId]: url });
+          setFilePreviewUrls((prev: any) => ({ ...prev, [fileId]: url }));
         })
         .catch((err) => {
           console.error('Failed to load preview:', err);
@@ -58,7 +58,7 @@ const FileCard = ({
     } else if (filePreviewUrls[fileId]) {
       setPreviewUrl(filePreviewUrls[fileId]);
     }
-  }, [fileId, isViewable, filePreviewUrls]);
+  }, [fileId, isViewable]);
 
   const handleViewFile = async () => {
     try {
@@ -199,6 +199,9 @@ const FileCard = ({
   );
 };
 
+// Memoize FileCard to prevent unnecessary re-renders
+export const MemoizedFileCard = React.memo(FileCard);
+
 const VerificationRequests = () => {
   // @ts-ignore
   const [data, setData] = useState<IVReq[]>([]);
@@ -210,6 +213,11 @@ const VerificationRequests = () => {
   const [fileActionLoading, setFileActionLoading] = useState(false);
   // @ts-ignore
   const [filePreviewUrls, setFilePreviewUrls] = useState<Record<string, string>>({});
+  
+  // Staff Applications State
+  const [staffApplicants, setStaffApplicants] = useState<any[]>([]);
+  const [staffLoading, setStaffLoading] = useState(false);
+  const [staffActionLoading, setStaffActionLoading] = useState(false);
 
   const loadRequests = async () => {
     setLoading(true);
@@ -224,7 +232,41 @@ const VerificationRequests = () => {
     }
   };
 
-  useEffect(() => { loadRequests(); }, []);
+  const loadStaffApplicants = async () => {
+    setStaffLoading(true);
+    try {
+      const res = await adminAPI.getStaffApplicants();
+      console.log('Staff applicants response:', res);
+      
+      // Handle different response structures
+      let applicants: any[] = [];
+      if (res && res.applicants && Array.isArray(res.applicants)) {
+        applicants = res.applicants;
+      } else if (Array.isArray(res)) {
+        // If response is directly an array
+        applicants = res;
+      } else if (res && res.data && Array.isArray(res.data)) {
+        // If response is wrapped in data property
+        applicants = res.data;
+      }
+      
+      console.log('Processed staff applicants:', applicants);
+      setStaffApplicants(applicants);
+    } catch (err) {
+      console.error('Failed to load staff applicants:', err);
+      // Don't show error message on initial load, just log it
+      if (staffApplicants.length === 0) {
+        console.log('Note: Staff applications endpoint may not be available yet');
+      }
+    } finally {
+      setStaffLoading(false);
+    }
+  };
+
+  useEffect(() => { 
+    loadRequests();
+    loadStaffApplicants();
+  }, []);
 
   const handleVerify = async (record: IVReq) => {
     setActionLoading(true);
@@ -232,7 +274,10 @@ const VerificationRequests = () => {
       const userId = record.userId?._id || record.userId;
       await verificationAPI.verifyUser(userId, true);
       message.success('User verified successfully');
-      await loadRequests();
+      // Update local state optimistically instead of refetching
+      setData(prev => prev.map(req => 
+        req._id === record._id ? { ...req, status: 'approved', reviewedAt: new Date().toISOString() } : req
+      ));
     } catch (err) {
       console.error('Verify error:', err);
       message.error('Failed to verify user');
@@ -248,7 +293,10 @@ const VerificationRequests = () => {
         await verificationAPI.rejectRequest(record._id);
       }
       message.success('Verification request rejected');
-      await loadRequests();
+      // Update local state optimistically instead of refetching
+      setData(prev => prev.map(req => 
+        req._id === record._id ? { ...req, status: 'rejected', reviewedAt: new Date().toISOString() } : req
+      ));
     } catch (err) {
       console.error('Reject error:', err);
       message.error('Failed to reject verification');
@@ -264,12 +312,46 @@ const VerificationRequests = () => {
         await verificationAPI.unapproveRequest(record._id);
       }
       message.success('User unverified successfully');
-      await loadRequests();
+      // Update local state optimistically instead of refetching
+      setData(prev => prev.map(req => 
+        req._id === record._id ? { ...req, status: 'pending' } : req
+      ));
     } catch (err) {
       console.error('Unverify error:', err);
       message.error('Failed to unverify user');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleApproveStaff = async (applicantId: string) => {
+    setStaffActionLoading(true);
+    try {
+      await adminAPI.approveStaffApplicant(applicantId);
+      message.success('Staff applicant approved successfully');
+      // Update local state optimistically - remove approved applicant from list
+      setStaffApplicants(prev => prev.filter(applicant => applicant._id !== applicantId));
+    } catch (err) {
+      console.error('Approve staff error:', err);
+      message.error('Failed to approve staff applicant');
+    } finally {
+      setStaffActionLoading(false);
+    }
+  };
+
+  const handleRejectStaff = async (applicantId: string) => {
+    setStaffActionLoading(true);
+    try {
+      // For now, we'll just remove inactive staff or disable them
+      // This would need a backend endpoint to properly reject
+      message.info('Rejection feature coming soon');
+      // Update local state optimistically - remove rejected applicant from list
+      setStaffApplicants(prev => prev.filter(applicant => applicant._id !== applicantId));
+    } catch (err) {
+      console.error('Reject staff error:', err);
+      message.error('Failed to reject staff applicant');
+    } finally {
+      setStaffActionLoading(false);
     }
   };
 
@@ -473,6 +555,104 @@ const VerificationRequests = () => {
     }
   ];
 
+  // Staff Applicants Columns
+  const staffColumns = [
+    {
+      title: 'Applicant Name',
+      dataIndex: 'fullName',
+      key: 'fullName',
+      width: 200,
+      render: (text: string, record: any) => (
+        <div style={{ fontWeight: 500, color: '#0f172a' }}>
+          {text || record.username || 'Unknown'}
+        </div>
+      )
+    },
+    {
+      title: 'Email',
+      dataIndex: 'email',
+      key: 'email',
+      width: 200,
+      render: (email: string) => email || '-'
+    },
+    {
+      title: 'Username',
+      dataIndex: 'username',
+      key: 'username',
+      width: 150,
+      render: (username: string) => username || '-'
+    },
+    {
+      title: 'Status',
+      dataIndex: 'isActive',
+      key: 'status',
+      width: 120,
+      render: (isActive: boolean) => (
+        <Tag color={isActive ? 'success' : 'processing'}>
+          {isActive ? 'Active' : 'Pending'}
+        </Tag>
+      )
+    },
+    {
+      title: 'Applied At',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      width: 180,
+      render: (d: string) => (
+        <span style={{ color: '#64748b', fontSize: 13 }}>
+          {d ? new Date(d).toLocaleString() : '-'}
+        </span>
+      )
+    },
+    {
+      title: 'Action',
+      key: 'action',
+      width: 200,
+      fixed: 'right' as const,
+      render: (_: any, record: any) => (
+        <Space size="small">
+          {record.isActive ? (
+            <Tag color="success" style={{ margin: 0 }}>Approved</Tag>
+          ) : (
+            <>
+              <Tooltip title="Approve this staff application">
+                <Button
+                  size="small"
+                  type="primary"
+                  icon={<CheckCircleOutlined />}
+                  onClick={() => handleApproveStaff(record._id)}
+                  loading={staffActionLoading}
+                  style={{ fontWeight: 500, backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+                >
+                  Approve
+                </Button>
+              </Tooltip>
+              <Tooltip title="Reject this staff application">
+                <Popconfirm
+                  title="Reject Staff Application"
+                  description="Are you sure you want to reject this application?"
+                  onConfirm={() => handleRejectStaff(record._id)}
+                  okText="Yes"
+                  cancelText="No"
+                >
+                  <Button
+                    size="small"
+                    danger
+                    icon={<CloseCircleOutlined />}
+                    loading={staffActionLoading}
+                    style={{ fontWeight: 500 }}
+                  >
+                    Reject
+                  </Button>
+                </Popconfirm>
+              </Tooltip>
+            </>
+          )}
+        </Space>
+      )
+    }
+  ];
+
   return (
     <div>
       {/* Header with Stats */}
@@ -565,38 +745,105 @@ const VerificationRequests = () => {
 
         <Divider style={{ margin: '28px 0', borderColor: '#e2e8f0' }} />
 
-        {/* Data Table */}
-        <Spin spinning={loading}>
-          {(!data || data.length === 0) ? (
-            <Empty
-              description="No verification requests"
-              style={{ padding: '60px 20px', color: '#94a3b8' }}
-            />
-          ) : (
-            <Table
-              rowKey={(record: any) => record?._id || 'unknown'}
-              loading={loading}
-              dataSource={data.filter((d: any) => d != null)}
-              columns={columns as any}
-              pagination={{
-                pageSize: 10,
-                showSizeChanger: true,
-                showTotal: (total) => (
-                  <span style={{ color: '#64748b' }}>
-                    Total {total} verification request{total !== 1 ? 's' : ''}
-                  </span>
-                ),
-                style: { marginTop: 16 }
-              }}
-              style={{ marginTop: 20 }}
-              rowClassName={(record) => {
-                if (record.status === 'approved') return 'verified-row';
-                if (record.status === 'rejected') return 'rejected-row';
-                return '';
-              }}
-            />
-          )}
-        </Spin>
+        {/* Tabs for Resident Verification and Staff Approval */}
+        <Tabs
+          items={[
+            {
+              key: 'residents',
+              label: (
+                <span style={{ fontWeight: 500 }}>
+                  Resident Verification ({data.length})
+                </span>
+              ),
+              children: (
+                <Spin spinning={loading}>
+                  {(!data || data.length === 0) ? (
+                    <Empty
+                      description="No verification requests"
+                      style={{ padding: '60px 20px', color: '#94a3b8' }}
+                    />
+                  ) : (
+                    <Table
+                      rowKey={(record: any) => record?._id || 'unknown'}
+                      loading={loading}
+                      dataSource={data.filter((d: any) => d != null)}
+                      columns={columns as any}
+                      pagination={{
+                        pageSize: 10,
+                        showSizeChanger: true,
+                        showTotal: (total) => (
+                          <span style={{ color: '#64748b' }}>
+                            Total {total} verification request{total !== 1 ? 's' : ''}
+                          </span>
+                        ),
+                        style: { marginTop: 16 }
+                      }}
+                      style={{ marginTop: 20 }}
+                      rowClassName={(record) => {
+                        if (record.status === 'approved') return 'verified-row';
+                        if (record.status === 'rejected') return 'rejected-row';
+                        return '';
+                      }}
+                    />
+                  )}
+                </Spin>
+              )
+            },
+            {
+              key: 'staff',
+              label: (
+                <span style={{ fontWeight: 500 }}>
+                  <UserAddOutlined style={{ marginRight: 8 }} />
+                  Staff Approvals ({staffApplicants.length})
+                </span>
+              ),
+              children: (
+                <div>
+                  <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
+                    <Button 
+                      type="primary" 
+                      size="small"
+                      onClick={loadStaffApplicants}
+                      loading={staffLoading}
+                    >
+                      Refresh
+                    </Button>
+                  </div>
+                  <Spin spinning={staffLoading}>
+                    {(!staffApplicants || staffApplicants.length === 0) ? (
+                      <Empty
+                        description="No staff applications"
+                        style={{ padding: '60px 20px', color: '#94a3b8' }}
+                      />
+                    ) : (
+                      <Table
+                        rowKey={(record: any) => record?._id || 'unknown'}
+                        loading={staffLoading}
+                        dataSource={staffApplicants.filter((a: any) => a != null)}
+                        columns={staffColumns as any}
+                        pagination={{
+                          pageSize: 10,
+                          showSizeChanger: true,
+                          showTotal: (total) => (
+                            <span style={{ color: '#64748b' }}>
+                              Total {total} staff applicant{total !== 1 ? 's' : ''}
+                            </span>
+                          ),
+                          style: { marginTop: 16 }
+                        }}
+                        style={{ marginTop: 20 }}
+                        rowClassName={(record) => {
+                          if (record.isActive) return 'verified-row';
+                          return '';
+                        }}
+                      />
+                    )}
+                  </Spin>
+                </div>
+              )
+            }
+          ]}
+        />
       </Card>
 
       {/* Files Modal */}
@@ -634,7 +881,7 @@ const VerificationRequests = () => {
                 const fileId = f.gridFileId || f.filename;
                 const filename = f.filename || 'file';
                 return (
-                  <FileCard
+                  <MemoizedFileCard
                     // @ts-ignore -- key is a special React prop
                     key={fileId}
                     fileId={fileId}

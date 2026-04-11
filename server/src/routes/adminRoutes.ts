@@ -14,20 +14,35 @@ import { handleSaveError } from '../utils/handleSaveError';
 
 // Get staff applicants (users with role: 'staff' and isActive: false)
 router.get('/staff-applications', async (req, res) => {
-	try {
-		const applicants = await User.find({ role: 'staff', isActive: false }).select('-password');
-		res.json({ count: applicants.length, applicants });
-	} catch (err) {
-		res.status(500).json({ message: 'Failed to fetch staff applicants', error: err && typeof err === 'object' && 'message' in err ? err.message : err });
-	}
-});
-// Get staff applicants (users with role: 'staff' and isActive: false)
-router.get('/staff-applications', async (req, res) => {
     try {
         const applicants = await User.find({ role: UserRole.STAFF, isActive: false }).select('-password');
         res.json({ count: applicants.length, applicants });
     } catch (err) {
         res.status(500).json({ message: 'Failed to fetch staff applicants', error: err && typeof err === 'object' && 'message' in err ? err.message : err });
+    }
+});
+
+// Approve a staff applicant (set isActive to true)
+router.post('/staff-applications/:applicantId/approve', isAdmin, async (req, res) => {
+    try {
+        const { applicantId } = req.params;
+        const applicant = await User.findById(applicantId);
+        
+        if (!applicant) {
+            return res.status(404).json({ message: 'Staff applicant not found' });
+        }
+        
+        if (applicant.role !== UserRole.STAFF) {
+            return res.status(400).json({ message: 'User is not a staff applicant' });
+        }
+        
+        // Approve by setting isActive to true
+        applicant.isActive = true;
+        await applicant.save();
+        
+        res.json({ message: 'Staff applicant approved successfully', applicant });
+    } catch (err) {
+        res.status(500).json({ message: 'Failed to approve staff applicant', error: err && typeof err === 'object' && 'message' in err ? err.message : err });
     }
 });
 

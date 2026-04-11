@@ -21,17 +21,17 @@ const getAbsoluteApiUrl = (path: string): string => {
   return `${baseUrl}${path}`;
 };
 
-// Color palette for SVG pie chart slices
-const pieColors = [
-  '#6366F1', // Indigo
-  '#22C55E', // Green
-  '#F59E42', // Orange
-  '#EF4444', // Red
-  '#3B82F6', // Blue
-  '#FBBF24', // Yellow
-  '#A21CAF', // Purple
-  '#14B8A6', // Teal
-];
+// Color palette for SVG pie chart slices (kept for future chart implementations)
+// const pieColors = [
+//   '#6366F1', // Indigo
+//   '#22C55E', // Green
+//   '#F59E42', // Orange
+//   '#EF4444', // Red
+//   '#3B82F6', // Blue
+//   '#FBBF24', // Yellow
+//   '#A21CAF', // Purple
+//   '#14B8A6', // Teal
+// ];
 
 const { Title, Text } = Typography;
 
@@ -119,12 +119,14 @@ const AdminDashboard = () => {
     { type: 'Permit', value: 5 },
     { type: 'Other', value: 3 },
   ];
-  const documentCategoryData = [
-    { type: 'Clearance', value: 27 },
-    { type: 'Certificate', value: 18 },
-    { type: 'Permit', value: 12 },
-    { type: 'Other', value: 8 },
-  ];
+  
+  // Document category data (kept for future analytics implementations)
+  // const documentCategoryData = [
+  //   { type: 'Clearance', value: 27 },
+  //   { type: 'Certificate', value: 18 },
+  //   { type: 'Permit', value: 12 },
+  //   { type: 'Other', value: 8 },
+  // ];
 
   // (Removed unused PieChartSVG helper to silence ESLint unused-symbol warnings)
 
@@ -266,7 +268,8 @@ const AdminDashboard = () => {
       }, 30000);
       return () => clearInterval(pollInterval);
     }
-  }, [fetchDashboardData, summaryQuery]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchDashboardData]);
 
   // Load verification requests (separate from main fetch to keep concerns isolated)
   const loadVerifs = async () => {
@@ -283,6 +286,27 @@ const AdminDashboard = () => {
   };
 
   useEffect(() => { loadVerifs(); }, []);
+
+  // Load staff approval notifications separately to prevent them from disappearing
+  const loadStaffApprovals = async () => {
+    try {
+      const notificationsRes = await notificationAPI.getNotifications();
+      const unreadNotifs = notificationsRes.filter((n: Notification) => !n.read);
+      const staffApprovalNotifs = unreadNotifs.filter((n: Notification) => (n.type || '').toString().toLowerCase() === 'staff_approval');
+      setStaffAccessNotifs(staffApprovalNotifs);
+    } catch (err) {
+      console.error('Failed to load staff approvals:', err);
+      // Keep showing previously loaded staff approvals instead of clearing them
+    }
+  };
+
+  useEffect(() => {
+    // Load staff approvals on mount
+    loadStaffApprovals();
+    // Poll consistently for staff approvals independently every 20 seconds
+    const interval = setInterval(loadStaffApprovals, 20000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Fetch users count explicitly from User Management and keep it refreshed
   const fetchUsersCount = async () => {
@@ -311,10 +335,17 @@ const AdminDashboard = () => {
     if (!notif.data?.userId || !notif._id) return;
     try {
       setLoading(true);
+      // Optimistic update: remove from local state immediately
+      setStaffAccessNotifs(prev => prev.filter(n => n._id !== notif._id));
+      setStats(prev => ({ ...prev, pendingRequests: Math.max(0, prev.pendingRequests - 1) }));
+      
       await notificationAPI.approveStaff(notif.data.userId, notif._id);
-      await fetchDashboardData();
+      // Reload staff approvals to ensure consistency
+      await loadStaffApprovals();
     } catch (err) {
       console.error('Failed to approve staff:', err);
+      // Reload on error to restore correct state
+      await loadStaffApprovals();
     } finally {
       setLoading(false);
     }
@@ -326,10 +357,17 @@ const AdminDashboard = () => {
     const reason = window.prompt('Enter a brief reason for rejection (optional):');
     try {
       setLoading(true);
+      // Optimistic update: remove from local state immediately
+      setStaffAccessNotifs(prev => prev.filter(n => n._id !== notif._id));
+      setStats(prev => ({ ...prev, pendingRequests: Math.max(0, prev.pendingRequests - 1) }));
+      
       await notificationAPI.rejectStaff(notif._id, reason || undefined);
-      await fetchDashboardData();
+      // Reload staff approvals to ensure consistency
+      await loadStaffApprovals();
     } catch (err) {
       console.error('Failed to reject staff request:', err);
+      // Reload on error to restore correct state
+      await loadStaffApprovals();
     } finally {
       setLoading(false);
     }
