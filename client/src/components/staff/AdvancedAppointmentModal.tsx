@@ -311,6 +311,36 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
     setTimeout(() => setSubmitProgress(0), 600);
   };
 
+  const handleResidentPickerDone = () => {
+    if (selectedResidents.length > numParticipants) {
+      // Trim to allowed count and warn
+      setSelectedResidents(s => s.slice(0, numParticipants));
+      message.warning(`Selected more residents than participant count; trimmed to first ${numParticipants}.`);
+      setResidentPickerOpen(false);
+      return;
+    }
+    if (residentsSelectionMode === 'manual' && selectedResidents.length < numParticipants) {
+      // Warn the staff that selected residents are fewer than the entered participants.
+      // Do NOT close the resident picker so they can select more residents.
+      Modal.confirm({
+        title: 'Selected residents do not match participant count',
+        content: `You set Participants = ${numParticipants} but selected only ${selectedResidents.length} residents. Please select additional residents or adjust the Participants number.`,
+        okText: 'Select more',
+        cancelText: `Adjust to ${selectedResidents.length}`,
+        onOk: () => {
+          // keep resident picker open for further selection
+        },
+        onCancel: () => {
+          // adjust participants to the number actually selected and close picker
+          setNumParticipants(selectedResidents.length);
+          setResidentPickerOpen(false);
+        }
+      });
+      return;
+    }
+    setResidentPickerOpen(false);
+  };
+
   return (
     <Modal title="Advanced Appointment Options" open={visible} onCancel={onClose} footer={null} width={900}>
       {overallProgress > 0 && overallProgress < 100 && (
@@ -481,6 +511,9 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
               <Button loading={autoSelecting} onClick={handleAutoSelect} disabled={loadingResidents}>Auto Select</Button>
               <Button onClick={() => { setSelectedResidents([]); message.info('Cleared selected residents'); }} disabled={loadingResidents}>Clear</Button>
             </div>
+            <div>
+              <Button type="primary" onClick={handleResidentPickerDone}>Done ({selectedResidents.length})</Button>
+            </div>
           </div>
           {loadingResidents ? <Spin /> : (
             <List dataSource={residentOptions} renderItem={(r: any) => (
@@ -535,37 +568,7 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
               </List.Item>
             )} />
           )}
-          <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-            <Button onClick={() => {
-              if (selectedResidents.length > numParticipants) {
-                // Trim to allowed count and warn
-                setSelectedResidents(s => s.slice(0, numParticipants));
-                message.warning(`Selected more residents than participant count; trimmed to first ${numParticipants}.`);
-                setResidentPickerOpen(false);
-                return;
-              }
-              if (residentsSelectionMode === 'manual' && selectedResidents.length < numParticipants) {
-                // Warn the staff that selected residents are fewer than the entered participants.
-                // Do NOT close the resident picker so they can select more residents.
-                Modal.confirm({
-                  title: 'Selected residents do not match participant count',
-                  content: `You set Participants = ${numParticipants} but selected only ${selectedResidents.length} residents. Please select additional residents or adjust the Participants number.`,
-                  okText: 'Select more',
-                  cancelText: `Adjust to ${selectedResidents.length}`,
-                  onOk: () => {
-                    // keep resident picker open for further selection
-                  },
-                  onCancel: () => {
-                    // adjust participants to the number actually selected and close picker
-                    setNumParticipants(selectedResidents.length);
-                    setResidentPickerOpen(false);
-                  }
-                });
-                return;
-              }
-              setResidentPickerOpen(false);
-            }}>Done ({selectedResidents.length})</Button>
-          </div>
+          
         </div>
       </Modal>
     </Modal>
