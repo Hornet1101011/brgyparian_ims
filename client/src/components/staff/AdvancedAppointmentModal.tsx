@@ -375,14 +375,7 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
               <InputNumber style={{ width: 140 }} min={1} max={1000} value={numParticipants} onChange={(v:any) => setNumParticipants(v || 1)} />
             </div>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-              <Radio.Group value={residentsSelectionMode} onChange={(e) => setResidentsSelectionMode(e.target.value)}>
-                <Radio value="manual">Manual</Radio>
-                <Radio value="auto">Auto</Radio>
-              </Radio.Group>
               <Button onClick={openResidentPicker}>Select Residents ({selectedResidents.length})</Button>
-              {residentsSelectionMode === 'auto' && (
-                <div style={{ color: '#666', fontSize: 12, marginLeft: 8 }}>Auto-select controls are available inside the resident picker</div>
-              )}
             </div>
           </div>
 
