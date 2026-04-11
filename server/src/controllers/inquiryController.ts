@@ -99,21 +99,36 @@ const normalizeToMinutes = (t?: string) => {
 };
 
 // Helper: find overlapping appointment slots for a given date/time range
-async function findConflictsForRange(date: string, startTime: string, endTime: string, excludeInquiryId?: string) {
+// Optionally restrict the check to a set of residentIds (to validate per-resident conflicts)
+async function findConflictsForRange(date: string, startTime: string, endTime: string, excludeInquiryId?: string, residentIds?: any[]) {
   const sMin = normalizeToMinutes(startTime);
   const eMin = normalizeToMinutes(endTime);
   if (Number.isNaN(sMin) || Number.isNaN(eMin) || sMin >= eMin) return [];
-  // Query AppointmentSlot for any minute buckets that overlap [sMin, eMin)
-  const overlapping = await AppointmentSlot.find({ date, slot: { $gte: sMin, $lt: eMin } }).lean();
-  const byInquiry = new Map<string, { date: string; startTime?: string; endTime?: string }>();
-  for (const o of overlapping || []) {
-    if (!o) continue;
-    const otherId = String(o.inquiryId || '');
-    if (!otherId || (excludeInquiryId && otherId === String(excludeInquiryId))) continue;
-    if (!byInquiry.has(otherId)) {
-      byInquiry.set(otherId, { date: o.date, startTime: o.appointmentStartTime || undefined, endTime: o.appointmentEndTime || undefined });
+  // Convert date string to UTC midnight date object for query
+  const dateObj = new Date(`${date}T00:00:00Z`);
+  if (isNaN(dateObj.getTime())) return [];
+
+  // Build query; if residentIds provided, only check slots for those residents
+  const q: any = { date: dateObj };
+  if (Array.isArray(residentIds) && residentIds.length) q.residentId = { $in: residentIds };
+
+  const slots = await AppointmentSlot.find(q).lean();
+  // Group conflicts by inquiry id and include representative range
+  const byInquiry = new Map<string, { date: string; startTime?: string; endTime?: string; residentName?: string }>();
+  for (const s of slots || []) {
+    if (!s) continue;
+    const os = normalizeToMinutes(s.startTime);
+    const oe = normalizeToMinutes(s.endTime);
+    if (Number.isNaN(os) || Number.isNaN(oe)) continue;
+    if (rangesOverlap(sMin, eMin, os, oe)) {
+      const otherId = String(s.inquiryId || '');
+      if (!otherId || (excludeInquiryId && otherId === String(excludeInquiryId))) continue;
+      if (!byInquiry.has(otherId)) {
+        byInquiry.set(otherId, { date: (s.date instanceof Date) ? (s.date as Date).toISOString().slice(0,10) : String(s.date), startTime: s.startTime, endTime: s.endTime, residentName: s.residentName || undefined });
+      }
     }
   }
+
   if (byInquiry.size === 0) return [];
   const conflicts: any[] = [];
   const ids = Array.from(byInquiry.keys());
@@ -121,9 +136,74 @@ async function findConflictsForRange(date: string, startTime: string, endTime: s
   for (const id of ids) {
     const info = byInquiry.get(id)!;
     const inq = (inqs || []).find((x: any) => String(x._id) === String(id));
-    conflicts.push({ inquiryId: id, username: inq?.username || null, residentName: (inq && (inq as any).createdBy && (inq as any).createdBy.fullName) || null, date: info.date, startTime: info.startTime, endTime: info.endTime });
+    conflicts.push({ inquiryId: id, username: inq?.username || null, residentName: info.residentName || (inq && (inq as any).createdBy && (inq as any).createdBy.fullName) || null, date: info.date, startTime: info.startTime, endTime: info.endTime });
   }
   return conflicts;
+}
+
+/** Persisted snapshot of Advanced Appointment modal settings (staff UI only; optional). */
+function sanitizeAdvancedSchedulingOptions(raw: any): Record<string, unknown> | undefined {
+  if (raw === null || raw === false) return undefined;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const allowed = new Set([
+    'timeMode',
+    'participantDistribution',
+    'intervalMode',
+    'intervalMins',
+    'multiplesOf',
+    'participants',
+    'participantCount',
+    'selectedDates',
+    'unifiedStart',
+    'unifiedEnd',
+    'perDateTimes',
+    'perDateAssignments',
+    'residentsSelectionMode',
+    'autoMethod',
+    'mode',
+    'bundleSize',
+  ]);
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (!allowed.has(k)) continue;
+    if (k === 'selectedDates' && Array.isArray(v)) {
+      out[k] = v.map((x) => String(x).trim()).filter(Boolean).slice(0, 31);
+      continue;
+    }
+    if (k === 'perDateTimes' && v && typeof v === 'object' && !Array.isArray(v)) {
+      const pt: Record<string, { start?: string; end?: string }> = {};
+      for (const [dk, dv] of Object.entries(v as Record<string, unknown>)) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dk)) continue;
+        if (dv && typeof dv === 'object' && !Array.isArray(dv)) {
+          const o = dv as { start?: unknown; end?: unknown };
+          pt[dk] = {
+            start: typeof o.start === 'string' ? o.start : undefined,
+            end: typeof o.end === 'string' ? o.end : undefined,
+          };
+        }
+      }
+      out[k] = pt;
+      continue;
+    }
+    if (k === 'perDateAssignments' && v && typeof v === 'object' && !Array.isArray(v)) {
+      const pa: Record<string, string[]> = {};
+      for (const [dk, arr] of Object.entries(v as Record<string, unknown>)) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dk)) continue;
+        pa[dk] = Array.isArray(arr) ? arr.map((x: unknown) => String(x).trim()).filter(Boolean) : [];
+      }
+      out[k] = pa;
+      continue;
+    }
+    if (k === 'intervalMins' || k === 'multiplesOf' || k === 'participants' || k === 'participantCount') {
+      const n = parseInt(String(v), 10);
+      if (!Number.isNaN(n)) out[k] = n;
+      continue;
+    }
+    if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+      out[k] = v;
+    }
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 
 export const createInquiry = async (req: any, res: Response, next: NextFunction) => {
@@ -564,8 +644,13 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
     if (scheduledProvided) {
       // Helper: save schedule in one operation (replace inquiry.scheduledDates and save once)
       const saveSchedule = async (inquiryDoc: any, normalized: any[]) => {
-        inquiryDoc.scheduledDates = normalized.map((r: any) => ({ date: r.date, startTime: r.startTime, endTime: r.endTime }));
+        inquiryDoc.scheduledDates = normalized.map((r: any) => ({ date: r.date, startTime: r.startTime, endTime: r.endTime, assignedUsernames: Array.isArray(r.assignedUsernames) ? r.assignedUsernames : [] }));
         inquiryDoc.scheduledBy = (req as any).user?._id || inquiryDoc.scheduledBy;
+        const rawSchedOpts = updateBody.schedulingOptions !== undefined ? updateBody.schedulingOptions : updateBody.scheduleOptions;
+        if (rawSchedOpts !== undefined) {
+          const cleaned = sanitizeAdvancedSchedulingOptions(rawSchedOpts);
+          (inquiryDoc as any).schedulingOptions = cleaned ?? undefined;
+        }
         await inquiryDoc.save();
         return inquiryDoc;
       };
@@ -576,21 +661,25 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
         const arr = updateBody.scheduledDates;
         if (!Array.isArray(arr)) return res.status(400).json({ message: 'scheduledDates must be an array' });
         const seenRange = new Set<string>();
+        const primaryUsernameForPayload = String((beforeInquiry as any)?.username || '').trim();
         for (const sd of arr) {
           if (!sd || !sd.date || !sd.startTime || !sd.endTime) return res.status(400).json({ message: 'Each scheduledDate must include date, startTime and endTime' });
-          const key = `${sd.date}|${sd.startTime}|${sd.endTime}`;
-          if (seenRange.has(key)) continue; // drop exact duplicate
-          seenRange.add(key);
+          // include optional assignedUsernames (for cluster/multiples/manual assignment from client)
+          const assignedUsernames = Array.isArray(sd.assignedUsernames) ? sd.assignedUsernames.map((x:any) => String(x).trim()).filter(Boolean) : [];
+          const dedupeKey = `${sd.date}|${sd.startTime}|${sd.endTime}|${assignedUsernames.slice().sort().join(',')}`;
+          if (seenRange.has(dedupeKey)) continue; // drop exact duplicate (same window + same assignees)
+          seenRange.add(dedupeKey);
           const sMin = normalizeToMinutes(sd.startTime);
           const eMin = normalizeToMinutes(sd.endTime);
           if (Number.isNaN(sMin) || Number.isNaN(eMin) || sMin >= eMin) return res.status(400).json({ message: 'Start time must be earlier than end time' });
-          // include optional assignedUsernames (for cluster/multiples/manual assignment from client)
-          const assignedUsernames = Array.isArray(sd.assignedUsernames) ? sd.assignedUsernames.map((x:any) => String(x).trim()).filter(Boolean) : [];
           normalized.push({ date: sd.date, startTime: sd.startTime, endTime: sd.endTime, sMin, eMin, assignedUsernames });
         }
 
-        // Validate no internal overlaps within the payload
-        const internal = schedulingService.validateScheduledDatesPayload(normalized.map((r: any) => ({ date: r.date, startTime: r.startTime, endTime: r.endTime })));
+        // Validate no internal overlaps within the payload (per-resident when assignees are present)
+        const internal = schedulingService.validateScheduledDatesPayload(
+          normalized.map((r: any) => ({ date: r.date, startTime: r.startTime, endTime: r.endTime, assignedUsernames: r.assignedUsernames })),
+          { primaryUsername: primaryUsernameForPayload || undefined }
+        );
         if (!internal.ok) return res.status(400).json({ message: internal.message });
 
         // Additional server-side validation for cluster/multiples/manual distribution logic
@@ -612,7 +701,8 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
         if (participantsExpected !== null && uniqueAssigned.length > 0 && uniqueAssigned.length !== participantsExpected) {
           return res.status(400).json({ message: `Mismatch: schedulingOptions.participants=${participantsExpected} but assignedUsernames contains ${uniqueAssigned.length} unique users.` });
         }
-        // Validate assigned usernames exist as resident users
+        // Validate assigned usernames exist as resident users and build a lookup map
+        let foundUserMap = new Map<string, any>();
         if (uniqueAssigned.length > 0) {
           const foundUsers = await User.find({ role: 'resident', username: { $in: uniqueAssigned } }).lean();
           const foundUsernames = new Set((foundUsers || []).map((u:any) => String(u.username)));
@@ -620,12 +710,24 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
           if (missing.length) {
             return res.status(400).json({ message: `Unknown resident usernames in assignedUsernames: ${missing.join(', ')}` });
           }
+          for (const fu of (foundUsers || [])) {
+            if (!fu || !fu.username) continue;
+            foundUserMap.set(String(fu.username), fu);
+          }
         }
 
-        // Validate each range against office hours and existing AppointmentSlot entries
+        // Validate each range against office hours and existing AppointmentSlot entries.
+        // If a scheduled range includes assignedUsernames, only validate conflicts for those resident(s).
         for (const r of normalized) {
-          const vt = await schedulingService.validateTimeRange(r.startTime, r.endTime, r.date, req.params.id);
-          if (!vt.ok) return res.status(400).json({ message: vt.message });
+          if (Array.isArray(r.assignedUsernames) && r.assignedUsernames.length > 0) {
+            const residentDocs = r.assignedUsernames.map((u: string) => foundUserMap.get(u)).filter(Boolean);
+            const residentIds = residentDocs.map((d: any) => d._id);
+            const vt = await schedulingService.validateTimeRange(r.startTime, r.endTime, r.date, { inquiryId: req.params.id, residentIds });
+            if (!vt.ok) return res.status(400).json({ message: vt.message });
+          } else {
+            const vt = await schedulingService.validateTimeRange(r.startTime, r.endTime, r.date, req.params.id);
+            if (!vt.ok) return res.status(400).json({ message: vt.message });
+          }
         }
 
         // No conflicts — perform single save operation (build minute slots and save)
@@ -642,29 +744,73 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
           try {
             await AppointmentSlot.deleteMany({ inquiryId: saved._id });
             const slotDocs: any[] = [];
-            for (const d of normalized) {
-              // Allow scheduledDates to include a residentUsername/resident field to assign the slot to a specific resident
-              let residentId: any = (saved as any).residentId || (saved as any).createdBy || null;
-              let residentName: string | undefined = (saved as any).residentName || (saved as any).username || undefined;
-              try {
-                const possibleUsername = d.residentUsername || d.username || d.recipientUsername || d.recipient;
-                if (possibleUsername) {
-                  const found = await User.findOne({ $or: [{ username: possibleUsername }, { email: possibleUsername }] , role: 'resident' }).lean().catch(() => null);
-                  if (found) { residentId = found._id; residentName = found.fullName || found.username; }
-                }
-              } catch (e) {
-                // ignore lookup errors and fall back to inquiry-level resident
-              }
+            const staffId = (req as any).user?._id;
+            if (!staffId) return res.status(403).json({ message: 'Staff identity required to schedule appointments.' });
+            const staffName = (req as any).user?.fullName || (req as any).user?.username || undefined;
 
-              slotDocs.push({
-                inquiryId: saved._id,
-                residentId: residentId || null,
-                residentName: residentName || undefined,
-                staffId: (req as any).user?._id || null,
-                date: new Date(`${d.date}T00:00:00Z`),
-                startTime: d.startTime,
-                endTime: d.endTime,
-              });
+            for (const d of normalized) {
+              // If assignedUsernames provided, create a slot doc per resident
+              if (Array.isArray(d.assignedUsernames) && d.assignedUsernames.length > 0) {
+                for (const uname of d.assignedUsernames) {
+                  let residentDoc = foundUserMap.get(uname);
+                  if (!residentDoc) {
+                    // fallback lookup
+                    residentDoc = await User.findOne({ role: 'resident', username: uname }).lean().catch(() => null);
+                  }
+                  if (!residentDoc || !residentDoc._id) {
+                    return res.status(400).json({ message: `Unable to resolve resident username: ${uname}` });
+                  }
+                  slotDocs.push({
+                    inquiryId: saved._id,
+                    residentId: residentDoc._id,
+                    residentName: residentDoc.fullName || residentDoc.username,
+                    residentBarangayID: residentDoc.barangayID || undefined,
+                    staffId,
+                    staffName,
+                    date: new Date(`${d.date}T00:00:00Z`),
+                    startTime: d.startTime,
+                    endTime: d.endTime,
+                  });
+                }
+              } else {
+                // Allow scheduledDates to include a residentUsername/resident field to assign the slot to a specific resident
+                let residentId: any = (saved as any).residentId || undefined;
+                let residentName: string | undefined = (saved as any).residentName || (saved as any).username || undefined;
+                let residentBarangayID: string | undefined = (saved as any).barangayID || undefined;
+                try {
+                  const possibleUsername = d.residentUsername || d.username || d.recipientUsername || d.recipient;
+                  if (possibleUsername) {
+                    const found = await User.findOne({ $or: [{ username: possibleUsername }, { email: possibleUsername }] , role: 'resident' }).lean().catch(() => null);
+                    if (found) { residentId = found._id; residentName = found.fullName || found.username; residentBarangayID = found.barangayID || residentBarangayID; }
+                  }
+                } catch (e) {
+                  // ignore lookup errors and fall back to inquiry-level resident
+                }
+
+                // Fall back to inquiry-level resident resolution if needed
+                if (!residentId) {
+                  try {
+                    const resolved = await User.findOne({ username: (saved as any).username, barangayID: (saved as any).barangayID, role: 'resident' }).lean().catch(() => null);
+                    if (resolved) { residentId = resolved._id; residentName = resolved.fullName || resolved.username; residentBarangayID = resolved.barangayID || residentBarangayID; }
+                  } catch (e) { /* ignore */ }
+                }
+
+                if (!residentId) {
+                  return res.status(400).json({ message: 'Unable to resolve resident for scheduled date; please ensure the inquiry has a resident username or assign specific residents.' });
+                }
+
+                slotDocs.push({
+                  inquiryId: saved._id,
+                  residentId: residentId,
+                  residentName: residentName || undefined,
+                  residentBarangayID: residentBarangayID || undefined,
+                  staffId,
+                  staffName,
+                  date: new Date(`${d.date}T00:00:00Z`),
+                  startTime: d.startTime,
+                  endTime: d.endTime,
+                });
+              }
             }
             if (slotDocs.length) {
               await AppointmentSlot.insertMany(slotDocs);
@@ -686,15 +832,12 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
               // For audit and notifications, group by resident if slots were assigned to multiple residents
               try {
                 const notifType = actionType === 'CREATED_APPOINTMENT' ? 'created' : 'edited';
-                // Log and gather per-resident scheduled ranges
+                // Log and gather per-resident scheduled ranges from the slotDocs (handles multiple residents per range)
                 const perResident = new Map<string, { residentId?: any; residentName?: string; ranges: any[] }>();
-                for (const d of normalized) {
-                  // find corresponding slot doc to extract resident assignment
-                  const matching = slotDocs.find(s => (new Date(s.date)).toISOString().slice(0,10) === d.date && s.startTime === d.startTime && s.endTime === d.endTime);
-                  const rid = matching?.residentId ? String(matching.residentId) : String(residentId || '') ;
-                  const rname = matching?.residentName || residentName;
-                  if (!perResident.has(rid)) perResident.set(rid, { residentId: matching?.residentId, residentName: rname, ranges: [] });
-                  perResident.get(rid)!.ranges.push({ date: d.date, startTime: d.startTime, endTime: d.endTime });
+                for (const sdoc of slotDocs) {
+                  const rid = sdoc && sdoc.residentId ? String(sdoc.residentId) : '';
+                  if (!perResident.has(rid)) perResident.set(rid, { residentId: sdoc.residentId, residentName: sdoc.residentName, ranges: [] });
+                  perResident.get(rid)!.ranges.push({ date: (new Date(sdoc.date)).toISOString().slice(0,10), startTime: sdoc.startTime, endTime: sdoc.endTime });
                 }
 
                 for (const [rid, info] of perResident.entries()) {
@@ -800,8 +943,20 @@ export const checkAvailability = async (req: any, res: Response, next: NextFunct
     const conflicts: any[] = [];
     for (const sd of scheduled) {
       if (!sd || !sd.date || !sd.startTime || !sd.endTime) continue;
-      const c = await findConflictsForRange(sd.date, sd.startTime, sd.endTime, req.params.id);
-      if (c && c.length) conflicts.push(...c);
+      // If client provided per-date assignedUsernames, only check conflicts for those resident(s)
+      if (Array.isArray(sd.assignedUsernames) && sd.assignedUsernames.length > 0) {
+        const names = sd.assignedUsernames.map((x: any) => String(x).trim()).filter(Boolean);
+        if (names.length === 0) continue;
+        const users = await User.find({ role: 'resident', username: { $in: names } }).lean();
+        const found = (users || []).map(u => String(u._id));
+        const missing = names.filter((n: string) => !users.find((u: any) => String(u.username) === String(n)));
+        if (missing.length) return res.status(400).json({ message: `Unknown resident usernames in scheduledDates: ${missing.join(', ')}` });
+        const c = await findConflictsForRange(sd.date, sd.startTime, sd.endTime, req.params.id, found);
+        if (c && c.length) conflicts.push(...c);
+      } else {
+        const c = await findConflictsForRange(sd.date, sd.startTime, sd.endTime, req.params.id);
+        if (c && c.length) conflicts.push(...c);
+      }
     }
     if (conflicts.length > 0) return res.status(409).json({ message: 'Scheduling conflict', conflicts });
     return res.json({ ok: true });

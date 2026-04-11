@@ -237,9 +237,137 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
     }
   };
 
+  const formatHM = (minutes: number) => {
+    const hh = Math.floor(minutes/60);
+    const mm = minutes % 60;
+    return `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;
+  };
+
+  /** Synchronous schedule builder (also used on submit so we do not rely on async preview state). */
+  const buildPreviewAssignments = (participantOverride?: number): Assignment[] => {
+    const np = participantOverride ?? numParticipants;
+    if (!selectedDates.length || selectedResidents.length < 1) return [];
+
+    const windows: {date:string; start:number; end:number}[] = selectedDates.map(ds => {
+      const tm = timeMode === 'unified' ? { start: unifiedStart, end: unifiedEnd } : perDateTimes[ds] || { start: unifiedStart, end: unifiedEnd };
+      return { date: ds, start: toMinutes(tm.start), end: toMinutes(tm.end) };
+    });
+
+    const assignments: Assignment[] = [];
+    const residents = [...selectedResidents].slice(0, np);
+
+    const residentMap: Record<string, Resident> = {};
+    for (const r of residents) residentMap[r.username] = r;
+
+    const assignedToDate: Record<string, string[]> = {};
+    for (const w of windows) {
+      assignedToDate[w.date] = (perDateAssignments[w.date] || []).filter(u => !!residentMap[u]);
+    }
+
+    const explicitlyAssigned = new Set(Object.values(assignedToDate).flat());
+    const unassigned = residents.filter(r => !explicitlyAssigned.has(r.username));
+    for (let i=0;i<unassigned.length;i++) {
+      const w = windows[i % windows.length];
+      assignedToDate[w.date].push(unassigned[i].username);
+    }
+
+    if (intervalMode === 'off') {
+      if (participantDistribution === 'all') {
+        for (const d of windows) {
+          for (const r of residents) assignments.push({ resident: r, date: d.date, startTime: formatHM(d.start), endTime: formatHM(d.end) });
+        }
+      } else if (participantDistribution === 'balanced') {
+        let idx = 0;
+        for (const r of residents) {
+          const d = windows[idx % windows.length];
+          assignments.push({ resident: r, date: d.date, startTime: formatHM(d.start), endTime: formatHM(d.end) });
+          idx++;
+        }
+      } else {
+        for (const d of windows) {
+          const usernames = assignedToDate[d.date] || [];
+          for (const uname of usernames) {
+            const r = residentMap[uname];
+            if (r) assignments.push({ resident: r, date: d.date, startTime: formatHM(d.start), endTime: formatHM(d.end) });
+          }
+        }
+      }
+    } else if (intervalMode === 'individual') {
+      if (participantDistribution === 'manual') {
+        for (const d of windows) {
+          let cursor = d.start;
+          const usernames = assignedToDate[d.date] || [];
+          for (const uname of usernames) {
+            if (cursor + intervalMins > d.end) break;
+            if (cursor >= 12*60 && cursor < 13*60) cursor = 13*60;
+            const r = residentMap[uname];
+            if (!r) continue;
+            assignments.push({ resident: r, date: d.date, startTime: formatHM(cursor), endTime: formatHM(cursor + intervalMins) });
+            cursor += intervalMins;
+          }
+        }
+      } else {
+        let resIdx = 0;
+        for (const d of windows) {
+          let cursor = d.start;
+          while (cursor + intervalMins <= d.end && resIdx < residents.length) {
+            if (cursor >= 12*60 && cursor < 13*60) cursor = 13*60;
+            if (cursor + intervalMins > d.end) break;
+            const r = residents[resIdx];
+            assignments.push({ resident: r, date: d.date, startTime: formatHM(cursor), endTime: formatHM(cursor + intervalMins) });
+            cursor += intervalMins;
+            resIdx++;
+          }
+        }
+      }
+    } else if (intervalMode === 'multiples') {
+      if (participantDistribution === 'manual') {
+        for (const d of windows) {
+          const usernames = assignedToDate[d.date] || [];
+          const bundles: string[][] = [];
+          for (let i=0;i<usernames.length;i+=multiplesOf) bundles.push(usernames.slice(i,i+multiplesOf));
+          let cursor = d.start;
+          let bundleIdx = 0;
+          while (cursor < d.end && bundleIdx < bundles.length) {
+            if (cursor >= 12*60 && cursor < 13*60) cursor = 13*60;
+            const start = cursor;
+            const end = cursor + intervalMins;
+            if (end > d.end) break;
+            const bundle = bundles[bundleIdx];
+            for (const uname of bundle) {
+              const r = residentMap[uname];
+              if (r) assignments.push({ resident: r, date: d.date, startTime: formatHM(start), endTime: formatHM(end) });
+            }
+            cursor = end;
+            bundleIdx++;
+          }
+        }
+      } else {
+        const bundles: Resident[][] = [];
+        for (let i=0;i<residents.length;i+=multiplesOf) bundles.push(residents.slice(i,i+multiplesOf));
+        let bundleIdx = 0;
+        for (const d of windows) {
+          let cursor = d.start;
+          while (cursor < d.end && bundleIdx < bundles.length) {
+            if (cursor >= 12*60 && cursor < 13*60) cursor = 13*60;
+            const start = cursor;
+            const end = cursor + intervalMins;
+            if (end > d.end) break;
+            const bundle = bundles[bundleIdx];
+            for (const r of bundle) assignments.push({ resident: r, date: d.date, startTime: formatHM(start), endTime: formatHM(end) });
+            cursor = end;
+            bundleIdx++;
+          }
+        }
+      }
+    }
+
+    return assignments;
+  };
+
   // compute preview schedule based on mode + interval settings
   const computePreview = async () => {
-    // If in manual mode, ensure selected residents match participant count
+    let participantCount = numParticipants;
     if (residentsSelectionMode === 'manual' && selectedResidents.length < numParticipants) {
       const proceed = await new Promise((resolve: (v: boolean) => void) => {
         Modal.confirm({
@@ -251,7 +379,8 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
           onCancel: () => resolve(false),
         });
       });
-      if (!proceed) return; // user cancelled — abort preview
+      if (!proceed) return;
+      participantCount = selectedResidents.length;
     }
 
     setComputingPreview(true);
@@ -260,161 +389,21 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
     previewTimer.current = setInterval(() => {
       setPreviewProgress(p => Math.min(95, p + Math.floor(Math.random() * 10) + 5));
     }, 300);
-    let aborted = false;
     try {
-      // basic validation
-      if (!selectedDates.length) { setPreview([]); aborted = true; }
-      if (!aborted && selectedResidents.length < 1) { setPreview([]); aborted = true; }
-      if (aborted) {
-        // allow the progress bar to run briefly, then finish below
-        return;
-      }
-
-      // build date windows
-      const windows: {date:string; start:number; end:number}[] = selectedDates.map(ds => {
-        const tm = timeMode === 'unified' ? { start: unifiedStart, end: unifiedEnd } : perDateTimes[ds] || { start: unifiedStart, end: unifiedEnd };
-        return { date: ds, start: toMinutes(tm.start), end: toMinutes(tm.end) };
-      });
-
-      // generate assignments in resident order
-      const assignments: Assignment[] = [];
-      const residents = [...selectedResidents].slice(0, numParticipants);
-
-      // Build quick lookup map for residents we're considering
-      const residentMap: Record<string, Resident> = {};
-      for (const r of residents) residentMap[r.username] = r;
-
-      // Build per-date assigned usernames from UI (manual), ensuring only selected residents are used
-      const assignedToDate: Record<string, string[]> = {};
-      for (const w of windows) {
-        assignedToDate[w.date] = (perDateAssignments[w.date] || []).filter(u => !!residentMap[u]);
-      }
-
-      // Any residents not explicitly assigned will be distributed evenly across dates
-      const explicitlyAssigned = new Set(Object.values(assignedToDate).flat());
-      const unassigned = residents.filter(r => !explicitlyAssigned.has(r.username));
-      for (let i=0;i<unassigned.length;i++) {
-        const w = windows[i % windows.length];
-        assignedToDate[w.date].push(unassigned[i].username);
-      }
-
-      if (intervalMode === 'off') {
-        if (participantDistribution === 'all') {
-          for (const d of windows) {
-            for (const r of residents) assignments.push({ resident: r, date: d.date, startTime: formatHM(d.start), endTime: formatHM(d.end) });
-          }
-        } else if (participantDistribution === 'balanced') {
-          // split residents evenly across dates
-          let idx = 0;
-          for (const r of residents) {
-            const d = windows[idx % windows.length];
-            assignments.push({ resident: r, date: d.date, startTime: formatHM(d.start), endTime: formatHM(d.end) });
-            idx++;
-          }
-        } else {
-          // manual: use per-date assignments (plus balanced fallback already merged above)
-          for (const d of windows) {
-            const usernames = assignedToDate[d.date] || [];
-            for (const uname of usernames) {
-              const r = residentMap[uname];
-              if (r) assignments.push({ resident: r, date: d.date, startTime: formatHM(d.start), endTime: formatHM(d.end) });
-            }
-          }
-        }
-      } else if (intervalMode === 'individual') {
-        if (participantDistribution === 'manual') {
-          // schedule assigned residents sequentially per date
-          for (const d of windows) {
-            let cursor = d.start;
-            const usernames = assignedToDate[d.date] || [];
-            for (const uname of usernames) {
-              if (cursor + intervalMins > d.end) break;
-              if (cursor >= 12*60 && cursor < 13*60) cursor = 13*60;
-              const r = residentMap[uname];
-              if (!r) continue;
-              assignments.push({ resident: r, date: d.date, startTime: formatHM(cursor), endTime: formatHM(cursor + intervalMins) });
-              cursor += intervalMins;
-            }
-          }
-        } else {
-          // sequential intervals per date, spilling to next date if needed
-          let resIdx = 0;
-          for (const d of windows) {
-            let cursor = d.start;
-            while (cursor + intervalMins <= d.end && resIdx < residents.length) {
-              if (cursor >= 12*60 && cursor < 13*60) cursor = 13*60;
-              if (cursor + intervalMins > d.end) break;
-              const r = residents[resIdx];
-              assignments.push({ resident: r, date: d.date, startTime: formatHM(cursor), endTime: formatHM(cursor + intervalMins) });
-              cursor += intervalMins;
-              resIdx++;
-            }
-          }
-        }
-      } else if (intervalMode === 'multiples') {
-        if (participantDistribution === 'manual') {
-          // group per-date assigned usernames into bundles and schedule
-          for (const d of windows) {
-            const usernames = assignedToDate[d.date] || [];
-            const bundles: string[][] = [];
-            for (let i=0;i<usernames.length;i+=multiplesOf) bundles.push(usernames.slice(i,i+multiplesOf));
-            let cursor = d.start;
-            let bundleIdx = 0;
-            while (cursor < d.end && bundleIdx < bundles.length) {
-              if (cursor >= 12*60 && cursor < 13*60) cursor = 13*60;
-              const start = cursor;
-              const end = cursor + intervalMins;
-              if (end > d.end) break;
-              const bundle = bundles[bundleIdx];
-              for (const uname of bundle) {
-                const r = residentMap[uname];
-                if (r) assignments.push({ resident: r, date: d.date, startTime: formatHM(start), endTime: formatHM(end) });
-              }
-              cursor = end;
-              bundleIdx++;
-            }
-          }
-        } else {
-          // group residents into bundles of multiplesOf, each bundle gets an interval
-          const bundles: Resident[][] = [];
-          for (let i=0;i<residents.length;i+=multiplesOf) bundles.push(residents.slice(i,i+multiplesOf));
-          let bundleIdx = 0;
-          for (const d of windows) {
-            let cursor = d.start;
-            while (cursor < d.end && bundleIdx < bundles.length) {
-              if (cursor >= 12*60 && cursor < 13*60) cursor = 13*60;
-              const start = cursor;
-              const end = cursor + intervalMins;
-              if (end > d.end) break;
-              const bundle = bundles[bundleIdx];
-              for (const r of bundle) assignments.push({ resident: r, date: d.date, startTime: formatHM(start), endTime: formatHM(end) });
-              cursor = end;
-              bundleIdx++;
-            }
-          }
-        }
-      }
-
+      const assignments = buildPreviewAssignments(participantCount);
       setPreview(assignments);
     } finally {
       setComputingPreview(false);
-      // finish progress if timer exists
       if (previewTimer.current) { clearInterval(previewTimer.current); previewTimer.current = null; }
       setPreviewProgress(100);
       setTimeout(() => setPreviewProgress(0), 600);
     }
   };
 
-  const formatHM = (minutes: number) => {
-    const hh = Math.floor(minutes/60);
-    const mm = minutes % 60;
-    return `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;
-  };
-
   const submit = async () => {
     if (!selectedDates.length) { alert('Please select at least one date.'); return; }
     if (!selectedResidents.length) { alert('Please select participants.'); return; }
-    // If in manual mode and selected residents fewer than participants, confirm with user
+    let participantCount = numParticipants;
     if (residentsSelectionMode === 'manual' && selectedResidents.length < numParticipants) {
       const proceed = await new Promise((resolve: (v: boolean) => void) => {
         Modal.confirm({
@@ -426,11 +415,12 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
           onCancel: () => resolve(false),
         });
       });
-      if (!proceed) return; // user cancelled submission
+      if (!proceed) return;
+      participantCount = selectedResidents.length;
     }
-    // recompute preview to ensure assigned
-    await computePreview();
-    if (!preview.length) { if (!window.confirm('No computed assignments. Continue?')) return; }
+
+    const assignments = buildPreviewAssignments(participantCount);
+    if (!assignments.length) { if (!window.confirm('No computed assignments. Continue?')) return; }
 
     setSubmitting(true);
     setSubmitProgress(1);
@@ -439,16 +429,19 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
       setSubmitProgress(p => Math.min(95, p + Math.floor(Math.random() * 8) + 2));
     }, 400);
     try {
-      // create inquiry
-      const recipients = selectedResidents.slice(0, numParticipants).map(r => r.fullName || r.username);
-      const recipientEmails = selectedResidents.slice(0, numParticipants).map(r => r.email).filter(Boolean);
+      const slice = selectedResidents.slice(0, participantCount);
+      const recipients = slice.map((r: any) => {
+        const label = (r.fullName || r.username || '').toString().trim();
+        return r.barangayID ? `${label}(${r.barangayID})` : label;
+      });
+      const recipientEmails = slice.map((r: any) => r.email).filter(Boolean);
       const payload = {
         subject: `Advanced Appointment (${selectedDates.join(',')})`,
         title: `Advanced Appointment`,
-        message: `Advanced appointment scheduled via staff calendar.`,
+        message: `Advanced appointment scheduled via staff calendar (multi-slot).`,
         username: selectedResidents[0]?.username || 'staff',
         type: 'QUICK_APPOINTMENT',
-        status: 'scheduled',
+        status: 'open',
         recipients,
         recipientEmails,
         quick_appointment_type: 'advanced'
@@ -456,20 +449,36 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
       const created = await contactAPI.submitInquiry(payload);
       if (!created || !created._id) { alert('Failed to create inquiry'); return; }
 
-      // For each preview assignment, schedule by calling scheduleInquiry(created._id, [{date,startTime,endTime}])
-      for (const a of preview) {
-        try {
-          await contactAPI.scheduleInquiry(created._id, [{ date: a.date, startTime: a.startTime, endTime: a.endTime }]);
-        } catch (err) {
-          console.warn('Failed scheduling one assignment', a, err);
-        }
-      }
+      const scheduledDates = assignments.map(a => ({
+        date: a.date,
+        startTime: a.startTime,
+        endTime: a.endTime,
+        assignedUsernames: a.resident?.username ? [a.resident.username] : [],
+      }));
 
-      alert('Advanced appointments scheduled (partial failures may be in console).');
+      const schedulingOptions: Record<string, unknown> = {
+        timeMode,
+        participantDistribution,
+        intervalMode,
+        intervalMins,
+        multiplesOf,
+        participantCount,
+        selectedDates: [...selectedDates].sort(),
+        unifiedStart,
+        unifiedEnd,
+        ...(timeMode === 'individual' ? { perDateTimes: { ...perDateTimes } } : {}),
+        ...(participantDistribution === 'manual' ? { perDateAssignments: { ...perDateAssignments } } : {}),
+        residentsSelectionMode,
+        autoMethod,
+      };
+
+      await contactAPI.scheduleInquiry(String(created._id), scheduledDates, schedulingOptions);
+      setPreview(assignments);
+      message.success('Advanced appointments scheduled.');
       onClose();
     } catch (err) {
       console.error('Failed to submit advanced appointment', err);
-      alert('Failed to submit advanced appointment.');
+      message.error('Failed to submit advanced appointment.');
     } finally { setSubmitting(false); }
     if (submitTimer.current) { clearInterval(submitTimer.current); submitTimer.current = null; }
     setSubmitProgress(100);

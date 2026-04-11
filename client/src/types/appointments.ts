@@ -14,6 +14,8 @@ export interface ScheduledAppointment {
   inquiryId?: string;
   residentUsername?: string;
   residentName?: string;
+  /** When set, slot is reserved for these resident login names (advanced / multi-resident scheduling). */
+  assignedUsernames?: string[];
 }
 
 export interface ResidentInfo {

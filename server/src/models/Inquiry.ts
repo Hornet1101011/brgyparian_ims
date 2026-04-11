@@ -52,7 +52,8 @@ export interface IInquiry extends Document {
   // Optional preferred appointment dates supplied by residents (stored as YYYY-MM-DD strings)
   appointmentDates?: string[];
   // scheduledDates contains the actual scheduled slots set by staff
-  scheduledDates?: Array<{ date: string; startTime: string; endTime: string }>;
+  // Each scheduled entry may include assignedUsernames (for advanced scheduling)
+  scheduledDates?: Array<{ date: string; startTime: string; endTime: string; assignedUsernames?: string[] }>;
   scheduledBy?: mongoose.Types.ObjectId;
   cancellationReason?: string;
   canceledBy?: mongoose.Types.ObjectId;
@@ -62,7 +63,9 @@ export interface IInquiry extends Document {
   // Quick appointment fields
   recipients?: string[]; // Array of usernames for multi-recipient appointments
   recipientEmails?: string[]; // Array of emails for multi-recipient appointments
-  quick_appointment_type?: string; // 'single' | 'multiple' | 'mass'
+  quick_appointment_type?: string; // 'single' | 'multiple' | 'mass' | 'advanced'
+  /** Optional snapshot from Advanced Appointment modal (time mode, distribution, intervals, etc.) */
+  schedulingOptions?: Record<string, unknown>;
   locationType?: string; // 'on-site' | 'virtual' | 'hybrid'
   location?: string; // Address or location details
   description?: string; // Appointment description
@@ -179,7 +182,8 @@ const inquirySchema = new mongoose.Schema({
   // Preferred appointment dates (optional) - store as YYYY-MM-DD strings
   appointmentDates: [{ type: String }],
   // Actual scheduled appointment slots added by staff
-  scheduledDates: [{ date: String, startTime: String, endTime: String }],
+  // Each scheduled entry may include assignedUsernames (string array of resident usernames)
+  scheduledDates: [{ date: String, startTime: String, endTime: String, assignedUsernames: [{ type: String }] }],
   scheduledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   cancellationReason: { type: String },
   canceledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
@@ -196,7 +200,8 @@ const inquirySchema = new mongoose.Schema({
   // Quick appointment fields
   recipients: [{ type: String }], // Array of usernames for multi-recipient appointments
   recipientEmails: [{ type: String }], // Array of emails for multi-recipient appointments
-  quick_appointment_type: { type: String }, // 'single' | 'multiple' | 'mass'
+  quick_appointment_type: { type: String }, // 'single' | 'multiple' | 'mass' | 'advanced'
+  schedulingOptions: { type: Schema.Types.Mixed, required: false },
   locationType: { type: String }, // 'on-site' | 'virtual' | 'hybrid'
   location: { type: String }, // Address or location details
   description: { type: String }, // Appointment description

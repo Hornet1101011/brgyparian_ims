@@ -24,8 +24,10 @@ const appointmentSlotSchema = new mongoose.Schema({
 // Optional index to quickly find slots by inquiry
 appointmentSlotSchema.index({ inquiryId: 1 });
 appointmentSlotSchema.index({ date: 1 });
-// Ensure uniqueness per inquiry/date/startTime to avoid accidental duplicates
-appointmentSlotSchema.index({ inquiryId: 1, date: 1, startTime: 1 }, { unique: true });
+// Ensure uniqueness per inquiry/resident/date/startTime to avoid accidental duplicates
+appointmentSlotSchema.index({ inquiryId: 1, residentId: 1, date: 1, startTime: 1 }, { unique: true });
+// Index residentId for quick resident-based conflict checks
+appointmentSlotSchema.index({ residentId: 1 });
 
 // Guard against recompilation in dev (nodemon / ts-node)
 export const AppointmentSlot: mongoose.Model<any> = (mongoose.models && (mongoose.models as any).AppointmentSlot)

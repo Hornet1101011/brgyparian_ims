@@ -49,4 +49,22 @@ describe('schedulingService.validateScheduledDatesPayload', () => {
     const res = schedulingService.validateScheduledDatesPayload(arr);
     expect(res.ok).toBe(true);
   });
+
+  test('allows overlapping ranges when different assigned residents', () => {
+    const arr = [
+      { date: '2025-12-01', startTime: '09:00', endTime: '09:30', assignedUsernames: ['alice'] },
+      { date: '2025-12-01', startTime: '09:15', endTime: '09:45', assignedUsernames: ['bob'] }
+    ];
+    const res = schedulingService.validateScheduledDatesPayload(arr);
+    expect(res.ok).toBe(true);
+  });
+
+  test('rejects overlapping ranges for same assigned resident', () => {
+    const arr = [
+      { date: '2025-12-01', startTime: '09:00', endTime: '09:30', assignedUsernames: ['alice'] },
+      { date: '2025-12-01', startTime: '09:20', endTime: '09:50', assignedUsernames: ['alice'] }
+    ];
+    const res = schedulingService.validateScheduledDatesPayload(arr);
+    expect(res.ok).toBe(false);
+  });
 });

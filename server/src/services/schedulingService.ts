@@ -10,7 +10,17 @@ const dateStringToUtcDate = (d: string) => {
   return dt;
 };
 
-export async function validateTimeRange(startTime: string, endTime: string, date: string, inquiryId?: any) {
+export async function validateTimeRange(startTime: string, endTime: string, date: string, inquiryIdOrOptions?: any) {
+  // Backwards-compatible: fourth arg may be an inquiryId (string) or an options object
+  let inquiryId: any = undefined;
+  let residentIds: any[] | undefined = undefined;
+  if (typeof inquiryIdOrOptions === 'string' || typeof inquiryIdOrOptions === 'number') {
+    inquiryId = inquiryIdOrOptions;
+  } else if (inquiryIdOrOptions && typeof inquiryIdOrOptions === 'object') {
+    inquiryId = inquiryIdOrOptions.inquiryId;
+    residentIds = Array.isArray(inquiryIdOrOptions.residentIds) ? inquiryIdOrOptions.residentIds : undefined;
+  }
+
   const s = toMinutes(startTime);
   const e = toMinutes(endTime);
   if (Number.isNaN(s) || Number.isNaN(e) || s >= e) {
@@ -34,7 +44,12 @@ export async function validateTimeRange(startTime: string, endTime: string, date
   const dateObj = dateStringToUtcDate(date);
   if (!dateObj) return { ok: false, message: 'Selected time is outside office hours' };
 
-  const slots = await AppointmentSlot.find({ date: dateObj }).lean();
+  // When residentIds is provided, only check conflicts for those resident(s).
+  const findQuery: any = { date: dateObj };
+  if (residentIds && residentIds.length) {
+    findQuery.residentId = { $in: residentIds };
+  }
+  const slots = await AppointmentSlot.find(findQuery).lean();
   for (const slot of slots || []) {
     // skip same inquiry's own slots
     if (inquiryId && String(slot.inquiryId) === String(inquiryId)) continue;
@@ -49,23 +64,51 @@ export async function validateTimeRange(startTime: string, endTime: string, date
   return { ok: true };
 }
 
-// Validate a set of scheduledDates for an inquiry payload to ensure no internal overlaps
-export function validateScheduledDatesPayload(dates: Array<{ date: string; startTime: string; endTime: string }>) {
+export type ScheduledPayloadEntry = {
+  date: string;
+  startTime: string;
+  endTime: string;
+  assignedUsernames?: string[];
+};
+
+/**
+ * Ensure no resident is double-booked within the same payload.
+ * When entries omit assignedUsernames, they are treated as the inquiry primary (same slot as legacy single-resident scheduling).
+ */
+export function validateScheduledDatesPayload(
+  dates: ScheduledPayloadEntry[],
+  opts?: { primaryUsername?: string }
+) {
   if (!Array.isArray(dates)) return { ok: false, message: 'scheduledDates must be an array' };
-  // ensure no overlapping ranges within the same payload for the same date
-  // group by date
-  const byDate = new Map<string, Array<{ s: number; e: number }>>();
+
+  const resolveUserKeys = (d: ScheduledPayloadEntry): string[] => {
+    const raw = Array.isArray(d.assignedUsernames)
+      ? d.assignedUsernames.map((x: any) => String(x).trim()).filter(Boolean)
+      : [];
+    if (raw.length) return raw;
+    const p = opts?.primaryUsername ? String(opts.primaryUsername).trim() : '';
+    return p ? [p] : ['__unassigned__'];
+  };
+
+  const byDate = new Map<string, Array<{ s: number; e: number; users: string[] }>>();
   for (const d of dates) {
     if (!d || !d.date || !d.startTime || !d.endTime) return { ok: false, message: 'Invalid scheduledDates payload' };
     const s = toMinutes(d.startTime);
     const e = toMinutes(d.endTime);
     if (Number.isNaN(s) || Number.isNaN(e) || s >= e) return { ok: false, message: 'Start time must be earlier than end time' };
+    const users = resolveUserKeys(d);
     const arr = byDate.get(d.date) || [];
-    // check overlap against existing entries for this date
     for (const ex of arr) {
-      if (rangesOverlap(s, e, ex.s, ex.e)) return { ok: false, message: 'Selected time overlaps an existing schedule' };
+      if (!rangesOverlap(s, e, ex.s, ex.e)) continue;
+      const setA = new Set(users);
+      const setB = new Set(ex.users);
+      for (const u of setA) {
+        if (setB.has(u)) {
+          return { ok: false, message: 'Selected time overlaps an existing schedule' };
+        }
+      }
     }
-    arr.push({ s, e });
+    arr.push({ s, e, users });
     byDate.set(d.date, arr);
   }
   return { ok: true };

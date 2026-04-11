@@ -530,8 +530,9 @@ export const contactAPI = {
   },
   // Schedule appointments for an inquiry. This centralizes the POST payload
   // used by various UI components and returns server response data.
-  scheduleInquiry: async (id: string, scheduledDates: ScheduledAppointment[]) => {
-    const payload = { scheduledDates, status: 'scheduled' };
+  scheduleInquiry: async (id: string, scheduledDates: ScheduledAppointment[], schedulingOptions?: Record<string, unknown>) => {
+    const payload: Record<string, unknown> = { scheduledDates, status: 'scheduled' };
+    if (schedulingOptions !== undefined) payload.schedulingOptions = schedulingOptions;
     const resp = await axiosInstance.post(`/inquiries/${id}`, payload);
     return resp.data as { success?: boolean; conflicts?: ConflictItem[] } | any;
   },

@@ -15,6 +15,30 @@ type Props = {
   onChanged?: () => void; // called after cancellation/scheduling
 };
 
+function renderSchedulingOptionsSummary(opt: Record<string, unknown> | null | undefined) {
+  if (!opt || typeof opt !== 'object') return <span>—</span>;
+  const lines: string[] = [];
+  if (typeof opt.timeMode === 'string') lines.push(`Time mode: ${opt.timeMode}`);
+  if (typeof opt.participantDistribution === 'string') lines.push(`Participant distribution: ${opt.participantDistribution}`);
+  if (typeof opt.intervalMode === 'string') {
+    const mins = typeof opt.intervalMins === 'number' ? opt.intervalMins : null;
+    lines.push(`Interval scheduling: ${opt.intervalMode}${mins != null ? ` (${mins} min)` : ''}`);
+  }
+  if (opt.intervalMode === 'multiples' && typeof opt.multiplesOf === 'number') lines.push(`Bundle size (N): ${opt.multiplesOf}`);
+  if (typeof opt.participantCount === 'number') lines.push(`Participants: ${opt.participantCount}`);
+  if (Array.isArray(opt.selectedDates) && opt.selectedDates.length) {
+    lines.push(`Selected dates: ${(opt.selectedDates as string[]).join(', ')}`);
+  }
+  if (typeof opt.unifiedStart === 'string' && typeof opt.unifiedEnd === 'string') {
+    lines.push(`Unified window: ${opt.unifiedStart} – ${opt.unifiedEnd}`);
+  }
+  return lines.length ? (
+    <div style={{ fontSize: 13 }}>
+      {lines.map((l, i) => <div key={i} style={{ marginBottom: 4 }}>{l}</div>)}
+    </div>
+  ) : <span>—</span>;
+}
+
 function InquiryDetailsModal({ visible, inquiryId, onClose, onChanged }: Props) {
   const query = useAppointmentDetailsQuery(inquiryId || undefined);
   const loading = query.isLoading;
@@ -346,6 +370,11 @@ function InquiryDetailsModal({ visible, inquiryId, onClose, onChanged }: Props) 
             {data?.type === 'QUICK_APPOINTMENT' && (
               <>
                 <Descriptions.Item label="Quick Appointment Type">{data?.quick_appointment_type || '—'}</Descriptions.Item>
+                {data?.quick_appointment_type === 'advanced' && data?.schedulingOptions && (
+                  <Descriptions.Item label="Advanced options">
+                    {renderSchedulingOptionsSummary(data.schedulingOptions as Record<string, unknown>)}
+                  </Descriptions.Item>
+                )}
                 <Descriptions.Item label="Recipients & Emails">{renderRecipientsWithPagination(data?.recipients || [], data?.recipientEmails || [])}</Descriptions.Item>
                 <Descriptions.Item label="Location Type">{data?.locationType || '—'}</Descriptions.Item>
                 <Descriptions.Item label="Address/Location">{data?.location || '—'}</Descriptions.Item>
@@ -396,7 +425,21 @@ function InquiryDetailsModal({ visible, inquiryId, onClose, onChanged }: Props) 
           </div>
 
           <Descriptions bordered column={1} size="small">
-            <Descriptions.Item label="Scheduled Dates">{(data?.scheduledDates && data.scheduledDates.length) ? data.scheduledDates.map((sd: any, idx: number) => <div key={idx}>{sd.date} {sd.startTime} - {sd.endTime}</div>) : 'None'}</Descriptions.Item>
+            <Descriptions.Item label="Scheduled slots">
+              {(data?.scheduledDates && data.scheduledDates.length) ? data.scheduledDates.map((sd: any, idx: number) => {
+                const assignees = Array.isArray(sd.assignedUsernames) ? sd.assignedUsernames : [];
+                const assigneeLabel = assignees.map((u: string) => {
+                  const r = residentOptions.find((x: any) => x.username === u);
+                  return r ? (r.fullName || r.username) : u;
+                }).filter(Boolean).join(', ');
+                return (
+                  <div key={idx} style={{ marginBottom: 6 }}>
+                    <strong>{sd.date}</strong> {sd.startTime} – {sd.endTime}
+                    {assigneeLabel ? <span style={{ marginLeft: 8, color: '#555' }}>({assigneeLabel})</span> : null}
+                  </div>
+                );
+              }) : 'None'}
+            </Descriptions.Item>
           </Descriptions>
 
           <Divider />
