@@ -140,7 +140,7 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
   const computePreview = async () => {
     // If in manual mode, ensure selected residents match participant count
     if (residentsSelectionMode === 'manual' && selectedResidents.length < numParticipants) {
-      const proceed = await new Promise<boolean>((resolve) => {
+      const proceed = await new Promise((resolve: (v: boolean) => void) => {
         Modal.confirm({
           title: 'Selected residents do not match participant count',
           content: `You set Participants = ${numParticipants} but selected only ${selectedResidents.length} residents. Adjust participants to ${selectedResidents.length}?`,
@@ -259,7 +259,7 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
     if (!selectedResidents.length) { alert('Please select participants.'); return; }
     // If in manual mode and selected residents fewer than participants, confirm with user
     if (residentsSelectionMode === 'manual' && selectedResidents.length < numParticipants) {
-      const proceed = await new Promise<boolean>((resolve) => {
+      const proceed = await new Promise((resolve: (v: boolean) => void) => {
         Modal.confirm({
           title: 'Selected residents do not match participant count',
           content: `You set Participants = ${numParticipants} but selected only ${selectedResidents.length} residents. Adjust participants to ${selectedResidents.length}?`,
