@@ -4,6 +4,7 @@ import AppAvatar from '../components/AppAvatar';
 import { InboxOutlined, SendOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import styles from './inbox.module.css';
 import { contactAPI, getAbsoluteApiUrl } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 
 // ============ TYPES ============
 interface FilterState {
@@ -33,14 +34,9 @@ const Inbox: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // ============ UTILITIES ============
-  const storedProfile = (() => {
-    try {
-      return localStorage.getItem('userProfile') ? JSON.parse(localStorage.getItem('userProfile') || 'null') : null;
-    } catch {
-      return null;
-    }
-  })();
-  const isRestricted = Boolean(storedProfile && storedProfile.restricted);
+  const { user } = useAuth();
+  // Check JWT-decoded user for restriction status (not localStorage which may be stale)
+  const isRestricted = Boolean(user && user.restricted);
 
   const getInitial = (val: any, fallback = '?'): string => {
     if (!val) return fallback;

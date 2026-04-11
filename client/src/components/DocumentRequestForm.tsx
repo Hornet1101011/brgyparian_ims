@@ -190,8 +190,10 @@ const DocumentRequestForm: React.FC = () => {
     authUser && (authUser as any).role === 'resident' && !((profile && (profile.verified === true)) || ((authUser as any).verified === true))
   );
 
+  // Prefer checking authUser (JWT) for restriction status; only fall back to profile if authUser doesn't have the flag
+  // JWT is more reliable than cached localStorage data
   const userIsRestricted = Boolean(
-    (profile && (profile as any).restricted === true) || ((authUser as any) && (authUser as any).restricted === true)
+    ((authUser as any) && (authUser as any).restricted === true)
   );
 
   // Verification popups disabled while the feature is paused

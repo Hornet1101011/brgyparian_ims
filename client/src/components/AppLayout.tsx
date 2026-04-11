@@ -228,14 +228,17 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }: { children: React.Rea
 
   useEffect(() => {
     try {
-      if (displayUser && displayUser.restricted) {
+      // Always check the JWT-decoded user for restriction status, not localStorage
+      // This ensures we don't show stale restriction notices from cached data
+      if (user && user.restricted) {
         setShowBarangayModal(true);
       }
     } catch (e) {}
-  }, [displayUser?.restricted]);
+  }, [user?.restricted]);
 
   const handleNavigate = useCallback((key: string) => {
-    if (displayUser?.restricted && (key === '/request' || key === '/request-document' || key === '/inbox')) {
+    // Always check the JWT-decoded user for restriction status, not localStorage
+    if (user?.restricted && (key === '/request' || key === '/request-document' || key === '/inbox')) {
       setShowBarangayModal(true);
       setMobileMenuOpen(false);
       return;
@@ -244,7 +247,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }: { children: React.Rea
       navigate(key);
       setMobileMenuOpen(false);
     }
-  }, [location.pathname, navigate, displayUser?.restricted]);
+  }, [location.pathname, navigate, user?.restricted]);
 
   // Determine sidebar configuration based on screen size
   const sidebarWidth = screenSize === 'mobile' ? 0 : SIDEBAR_WIDTH;
@@ -313,7 +316,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }: { children: React.Rea
                 }))
               }
               onClick={({ key }: { key: string }) => {
-                if (displayUser?.restricted && (key === '/request' || key === '/request-document' || key === '/inbox')) {
+                if (user?.restricted && (key === '/request' || key === '/request-document' || key === '/inbox')) {
                   setShowBarangayModal(true);
                   return;
                 }

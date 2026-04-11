@@ -35,8 +35,8 @@ interface LoginRequest {
   password: string;
 }
 
-// Generate JWT Token (now includes username, email, fullName, barangayID, address, contactNumber)
-const generateToken = (user: { _id: string, role: string, username: string, email?: string, fullName?: string, barangayID?: string, address?: string, contactNumber?: string }): string => {
+// Generate JWT Token (includes username, email, fullName, barangayID, address, contactNumber, and status flags)
+const generateToken = (user: { _id: string, role: string, username: string, email?: string, fullName?: string, barangayID?: string, address?: string, contactNumber?: string, restricted?: boolean, warning?: boolean, verified?: boolean }): string => {
   return jwt.sign(
     { 
       _id: user._id, 
@@ -46,7 +46,10 @@ const generateToken = (user: { _id: string, role: string, username: string, emai
       fullName: user.fullName,
       barangayID: user.barangayID,
       address: user.address,
-      contactNumber: user.contactNumber
+      contactNumber: user.contactNumber,
+      restricted: user.restricted || false,
+      warning: user.warning || false,
+      verified: user.verified || false,
     },
     process.env.JWT_SECRET || 'defaultsecret',
     { expiresIn: '24h' }
@@ -245,7 +248,10 @@ export const register = async (req: Request, res: Response, next: unknown) => {
       fullName: user.fullName,
       barangayID: user.barangayID,
       address: user.address,
-      contactNumber: user.contactNumber
+      contactNumber: user.contactNumber,
+      restricted: (user as any).restricted,
+      warning: (user as any).warning,
+      verified: (user as any).verified,
     });
 
     // Update last login
@@ -345,7 +351,10 @@ export const login = async (req: Request, res: Response) => {
       fullName: user.fullName,
       barangayID: user.barangayID,
       address: user.address,
-      contactNumber: user.contactNumber
+      contactNumber: user.contactNumber,
+      restricted: (user as any).restricted,
+      warning: (user as any).warning,
+      verified: (user as any).verified,
     });
 
     // Update last login
