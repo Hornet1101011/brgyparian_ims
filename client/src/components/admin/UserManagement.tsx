@@ -56,6 +56,9 @@ const UserManagement = () => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [selectedResident, setSelectedResident] = useState(null);
   const [residentLoading, setResidentLoading] = useState(false);
+  const [logsModalOpen, setLogsModalOpen] = useState(false);
+  const [activityLogs, setActivityLogs] = useState<any[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editUserModalOpen, setEditUserModalOpen] = useState(false);
   const [userFormValues, setUserFormValues] = useState({});
@@ -153,6 +156,80 @@ const UserManagement = () => {
     } catch (err) {
       console.error('Failed to enable user', err);
       message.error('Failed to enable user');
+    }
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    if (!userId) return;
+    try {
+      message.loading({ content: 'Deleting user...', key: 'delete' });
+      await adminAPI.deleteUser(userId);
+      message.success({ content: 'User deleted', key: 'delete', duration: 2 });
+      await fetchUsers();
+      if (selectedUser && selectedUser._id === userId) {
+        setSelectedUser(null);
+        setDrawerOpen(false);
+      }
+    } catch (err) {
+      console.error('Failed to delete user', err);
+      message.error('Failed to delete user');
+    }
+  };
+
+  const openActivityLogs = async (userId: string) => {
+    if (!userId) { message.error('No user selected'); return; }
+    setLogsLoading(true);
+    try {
+      const logs = await adminAPI.getActivityLogs({ userId });
+      setActivityLogs(Array.isArray(logs) ? logs : (logs && logs.logs) || []);
+      setLogsModalOpen(true);
+    } catch (err) {
+      console.error('Failed to load activity logs', err);
+      message.error('Failed to load activity logs');
+    } finally {
+      setLogsLoading(false);
+    }
+  };
+
+  const handleBulkActivate = async () => {
+    if (!selectedRowKeys || selectedRowKeys.length === 0) return;
+    try {
+      message.loading({ content: 'Activating users...', key: 'bulk-activate' });
+      await Promise.all(selectedRowKeys.map((id: any) => adminAPI.enableUser(id)));
+      message.success({ content: 'Users activated', key: 'bulk-activate', duration: 2 });
+      setSelectedRowKeys([]);
+      await fetchUsers();
+    } catch (err) {
+      console.error('Bulk activate failed', err);
+      message.error('Bulk activation failed');
+    }
+  };
+
+  const handleBulkDeactivate = async () => {
+    if (!selectedRowKeys || selectedRowKeys.length === 0) return;
+    try {
+      message.loading({ content: 'Deactivating users...', key: 'bulk-deactivate' });
+      await Promise.all(selectedRowKeys.map((id: any) => adminAPI.disableUser(id)));
+      message.success({ content: 'Users deactivated', key: 'bulk-deactivate', duration: 2 });
+      setSelectedRowKeys([]);
+      await fetchUsers();
+    } catch (err) {
+      console.error('Bulk deactivate failed', err);
+      message.error('Bulk deactivation failed');
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!selectedRowKeys || selectedRowKeys.length === 0) return;
+    try {
+      message.loading({ content: 'Deleting users...', key: 'bulk-delete' });
+      await Promise.all(selectedRowKeys.map((id: any) => adminAPI.deleteUser(id)));
+      message.success({ content: 'Users deleted', key: 'bulk-delete', duration: 2 });
+      setSelectedRowKeys([]);
+      await fetchUsers();
+    } catch (err) {
+      console.error('Bulk delete failed', err);
+      message.error('Bulk delete failed');
     }
   };
 
@@ -386,6 +463,40 @@ const UserManagement = () => {
       onFilter: (value: any, record: any) => record.verified === value,
     },
     {
+      title: 'Flags',
+      dataIndex: 'flags',
+      key: 'flags',
+      width: 160,
+      render: (_: any, record: any) => (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {!record.isActive && (
+            <span style={{
+              background: '#fff1f2',
+              color: '#c53030',
+              padding: '6px 10px',
+              borderRadius: 6,
+              fontWeight: 700,
+              fontSize: 12,
+              border: '1px solid #fecaca',
+              display: 'inline-block'
+            }}>Disabled</span>
+          )}
+          {record.restricted && (
+            <span style={{
+              background: '#fffbeb',
+              color: '#b45309',
+              padding: '6px 10px',
+              borderRadius: 6,
+              fontWeight: 700,
+              fontSize: 12,
+              border: '1px solid #ffedd5',
+              display: 'inline-block'
+            }}>Restricted</span>
+          )}
+        </div>
+      ),
+    },
+    {
       title: 'Created',
       dataIndex: 'createdAt',
       key: 'createdAt',
@@ -418,10 +529,7 @@ const UserManagement = () => {
               <Menu.Item key="edit" icon={<EditOutlined style={{ color: '#1890ff' }} />} style={{ color: '#1f2937' }} onClick={() => { setSelectedUser(record); setDrawerOpen(true); }}>
                 Edit
               </Menu.Item>
-              <Menu.Item key="logs" icon={<EyeOutlined style={{ color: '#0891b2' }} />} style={{ color: '#1f2937' }} onClick={() => { /* View logs logic */ }}>
-                View Logs
-              </Menu.Item>
-              <Menu.Item key="deactivate" icon={<StopOutlined style={{ color: '#faad14' }} />} style={{ color: '#1f2937' }} onClick={() => { /* Deactivate logic */ }}>
+              <Menu.Item key="deactivate" icon={<StopOutlined style={{ color: '#faad14' }} />} style={{ color: '#1f2937' }} onClick={() => { if (!record || !record._id) { message.error('No user selected'); return; } Modal.confirm({ title: 'Deactivate user', content: `Are you sure you want to deactivate ${record.fullName || record.email || record._id}?`, onOk: async () => { await handleDisableUser(record._id); } }); }}>
                 Deactivate
               </Menu.Item>
               <Menu.Item key="toggleVerified" icon={<CheckOutlined style={{ color: '#52c41a' }} />} style={{ color: '#1f2937' }} onClick={async () => {
@@ -491,7 +599,7 @@ const UserManagement = () => {
               }}>
                 Enable
               </Menu.Item>
-              <Menu.Item key="delete" icon={<DeleteOutlined style={{ color: '#dc2626' }} />} danger style={{ color: '#dc2626' }} onClick={() => { /* Delete logic */ }}>
+              <Menu.Item key="delete" icon={<DeleteOutlined style={{ color: '#dc2626' }} />} danger style={{ color: '#dc2626' }} onClick={() => { if (!record || !record._id) { message.error('No user selected'); return; } Modal.confirm({ title: 'Delete user', content: `Are you sure you want to delete ${record.fullName || record.email || record._id}? This cannot be undone.`, okText: 'Yes', cancelText: 'No', onOk: async () => { await handleDeleteUser(record._id); } }); }}>
                 Delete
               </Menu.Item>
             </Menu>
@@ -529,9 +637,9 @@ const UserManagement = () => {
   const hasSelection = selectedRowKeys.length > 0;
   const bulkBar = hasSelection && (
     <Space style={{ marginBottom: 16 }}>
-      <Button icon={<CheckOutlined />} onClick={() => {/* bulk activate */}}>Activate</Button>
-      <Button icon={<StopOutlined />} onClick={() => {/* bulk deactivate */}}>Deactivate</Button>
-      <Popconfirm title="Are you sure to delete selected users?" onConfirm={() => {/* bulk delete */}} okText="Yes" cancelText="No">
+      <Button icon={<CheckOutlined />} onClick={handleBulkActivate}>Activate</Button>
+      <Button icon={<StopOutlined />} onClick={() => { Modal.confirm({ title: 'Deactivate selected users', content: `Are you sure you want to deactivate ${selectedRowKeys.length} users?`, onOk: async () => { await handleBulkDeactivate(); } }); }}>Deactivate</Button>
+      <Popconfirm title="Are you sure to delete selected users?" onConfirm={async () => { await handleBulkDelete(); }} okText="Yes" cancelText="No">
         <Button icon={<DeleteOutlined />} danger>Delete</Button>
       </Popconfirm>
       <span style={{ marginLeft: 8 }}>{`Selected ${selectedRowKeys.length} users`}</span>
@@ -1141,6 +1249,32 @@ const UserManagement = () => {
           </Space>
         )}
       </Drawer>
+
+      <Modal
+        title="Activity Logs"
+        open={logsModalOpen}
+        onCancel={() => setLogsModalOpen(false)}
+        footer={
+          [<Button key="close" onClick={() => setLogsModalOpen(false)}>Close</Button>]
+        }
+        width={800}
+      >
+        {logsLoading ? (
+          <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
+        ) : (activityLogs && activityLogs.length > 0) ? (
+          <div style={{ maxHeight: '60vh', overflow: 'auto' }}>
+            {activityLogs.map((log: any, idx: number) => (
+              <div key={log.id || log._id || idx} style={{ padding: 12, borderBottom: '1px solid #eee' }}>
+                <div style={{ fontWeight: 700 }}>{log.action || log.description || log.module || 'Activity'}</div>
+                <div style={{ fontSize: 12, color: '#6b7280' }}>{log.timestamp ? dayjs(log.timestamp).format('YYYY-MM-DD HH:mm') : ''}</div>
+                <div style={{ marginTop: 8 }}>{log.details || log.message || log.description || JSON.stringify(log)}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ padding: 12 }}>No activity logs available</div>
+        )}
+      </Modal>
 
       <Modal
         title="Edit Resident"

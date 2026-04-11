@@ -23,6 +23,11 @@ const VerifiedResidentRoute: React.FC<VerifiedResidentRouteProps> = ({ children 
       try { message.info('Please verify your account or wait for admin approval before requesting documents. Redirecting to your profile.'); } catch (e) {}
       return <Navigate to="/profile" replace />;
     }
+    // If the user is restricted (e.g. admin flagged), prevent document requests
+    if (user && (user as any).restricted) {
+      try { message.warning('Please visit the barangay to resolve this matter. Access to document requests and inbox is restricted.'); } catch (e) {}
+      return <Navigate to="/dashboard" replace />;
+    }
   } catch (err) {
     // ignore unexpected shapes
   }

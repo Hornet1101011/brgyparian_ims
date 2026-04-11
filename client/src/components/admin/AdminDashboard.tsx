@@ -13,6 +13,7 @@ import { adminAPI, contactAPI, verificationAPI, notificationAPI, documentsAPI } 
 import { initNotificationSocket, onNotificationEvent, offNotificationEvent } from '../../services/notificationSocket';
 import { Notification } from '../../types/notification';
 import { useAuth } from '../../contexts/AuthContext';
+import { useDashboardSummary } from '../../hooks/useAnalytics';
 
 // Helper function to get absolute API URL
 const getAbsoluteApiUrl = (path: string): string => {
@@ -104,7 +105,7 @@ const AdminDashboard = () => {
   const [, setInboxInquiries] = useState([] as Inquiry[]);
   const [documentsModalVisible, setDocumentsModalVisible] = useState(false);
   const [documentsData, setDocumentsData] = useState([] as DocumentData[]);
-  const [templatesCount, setTemplatesCount] = useState(0);
+  const summaryQuery = useDashboardSummary();
   // Mini announcements viewer to replace Recent Activity
   const [miniAnns, setMiniAnns] = useState([] as Announcement[]);
   const [miniLoading, setMiniLoading] = useState(false);
@@ -152,21 +153,9 @@ const AdminDashboard = () => {
         );
         setDocumentsData(tableData);
 
-        // Fetch templates count
-        try {
-          const templatesRes = await fetch(getAbsoluteApiUrl('/api/templates'));
-          if (templatesRes.ok) {
-            const templates = await templatesRes.json();
-            setTemplatesCount(Array.isArray(templates) ? templates.length : 0);
-          } else {
-            setTemplatesCount(0);
-          }
-        } catch (err) {
-          setTemplatesCount(0);
-        }
+        // templates count is provided by the dashboard summary hook; no local fetch required here
       } catch (err) {
         setDocumentsData([]);
-        setTemplatesCount(0);
       }
 
       const notificationsRes = await notificationAPI.getNotifications();
@@ -182,7 +171,6 @@ const AdminDashboard = () => {
 
       // Transform system statistics
       const systemPending = (statsRes.documents?.pending || 0) + staffApprovalNotifs.length;
-      const systemTotalDocs = statsRes.documents?.total || 0;
 
       // Try to fetch document requests directly and derive pending count to ensure accuracy
       let directPending = 0;
@@ -199,14 +187,19 @@ const AdminDashboard = () => {
       // Calculate total documents from fetched data
       const totalDocsFromFetch = docs ? docs.length : 0;
       const completedDocsCount = docs ? docs.filter((d: any) => (d.status || '').toString().toLowerCase() === 'approved').length : 0;
-      
+
+      // Prefer authoritative counts from admin statistics endpoint when available,
+      // but fall back to counts derived from fetched records.
+      const systemTotalDocs = statsRes.documents?.total || 0;
+      const systemCompleted = statsRes.documents?.completed || 0;
+
       setStats({
         totalUsers: statsRes.users?.total || 0,
         activeUsers: statsRes.users?.active || 0,
         // Combine pending document requests with unread staff access notifications
         pendingRequests: totalPending,
-        totalDocuments: totalDocsFromFetch,
-        completedRequests: completedDocsCount,
+        totalDocuments: systemTotalDocs || totalDocsFromFetch,
+        completedRequests: systemCompleted || completedDocsCount,
         unreadMessages: (unreadNotifs && Array.isArray(unreadNotifs)) ? unreadNotifs.length : 0
       });
 
@@ -243,11 +236,12 @@ const AdminDashboard = () => {
 
     // Initialize socket and listen for document-related events to refresh dashboard
     try {
-      initNotificationSocket();
-      const handler = (payload: any) => {
-        console.log('Received document socket event, refreshing dashboard', payload);
-        fetchDashboardData();
-      };
+        initNotificationSocket();
+        const handler = (payload: any) => {
+          console.log('Received document socket event, refreshing dashboard', payload);
+          try { summaryQuery?.refetch?.(); } catch (e) { /* best-effort */ }
+          fetchDashboardData();
+        };
       onNotificationEvent('documentStatusUpdate', handler);
       onNotificationEvent('documentCreated', handler);
       onNotificationEvent('documentDeleted', handler);
@@ -272,7 +266,7 @@ const AdminDashboard = () => {
       }, 30000);
       return () => clearInterval(pollInterval);
     }
-  }, [fetchDashboardData]);
+  }, [fetchDashboardData, summaryQuery]);
 
   // Load verification requests (separate from main fetch to keep concerns isolated)
   const loadVerifs = async () => {
@@ -399,7 +393,11 @@ const AdminDashboard = () => {
     },
     {
       label: 'Documents',
-      value: stats.totalDocuments,
+      // prefer the dashboard summary values when available
+      value: summaryQuery?.data?.totalDocuments ?? stats.totalDocuments,
+      // include templates and processed counts to mirror the Statistics page
+      templates: summaryQuery?.data?.templatesCount ?? 0,
+      processed: summaryQuery?.data?.processedDocuments ?? stats.completedRequests,
       icon: '📄',
       bg: 'linear-gradient(90deg, #52c41a 0%, #b7eb8f 100%)',
       color: '#52c41a',
@@ -491,6 +489,18 @@ const AdminDashboard = () => {
             <span style={{ fontSize: 44, fontWeight: 900, lineHeight: 1.1, background: `linear-gradient(135deg, ${card.color} 0%, ${card.color}cc 100%)`, backgroundClip: 'text', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: 8, whiteSpace: 'pre-line' }}>{card.value}</span>
             <span style={{ fontSize: 16, color: card.color, fontWeight: 700, marginBottom: 4, letterSpacing: '-0.3px' }}>{card.label}</span>
             <span style={{ fontSize: 13, color: '#9ca3af', fontWeight: 500, textAlign: 'center', letterSpacing: '0.3px' }}>{statCardSubtitles[idx]}</span>
+            {(card.templates !== undefined || card.processed !== undefined) && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, padding: '12px 0', borderTop: '1px solid #f0f0f0', width: '100%' }}>
+                <div>
+                  <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginBottom: 4 }}>Templates</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: card.color }}>{card.templates}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginBottom: 4 }}>Processed</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: card.color }}>{card.processed}</div>
+                </div>
+              </div>
+            )}
             {card.chart && <div style={{ marginTop: 12, width: '100%' }}>{card.chart}</div>}
           </Card>
         </Col>

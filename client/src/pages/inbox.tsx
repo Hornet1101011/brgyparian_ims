@@ -40,6 +40,7 @@ const Inbox: React.FC = () => {
       return null;
     }
   })();
+  const isRestricted = Boolean(storedProfile && storedProfile.restricted);
 
   const getInitial = (val: any, fallback = '?'): string => {
     if (!val) return fallback;
@@ -123,6 +124,20 @@ const Inbox: React.FC = () => {
       setListFullscreen(false);
     }
   }, [isMobile, selectedInquiry]);
+
+  // If account is restricted by barangay, block access to Inbox
+  if (isRestricted) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <Result
+          status="warning"
+          title="Account Restricted"
+          subTitle="Please visit the barangay to resolve this matter. Inbox and Document Request are unavailable while your account is restricted."
+          extra={<Button type="primary" onClick={() => { window.location.href = '/profile'; }}>Go to Profile</Button>}
+        />
+      </div>
+    );
+  }
 
   // ============ FILTERING LOGIC ============
   const filteredInquiries = inquiries.filter(inquiry => {

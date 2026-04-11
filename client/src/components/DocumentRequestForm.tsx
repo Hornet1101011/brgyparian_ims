@@ -131,6 +131,7 @@ const DocumentRequestForm: React.FC = () => {
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [showVerifyModal, setShowVerifyModal] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
+  const [showRestrictedModal, setShowRestrictedModal] = useState(false);
   
   const [searchTerm, setSearchTerm] = useState('');
   // Removed category filter state
@@ -189,6 +190,10 @@ const DocumentRequestForm: React.FC = () => {
     authUser && (authUser as any).role === 'resident' && !((profile && (profile.verified === true)) || ((authUser as any).verified === true))
   );
 
+  const userIsRestricted = Boolean(
+    (profile && (profile as any).restricted === true) || ((authUser as any) && (authUser as any).restricted === true)
+  );
+
   // Verification popups disabled while the feature is paused
 
   useEffect(() => {
@@ -211,6 +216,10 @@ const DocumentRequestForm: React.FC = () => {
   const handleCardClick = async (file: FileData) => {
     if (userIsResidentUnverified) {
       setShowVerifyModal(true);
+      return;
+    }
+    if (userIsRestricted) {
+      setShowRestrictedModal(true);
       return;
     }
     // If resident and not verified, normally we'd prompt for verification.
@@ -270,6 +279,10 @@ const DocumentRequestForm: React.FC = () => {
   const handleView = async (file: FileData) => {
     if (userIsResidentUnverified) {
       setShowVerifyModal(true);
+      return;
+    }
+    if (userIsRestricted) {
+      setShowRestrictedModal(true);
       return;
     }
     setSelectedTemplateId(file._id);
@@ -449,7 +462,7 @@ const DocumentRequestForm: React.FC = () => {
           </Col>
         ) : (
           filteredFiles.map((file) => {
-            const blocked = userIsResidentUnverified;
+            const blocked = userIsResidentUnverified || userIsRestricted;
             return (
             <Col xs={24} sm={12} md={8} lg={6} key={file._id}>
               <Card
@@ -466,7 +479,7 @@ const DocumentRequestForm: React.FC = () => {
                   boxShadow: '0 4px 12px rgba(64, 201, 255, 0.1)'
                 }}
                 styles={{ body: { padding: 16 } }}
-                onClick={() => { if (!blocked) handleCardClick(file); else setShowVerifyModal(true); }}
+                onClick={() => { if (!blocked) handleCardClick(file); else { if (userIsRestricted) setShowRestrictedModal(true); else setShowVerifyModal(true); } }}
               >
                 <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: 12 }}>
                   <div style={{ 
@@ -1046,6 +1059,18 @@ const DocumentRequestForm: React.FC = () => {
         ]}
       >
         <p>To request documents you must verify your resident profile. Please visit your profile page and complete the verification steps to unlock this service.</p>
+      </Modal>
+      {/* Modal shown when user is restricted and must visit barangay */}
+      <Modal
+        open={showRestrictedModal}
+        onCancel={() => setShowRestrictedModal(false)}
+        title="Account Restricted"
+        footer={[
+          <Button key="close" onClick={() => setShowRestrictedModal(false)}>Close</Button>,
+          <Button key="profile" type="primary" onClick={() => { setShowRestrictedModal(false); window.location.href = '/profile'; }}>Go to Profile</Button>
+        ]}
+      >
+        <p>Please visit the barangay to resolve this matter. Document requests and Inbox are disabled until the restriction is lifted.</p>
       </Modal>
     </div>
   );

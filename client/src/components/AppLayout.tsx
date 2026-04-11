@@ -1,7 +1,7 @@
 // @ts-nocheck
 import './responsive-system-title.css';
 import React, { useState, useEffect, useCallback } from 'react';
-import { Layout, Menu, Button, Space, Dropdown, Drawer } from 'antd';
+import { Layout, Menu, Button, Space, Dropdown, Drawer, Modal } from 'antd';
 import {
   LogoutOutlined,
   ClockCircleOutlined,
@@ -224,12 +224,27 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }: { children: React.Rea
   }, []);
 
   // Close mobile menu when navigation happens
+  const [showBarangayModal, setShowBarangayModal] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (displayUser && displayUser.restricted) {
+        setShowBarangayModal(true);
+      }
+    } catch (e) {}
+  }, [displayUser?.restricted]);
+
   const handleNavigate = useCallback((key: string) => {
+    if (displayUser?.restricted && (key === '/request' || key === '/request-document' || key === '/inbox')) {
+      setShowBarangayModal(true);
+      setMobileMenuOpen(false);
+      return;
+    }
     if (location.pathname !== key) {
       navigate(key);
       setMobileMenuOpen(false);
     }
-  }, [location.pathname, navigate]);
+  }, [location.pathname, navigate, displayUser?.restricted]);
 
   // Determine sidebar configuration based on screen size
   const sidebarWidth = screenSize === 'mobile' ? 0 : SIDEBAR_WIDTH;
@@ -272,6 +287,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }: { children: React.Rea
               flexDirection: 'column',
             }}
           >
+            <>
             <Menu
               theme="light"
               mode="inline"
@@ -297,11 +313,30 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }: { children: React.Rea
                 }))
               }
               onClick={({ key }: { key: string }) => {
+                if (displayUser?.restricted && (key === '/request' || key === '/request-document' || key === '/inbox')) {
+                  setShowBarangayModal(true);
+                  return;
+                }
                 if (location.pathname !== key) {
                   navigate(key);
                 }
               }}
             />
+            {showBarangayModal && (
+              <Modal
+                open={showBarangayModal}
+                onCancel={() => setShowBarangayModal(false)}
+                centered
+                title="Account Restricted"
+                footer={[
+                  <Button key="close" onClick={() => setShowBarangayModal(false)}>Close</Button>,
+                  <Button key="profile" type="primary" onClick={() => { setShowBarangayModal(false); navigate('/profile'); }}>Go to Profile</Button>
+                ]}
+              >
+                <div>Please visit the barangay to resolve this matter. You cannot use Document Request or Inbox until this is resolved.</div>
+              </Modal>
+            )}
+            </>
           </div>
         </Sider>
       )}
