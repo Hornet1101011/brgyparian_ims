@@ -138,6 +138,21 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
 
   // compute preview schedule based on mode + interval settings
   const computePreview = async () => {
+    // If in manual mode, ensure selected residents match participant count
+    if (residentsSelectionMode === 'manual' && selectedResidents.length < numParticipants) {
+      const proceed = await new Promise<boolean>((resolve) => {
+        Modal.confirm({
+          title: 'Selected residents do not match participant count',
+          content: `You set Participants = ${numParticipants} but selected only ${selectedResidents.length} residents. Adjust participants to ${selectedResidents.length}?`,
+          okText: `Adjust to ${selectedResidents.length}`,
+          cancelText: 'Cancel',
+          onOk: () => { setNumParticipants(selectedResidents.length); resolve(true); },
+          onCancel: () => resolve(false),
+        });
+      });
+      if (!proceed) return; // user cancelled — abort preview
+    }
+
     setComputingPreview(true);
     setPreviewProgress(1);
     if (previewTimer.current) clearInterval(previewTimer.current);
@@ -242,6 +257,20 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
   const submit = async () => {
     if (!selectedDates.length) { alert('Please select at least one date.'); return; }
     if (!selectedResidents.length) { alert('Please select participants.'); return; }
+    // If in manual mode and selected residents fewer than participants, confirm with user
+    if (residentsSelectionMode === 'manual' && selectedResidents.length < numParticipants) {
+      const proceed = await new Promise<boolean>((resolve) => {
+        Modal.confirm({
+          title: 'Selected residents do not match participant count',
+          content: `You set Participants = ${numParticipants} but selected only ${selectedResidents.length} residents. Adjust participants to ${selectedResidents.length}?`,
+          okText: `Adjust to ${selectedResidents.length}`,
+          cancelText: 'Cancel',
+          onOk: () => { setNumParticipants(selectedResidents.length); resolve(true); },
+          onCancel: () => resolve(false),
+        });
+      });
+      if (!proceed) return; // user cancelled submission
+    }
     // recompute preview to ensure assigned
     await computePreview();
     if (!preview.length) { if (!window.confirm('No computed assignments. Continue?')) return; }
@@ -485,6 +514,18 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
                 // Trim to allowed count and warn
                 setSelectedResidents(s => s.slice(0, numParticipants));
                 message.warning(`Selected more residents than participant count; trimmed to first ${numParticipants}.`);
+                setResidentPickerOpen(false);
+                return;
+              }
+              if (residentsSelectionMode === 'manual' && selectedResidents.length < numParticipants) {
+                Modal.confirm({
+                  title: 'Selected residents do not match participant count',
+                  content: `You set Participants = ${numParticipants} but selected only ${selectedResidents.length} residents. Adjust participants to ${selectedResidents.length}?`,
+                  okText: `Adjust to ${selectedResidents.length}`,
+                  cancelText: 'Cancel',
+                  onOk: () => { setNumParticipants(selectedResidents.length); setResidentPickerOpen(false); },
+                });
+                return;
               }
               setResidentPickerOpen(false);
             }}>Done ({selectedResidents.length})</Button>
