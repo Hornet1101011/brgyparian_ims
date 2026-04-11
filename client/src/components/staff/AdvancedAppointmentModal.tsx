@@ -38,6 +38,9 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
   const [residentOptions, setResidentOptions] = useState([] as Resident[]);
   const [selectedResidents, setSelectedResidents] = useState([] as Resident[]);
   const [residentPickerOpen, setResidentPickerOpen] = useState(false);
+  const [residentsSelectionMode, setResidentsSelectionMode] = useState<'manual'|'auto'>('manual');
+  const [autoMethod, setAutoMethod] = useState<'first'|'random'>('first');
+  const [autoSelecting, setAutoSelecting] = useState(false);
 
   const [loadingResidents, setLoadingResidents] = useState(false);
   const [preview, setPreview] = useState([] as Assignment[]);
@@ -66,13 +69,16 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
 
   // Keep the participant count in sync with selected residents
   useEffect(() => {
-    try {
-      const count = Array.isArray(selectedResidents) ? selectedResidents.length : 0;
-      // ensure at least 1 participant
-      setNumParticipants(Math.max(1, count));
-    } catch (e) {
-      // best-effort — don't block UI on unexpected errors
-      console.warn('Failed to sync participant count with selected residents', e);
+    // Only sync participant count automatically when staff is in 'manual' selection mode
+    if (residentsSelectionMode === 'manual') {
+      try {
+        const count = Array.isArray(selectedResidents) ? selectedResidents.length : 0;
+        // ensure at least 1 participant
+        setNumParticipants(Math.max(1, count));
+      } catch (e) {
+        // best-effort — don't block UI on unexpected errors
+        console.warn('Failed to sync participant count with selected residents', e);
+      }
     }
   }, [selectedResidents]);
 
@@ -99,6 +105,39 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
   const openResidentPicker = async () => {
     await fetchResidents();
     setResidentPickerOpen(true);
+  };
+
+  const handleAutoSelect = async () => {
+    setAutoSelecting(true);
+    try {
+      // Ensure resident options are loaded
+      if (!residentOptions || residentOptions.length === 0) await fetchResidents();
+      const options = residentOptions || [];
+      const available = options.length;
+      if (available === 0) {
+        message.warning('No residents available to auto-select');
+        return;
+      }
+      const desired = Math.max(1, Math.floor(Number(numParticipants) || 1));
+      const pickCount = Math.min(desired, available);
+      let selected: Resident[] = [];
+      if (autoMethod === 'first') {
+        selected = options.slice(0, pickCount);
+      } else {
+        // random selection
+        const shuffled = [...options].sort(() => Math.random() - 0.5);
+        selected = shuffled.slice(0, pickCount);
+      }
+      setSelectedResidents(selected);
+      if (pickCount < desired) message.warning(`Only ${available} residents available; selected ${pickCount}.`);
+      // Update participants count to reflect actual selected count
+      setNumParticipants(pickCount);
+    } catch (err) {
+      console.error('Auto-select failed', err);
+      message.error('Failed to auto-select residents');
+    } finally {
+      setAutoSelecting(false);
+    }
   };
 
   // compute preview schedule based on mode + interval settings
@@ -318,8 +357,20 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
             <div>
               <InputNumber style={{ width: 140 }} min={1} max={1000} value={numParticipants} onChange={(v:any) => setNumParticipants(v || 1)} />
             </div>
-            <div>
-              <Button onClick={openResidentPicker}>Select Residents ({selectedResidents.length})</Button>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+              <Radio.Group value={residentsSelectionMode} onChange={(e) => setResidentsSelectionMode(e.target.value)}>
+                <Radio value="manual">Manual</Radio>
+                <Radio value="auto">Auto</Radio>
+              </Radio.Group>
+              {residentsSelectionMode === 'manual' ? (
+                <Button onClick={openResidentPicker}>Select Residents ({selectedResidents.length})</Button>
+              ) : (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <Select value={autoMethod} onChange={(v:any) => setAutoMethod(v)} style={{ width: 150 }} options={[{ label: 'First N', value: 'first' }, { label: 'Random N', value: 'random' }]} />
+                  <Button loading={autoSelecting} onClick={handleAutoSelect}>Auto Select</Button>
+                  <Button onClick={() => { setSelectedResidents([]); message.info('Cleared selected residents'); }}>Clear</Button>
+                </div>
+              )}
             </div>
           </div>
 
