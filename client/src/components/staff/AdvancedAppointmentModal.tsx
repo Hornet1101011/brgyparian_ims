@@ -26,6 +26,8 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
   const [unifiedEnd, setUnifiedEnd] = useState('09:00');
   const [perDateTimes, setPerDateTimes] = useState({} as Record<string,{start:string;end:string}>);
 
+  const [perDateAssignments, setPerDateAssignments] = useState({} as Record<string, string[]>);
+
   const [numParticipants, setNumParticipants] = useState(1);
   const [participantDistribution, setParticipantDistribution] = useState('manual' as 'all'|'balanced'|'manual');
   const [intervalMode, setIntervalMode] = useState('off' as 'off'|'individual'|'multiples');
@@ -85,8 +87,32 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
       setNumParticipants(1);
       setSelectedResidents([]);
       setPreview([]);
+      setPerDateAssignments({});
     }
   }, [visible]);
+
+  // Keep per-date assignment keys in sync with selectedDates
+  useEffect(() => {
+    setPerDateAssignments(prev => {
+      const next: Record<string,string[]> = {};
+      for (const ds of selectedDates) {
+        next[ds] = prev[ds] ? prev[ds].filter(Boolean) : [];
+      }
+      return next;
+    });
+  }, [selectedDates]);
+
+  // When selectedResidents changes, remove any assignments that reference removed residents
+  useEffect(() => {
+    const usernames = new Set(selectedResidents.map(r => r.username));
+    setPerDateAssignments(prev => {
+      const next: Record<string,string[]> = {};
+      for (const k of Object.keys(prev)) {
+        next[k] = (prev[k] || []).filter(u => usernames.has(u));
+      }
+      return next;
+    });
+  }, [selectedResidents]);
 
   // Keep the participant count in sync with selected residents
   useEffect(() => {
@@ -243,8 +269,25 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
       const assignments: Assignment[] = [];
       const residents = [...selectedResidents].slice(0, numParticipants);
 
+      // Build quick lookup map for residents we're considering
+      const residentMap: Record<string, Resident> = {};
+      for (const r of residents) residentMap[r.username] = r;
+
+      // Build per-date assigned usernames from UI (manual), ensuring only selected residents are used
+      const assignedToDate: Record<string, string[]> = {};
+      for (const w of windows) {
+        assignedToDate[w.date] = (perDateAssignments[w.date] || []).filter(u => !!residentMap[u]);
+      }
+
+      // Any residents not explicitly assigned will be distributed evenly across dates
+      const explicitlyAssigned = new Set(Object.values(assignedToDate).flat());
+      const unassigned = residents.filter(r => !explicitlyAssigned.has(r.username));
+      for (let i=0;i<unassigned.length;i++) {
+        const w = windows[i % windows.length];
+        assignedToDate[w.date].push(unassigned[i].username);
+      }
+
       if (intervalMode === 'off') {
-        // all residents get same start/end per their date assignment rules
         if (participantDistribution === 'all') {
           for (const d of windows) {
             for (const r of residents) assignments.push({ resident: r, date: d.date, startTime: formatHM(d.start), endTime: formatHM(d.end) });
@@ -258,46 +301,85 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
             idx++;
           }
         } else {
-          // manual: assume user assigned residents to dates via UI (not assigned yet) => default balanced
-          let idx = 0;
-          for (const r of residents) {
-            const d = windows[idx % windows.length];
-            assignments.push({ resident: r, date: d.date, startTime: formatHM(d.start), endTime: formatHM(d.end) });
-            idx++;
+          // manual: use per-date assignments (plus balanced fallback already merged above)
+          for (const d of windows) {
+            const usernames = assignedToDate[d.date] || [];
+            for (const uname of usernames) {
+              const r = residentMap[uname];
+              if (r) assignments.push({ resident: r, date: d.date, startTime: formatHM(d.start), endTime: formatHM(d.end) });
+            }
           }
         }
       } else if (intervalMode === 'individual') {
-        // sequential intervals per date, spilling to next date if needed
-        let resIdx = 0;
-        for (const d of windows) {
-          let cursor = d.start;
-          while (cursor + intervalMins <= d.end && resIdx < residents.length) {
-            // skip lunch
-            if (cursor >= 12*60 && cursor < 13*60) cursor = 13*60;
-            if (cursor + intervalMins > d.end) break;
-            const r = residents[resIdx];
-            assignments.push({ resident: r, date: d.date, startTime: formatHM(cursor), endTime: formatHM(cursor + intervalMins) });
-            cursor += intervalMins;
-            resIdx++;
+        if (participantDistribution === 'manual') {
+          // schedule assigned residents sequentially per date
+          for (const d of windows) {
+            let cursor = d.start;
+            const usernames = assignedToDate[d.date] || [];
+            for (const uname of usernames) {
+              if (cursor + intervalMins > d.end) break;
+              if (cursor >= 12*60 && cursor < 13*60) cursor = 13*60;
+              const r = residentMap[uname];
+              if (!r) continue;
+              assignments.push({ resident: r, date: d.date, startTime: formatHM(cursor), endTime: formatHM(cursor + intervalMins) });
+              cursor += intervalMins;
+            }
+          }
+        } else {
+          // sequential intervals per date, spilling to next date if needed
+          let resIdx = 0;
+          for (const d of windows) {
+            let cursor = d.start;
+            while (cursor + intervalMins <= d.end && resIdx < residents.length) {
+              if (cursor >= 12*60 && cursor < 13*60) cursor = 13*60;
+              if (cursor + intervalMins > d.end) break;
+              const r = residents[resIdx];
+              assignments.push({ resident: r, date: d.date, startTime: formatHM(cursor), endTime: formatHM(cursor + intervalMins) });
+              cursor += intervalMins;
+              resIdx++;
+            }
           }
         }
-        // leftover residents ignored in preview (user must add dates or change settings)
       } else if (intervalMode === 'multiples') {
-        // group residents into bundles of multiplesOf, each bundle gets an interval
-        const bundles: Resident[][] = [];
-        for (let i=0;i<residents.length;i+=multiplesOf) bundles.push(residents.slice(i,i+multiplesOf));
-        let bundleIdx = 0;
-        for (const d of windows) {
-          let cursor = d.start;
-          while (cursor < d.end && bundleIdx < bundles.length) {
-            if (cursor >= 12*60 && cursor < 13*60) cursor = 13*60;
-            const start = cursor;
-            const end = cursor + intervalMins;
-            if (end > d.end) break;
-            const bundle = bundles[bundleIdx];
-            for (const r of bundle) assignments.push({ resident: r, date: d.date, startTime: formatHM(start), endTime: formatHM(end) });
-            cursor = end;
-            bundleIdx++;
+        if (participantDistribution === 'manual') {
+          // group per-date assigned usernames into bundles and schedule
+          for (const d of windows) {
+            const usernames = assignedToDate[d.date] || [];
+            const bundles: string[][] = [];
+            for (let i=0;i<usernames.length;i+=multiplesOf) bundles.push(usernames.slice(i,i+multiplesOf));
+            let cursor = d.start;
+            let bundleIdx = 0;
+            while (cursor < d.end && bundleIdx < bundles.length) {
+              if (cursor >= 12*60 && cursor < 13*60) cursor = 13*60;
+              const start = cursor;
+              const end = cursor + intervalMins;
+              if (end > d.end) break;
+              const bundle = bundles[bundleIdx];
+              for (const uname of bundle) {
+                const r = residentMap[uname];
+                if (r) assignments.push({ resident: r, date: d.date, startTime: formatHM(start), endTime: formatHM(end) });
+              }
+              cursor = end;
+              bundleIdx++;
+            }
+          }
+        } else {
+          // group residents into bundles of multiplesOf, each bundle gets an interval
+          const bundles: Resident[][] = [];
+          for (let i=0;i<residents.length;i+=multiplesOf) bundles.push(residents.slice(i,i+multiplesOf));
+          let bundleIdx = 0;
+          for (const d of windows) {
+            let cursor = d.start;
+            while (cursor < d.end && bundleIdx < bundles.length) {
+              if (cursor >= 12*60 && cursor < 13*60) cursor = 13*60;
+              const start = cursor;
+              const end = cursor + intervalMins;
+              if (end > d.end) break;
+              const bundle = bundles[bundleIdx];
+              for (const r of bundle) assignments.push({ resident: r, date: d.date, startTime: formatHM(start), endTime: formatHM(end) });
+              cursor = end;
+              bundleIdx++;
+            }
           }
         }
       }
@@ -513,9 +595,9 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
                     style={{ width: '100%' }}
                     placeholder={selectedResidents.length === 0 ? 'Select residents first' : 'Select residents for this date'}
                     disabled={selectedResidents.length === 0}
-                    value={selectedResidents.filter((r:any) => r._assignedToDate === ds).map((r:any)=>r.username)}
+                    value={perDateAssignments[ds] || []}
                     onChange={(vals:any) => {
-                      // simple: no persistent per-date assignment state in this first iteration
+                      setPerDateAssignments(prev => ({ ...prev, [ds]: vals }));
                     }}
                   >
                     {selectedResidents.slice(0, numParticipants).map(r => (
