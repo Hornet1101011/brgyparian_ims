@@ -481,7 +481,6 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
               <Button loading={autoSelecting} onClick={handleAutoSelect} disabled={loadingResidents}>Auto Select</Button>
               <Button onClick={() => { setSelectedResidents([]); message.info('Cleared selected residents'); }} disabled={loadingResidents}>Clear</Button>
             </div>
-            <Button type="text" icon={<CloseOutlined />} onClick={() => setResidentPickerOpen(false)} />
           </div>
           {loadingResidents ? <Spin /> : (
             <List dataSource={residentOptions} renderItem={(r: any) => (
