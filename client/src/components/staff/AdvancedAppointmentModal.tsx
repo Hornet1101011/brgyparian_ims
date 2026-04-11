@@ -64,6 +64,18 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
     }
   }, [visible]);
 
+  // Keep the participant count in sync with selected residents
+  useEffect(() => {
+    try {
+      const count = Array.isArray(selectedResidents) ? selectedResidents.length : 0;
+      // ensure at least 1 participant
+      setNumParticipants(Math.max(1, count));
+    } catch (e) {
+      // best-effort — don't block UI on unexpected errors
+      console.warn('Failed to sync participant count with selected residents', e);
+    }
+  }, [selectedResidents]);
+
   const addDate = (d: dayjs.Dayjs | null) => {
     if (!d) return;
     const ds = d.format('YYYY-MM-DD');
