@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Card, Row, Col, Button, Tooltip, Modal, List, Grid, Popover, Badge, Empty, Space, Spin, Tag, DatePicker, Descriptions, Divider, Avatar, Timeline, Statistic } from 'antd';
+import { Card, Row, Col, Button, Tooltip, Modal, List, Grid, Popover, Badge, Empty, Space, Spin, Tag, DatePicker, Descriptions, Divider, Avatar, Timeline, Statistic, Progress, Select } from 'antd';
 import { LeftOutlined, RightOutlined, ClockCircleOutlined, UserOutlined, CalendarOutlined, MailOutlined, PhoneOutlined, TeamOutlined } from '@ant-design/icons';
 import { getSlotsForRange, getAppointmentWithSlots, getAppointmentInquiries, getScheduledAppointmentsByDate, cancelAppointment } from '../../api/appointments';
 import AppointmentDetailsModal from '../AppointmentDetailsModal';
@@ -134,6 +134,7 @@ const StaffCalendar = () => {
   const [multipleDate, setMultipleDate] = useState('');
   const [multipleTitle, setMultipleTitle] = useState('');
   const [multipleLoading, setMultipleLoading] = useState(false);
+  const [multipleProgress, setMultipleProgress] = useState(0);
   const [multipleResidentSearch, setMultipleResidentSearch] = useState('');
     // Single appointment modal state
   const [singleModalVisible, setSingleModalVisible] = useState(false);
@@ -147,6 +148,7 @@ const StaffCalendar = () => {
   const [singleUrgency, setSingleUrgency] = useState('normal');
   const [singleDate, setSingleDate] = useState('');
   const [singleLoading, setSingleLoading] = useState(false);
+  const [singleProgress, setSingleProgress] = useState(0);
   const [residentOptions, setResidentOptions] = useState([]);
   const [residentSelectModal, setResidentSelectModal] = useState(false);
   const [residentSearch, setResidentSearch] = useState('');
@@ -178,6 +180,9 @@ const StaffCalendar = () => {
           alert('Please fill all required fields including appointment date, title, and at least one resident.');
           return;
         }
+        setMultipleLoading(true);
+        setMultipleProgress(0);
+        
         // Reuse normalizeTime from single
         const normalizeTime = (t: string) => {
           if (!t || typeof t !== 'string') return null;
@@ -209,14 +214,18 @@ const StaffCalendar = () => {
         }
         if (endObj.minutes <= startObj.minutes) {
           alert('End time must be after start time.');
+          setMultipleLoading(false);
+          setMultipleProgress(0);
           return;
         }
         if (startObj.minutes < 8 * 60 || endObj.minutes > 17 * 60) {
           alert('Time must be between 8:00 AM and 5:00 PM.');
+          setMultipleLoading(false);
+          setMultipleProgress(0);
           return;
         }
         // Pre-flight conflict scan for each resident
-        setMultipleLoading(true);
+        setMultipleProgress(20);
         try {
           // Check for conflicts for all residents
           const conflictMap = new Map();
@@ -246,6 +255,7 @@ const StaffCalendar = () => {
             const overwrite = window.confirm(`Conflicts found for these residents:\n${conflictDetails}\n\nPress OK to overwrite (cancel conflicting slot(s)), or Cancel to abort.`);
             if (!overwrite) {
               setMultipleLoading(false);
+              setMultipleProgress(0);
               return;
             }
 
@@ -263,6 +273,8 @@ const StaffCalendar = () => {
               }
             }
           }
+
+          setMultipleProgress(40);
 
           // Step 1: Create single inquiry with all residents as recipients
           const appointmentDate = dayjs(multipleDate).format('MMMM DD, YYYY');
@@ -290,8 +302,11 @@ const StaffCalendar = () => {
           if (!created || !created._id) {
             alert('Failed to create appointment inquiry.');
             setMultipleLoading(false);
+            setMultipleProgress(0);
             return;
           }
+
+          setMultipleProgress(60);
 
           // Step 2: Schedule appointment for each resident (create AppointmentSlots)
           for (const resident of multipleResidents) {
@@ -300,6 +315,7 @@ const StaffCalendar = () => {
             await contactAPI.scheduleInquiry(created._id, scheduledDates);
           }
 
+          setMultipleProgress(100);
           alert('Group appointment scheduled for all residents. Notifications will be sent to all email addresses.');
           setMultipleModalVisible(false);
           // Reset form
@@ -318,6 +334,8 @@ const StaffCalendar = () => {
           alert('Failed to schedule one or more appointments. ' + (err?.response?.data?.message || (err instanceof Error ? err.message : '')));
         } finally {
           setMultipleLoading(false);
+          // Reset progress after a short delay
+          setTimeout(() => setMultipleProgress(0), 500);
         }
       };
 
@@ -335,6 +353,9 @@ const StaffCalendar = () => {
         alert('Please fill all required fields including appointment date and title.');
         return;
       }
+      setSingleLoading(true);
+      setSingleProgress(0);
+      
       // Validate/normalize time input from TimePicker:
       // supports "08:00 AM", "08:00:00 am", "08:00", "08:00:00", etc.
       const normalizeTime = (t: string) => {
@@ -372,17 +393,24 @@ const StaffCalendar = () => {
       const endObj = normalizeTime(singleEndTime);
       if (!startObj || !endObj) {
         alert('Please supply valid start and end time values (e.g. 08:00 AM).');
+        setSingleLoading(false);
+        setSingleProgress(0);
         return;
       }
       if (endObj.minutes <= startObj.minutes) {
         alert('End time must be after start time.');
+        setSingleLoading(false);
+        setSingleProgress(0);
         return;
       }
       if (startObj.minutes < 8 * 60 || endObj.minutes > 17 * 60) {
         alert('Time must be between 8:00 AM and 5:00 PM.');
+        setSingleLoading(false);
+        setSingleProgress(0);
         return;
       }
       // Pre-flight conflict scan using existing scheduled slots by day
+      setSingleProgress(20);
       const scheduledAppointments = await getScheduledAppointmentsByDate(singleDate);
       const targetStart = toMinutes(startObj.iso);
       const targetEnd = toMinutes(endObj.iso);
@@ -397,6 +425,7 @@ const StaffCalendar = () => {
         const overwrite = window.confirm(`An existing schedule overlaps this timeslot:\n${summary}\n\nPress OK to overwrite (cancel conflicting slot(s)), or Cancel to abort.`);
         if (!overwrite) {
           setSingleLoading(false);
+          setSingleProgress(0);
           return;
         }
 
@@ -412,7 +441,7 @@ const StaffCalendar = () => {
         }
       }
 
-      setSingleLoading(true);
+      setSingleProgress(40);
       try {
         // Step 1: Create inquiry for appointment
         const appointmentDate = dayjs(singleDate).format('MMMM DD, YYYY');
@@ -444,8 +473,11 @@ const StaffCalendar = () => {
         if (!created || !created._id) {
           alert('Failed to create appointment inquiry.');
           setSingleLoading(false);
+          setSingleProgress(0);
           return;
         }
+
+        setSingleProgress(60);
 
         // Step 2: Schedule appointment (create AppointmentSlots)
         console.log('[StaffCalendar] Scheduling appointment with inquiry ID:', created._id);
@@ -454,6 +486,7 @@ const StaffCalendar = () => {
         const scheduled = await contactAPI.scheduleInquiry(created._id, scheduledDates);
         console.log('[StaffCalendar] Appointment scheduled:', scheduled);
 
+        setSingleProgress(100);
         alert('Appointment scheduled and resident will be notified by email.');
         setSingleModalVisible(false);
         setSingleTitle('');
@@ -474,6 +507,8 @@ const StaffCalendar = () => {
         alert('Failed to schedule appointment. ' + (err?.response?.data?.message || (err instanceof Error ? err.message : '')));
       } finally {
         setSingleLoading(false);
+        // Reset progress after a short delay
+        setTimeout(() => setSingleProgress(0), 500);
       }
     };
   const [quickCreateUsername, setQuickCreateUsername] = useState('');
@@ -998,15 +1033,15 @@ const StaffCalendar = () => {
             </Row>
             <div>
               <label style={{ fontWeight: 600 }}>Location Type</label>
-              <br />
-              <select
+              <Select
                 value={singleLocationType}
-                onChange={e => setSingleLocationType(e.target.value)}
-                style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #d9d9d9', fontSize: 15 }}
-              >
-                <option value="on-site">On-site</option>
-                <option value="online">Online</option>
-              </select>
+                onChange={(val) => setSingleLocationType(val)}
+                style={{ width: '100%' }}
+                options={[
+                  { label: 'On-site', value: 'on-site' },
+                  { label: 'Online', value: 'online' }
+                ]}
+              />
             </div>
             <div>
               <label style={{ fontWeight: 600 }}>{singleLocationType === 'online' ? 'Meeting Link' : 'Address'}</label>
@@ -1029,17 +1064,22 @@ const StaffCalendar = () => {
             </div>
             <div>
               <label style={{ fontWeight: 600 }}>Urgency</label>
-              <br />
-              <select
+              <Select
                 value={singleUrgency}
-                onChange={e => setSingleUrgency(e.target.value)}
-                style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #d9d9d9', fontSize: 15 }}
-              >
-                <option value="normal">Normal</option>
-                <option value="urgent">Urgent</option>
-                <option value="emergency">Emergency</option>
-              </select>
+                onChange={(val) => setSingleUrgency(val)}
+                style={{ width: '100%' }}
+                options={[
+                  { label: 'Normal', value: 'normal' },
+                  { label: 'Urgent', value: 'urgent' },
+                  { label: 'Emergency', value: 'emergency' }
+                ]}
+              />
             </div>
+            {singleProgress > 0 && singleProgress < 100 && (
+              <div style={{ marginBottom: 12 }}>
+                <Progress percent={singleProgress} showInfo={false} />
+              </div>
+            )}
             <Button
               type="primary"
               loading={singleLoading}
@@ -1185,15 +1225,15 @@ const StaffCalendar = () => {
             </Row>
             <div>
               <label style={{ fontWeight: 600 }}>Location Type</label>
-              <br />
-              <select
+              <Select
                 value={multipleLocationType}
-                onChange={e => setMultipleLocationType(e.target.value)}
-                style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #d9d9d9', fontSize: 15 }}
-              >
-                <option value="on-site">On-site</option>
-                <option value="online">Online</option>
-              </select>
+                onChange={(val) => setMultipleLocationType(val)}
+                style={{ width: '100%' }}
+                options={[
+                  { label: 'On-site', value: 'on-site' },
+                  { label: 'Online', value: 'online' }
+                ]}
+              />
             </div>
             <div>
               <label style={{ fontWeight: 600 }}>{multipleLocationType === 'online' ? 'Meeting Link' : 'Address'}</label>
@@ -1216,17 +1256,22 @@ const StaffCalendar = () => {
             </div>
             <div>
               <label style={{ fontWeight: 600 }}>Urgency</label>
-              <br />
-              <select
+              <Select
                 value={multipleUrgency}
-                onChange={e => setMultipleUrgency(e.target.value)}
-                style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #d9d9d9', fontSize: 15 }}
-              >
-                <option value="normal">Normal</option>
-                <option value="urgent">Urgent</option>
-                <option value="emergency">Emergency</option>
-              </select>
+                onChange={(val) => setMultipleUrgency(val)}
+                style={{ width: '100%' }}
+                options={[
+                  { label: 'Normal', value: 'normal' },
+                  { label: 'Urgent', value: 'urgent' },
+                  { label: 'Emergency', value: 'emergency' }
+                ]}
+              />
             </div>
+            {multipleProgress > 0 && multipleProgress < 100 && (
+              <div style={{ marginBottom: 12 }}>
+                <Progress percent={multipleProgress} showInfo={false} />
+              </div>
+            )}
             <Button
               type="primary"
               loading={multipleLoading}

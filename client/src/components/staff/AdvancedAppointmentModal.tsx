@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Modal, Button, Space, DatePicker, InputNumber, Radio, Input, List, Divider, Row, Col, Tag, Select, Spin, Progress, message, Switch } from 'antd';
+import { Modal, Button, Space, DatePicker, InputNumber, Radio, Input, List, Divider, Row, Col, Tag, Select, Spin, Progress, message, Switch, Input as TextArea } from 'antd';
 import { CloseOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { contactAPI, residentsListAPI } from '../../services/api';
@@ -33,6 +33,12 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
   const [intervalMode, setIntervalMode] = useState('off' as 'off'|'individual'|'multiples');
   const [intervalMins, setIntervalMins] = useState(30);
   const [multiplesOf, setMultiplesOf] = useState(1);
+
+  // New fields
+  const [locationType, setLocationType] = useState('' as string);
+  const [address, setAddress] = useState('' as string);
+  const [description, setDescription] = useState('' as string);
+  const [urgency, setUrgency] = useState('medium' as string);
 
   const [residentOptions, setResidentOptions] = useState([] as Resident[]);
   const [selectedResidents, setSelectedResidents] = useState([] as Resident[]);
@@ -88,6 +94,10 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
       setSelectedResidents([]);
       setPreview([]);
       setPerDateAssignments({});
+      setLocationType('');
+      setAddress('');
+      setDescription('');
+      setUrgency('medium');
     }
   }, [visible]);
 
@@ -444,7 +454,11 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
         status: 'open',
         recipients,
         recipientEmails,
-        quick_appointment_type: 'advanced'
+        quick_appointment_type: 'advanced',
+        locationType,
+        address,
+        description,
+        urgency,
       } as any;
       const created = await contactAPI.submitInquiry(payload);
       if (!created || !created._id) { alert('Failed to create inquiry'); return; }
@@ -470,6 +484,10 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
         ...(participantDistribution === 'manual' ? { perDateAssignments: { ...perDateAssignments } } : {}),
         residentsSelectionMode,
         autoMethod,
+        locationType,
+        address,
+        description,
+        urgency,
       };
 
       await contactAPI.scheduleInquiry(String(created._id), scheduledDates, schedulingOptions);
@@ -640,6 +658,53 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
         </div>
 
         <div style={{ width: 420 }}>
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>Location Type</div>
+          <Select
+            style={{ width: '100%', marginBottom: 16 }}
+            placeholder="Select location type"
+            value={locationType || undefined}
+            onChange={(val) => setLocationType(val)}
+            options={[
+              { label: 'Office', value: 'office' },
+              { label: 'Virtual', value: 'virtual' },
+              { label: 'Home', value: 'home' },
+              { label: 'Hybrid', value: 'hybrid' },
+              { label: 'Other', value: 'other' },
+            ]}
+          />
+
+          <div style={{ marginBottom: 8, fontWeight: 600 }}>Address/Location</div>
+          <Input
+            placeholder="Enter address or location details"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            style={{ marginBottom: 16 }}
+          />
+
+          <div style={{ marginBottom: 8, fontWeight: 600 }}>Description</div>
+          <Input.TextArea
+            placeholder="Enter appointment description or notes"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={3}
+            style={{ marginBottom: 16 }}
+          />
+
+          <div style={{ marginBottom: 8, fontWeight: 600 }}>Urgency</div>
+          <Select
+            style={{ width: '100%', marginBottom: 16 }}
+            value={urgency}
+            onChange={(val) => setUrgency(val)}
+            options={[
+              { label: 'Low', value: 'low' },
+              { label: 'Medium', value: 'medium' },
+              { label: 'High', value: 'high' },
+              { label: 'Critical', value: 'critical' },
+            ]}
+          />
+
+          <Divider />
+
           <div style={{ fontWeight: 600, marginBottom: 8 }}>Interval Scheduling</div>
           <Radio.Group value={intervalMode} onChange={e => setIntervalMode(e.target.value)}>
             <Radio value="off">Off (everyone same start/end)</Radio>

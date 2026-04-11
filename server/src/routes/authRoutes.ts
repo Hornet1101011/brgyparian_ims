@@ -126,8 +126,14 @@ router.get('/users', auth, async (req: any, res: Response, next?: NextFunction) 
       role: user.role,
       isActive: user.isActive,
       createdAt: (user as any).createdAt,
+      lastLogin: (user as any).lastLogin,
+      avatar: (user as any).avatar,
       // expose barangay identifier if present (common variants)
       barangayID: (user as any).barangayID || (user as any).barangayId || (user as any).barangay_id || null,
+      // Include status flags so frontend displays correct user state
+      restricted: (user as any).restricted || false,
+      warning: (user as any).warning || false,
+      verified: (user as any).verified || false,
     }));
     res.json(mapped);
   } catch (error) {
