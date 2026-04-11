@@ -505,7 +505,7 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
 
       <Modal title="Select Residents" open={residentPickerOpen} onCancel={() => setResidentPickerOpen(false)} footer={null} width={600}>
         <div style={{ maxHeight: 400, overflowY: 'auto' }}>
-          <div style={{ marginBottom: 8, display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ position: 'sticky', top: 0, zIndex: 10, background: '#fff', padding: '8px 0', borderBottom: '1px solid #f0f0f0', marginBottom: 8, display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <Select value={autoMethod} onChange={(v:any) => setAutoMethod(v)} style={{ width: 160 }} options={[{ label: 'First N', value: 'first' }, { label: 'Random N', value: 'random' }]} disabled={loadingResidents} />
               <Button loading={autoSelecting} onClick={handleAutoSelect} disabled={loadingResidents}>Auto Select</Button>
