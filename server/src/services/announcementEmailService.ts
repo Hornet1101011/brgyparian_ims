@@ -1,4 +1,5 @@
 import { User, UserRole, UserStatus } from '../models/User';
+import { Announcement } from '../models/Announcement';
 import { sendMail } from './EmailService';
 import { EmailLog } from '../models/EmailLog';
 
