@@ -187,7 +187,7 @@ router.post('/announcements', isAdmin, upload.single('image'), async (req, res) 
 				}
 				const imageUrl = imagePath ? `${rootUrl}/api/announcements/${ann._id}/image` : undefined;
 
-		sendAnnouncementEmail(subject, ann.text, imageUrl)
+		sendAnnouncementEmail(subject, ann.text, imageUrl, ann._id && ann._id.toString ? ann._id.toString() : ann._id)
 			.then((result) => {
 				// Update announcement with email status
 				return Announcement.findByIdAndUpdate(ann._id, {

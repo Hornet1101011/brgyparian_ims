@@ -52,7 +52,8 @@ export async function getActiveResidentEmails(): Promise<string[]> {
 export async function sendAnnouncementEmail(
   subject: string,
   announcementText: string,
-  imageUrl?: string
+  imageUrl?: string,
+  announcementId?: string
 ): Promise<{ success: boolean; recipientsCount: number; error?: string }> {
   try {
     // Get all active resident emails
@@ -81,13 +82,70 @@ export async function sendAnnouncementEmail(
           </div>
     `;
 
-    // Add image if provided
-    if (imageUrl) {
-      htmlContent += `
+    // If an announcementId was provided, try to load the image binary so we can
+    // embed it inline (CID) to improve deliverability and avoid remote-image
+    // blocking by email clients. Fallback to remote image URL when binary not available.
+    let attachments: any[] | undefined;
+    if (announcementId) {
+      try {
+        const annDoc: any = await Announcement.findById(announcementId);
+        if (annDoc) {
+          let imgBuffer: Buffer | undefined;
+          let imgContentType: string | undefined;
+          if (annDoc.imageData) {
+            imgBuffer = Buffer.isBuffer(annDoc.imageData) ? annDoc.imageData : (annDoc.imageData.buffer ? Buffer.from(annDoc.imageData.buffer) : Buffer.from(annDoc.imageData));
+            imgContentType = annDoc.imageContentType;
+          } else if (annDoc.imagePath) {
+            try {
+              const fs = require('fs');
+              const path = require('path');
+              const filePath = path.join(process.cwd(), annDoc.imagePath);
+              if (fs.existsSync(filePath)) {
+                imgBuffer = fs.readFileSync(filePath);
+                imgContentType = annDoc.imageContentType || 'application/octet-stream';
+              }
+            } catch (e) {
+              // ignore
+            }
+          }
+
+          if (imgBuffer) {
+            const ext = (imgContentType || '').split('/').pop() || 'jpg';
+            const filename = `announcement-image.${ext}`;
+            const cid = `announcement-image-${announcementId}`;
+            attachments = [{ filename, content: imgBuffer, contentType: imgContentType || undefined, cid, disposition: 'inline' }];
+            // Use CID reference in the HTML so clients render the inline image
+            htmlContent += `
+          <div style="text-align: center; margin: 20px 0;">
+            <img src="cid:${cid}" alt="Announcement Image" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+          </div>
+      `;
+          } else if (imageUrl) {
+            htmlContent += `
           <div style="text-align: center; margin: 20px 0;">
             <img src="${imageUrl}" alt="Announcement Image" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
           </div>
       `;
+          }
+        }
+      } catch (err) {
+        console.warn('[AnnouncementEmailService] Failed to load announcement image for inline embedding', err);
+        if (imageUrl) {
+          htmlContent += `
+          <div style="text-align: center; margin: 20px 0;">
+            <img src="${imageUrl}" alt="Announcement Image" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+          </div>
+      `;
+        }
+      }
+    } else {
+      if (imageUrl) {
+        htmlContent += `
+          <div style="text-align: center; margin: 20px 0;">
+            <img src="${imageUrl}" alt="Announcement Image" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+          </div>
+      `;
+      }
     }
 
     htmlContent += `
@@ -109,7 +167,7 @@ export async function sendAnnouncementEmail(
 
     console.log(`[AnnouncementEmailService] Sending announcement email to ${bccRecipients.length} residents`);
 
-    await sendMail(dummyRecipient, subject, htmlContent, bccRecipients, 'announcement');
+    await sendMail(dummyRecipient, subject, htmlContent, bccRecipients, 'announcement', attachments);
 
     console.log(`[AnnouncementEmailService] Announcement email sent successfully to ${bccRecipients.length} residents`);
 

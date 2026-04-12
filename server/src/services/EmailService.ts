@@ -250,7 +250,15 @@ export async function sendDocumentNotification(
 /**
  * Send a generic email
  */
-export async function sendMail(to: string, subject: string, html: string, bcc?: string[], emailType?: string) {
+export async function sendMail(
+  to: string,
+  subject: string,
+  html: string,
+  bcc?: string[],
+  emailType?: string,
+  // attachments: array of { filename, content (Buffer|string), contentType, cid, disposition }
+  attachments?: Array<{ filename?: string; content: Buffer | string; contentType?: string; cid?: string; disposition?: string }>
+) {
   try {
     // Check if this email type is enabled
     const enabled = await isEmailTypeEnabled(emailType);
@@ -343,6 +351,17 @@ export async function sendMail(to: string, subject: string, html: string, bcc?: 
             sgMailOptions.bcc = bcc;
           }
 
+          // Add attachments for SendGrid: convert Buffer content to base64
+          if (attachments && Array.isArray(attachments) && attachments.length > 0) {
+            sgMailOptions.attachments = attachments.map((att: any) => ({
+              content: Buffer.isBuffer(att.content) ? att.content.toString('base64') : (typeof att.content === 'string' ? Buffer.from(att.content).toString('base64') : ''),
+              filename: att.filename || 'attachment',
+              type: att.contentType || att.type || 'application/octet-stream',
+              disposition: att.disposition || 'inline',
+              content_id: att.cid || att.contentId || undefined,
+            }));
+          }
+
           await sgMail.send(sgMailOptions);
 
           // Log email as sent
@@ -385,6 +404,17 @@ export async function sendMail(to: string, subject: string, html: string, bcc?: 
     // Add BCC if provided
     if (bcc && Array.isArray(bcc) && bcc.length > 0) {
       mailOptions.bcc = bcc;
+    }
+
+    // Add attachments for nodemailer transport (Buffers allowed)
+    if (attachments && Array.isArray(attachments) && attachments.length > 0) {
+      mailOptions.attachments = attachments.map((att: any) => ({
+        filename: att.filename || 'attachment',
+        content: att.content,
+        contentType: att.contentType || att.type,
+        cid: att.cid,
+        disposition: att.disposition || (att.cid ? 'inline' : 'attachment'),
+      }));
     }
 
     const info = await transporter.sendMail(mailOptions);
