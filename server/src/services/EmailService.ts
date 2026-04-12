@@ -362,6 +362,11 @@ export async function sendMail(
             }));
           }
 
+          // Debug: log attachment metadata (without content)
+          try {
+            console.debug('[EmailService] SendGrid attachments meta:', (sgMailOptions.attachments || []).map((a: any) => ({ filename: a.filename, type: a.type, disposition: a.disposition, content_id: a.content_id })));
+          } catch (e) {}
+
           await sgMail.send(sgMailOptions);
 
           // Log email as sent
@@ -413,9 +418,14 @@ export async function sendMail(
         content: att.content,
         contentType: att.contentType || att.type,
         cid: att.cid,
-        disposition: att.disposition || (att.cid ? 'inline' : 'attachment'),
+        contentDisposition: att.disposition || (att.cid ? 'inline' : 'attachment'),
       }));
     }
+
+    // Debug: log nodemailer attachment metadata
+    try {
+      console.debug('[EmailService] Nodemailer attachments meta:', (mailOptions.attachments || []).map((a: any) => ({ filename: a.filename, contentType: a.contentType, cid: a.cid, contentDisposition: a.contentDisposition })));
+    } catch (e) {}
 
     const info = await transporter.sendMail(mailOptions);
     
