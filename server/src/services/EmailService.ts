@@ -269,9 +269,54 @@ export async function sendMail(to: string, subject: string, html: string, bcc?: 
 
     // If SendGrid is configured and enabled, prefer SendGrid
     try {
+      // Robustly load SendGrid configuration.
+      // Try module from expected location, then try resolving from project root (useful when running from dist),
+      // finally fall back to SystemSetting.getSendGridConfig helper.
       // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const SendGridConfig = require('../models/SendGridConfig.js');
-      const sgCfg = await SendGridConfig.getConfig();
+      let SendGridConfigModule: any = null;
+      let sgCfg: any = null;
+
+      try {
+        // Primary location (when model was copied into dist or running from src)
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        SendGridConfigModule = require('../models/SendGridConfig.js');
+      } catch (requireErr1) {
+        try {
+          // Fallback: resolve from server root (handles compiled dist paths)
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const path = require('path');
+          // __dirname is e.g. .../server/dist/services when running compiled code
+          // Resolve to .../server/models/SendGridConfig.js which exists in the repo
+          // and may not have been copied into dist during build.
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          SendGridConfigModule = require(path.resolve(__dirname, '..', '..', 'models', 'SendGridConfig.js'));
+        } catch (requireErr2) {
+          console.warn('[EmailService] SendGridConfig require attempts failed, will try SystemSetting.getSendGridConfig', requireErr1, requireErr2);
+        }
+      }
+
+      if (SendGridConfigModule && typeof SendGridConfigModule.getConfig === 'function') {
+        sgCfg = await SendGridConfigModule.getConfig();
+        // If the module returned a wrapper document (e.g., a SystemSetting doc), extract nested config
+        if (sgCfg && sgCfg.sendgridConfig) sgCfg = sgCfg.sendgridConfig;
+      }
+
+      // If still not found, try reading from SystemSetting helper (legacy location)
+      if (!sgCfg || !sgCfg.apiKey) {
+        try {
+          const sysSg = await (SystemSetting as any).getSendGridConfig();
+          if (sysSg && sysSg.sendgridConfig) {
+            sgCfg = sysSg.sendgridConfig;
+          } else if (sysSg && sysSg.apiKey) {
+            // handle case where sendgrid fields are on the document root
+            sgCfg = sysSg;
+          }
+        } catch (sysErr) {
+          // ignore - we'll fallback to SMTP/Gmail later
+          console.warn('[EmailService] SystemSetting.getSendGridConfig failed', sysErr instanceof Error ? sysErr.message : sysErr);
+        }
+      }
+
       console.log('[EmailService] SendGrid branch check:', {
         sgConfigPresent: !!sgCfg,
         sgEnabled: !!(sgCfg && sgCfg.enabled),
