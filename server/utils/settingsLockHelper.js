@@ -36,10 +36,30 @@ async function acquireLock(userId, userName) {
 
     // Check if there's an existing lock
     if (settings.settingsLock?.isLocked) {
-      const lockAge = now - settings.settingsLock.lockedAt;
+        const lockAge = now - settings.settingsLock.lockedAt;
 
-      // If lock is expired, allow takeover
-      if (lockAge > lockTimeout) {
+        // If the current user already owns the lock, treat this as idempotent
+        // and extend the lock timestamp so UI keep-alive/reacquire calls succeed.
+        if (settings.settingsLock.lockedBy === userId) {
+          try {
+            await SystemSetting.updateOne(
+              { _id: settings._id },
+              { $set: { 'settingsLock.lockedAt': now } }
+            );
+          } catch (err) {
+            console.warn('[SettingsLock] Failed to refresh lock timestamp for owner', userId, err);
+          }
+
+          return {
+            success: true,
+            locked: true,
+            lockOwner: userName,
+            message: 'You already hold the lock; refreshed timestamp'
+          };
+        }
+
+        // If lock is expired, allow takeover
+        if (lockAge > lockTimeout) {
         console.log(`[SettingsLock] Lock expired (age: ${lockAge}ms, timeout: ${lockTimeout}ms), allowing takeover`, {
           previousOwner: settings.settingsLock.lockedBy,
           newOwner: userId
