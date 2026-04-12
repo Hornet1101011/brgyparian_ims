@@ -114,11 +114,16 @@ export async function sendAnnouncementEmail(
             const ext = (imgContentType || '').split('/').pop() || 'jpg';
             const filename = `announcement-image.${ext}`;
             const cid = `announcement-image-${announcementId}`;
+            // Keep the attachment (CID) for clients that honor it, and also
+            // embed a base64 data-URI as the image src so clients that don't
+            // bind the CID will still show the image. Note: this increases
+            // message size depending on image size.
             attachments = [{ filename, content: imgBuffer, contentType: imgContentType || undefined, cid, disposition: 'inline' }];
-            // Use CID reference in the HTML so clients render the inline image
+            const b64 = imgBuffer.toString('base64');
+            const dataUri = `data:${imgContentType || 'image/png'};base64,${b64}`;
             htmlContent += `
           <div style="text-align: center; margin: 20px 0;">
-            <img src="cid:${cid}" alt="Announcement Image" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+            <img src="${dataUri}" alt="Announcement Image" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
           </div>
       `;
           } else if (imageUrl) {
