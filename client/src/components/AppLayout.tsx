@@ -289,6 +289,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }: { children: React.Rea
               display: 'flex',
               flexDirection: 'column',
             }}
+            className="hidden-scrollbar"
           >
             <>
             <Menu
@@ -369,7 +370,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }: { children: React.Rea
           closeIcon={<CloseOutlined style={{ color: '#fff', fontSize: 20 }} />}
           width={280}
         >
-          <div style={{ padding: '8px 0' }}>
+          <div style={{ padding: '8px 0' }} className="hidden-scrollbar">
             <Menu
               theme="light"
               mode="vertical"
@@ -524,6 +525,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }: { children: React.Rea
   {/* Divider line below header */}
   <div style={{ height: 1, background: 'rgba(139, 115, 234, 0.06)', width: '100%', margin: 0, boxShadow: 'none' }} />
         <Content
+          className="hidden-scrollbar"
           style={{
             marginTop: screenSize === 'mobile' ? 56 : HEADER_HEIGHT,
             padding: screenSize === 'mobile' ? 12 : screenSize === 'tablet' ? 16 : 32,

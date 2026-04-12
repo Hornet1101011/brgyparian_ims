@@ -164,7 +164,7 @@ export const notificationAPI = {
     return axiosInstance.post(`/notifications/reject-staff/${notifId}`, { reason });
   },
   markAsRead: async (notifId: string) => {
-    return axiosInstance.patch(`/notifications/mark-read/${notifId}`);
+    return axiosInstance.post(`/notifications/read`, { notificationId: notifId });
   },
 };
 

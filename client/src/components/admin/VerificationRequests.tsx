@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Table, Button, Space, Tag, message, Spin, Modal, Empty, Card, Row, Col, Divider, Statistic, Badge, Tooltip, Tabs, Popconfirm } from 'antd';
 import { CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, EyeOutlined, DeleteOutlined, DownloadOutlined, UserAddOutlined } from '@ant-design/icons';
-import { verificationAPI, API_URL, adminAPI } from '../../services/api';
+import { verificationAPI, API_URL, adminAPI, notificationAPI } from '../../services/api';
 import { getFileExtension, getFileTypeLabel, isViewableFileType } from '../../utils/fileTypeDetector';
 
 interface IVReq {
@@ -214,8 +214,8 @@ const VerificationRequests = () => {
   // @ts-ignore
   const [filePreviewUrls, setFilePreviewUrls] = useState<Record<string, string>>({});
   
-  // Staff Applications State
-  const [staffApplicants, setStaffApplicants] = useState<any[]>([]);
+  // Staff Applications State - Using Notifications instead
+  const [staffAccessNotifs, setStaffAccessNotifs] = useState<any[]>([]);
   const [staffLoading, setStaffLoading] = useState(false);
   const [staffActionLoading, setStaffActionLoading] = useState(false);
 
@@ -232,32 +232,16 @@ const VerificationRequests = () => {
     }
   };
 
-  const loadStaffApplicants = async () => {
+  const loadStaffApprovals = async () => {
     setStaffLoading(true);
     try {
-      const res = await adminAPI.getStaffApplicants();
-      console.log('Staff applicants response:', res);
-      
-      // Handle different response structures
-      let applicants: any[] = [];
-      if (res && res.applicants && Array.isArray(res.applicants)) {
-        applicants = res.applicants;
-      } else if (Array.isArray(res)) {
-        // If response is directly an array
-        applicants = res;
-      } else if (res && res.data && Array.isArray(res.data)) {
-        // If response is wrapped in data property
-        applicants = res.data;
-      }
-      
-      console.log('Processed staff applicants:', applicants);
-      setStaffApplicants(applicants);
+      const notificationsRes = await notificationAPI.getNotifications();
+      const unreadNotifs = notificationsRes.filter((n: any) => !n.read);
+      const staffApprovalNotifs = unreadNotifs.filter((n: any) => (n.type || '').toString().toLowerCase() === 'staff_approval');
+      console.log('Staff approval notifications:', staffApprovalNotifs);
+      setStaffAccessNotifs(staffApprovalNotifs);
     } catch (err) {
-      console.error('Failed to load staff applicants:', err);
-      // Don't show error message on initial load, just log it
-      if (staffApplicants.length === 0) {
-        console.log('Note: Staff applications endpoint may not be available yet');
-      }
+      console.error('Failed to load staff approvals:', err);
     } finally {
       setStaffLoading(false);
     }
@@ -265,7 +249,7 @@ const VerificationRequests = () => {
 
   useEffect(() => { 
     loadRequests();
-    loadStaffApplicants();
+    loadStaffApprovals();
   }, []);
 
   const handleVerify = async (record: IVReq) => {
@@ -324,32 +308,44 @@ const VerificationRequests = () => {
     }
   };
 
-  const handleApproveStaff = async (applicantId: string) => {
+  const handleApproveStaff = async (notif: any) => {
+    if (!notif.data?.userId || !notif._id) return;
     setStaffActionLoading(true);
     try {
-      await adminAPI.approveStaffApplicant(applicantId);
+      // Optimistic update: remove from local state immediately
+      setStaffAccessNotifs(prev => prev.filter(n => n._id !== notif._id));
+      
+      await notificationAPI.approveStaff(notif.data.userId, notif._id);
       message.success('Staff applicant approved successfully');
-      // Update local state optimistically - remove approved applicant from list
-      setStaffApplicants(prev => prev.filter(applicant => applicant._id !== applicantId));
+      // Reload staff approvals to ensure consistency
+      await loadStaffApprovals();
     } catch (err) {
       console.error('Approve staff error:', err);
       message.error('Failed to approve staff applicant');
+      // Reload on error to restore correct state
+      await loadStaffApprovals();
     } finally {
       setStaffActionLoading(false);
     }
   };
 
-  const handleRejectStaff = async (applicantId: string) => {
+  const handleRejectStaff = async (notif: any) => {
+    if (!notif._id) return;
+    const reason = window.prompt('Enter a brief reason for rejection (optional):');
     setStaffActionLoading(true);
     try {
-      // For now, we'll just remove inactive staff or disable them
-      // This would need a backend endpoint to properly reject
-      message.info('Rejection feature coming soon');
-      // Update local state optimistically - remove rejected applicant from list
-      setStaffApplicants(prev => prev.filter(applicant => applicant._id !== applicantId));
+      // Optimistic update: remove from local state immediately
+      setStaffAccessNotifs(prev => prev.filter(n => n._id !== notif._id));
+      
+      await notificationAPI.rejectStaff(notif._id, reason || undefined);
+      message.success('Staff request rejected');
+      // Reload staff approvals to ensure consistency
+      await loadStaffApprovals();
     } catch (err) {
       console.error('Reject staff error:', err);
-      message.error('Failed to reject staff applicant');
+      message.error('Failed to reject staff request');
+      // Reload on error to restore correct state
+      await loadStaffApprovals();
     } finally {
       setStaffActionLoading(false);
     }
@@ -559,42 +555,17 @@ const VerificationRequests = () => {
   const staffColumns = [
     {
       title: 'Applicant Name',
-      dataIndex: 'fullName',
-      key: 'fullName',
+      key: 'name',
       width: 200,
-      render: (text: string, record: any) => (
-        <div style={{ fontWeight: 500, color: '#0f172a' }}>
-          {text || record.username || 'Unknown'}
-        </div>
-      )
+      render: (_: any, record: any) => {
+        const d: any = record.data || {};
+        const nameFromData = d.fullName || (d.userId && (d.userId.fullName || d.userId.username));
+        const displayName = nameFromData || record.message || 'Unknown';
+        return <span style={{ fontWeight: 500, color: '#0f172a' }}>{displayName}</span>;
+      }
     },
     {
-      title: 'Email',
-      dataIndex: 'email',
-      key: 'email',
-      width: 200,
-      render: (email: string) => email || '-'
-    },
-    {
-      title: 'Username',
-      dataIndex: 'username',
-      key: 'username',
-      width: 150,
-      render: (username: string) => username || '-'
-    },
-    {
-      title: 'Status',
-      dataIndex: 'isActive',
-      key: 'status',
-      width: 120,
-      render: (isActive: boolean) => (
-        <Tag color={isActive ? 'success' : 'processing'}>
-          {isActive ? 'Active' : 'Pending'}
-        </Tag>
-      )
-    },
-    {
-      title: 'Applied At',
+      title: 'Requested At',
       dataIndex: 'createdAt',
       key: 'createdAt',
       width: 180,
@@ -611,43 +582,37 @@ const VerificationRequests = () => {
       fixed: 'right' as const,
       render: (_: any, record: any) => (
         <Space size="small">
-          {record.isActive ? (
-            <Tag color="success" style={{ margin: 0 }}>Approved</Tag>
-          ) : (
-            <>
-              <Tooltip title="Approve this staff application">
-                <Button
-                  size="small"
-                  type="primary"
-                  icon={<CheckCircleOutlined />}
-                  onClick={() => handleApproveStaff(record._id)}
-                  loading={staffActionLoading}
-                  style={{ fontWeight: 500, backgroundColor: '#52c41a', borderColor: '#52c41a' }}
-                >
-                  Approve
-                </Button>
-              </Tooltip>
-              <Tooltip title="Reject this staff application">
-                <Popconfirm
-                  title="Reject Staff Application"
-                  description="Are you sure you want to reject this application?"
-                  onConfirm={() => handleRejectStaff(record._id)}
-                  okText="Yes"
-                  cancelText="No"
-                >
-                  <Button
-                    size="small"
-                    danger
-                    icon={<CloseCircleOutlined />}
-                    loading={staffActionLoading}
-                    style={{ fontWeight: 500 }}
-                  >
-                    Reject
-                  </Button>
-                </Popconfirm>
-              </Tooltip>
-            </>
-          )}
+          <Tooltip title="Approve this staff application">
+            <Button
+              size="small"
+              type="primary"
+              icon={<CheckCircleOutlined />}
+              onClick={() => handleApproveStaff(record)}
+              loading={staffActionLoading}
+              style={{ fontWeight: 500, backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+            >
+              Approve
+            </Button>
+          </Tooltip>
+          <Tooltip title="Reject this staff application">
+            <Popconfirm
+              title="Reject Staff Application"
+              description="Are you sure you want to reject this application?"
+              onConfirm={() => handleRejectStaff(record)}
+              okText="Yes"
+              cancelText="No"
+            >
+              <Button
+                size="small"
+                danger
+                icon={<CloseCircleOutlined />}
+                loading={staffActionLoading}
+                style={{ fontWeight: 500 }}
+              >
+                Reject
+              </Button>
+            </Popconfirm>
+          </Tooltip>
         </Space>
       )
     }
@@ -794,7 +759,7 @@ const VerificationRequests = () => {
               label: (
                 <span style={{ fontWeight: 500 }}>
                   <UserAddOutlined style={{ marginRight: 8 }} />
-                  Staff Approvals ({staffApplicants.length})
+                  Staff Approvals ({staffAccessNotifs.length})
                 </span>
               ),
               children: (
@@ -803,14 +768,14 @@ const VerificationRequests = () => {
                     <Button 
                       type="primary" 
                       size="small"
-                      onClick={loadStaffApplicants}
+                      onClick={loadStaffApprovals}
                       loading={staffLoading}
                     >
                       Refresh
                     </Button>
                   </div>
                   <Spin spinning={staffLoading}>
-                    {(!staffApplicants || staffApplicants.length === 0) ? (
+                    {(!staffAccessNotifs || staffAccessNotifs.length === 0) ? (
                       <Empty
                         description="No staff applications"
                         style={{ padding: '60px 20px', color: '#94a3b8' }}
@@ -819,7 +784,7 @@ const VerificationRequests = () => {
                       <Table
                         rowKey={(record: any) => record?._id || 'unknown'}
                         loading={staffLoading}
-                        dataSource={staffApplicants.filter((a: any) => a != null)}
+                        dataSource={staffAccessNotifs.filter((a: any) => a != null)}
                         columns={staffColumns as any}
                         pagination={{
                           pageSize: 10,
@@ -832,10 +797,6 @@ const VerificationRequests = () => {
                           style: { marginTop: 16 }
                         }}
                         style={{ marginTop: 20 }}
-                        rowClassName={(record) => {
-                          if (record.isActive) return 'verified-row';
-                          return '';
-                        }}
                       />
                     )}
                   </Spin>

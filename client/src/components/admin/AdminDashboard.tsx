@@ -1,13 +1,18 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, Row, Col, List, Typography, Space, Spin, Button, Drawer, Table, Empty, Modal } from 'antd';
+import { Card, Row, Col, List, Typography, Space, Spin, Button, Drawer, Table, Modal, Tag, Tooltip, Divider, Avatar, Alert } from 'antd';
 import {
   UserOutlined,
-  BellOutlined,
   FileTextOutlined,
   CheckOutlined,
-  ExclamationCircleOutlined
+  ExclamationCircleOutlined,
+  ClockCircleOutlined,
+  CheckCircleOutlined,
+  UserAddOutlined,
+  FileOutlined,
+  CalendarOutlined,
+  PictureOutlined
 } from '@ant-design/icons';
 import { adminAPI, contactAPI, verificationAPI, notificationAPI, documentsAPI } from '../../services/api';
 import { initNotificationSocket, onNotificationEvent, offNotificationEvent } from '../../services/notificationSocket';
@@ -99,8 +104,6 @@ const AdminDashboard = () => {
   const [, setRecentActivity] = useState([] as Activity[]);
   const [verifs, setVerifs] = useState([] as VerificationRequest[]);
   const [verifsLoading, setVerifsLoading] = useState(false);
-  const [verifModalVisible, setVerifModalVisible] = useState(false);
-  const [selectedVerif, setSelectedVerif] = useState(null as VerificationRequest | null);
   const [, setInquiries] = useState([] as Inquiry[]);
   const [, setInboxInquiries] = useState([] as Inquiry[]);
   const [documentsModalVisible, setDocumentsModalVisible] = useState(false);
@@ -111,6 +114,8 @@ const AdminDashboard = () => {
   const [miniLoading, setMiniLoading] = useState(false);
   const [miniSelected, setMiniSelected] = useState(null as Announcement | null);
   const [drawerVisible, setDrawerVisible] = useState(false);
+  const [expandedTitle, setExpandedTitle] = useState(false);
+  const [expandedDescription, setExpandedDescription] = useState(false);
   // Demo data for mini charts
   const usersTrend = [3, 5, 4, 6, 7, 8, 10]; // last 7 days
   const requestsByType = [
@@ -373,6 +378,77 @@ const AdminDashboard = () => {
     }
   };
 
+  // Inject scrollbar styles
+  useEffect(() => {
+    const styleElement = document.createElement('style');
+    styleElement.innerHTML = `
+      .announcement-drawer-content {
+        width: 100%;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        scroll-behavior: smooth;
+        scrollbar-width: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      .announcement-drawer-content::-webkit-scrollbar {
+        width: 10px;
+      }
+      .announcement-drawer-content::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .announcement-drawer-content::-webkit-scrollbar-thumb {
+        background: rgba(0, 0, 0, 0.08);
+        border-radius: 5px;
+        transition: background 0.3s ease;
+      }
+      .announcement-drawer-content:hover::-webkit-scrollbar-thumb {
+        background: rgba(0, 0, 0, 0.2);
+      }
+      .announcement-drawer-content::-webkit-scrollbar-thumb:hover {
+        background: rgba(0, 0, 0, 0.35);
+      }
+      .announcement-drawer-content::-webkit-scrollbar-thumb:active {
+        background: rgba(0, 0, 0, 0.5);
+      }
+      .announcement-drawer-content:hover {
+        scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+      }
+    `;
+    document.head.appendChild(styleElement);
+    return () => styleElement.remove();
+  }, []);
+
+  // Handle drawer UX: ESC key to close and prevent body scroll
+  useEffect(() => {
+    if (!drawerVisible) return;
+
+    // Reset expanded states when drawer opens
+    setExpandedTitle(false);
+    setExpandedDescription(false);
+
+    // Prevent body scroll when drawer is open
+    document.body.style.overflow = 'hidden';
+    document.body.classList.add('ant-drawer-open');
+
+    // Handler for ESC key
+    const handleEscKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setDrawerVisible(false);
+        setMiniSelected(null);
+      }
+    };
+
+    // Add event listener
+    window.addEventListener('keydown', handleEscKey);
+
+    // Cleanup
+    return () => {
+      window.removeEventListener('keydown', handleEscKey);
+      document.body.style.overflow = 'unset';
+      document.body.classList.remove('ant-drawer-open');
+    };
+  }, [drawerVisible]);
+
   // (Unread badge removed — messages moved to dedicated notifications page)
 
   const kpiCards = [
@@ -550,276 +626,188 @@ const AdminDashboard = () => {
 
   const renderNotifications = () => (
     <Card
-      title={<Space><BellOutlined style={{ color: '#1890ff', fontSize: 20 }} /> <span style={{ fontWeight: 700, fontSize: 17, letterSpacing: '-0.3px', color: '#1f2937' }}>Staff Access Approval</span></Space>}
+      title={
+        <Space size="large">
+          <Avatar 
+            size={40} 
+            icon={<UserAddOutlined />} 
+            style={{ background: 'linear-gradient(135deg, #1890ff 0%, #40a9ff 100%)' }} 
+          />
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 18, letterSpacing: '-0.3px', color: '#1f2937' }}>Staff Access Approval</div>
+            <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>{staffAccessNotifs.length} pending request{staffAccessNotifs.length !== 1 ? 's' : ''}</div>
+          </div>
+        </Space>
+      }
       style={{ marginTop: 0, background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)', borderRadius: 16, boxShadow: '0 6px 20px rgba(24, 144, 255, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8)', border: '2px solid #1890ff', borderTop: '6px solid #1890ff', position: 'relative' }}
-      styles={{ body: { padding: 16 } }}
+      styles={{ body: { padding: 0 } }}
       size="small"
       hoverable={false}
     >
-  {/* Render a dedicated table for unread staff access approval requests */}
-      {/* Show staff approval notifications (type === 'staff_approval') if present */}
-      <div style={{ maxHeight: 360, overflowY: 'auto', paddingRight: 6, paddingBottom: 12 }}>
-        <Table
-          size="small"
-          pagination={{ pageSize: 100, hideOnSinglePage: true, position: ['bottomCenter'] }}
-          dataSource={staffAccessNotifs.filter((n: any) => n != null)}
-          rowKey={(r: any) => r?._id || String(r?.createdAt || '') || 'unknown'}
-          style={{ borderRadius: 8 }}
-          rowClassName={() => 'staff-access-row'}
-          columns={[
-            {
-              title: 'Name',
-              key: 'requestedBy',
-              render: (_: any, record: Notification) => {
-                const d: any = record.data || {};
-                const nameFromData = d.fullName || (d.userId && (d.userId.fullName || d.userId.username));
-                const requestedByName = (record as any).requestedByName;
-                const displayName = nameFromData || (requestedByName || record.message) || 'Unknown';
-                return <span style={{ fontWeight: 700, color: '#1f2937', fontSize: 14, display: 'block', padding: '6px 0' }}>{displayName}</span>;
-              }
-            },
-            {
-              title: 'Requested At',
-              dataIndex: 'createdAt',
-              key: 'createdAt',
-              render: (val: any, record: Notification) => <span style={{ fontSize: 14, color: '#6b7280', display: 'block', padding: '6px 0' }}>{new Date(record.createdAt || val).toLocaleString()}</span>
-            },
-            {
-              title: 'Actions',
-              key: 'actions',
-              render: (_: any, record: Notification) => (
-                <Space size="small">
-                  {!record.read && (
-                    <Button type="primary" size="small" onClick={() => handleApproveStaff(record)} icon={<CheckOutlined />} style={{ background: '#10b981', border: 'none', fontWeight: 600 }}>Approve</Button>
-                  )}
-                  <Button danger size="small" onClick={() => handleRejectStaff(record)} icon={<ExclamationCircleOutlined />} style={{ fontWeight: 600 }}>Reject</Button>
-                </Space>
-              )
-            }
-          ]}
-        />
+      {staffAccessNotifs.length === 0 ? (
+        <div style={{ padding: '40px 20px', textAlign: 'center' }}>
+          <Alert
+            message="All Caught Up!"
+            description="No pending staff approval requests at the moment."
+            type="success"
+            icon={<CheckCircleOutlined />}
+            showIcon
+            style={{ marginBottom: 0 }}
+          />
+        </div>
+      ) : (
+        <div style={{ maxHeight: 420, overflowY: 'auto', paddingRight: 6 }}>
+          <List
+            dataSource={staffAccessNotifs.filter((n: any) => n != null)}
+            renderItem={(record: Notification) => {
+              const d: any = record.data || {};
+              const nameFromData = d.fullName || (d.userId && (d.userId.fullName || d.userId.username));
+              const displayName = nameFromData || record.message || 'Unknown';
+              return (
+                <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb', transition: 'background 0.2s', display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', gap: 16 }} onMouseEnter={(e) => e.currentTarget.style.background = '#f9fafb'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                    <Avatar icon={<UserOutlined />} style={{ background: '#1890ff', flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, color: '#1f2937', fontSize: 14, marginBottom: 4 }}>{displayName}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#9ca3af' }}>
+                        <ClockCircleOutlined />
+                        <span>{new Date(record.createdAt).toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <Space size="small">
+                    <Tooltip title="Approve staff access">
+                      <Button 
+                        type="primary" 
+                        size="small" 
+                        icon={<CheckOutlined />} 
+                        onClick={() => handleApproveStaff(record)} 
+                        style={{ background: '#10b981', border: 'none', fontWeight: 600 }}
+                      >
+                        Approve
+                      </Button>
+                    </Tooltip>
+                    <Tooltip title="Reject staff access">
+                      <Button 
+                        danger 
+                        size="small" 
+                        icon={<ExclamationCircleOutlined />} 
+                        onClick={() => handleRejectStaff(record)} 
+                        style={{ fontWeight: 600 }}
+                      >
+                        Reject
+                      </Button>
+                    </Tooltip>
+                  </Space>
+                </div>
+              );
+            }}
+            size="small"
+          />
+        </div>
+      )}
+      <Divider style={{ margin: 0 }} />
+      <div style={{ padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f9fafb', borderBottomLeftRadius: 14, borderBottomRightRadius: 14 }}>
+        <Text style={{ fontSize: 12, color: '#6b7280' }}>Showing {Math.min(staffAccessNotifs.length, 10)} of {staffAccessNotifs.length} requests</Text>
+        <Button type="link" style={{ fontSize: 13, color: '#1890ff', padding: 0 }} onClick={() => navigate('/admin/verification-requests')}>View all →</Button>
       </div>
-
-      {/* Notifications removed from this container to avoid duplicate admin entries */}
-  <Button type="link" style={{ position: 'absolute', right: 16, bottom: 8, fontSize: 13, color: '#1890ff' }} onClick={() => navigate('/admin/notifications')}>View all</Button>
     </Card>
   );
 
   // Verification widget for admin dashboard
-  const handleApproveVerif = async (arg: VerificationRequest | string) => {
-    // arg may be a userId string or the verification request object
-    try {
-      setVerifsLoading(true);
-      if (arg && typeof arg === 'object') {
-        const reqId = arg._id;
-        const userId = arg.userId._id;
-        // mark request approved on server (if endpoint exists)
-        try { await verificationAPI.approveRequest(reqId); } catch (e) { /* best-effort */ }
-        // set the user verified
-        if (userId) await verificationAPI.verifyUser(userId, true);
-        // refresh list from server so approved items show as verified in the table/widget
-        await loadVerifs();
-      } else if (typeof arg === 'string') {
-        await verificationAPI.verifyUser(arg, true);
-      }
-    } catch (err) {
-      console.error('Failed to verify user', err);
-    } finally {
-      setVerifsLoading(false);
-    }
-  };
-
-  // Handler to revert an approval (unverify)
-  const handleUnverifyVerif = async (arg: VerificationRequest | string) => {
-    try {
-      setVerifsLoading(true);
-      if (arg && typeof arg === 'object') {
-        const reqId = arg._id;
-        const userId = arg.userId._id;
-        // Call the server-side unapprove route if available to revert approval state
-        try { if (reqId) await verificationAPI.unapproveRequest(reqId); } catch (e) { /* best-effort */ }
-        if (userId) await verificationAPI.verifyUser(userId, false);
-        // refresh list from server to reflect unverified status
-        await loadVerifs();
-      } else if (typeof arg === 'string') {
-        await verificationAPI.verifyUser(arg, false);
-        await loadVerifs();
-      }
-    } catch (err) {
-      console.error('Failed to unverify user', err);
-    } finally {
-      setVerifsLoading(false);
-    }
-  };
-
-  const handleRejectVerif = async (arg: VerificationRequest | string) => {
-    try {
-      setVerifsLoading(true);
-      if (arg && typeof arg === 'object') {
-        const reqId = arg._id;
-        const userId = arg.userId._id;
-        try { await verificationAPI.rejectRequest(reqId); } catch (e) { /* best-effort */ }
-        if (userId) await verificationAPI.verifyUser(userId, false);
-      } else if (typeof arg === 'string') {
-        // no request id available; just flip user verified to false
-        await verificationAPI.verifyUser(arg, false);
-      }
-      await loadVerifs();
-    } catch (err) {
-      console.error('Failed to reject verification', err);
-    } finally {
-      setVerifsLoading(false);
-    }
-  };
-
-  const openCheckId = (req: VerificationRequest) => {
-    setSelectedVerif(req);
-    setVerifModalVisible(true);
-  };
-
-  const renderVerificationWidget = () => (
-    <Card
-      title={<Space><UserOutlined style={{ color: '#722ed1', fontSize: 20 }} /> <span style={{ fontWeight: 700, fontSize: 17, letterSpacing: '-0.3px', color: '#1f2937' }}>Verification Requests</span></Space>}
-      style={{ marginTop: 0, background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)', borderRadius: 16, boxShadow: '0 6px 20px rgba(114, 46, 209, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8)', border: '2px solid #722ed1', borderTop: '6px solid #722ed1' }}
-      size="small"
-      hoverable={false}
-      styles={{ body: { padding: 20 } }}
-    >
-      {verifsLoading ? (
-        <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
-      ) : (!verifs || verifs.length === 0) ? (
-        <Empty description="No verification requests" />
-      ) : (
-        <Table
-          size="small"
-          pagination={{ pageSize: 6 }}
-          dataSource={verifs.filter((v: any) => v != null)}
-          rowKey={(r: any) => r?._id || 'unknown'}
-          columns={[{
-              title: 'Resident',
-              key: 'resident',
-              render: (_: any, record: VerificationRequest) => <span style={{ fontWeight: 700, color: '#1f2937', fontSize: 14 }}>{(record.userId && (record.userId.fullName || record.userId.username)) || 'Unknown Resident'}</span>
-            },
-            {
-              title: 'Status',
-              dataIndex: 'status',
-              key: 'status',
-              render: (val: any) => {
-                const isApproved = val === 'approved';
-                return (
-                  <span style={{ 
-                    color: isApproved ? '#059669' : '#d97706',
-                    fontWeight: 700,
-                    fontSize: 14,
-                    backgroundColor: isApproved ? '#ecfdf5' : '#fffbeb',
-                    padding: '6px 14px',
-                    borderRadius: 6,
-                    display: 'inline-block',
-                    border: `1px solid ${isApproved ? '#a7f3d0' : '#fcd34d'}`
-                  }}>
-                    {val || 'pending'}
-                  </span>
-                );
-              }
-            },
-            {
-              title: 'Submitted',
-              dataIndex: 'createdAt',
-              key: 'createdAt',
-              render: (val: any) => <span style={{ color: '#6b7280', fontSize: 14 }}>{val ? new Date(val).toLocaleString() : '-'}</span>
-            },
-            {
-              title: 'Verified',
-              dataIndex: 'approvedAt',
-              key: 'approvedAt',
-              render: (val: any) => <span style={{ color: '#6b7280', fontSize: 14 }}>{val ? new Date(val).toLocaleString() : '-'}</span>
-            },
-            {
-              title: 'Files',
-              key: 'files',
-              render: (_: any, record: VerificationRequest) => {
-                if (!record) return null;
-                const filesMeta = Array.isArray(record.filesMeta) ? record.filesMeta.filter((f: any) => f != null) : [];
-                const gridFileIds = Array.isArray(record.gridFileIds) ? record.gridFileIds.filter((id: any) => id != null) : [];
-                const files = filesMeta.length > 0 ? filesMeta : gridFileIds.map((id: string) => ({ filename: id, gridFileId: id }));
-                return (
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    {files.map((f: any, i: number) => {
-                      if (!f) return null;
-                      const userId = (typeof record.userId === 'object' && record.userId ? record.userId._id : record.userId) as string;
-                      const fileType = f.fileType || 'unknown';
-                      const fileUrl = verificationAPI.getFileUrlByUserType(userId, fileType);
-                      return (
-                        <a key={i} href={fileUrl} target="_blank" rel="noreferrer" style={{ color: '#3b82f6', fontWeight: 600, fontSize: 13 }}>{fileType}</a>
-                      );
-                    })}
-                  </div>
-                );
-              }
-            },
-            {
-              title: 'Action',
-              key: 'action',
-              render: (_: any, record: VerificationRequest) => (
-                <Space size="small">
-                  <Button size="small" onClick={() => openCheckId(record)} style={{ fontWeight: 600 }}>Check ID</Button>
-                  {record.status === 'approved' ? (
-                    <Button size="small" onClick={() => handleUnverifyVerif(record)} danger style={{ fontWeight: 600 }}>Unverify</Button>
-                  ) : (
-                    <Button type="primary" size="small" onClick={() => handleApproveVerif(record)} style={{ background: '#10b981', border: 'none', fontWeight: 600 }}>Verify</Button>
-                  )}
-                  {record.status === 'approved' ? null : <Button danger size="small" onClick={() => handleRejectVerif(record)} style={{ fontWeight: 600 }}>Reject</Button>}
-                </Space>
-              )
-            }
-          ]}
-        />
-      )}
-
-      <Button type="link" style={{ marginTop: 12 }} onClick={() => navigate('/admin/verification-requests')}>View all</Button>
-
-      <Modal
-        title="Verification Files"
-        open={verifModalVisible}
-        onCancel={() => setVerifModalVisible(false)}
-        footer={null}
-        width={840}
-      >
-        {selectedVerif ? (
-          <div>
-            <p><strong>Resident:</strong> {(selectedVerif.userId && (selectedVerif.userId.fullName || selectedVerif.userId.username)) || 'Unknown'}</p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-              {((selectedVerif.filesMeta && selectedVerif.filesMeta.filter((f: any) => f != null).length) ? selectedVerif.filesMeta.filter((f: any) => f != null) : (selectedVerif.gridFileIds || []).filter((id: any) => id != null).map((id: string) => ({ filename: id, gridFileId: id }))).map((f: any, idx: number) => {
-                if (!f) return null;
-                const userId = (typeof selectedVerif.userId === 'object' && selectedVerif.userId ? selectedVerif.userId._id : selectedVerif.userId) as string;
-                const fileType = f.fileType || 'unknown';
-                const fileUrl = verificationAPI.getFileUrlByUserType(userId, fileType);
-                const label = fileType.charAt(0).toUpperCase() + fileType.slice(1);
-                return (
-                  <div key={idx} style={{ border: '1px solid #f0f0f0', padding: 12, borderRadius: 8, background: '#fff' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                      <div style={{ fontWeight: 600 }}>{label}</div>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <a href={fileUrl} target="_blank" rel="noreferrer">Open</a>
-                        <a href={fileUrl} download>Download</a>
-                      </div>
-                    </div>
-                    <div style={{ textAlign: 'center' }}>
-                      {/* try to render image preview, otherwise show filename */}
-                      <img src={fileUrl} alt={label} style={{ maxWidth: '100%', maxHeight: 360 }} onError={(e) => { const el = e.currentTarget as HTMLImageElement; el.style.display = 'none'; }} />
-                      <div style={{ marginTop: 8, color: '#666', fontSize: 13 }}>{f.filename || fileType}</div>
-                    </div>
-                  </div>
-                );
-              })}
+  const renderVerificationWidget = () => {
+    const approvedCount = verifs.filter((v: any) => v.status === 'approved').length;
+    const pendingCount = verifs.filter((v: any) => v.status === 'pending').length;
+    
+    return (
+      <Card
+        title={
+          <Space size="large">
+            <Avatar 
+              size={40} 
+              icon={<FileOutlined />} 
+              style={{ background: 'linear-gradient(135deg, #722ed1 0%, #b37feb 100%)' }} 
+            />
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 18, letterSpacing: '-0.3px', color: '#1f2937' }}>Verification Requests</div>
+              <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>{verifs.length} total request{verifs.length !== 1 ? 's' : ''}</div>
             </div>
+          </Space>
+        }
+        style={{ marginTop: 0, background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)', borderRadius: 16, boxShadow: '0 6px 20px rgba(114, 46, 209, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8)', border: '2px solid #722ed1', borderTop: '6px solid #722ed1' }}
+        styles={{ body: { padding: 0 } }}
+        size="small"
+        hoverable={false}
+      >
+        {verifsLoading ? (
+          <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>
+        ) : (!verifs || verifs.length === 0) ? (
+          <div style={{ padding: '40px 20px', textAlign: 'center' }}>
+            <Alert
+              message="No Requests Yet"
+              description="All verification requests have been processed."
+              type="info"
+              showIcon
+              style={{ marginBottom: 0 }}
+            />
           </div>
         ) : (
-          <Empty description="No files" />
+          <>
+            <div style={{ padding: '16px 20px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, borderBottom: '1px solid #e5e7eb', background: '#f9fafb' }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 24, fontWeight: 700, color: '#f59e0b' }}>{pendingCount}</div>
+                <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 4, fontWeight: 500 }}>Pending</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 24, fontWeight: 700, color: '#10b981' }}>{approvedCount}</div>
+                <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 4, fontWeight: 500 }}>Approved</div>
+              </div>
+            </div>
+            <div style={{ maxHeight: 360, overflowY: 'auto', paddingRight: 6 }}>
+              <List
+                dataSource={verifs.filter((v: any) => v != null)}
+                renderItem={(record: VerificationRequest) => {
+                  const isApproved = record.status === 'approved';
+                  return (
+                    <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb', transition: 'background 0.2s', display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'space-between' }} onMouseEnter={(e) => e.currentTarget.style.background = '#f9fafb'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
+                        <Avatar icon={<UserOutlined />} style={{ background: isApproved ? '#10b981' : '#f59e0b', flexShrink: 0 }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 600, color: '#1f2937', fontSize: 14, marginBottom: 4 }}>
+                            {(record.userId && (record.userId.fullName || record.userId.username)) || 'Unknown Resident'}
+                          </div>
+                          <div style={{ fontSize: 12, color: '#9ca3af' }}>
+                            {new Date(record.createdAt).toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+                      <Tag 
+                        color={isApproved ? '#f6ffed' : '#fffbe6'} 
+                        style={{ 
+                          color: isApproved ? '#052e16' : '#7c2d12',
+                          fontWeight: 600,
+                          border: `1px solid ${isApproved ? '#b7eb8f' : '#fcd34d'}`,
+                          marginRight: 0
+                        }}
+                      >
+                        {isApproved ? 'Verified' : 'Pending'}
+                      </Tag>
+                    </div>
+                  );
+                }}
+                size="small"
+              />
+            </div>
+          </>
         )}
-      </Modal>
-    </Card>
-  );
+        <Divider style={{ margin: 0 }} />
+        <div style={{ padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f9fafb', borderBottomLeftRadius: 14, borderBottomRightRadius: 14 }}>
+          <Text style={{ fontSize: 12, color: '#6b7280' }}>Showing {Math.min(verifs.length, 10)} of {verifs.length} requests</Text>
+          <Button type="link" style={{ fontSize: 13, color: '#722ed1', padding: 0 }} onClick={() => navigate('/admin/verification-requests')}>View all →</Button>
+        </div>
+      </Card>
+    );
+  };
 
   const fetchMiniAnnouncements = async () => {
     setMiniLoading(true);
@@ -848,60 +836,557 @@ const AdminDashboard = () => {
     return d.toLocaleDateString();
   };
 
+  // Helper function to truncate text with character limit and line count
+  const truncateText = (text: string | undefined, maxChars: number = 150, maxLines: number = 3): { truncated: string; isTruncated: boolean } => {
+    if (!text) return { truncated: '', isTruncated: false };
+    
+    // Check line count
+    const lines = text.split('\n');
+    let result = text;
+    
+    if (lines.length > maxLines) {
+      result = lines.slice(0, maxLines).join('\n');
+    }
+    
+    // Check character count
+    if (result.length > maxChars) {
+      result = result.substring(0, maxChars).trim() + '...';
+      return { truncated: result, isTruncated: true };
+    }
+    
+    if (lines.length > maxLines) {
+      return { truncated: result, isTruncated: true };
+    }
+    
+    return { truncated: result, isTruncated: false };
+  };
+
   const renderRecentActivity = () => (
     <Card
-      title={<Space><FileTextOutlined style={{ color: '#52c41a', fontSize: 20 }} /> <span style={{ fontWeight: 700, fontSize: 17, letterSpacing: '-0.3px', color: '#1f2937' }}>Announcements</span></Space>}
+      title={
+        <Space size="large">
+          <Avatar 
+            size={40} 
+            icon={<FileOutlined />} 
+            style={{ background: 'linear-gradient(135deg, #52c41a 0%, #b7eb8f 100%)' }} 
+          />
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 18, letterSpacing: '-0.3px', color: '#1f2937' }}>Announcements</div>
+            <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>{miniAnns.length} announcement{miniAnns.length !== 1 ? 's' : ''}</div>
+          </div>
+        </Space>
+      }
       style={{ marginTop: 0, background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)', borderRadius: 16, boxShadow: '0 6px 20px rgba(82, 196, 26, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8)', border: '2px solid #52c41a', borderTop: '6px solid #52c41a', position: 'relative' }}
-      styles={{ body: { padding: 16 } }}
+      styles={{ body: { padding: 0 } }}
       size="small"
       hoverable={false}
     >
       {miniAnns.length === 0 ? (
-        <Empty
-          image={<FileTextOutlined style={{ fontSize: 42, color: '#d9d9d9' }} />}
-          description={<span style={{ color: '#888' }}>No announcements</span>}
-        />
+        <div style={{ padding: '40px 20px', textAlign: 'center' }}>
+          <Alert
+            message="No Announcements"
+            description="No announcements have been posted yet."
+            type="info"
+            icon={<FileTextOutlined />}
+            showIcon
+            style={{ marginBottom: 0 }}
+          />
+        </div>
       ) : (
-  <div style={{ maxHeight: 360, overflowY: 'auto', paddingRight: 6, paddingBottom: 48 }}>
+        <div style={{ maxHeight: 420, overflowY: 'auto', paddingRight: 6 }}>
           <List
             loading={miniLoading}
             dataSource={miniAnns.filter((item: any) => item && item._id)}
             renderItem={(item: any) => (
-              <List.Item style={{ cursor: 'pointer', padding: '16px 10px', alignItems: 'flex-start', borderBottom: '1px solid #f0f0f0', transition: 'background 0.2s' }} onClick={() => { setMiniSelected(item); setDrawerVisible(true); }} onMouseEnter={(e) => e.currentTarget.style.background = '#fafbfc'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
-                <List.Item.Meta
-                  title={<div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, width: '100%' }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: 15, color: '#1f2937', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: '1.3em' }}>{item.text || 'Untitled'}</div>
-                      <div style={{ fontSize: 13, color: '#9ca3af', marginTop: 8, fontWeight: 500 }}>{timeAgo(item.createdAt)}</div>
+              <div 
+                style={{ 
+                  padding: '16px 20px', 
+                  borderBottom: '1px solid #e5e7eb', 
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  background: '#fff'
+                }} 
+                onClick={() => { setMiniSelected(item); setDrawerVisible(true); }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#f9fafb';
+                  e.currentTarget.style.borderLeft = '4px solid #52c41a';
+                  e.currentTarget.style.paddingLeft = '16px';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = '#fff';
+                  e.currentTarget.style.borderLeft = 'none';
+                  e.currentTarget.style.paddingLeft = '20px';
+                }}
+              >
+                <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                  {item.imagePath ? (
+                    <img 
+                      loading="lazy" 
+                      src={getAbsoluteApiUrl(`/announcements/${item._id}/image`)} 
+                      alt="ann" 
+                      style={{ width: 64, height: 48, objectFit: 'cover', borderRadius: 6, background: '#f3f4f6', border: '1px solid #e5e7eb', flexShrink: 0 }} 
+                    />
+                  ) : (
+                    <div style={{ width: 64, height: 48, borderRadius: 6, background: '#f3f4f6', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <FileTextOutlined style={{ fontSize: 24, color: '#d1d5db' }} />
                     </div>
-                    {item.imagePath && (
-                      <div style={{ marginLeft: 8, width: 88, flexShrink: 0 }}>
-                        <img loading="lazy" className="rounded-img" src={getAbsoluteApiUrl(`/announcements/${item._id}/image`)} alt="ann" style={{ width: 80, height: 56, objectFit: 'cover', borderRadius: 8, background: '#f3f4f6', border: '1px solid #e5e7eb' }} />
-                      </div>
-                    )}
-                  </div>}
-                  description={null}
-                />
-              </List.Item>
+                  )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14, color: '#1f2937', marginBottom: 4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                      {item.text || 'Untitled Announcement'}
+                    </div>
+                    <div style={{ fontSize: 12, color: '#9ca3af', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <ClockCircleOutlined style={{ fontSize: 11 }} />
+                      <span>{timeAgo(item.createdAt)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             )}
             size="small"
           />
         </div>
       )}
-
-      {/* Footer area to host Manage link and avoid overlapping the scrollable list */}
-      <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end' }}>
-        <Button type="link" style={{ fontSize: 13, color: '#1890ff' }} onClick={() => navigate('/admin/announcements')}>Manage</Button>
+      <Divider style={{ margin: 0 }} />
+      <div style={{ padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f9fafb', borderBottomLeftRadius: 14, borderBottomRightRadius: 14 }}>
+        <Text style={{ fontSize: 12, color: '#6b7280' }}>Showing {Math.min(miniAnns.length, 6)} of {miniAnns.length}</Text>
+        <Button type="link" style={{ fontSize: 13, color: '#52c41a', padding: 0 }} onClick={() => navigate('/admin/announcements')}>Manage →</Button>
       </div>
 
-      <Drawer open={drawerVisible} onClose={() => { setDrawerVisible(false); setMiniSelected(null); }} title="Announcement" width={720} placement="right">
+      <Drawer 
+        open={drawerVisible} 
+        onClose={() => { setDrawerVisible(false); setMiniSelected(null); }} 
+        title={null}
+        width="100%"
+        placement="right"
+        bodyStyle={{ 
+          padding: 0, 
+          background: 'rgba(0,0,0,0.02)', 
+          display: 'block',
+          overflow: 'visible',
+          height: '100vh'
+        }}
+        headerStyle={{ display: 'none' }}
+        closeIcon={
+          <Button type="text" size="large" icon={<span style={{ fontSize: 18 }}>✕</span>} style={{ position: 'absolute', right: 16, top: 16, zIndex: 10 }} />
+        }
+        maskStyle={{
+          backdropFilter: 'blur(4px)',
+          WebkitBackdropFilter: 'blur(4px)',
+          background: 'rgba(0, 0, 0, 0.35)'
+        }}
+      >
         {miniSelected && (
-          <div>
-            <Text style={{ display: 'block', marginBottom: 12, whiteSpace: 'pre-wrap' }}>{miniSelected.text}</Text>
-                    {miniSelected.imagePath && (
-                      <img loading="lazy" className="rounded-img rounded-img-lg" src={getAbsoluteApiUrl(`/announcements/${miniSelected._id}/image`)} alt="announcement" style={{ width: '100%', height: 'auto', borderRadius: 8, background: '#f6f6f6' }} />
-                    )}
-            <div style={{ marginTop: 8, color: '#888' }}>{timeAgo(miniSelected.createdAt)}</div>
+          <div style={{ 
+            width: '100%',
+            height: '100vh',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'flex-start',
+            padding: '32px 24px',
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            boxSizing: 'border-box',
+            scrollBehavior: 'smooth'
+          }}
+          className="announcement-drawer-content"
+          >
+            {/* Modern Card Container */}
+            <div style={{
+              background: '#ffffff',
+              borderRadius: '16px',
+              boxShadow: '0 12px 48px rgba(0, 0, 0, 0.08), 0 4px 16px rgba(0, 0, 0, 0.04)',
+              overflow: 'visible',
+              width: '100%',
+              maxWidth: '800px',
+              margin: '0 auto',
+              flexShrink: 0,
+              display: 'flex',
+              flexDirection: 'column'
+            }}>
+              {/* Header Section */}
+              <div style={{
+                padding: '32px 28px 28px',
+                borderBottom: '1px solid #f0f0f0',
+                background: 'linear-gradient(135deg, #fafbfc 0%, #f5f7fa 100%)',
+                position: 'relative',
+                flexShrink: 0
+              }}>
+                {/* Close Button */}
+                <button 
+                  onClick={() => { setDrawerVisible(false); setMiniSelected(null); }}
+                  style={{
+                    position: 'absolute',
+                    top: 16,
+                    right: 16,
+                    width: 40,
+                    height: 40,
+                    border: 'none',
+                    background: 'rgba(0, 0, 0, 0.04)',
+                    borderRadius: '50%',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                    fontSize: 18,
+                    color: '#666',
+                    outline: 'none'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(82, 196, 26, 0.1)';
+                    e.currentTarget.style.color = '#52c41a';
+                    e.currentTarget.style.transform = 'scale(1.08)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(0, 0, 0, 0.04)';
+                    e.currentTarget.style.color = '#666';
+                    e.currentTarget.style.transform = 'scale(1)';
+                  }}
+                >
+                  ✕
+                </button>
+
+                {/* Title - Bold and Large with See More/Less */}
+                <div>
+                  <h2 style={{ 
+                    margin: 0, 
+                    fontSize: 24, 
+                    fontWeight: 700, 
+                    color: '#0f172a', 
+                    lineHeight: 1.3,
+                    marginBottom: 12,
+                    paddingRight: 40,
+                    wordBreak: 'break-word'
+                  }}>
+                    {expandedTitle 
+                      ? (miniSelected.text || 'Untitled Announcement')
+                      : truncateText(miniSelected.text, 150, 2).truncated
+                    }
+                  </h2>
+                  {truncateText(miniSelected.text, 150, 2).isTruncated && (
+                    <button
+                      onClick={() => setExpandedTitle(!expandedTitle)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#52c41a',
+                        cursor: 'pointer',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        padding: 0,
+                        marginBottom: 16,
+                        transition: 'all 0.2s',
+                        textDecoration: 'underline'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.color = '#3da63d';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.color = '#52c41a';
+                      }}
+                    >
+                      {expandedTitle ? 'See Less' : 'See More...'}
+                    </button>
+                  )}
+                </div>
+
+                {/* Metadata - Muted Gray with Icons */}
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 20, 
+                  flexWrap: 'wrap',
+                  fontSize: 13,
+                  fontWeight: 500
+                }}>
+                  {/* Date Metadata */}
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 8,
+                    padding: '6px 12px',
+                    borderRadius: 6,
+                    background: 'rgba(82, 196, 26, 0.08)',
+                    color: '#52c41a'
+                  }}>
+                    <CalendarOutlined style={{ fontSize: 14 }} />
+                    <span>
+                      {new Date(miniSelected.createdAt).toLocaleDateString('en-US', { 
+                        year: 'numeric', 
+                        month: 'short', 
+                        day: 'numeric'
+                      })}
+                    </span>
+                  </div>
+
+                  {/* Time Metadata */}
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 8,
+                    padding: '6px 12px',
+                    borderRadius: 6,
+                    background: 'rgba(102, 126, 234, 0.08)',
+                    color: '#667eea'
+                  }}>
+                    <ClockCircleOutlined style={{ fontSize: 14 }} />
+                    <span>
+                      {timeAgo(miniSelected.createdAt)}
+                    </span>
+                  </div>
+
+                  {/* Exact Time */}
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 8,
+                    padding: '6px 12px',
+                    borderRadius: 6,
+                    background: 'rgba(0, 0, 0, 0.05)',
+                    color: '#6b7280',
+                    fontSize: 12
+                  }}>
+                    <span style={{ fontSize: 12 }}>
+                      {new Date(miniSelected.createdAt).toLocaleTimeString('en-US', {
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Image Section */}
+              {miniSelected.imagePath && (
+                <div style={{
+                  padding: '28px',
+                  borderBottom: '1px solid #f0f0f0',
+                  flexShrink: 0
+                }}>
+                  <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <PictureOutlined style={{ fontSize: 16, color: '#52c41a' }} />
+                    <span style={{ fontSize: 12, fontWeight: 600, color: '#65748b', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Featured Image</span>
+                  </div>
+                  
+                  {/* Image Container with 16:9 Aspect Ratio */}
+                  <div 
+                    style={{
+                      position: 'relative',
+                      width: '100%',
+                      paddingBottom: '56.25%', // 16:9 aspect ratio
+                      backgroundColor: '#f0f0f0',
+                      borderRadius: '12px',
+                      overflow: 'hidden',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)'
+                    }}
+                    onMouseEnter={(e) => {
+                      const imgElement = e.currentTarget.querySelector('img');
+                      if (imgElement) {
+                        imgElement.style.transform = 'scale(1.02)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      const imgElement = e.currentTarget.querySelector('img');
+                      if (imgElement) {
+                        imgElement.style.transform = 'scale(1)';
+                      }
+                    }}
+                    onClick={() => {
+                      // Open image in preview modal
+                      window.open(getAbsoluteApiUrl(`/announcements/${miniSelected._id}/image`), '_blank');
+                    }}
+                  >
+                    {/* Image */}
+                    <img
+                      loading="lazy"
+                      src={getAbsoluteApiUrl(`/announcements/${miniSelected._id}/image`)}
+                      alt="announcement-featured"
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        objectPosition: 'center',
+                        transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                        display: 'block'
+                      }}
+                    />
+
+                    {/* Subtle Gradient Overlay at Bottom */}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        height: '60px',
+                        background: 'linear-gradient(to bottom, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.2))',
+                        pointerEvents: 'none'
+                      }}
+                    />
+
+                    {/* Hover Icon - Zoom In */}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: 'rgba(0, 0, 0, 0)',
+                        opacity: 0,
+                        transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.opacity = '1';
+                        e.currentTarget.style.background = 'rgba(0, 0, 0, 0.2)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.opacity = '0';
+                        e.currentTarget.style.background = 'rgba(0, 0, 0, 0)';
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 48,
+                          height: 48,
+                          borderRadius: '50%',
+                          background: 'rgba(255, 255, 255, 0.9)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 24,
+                          color: '#52c41a',
+                          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
+                          transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
+                        }}
+                      >
+                        🔍
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Content Section */}
+              <div style={{
+                padding: '28px',
+                flex: 1,
+                overflowY: 'auto',
+                overflowX: 'hidden'
+              }}>
+                {/* Section Header with Divider */}
+                <div style={{ marginBottom: 24 }}>
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 8,
+                    marginBottom: 12 
+                  }}>
+                    <FileTextOutlined style={{ fontSize: 16, color: '#52c41a' }} />
+                    <span style={{ 
+                      fontSize: 12, 
+                      fontWeight: 600, 
+                      color: '#65748b', 
+                      letterSpacing: '0.5px', 
+                      textTransform: 'uppercase' 
+                    }}>Details</span>
+                  </div>
+                  <div style={{ 
+                    height: 1, 
+                    background: 'linear-gradient(to right, #d1d5db, transparent)', 
+                    borderRadius: 1 
+                  }} />
+                </div>
+
+                {/* Content Container with See More/Less */}
+                <div style={{ 
+                  padding: '24px',
+                  borderRadius: 12, 
+                  background: '#f9fafb',
+                  border: '1px solid #ecf0f1',
+                  fontSize: 16,
+                  lineHeight: 1.62,
+                  color: '#374151',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word'
+                }}>
+                  {expandedDescription 
+                    ? (miniSelected.text || 'No additional details available.')
+                    : truncateText(miniSelected.text, 300, 5).truncated || 'No additional details available.'
+                  }
+                </div>
+
+                {/* See More / See Less Button */}
+                {truncateText(miniSelected.text, 300, 5).isTruncated && (
+                  <button
+                    onClick={() => setExpandedDescription(!expandedDescription)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#52c41a',
+                      cursor: 'pointer',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      padding: '12px 0 0 0',
+                      marginTop: 8,
+                      transition: 'all 0.2s',
+                      textDecoration: 'underline'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.color = '#3da63d';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.color = '#52c41a';
+                    }}
+                  >
+                    {expandedDescription ? 'See Less' : 'See More...'}
+                  </button>
+                )}
+              </div>
+
+              {/* Footer Section */}
+              <div style={{
+                padding: '24px 28px',
+                borderTop: '1px solid #f0f0f0',
+                background: 'linear-gradient(135deg, #fafbfc 0%, #f5f7fa 100%)',
+                display: 'flex',
+                gap: 12,
+                justifyContent: 'flex-end',
+                flexShrink: 0
+              }}>
+                <Button 
+                  type="default"
+                  style={{ 
+                    fontWeight: 600,
+                    height: 38,
+                    borderRadius: 8
+                  }}
+                  onClick={() => { setDrawerVisible(false); setMiniSelected(null); }}
+                >
+                  Close
+                </Button>
+                <Button 
+                  type="primary" 
+                  style={{ 
+                    background: 'linear-gradient(135deg, #52c41a 0%, #7cb342 100%)',
+                    borderColor: 'transparent',
+                    fontWeight: 600,
+                    height: 38,
+                    borderRadius: 8
+                  }}
+                  onClick={() => navigate('/admin/announcements')}
+                >
+                  View All
+                </Button>
+              </div>
+            </div>
           </div>
         )}
       </Drawer>
@@ -919,11 +1404,13 @@ const AdminDashboard = () => {
         </div>
         {renderStatCards()}
         <Row gutter={[28, 28]} style={{ marginTop: 8 }}>
-          <Col xs={24} lg={12}>
-            {renderNotifications()}
-          </Col>
-          <Col xs={24} lg={12}>
+          <Col xs={24}>
             {renderRecentActivity()}
+          </Col>
+        </Row>
+        <Row gutter={[28, 28]} style={{ marginTop: 28 }}>
+          <Col xs={24}>
+            {renderNotifications()}
           </Col>
         </Row>
         <Row gutter={[28, 28]} style={{ marginTop: 28 }}>

@@ -128,3 +128,90 @@ router.post('/read', auth, async (req, res) => {
     res.status(500).json({ error: err.message || err });
   }
 });
+
+// URL-parameter-based endpoint for backward compatibility: /approve-staff/:userId/:notifId
+router.post('/approve-staff/:userId/:notifId', auth, async (req, res) => {
+  try {
+    const { userId, notifId } = req.params;
+    if (!userId || !notifId) return res.status(400).json({ message: 'userId and notifId are required' });
+    
+    // Find user
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    
+    // If already staff, just mark notification read
+    if (user.role === 'staff') {
+      await Notification.findByIdAndUpdate(notifId, { read: true });
+      return res.json({ message: 'User already staff, notification marked read' });
+    }
+    
+    // Promote to staff
+    user.role = 'staff';
+    user.isActive = true;
+    try {
+      await user.save();
+    } catch (saveErr) {
+      if (handleSaveError(saveErr, res)) return;
+      throw saveErr;
+    }
+    
+    // Mark notification as deleted
+    await Notification.findByIdAndDelete(notifId);
+    
+    // Send confirmation message
+    try {
+      await Message.create({
+        to: user._id,
+        from: req.user && req.user._id ? req.user._id : undefined,
+        barangayID: req.user && req.user.barangayID ? req.user.barangayID : undefined,
+        subject: 'Staff access approved',
+        text: 'Your request for staff access has been approved. You now have staff privileges.'
+      });
+    } catch (e) {
+      console.warn('Failed to create approval message', e);
+    }
+    
+    res.json({ message: 'User promoted to staff' });
+  } catch (err) {
+    console.error('Error approving staff request', err);
+    res.status(500).json({ error: err.message || err });
+  }
+});
+
+// URL-parameter-based endpoint for backward compatibility: /reject-staff/:notifId
+router.post('/reject-staff/:notifId', auth, async (req, res) => {
+  try {
+    const { notifId } = req.params;
+    const { reason } = req.body;
+    
+    if (!notifId) return res.status(400).json({ message: 'notifId is required' });
+    
+    const notif = await Notification.findById(notifId);
+    if (!notif) return res.status(404).json({ message: 'Notification not found' });
+    
+    const requesterId = notif.data && notif.data.userId ? notif.data.userId : notif.userId || notif.user;
+    
+    // Delete the staff request notification
+    await Notification.findByIdAndDelete(notifId);
+    
+    // Send rejection message to requester
+    if (requesterId) {
+      try {
+        await Message.create({
+          to: requesterId,
+          from: req.user && req.user._id ? req.user._id : undefined,
+          barangayID: req.user && req.user.barangayID ? req.user.barangayID : undefined,
+          subject: 'Staff access rejected',
+          text: reason && reason.trim() !== '' ? reason : 'Your request for staff access has been rejected.'
+        });
+      } catch (e) {
+        console.warn('Failed to create rejection message', e);
+      }
+    }
+    
+    res.json({ message: 'Staff request rejected and requester notified' });
+  } catch (err) {
+    console.error('Error rejecting staff request', err);
+    res.status(500).json({ error: err.message || err });
+  }
+});

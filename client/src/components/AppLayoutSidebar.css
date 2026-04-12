@@ -198,6 +198,48 @@
   }
 }
 
+/* Hidden Scrollbar - Click & Drag Interactive Scrollbar */
+/* Allows scrolling/dragging while hiding the scrollbar thumb */
+.hidden-scrollbar {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* Internet Explorer and Edge */
+}
+
+.hidden-scrollbar::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Edge (WebKit) */
+  width: 0;
+  height: 0;
+}
+
+/* Show scrollbar on hover for better UX */
+.hidden-scrollbar:hover {
+  scrollbar-width: auto; /* Firefox */
+  -ms-overflow-style: auto; /* Internet Explorer and Edge */
+}
+
+.hidden-scrollbar:hover::-webkit-scrollbar {
+  display: block; /* Chrome, Safari, Edge (WebKit) */
+  width: 8px;
+  height: 8px;
+}
+
+.hidden-scrollbar:hover::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.hidden-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: rgba(139, 115, 234, 0.4);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.hidden-scrollbar:hover::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 115, 234, 0.7);
+  background-clip: padding-box;
+}
+
+
 @media (min-width: 768px) and (max-width: 1199px) {
   /* Tablet: Keep sidebar visible but slightly adjusted */
   .ant-layout-sider {
