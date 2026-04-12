@@ -169,9 +169,23 @@ router.post('/announcements', isAdmin, upload.single('image'), async (req, res) 
 			return res.status(500).json({ message: 'Failed to create announcement', error: err && err.message ? err.message : err });
 		}
 
-		// Send announcement email to all active residents (fire and forget)
-		const subject = '📢 New Announcement from Barangay';
-		const imageUrl = imagePath ? `${process.env.FRONTEND_URL || 'http://localhost:3000'}/api/announcements/${ann._id}/image` : undefined;
+				// Send announcement email to all active residents (fire and forget)
+				const subject = '📢 New Announcement from Barangay';
+				// Build an absolute URL for the announcement image to include in emails.
+				// Prefer an explicitly configured FRONTEND_URL/BASE_URL when it's not the local dev fallback.
+				let rootUrl: string;
+				const configuredFrontend = (process.env.FRONTEND_URL || process.env.BASE_URL || '').trim();
+				if (configuredFrontend && configuredFrontend !== 'http://localhost:3000') {
+					rootUrl = configuredFrontend.replace(/\/$/, '');
+				} else {
+					// Derive from the incoming request so URLs work in deployed environments
+					// behind proxies. Respect X-Forwarded-Proto when provided.
+					const protoHeader = req.headers['x-forwarded-proto'];
+					const proto = protoHeader ? String(protoHeader).split(',')[0] : req.protocol;
+					const host = req.get('host') || req.hostname;
+					rootUrl = `${proto}://${host}`;
+				}
+				const imageUrl = imagePath ? `${rootUrl}/api/announcements/${ann._id}/image` : undefined;
 
 		sendAnnouncementEmail(subject, ann.text, imageUrl)
 			.then((result) => {
