@@ -19,7 +19,13 @@ export async function getActiveResidentEmails(): Promise<string[]> {
       isActive: true,
       email: { $exists: true, $ne: null },
       deletedAt: null, // Not soft-deleted
-      suspendedUntil: { $or: [{ $exists: false }, { $lt: new Date() }] } // Not suspended or suspension expired
+      // suspendedUntil may be missing, null, or a date in the past when suspension expired.
+      // Use a top-level $or to combine these conditions correctly for MongoDB.
+      $or: [
+        { suspendedUntil: { $exists: false } },
+        { suspendedUntil: null },
+        { suspendedUntil: { $lt: new Date() } }
+      ]
     })
     .select('email fullName')
     .lean();
