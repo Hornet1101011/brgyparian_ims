@@ -33,9 +33,9 @@ router.delete('/:id', auth, deleteNotification);
 router.delete('/', auth, deleteManyNotifications);
 
 // POST /api/notifications/approve-staff/:userId/:notifId
-router.post('/approve-staff/:userId/:notifId', auth, authorize(['admin']), approveStaff);
+router.post('/approve-staff/:userId/:notifId', auth, authorize('admin'), approveStaff);
 
 // POST /api/notifications/reject-staff/:notifId
-router.post('/reject-staff/:notifId', auth, authorize(['admin']), rejectStaff);
+router.post('/reject-staff/:notifId', auth, authorize('admin'), rejectStaff);
 
 export default router;

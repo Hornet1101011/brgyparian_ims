@@ -149,8 +149,8 @@ export const approveStaff = async (req: Request, res: Response) => {
     if (!userId || !notifId) return res.status(400).json({ message: 'userId and notifId are required' });
     
     // Import User model dynamically to avoid circular dependencies
-    const { User } = await import('../models/User');
-    const { Message } = await import('../models/Message');
+    const { User } = await import('../models/User.js');
+    const { Message } = await import('../models/Message.js');
     
     // Find user
     const user = await User.findById(userId);
@@ -199,7 +199,7 @@ export const rejectStaff = async (req: Request, res: Response) => {
     if (!notifId) return res.status(400).json({ message: 'notifId is required' });
     
     // Import models dynamically to avoid circular dependencies
-    const { Message } = await import('../models/Message');
+    const { Message } = await import('../models/Message.js');
     
     const notif = await Notification.findById(notifId);
     if (!notif) return res.status(404).json({ message: 'Notification not found' });

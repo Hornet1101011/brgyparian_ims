@@ -3,7 +3,7 @@ import './DocumentRequestForm.css';
 import { documentsAPI, axiosInstance } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useTemplateValidations } from '../hooks/useTemplateValidations';
-import { FileWordOutlined, MoreOutlined, EyeOutlined, DownloadOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { FileWordOutlined, MoreOutlined, EyeOutlined, DownloadOutlined, InfoCircleOutlined, CopyOutlined } from '@ant-design/icons';
 import { 
   Card, 
   Row, 
@@ -794,20 +794,6 @@ const DocumentRequestForm: React.FC = () => {
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
             <Button onClick={() => setShowInfoModal(false)}>Close</Button>
-            <Button 
-              type="primary"
-              onClick={() => {
-                // Copy basic information
-                const textToCopy = `${personalInfo?.firstName || ''} ${personalInfo?.lastName || ''} ${personalInfo?.middleName || ''}\n${personalInfo?.contactNumber || ''}`.trim();
-                navigator.clipboard.writeText(textToCopy).then(() => {
-                  message.success('Basic information copied!');
-                }).catch(() => {
-                  message.error('Failed to copy information');
-                });
-              }}
-            >
-              Copy Basic Info
-            </Button>
           </div>
         }
         title={
@@ -856,9 +842,32 @@ const DocumentRequestForm: React.FC = () => {
                               </span>
                             }
                             description={
-                              <span style={{ color: '#666', fontSize: 13 }}>
-                                {item!.value}
-                              </span>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                                <span style={{ color: '#666', fontSize: 13, flex: 1 }}>
+                                  {item!.value}
+                                </span>
+                                <Button
+                                  type="text"
+                                  size="small"
+                                  icon={<CopyOutlined />}
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(String(item!.value)).then(() => {
+                                      message.success(`${item!.label} copied!`);
+                                    }).catch(() => {
+                                      message.error('Failed to copy information');
+                                    });
+                                  }}
+                                  style={{ 
+                                    padding: '2px 6px',
+                                    height: '24px',
+                                    minWidth: '24px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center'
+                                  }}
+                                  title={`Copy ${item!.label}`}
+                                />
+                              </div>
                             }
                           />
                         </List.Item>
@@ -900,9 +909,32 @@ const DocumentRequestForm: React.FC = () => {
                                 </span>
                               }
                               description={
-                                <span style={{ color: '#666', fontSize: 13 }}>
-                                  {item!.value}
-                                </span>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                                  <span style={{ color: '#666', fontSize: 13, flex: 1 }}>
+                                    {item!.value}
+                                  </span>
+                                  <Button
+                                    type="text"
+                                    size="small"
+                                    icon={<CopyOutlined />}
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(String(item!.value)).then(() => {
+                                        message.success(`${item!.label} copied!`);
+                                      }).catch(() => {
+                                        message.error('Failed to copy information');
+                                      });
+                                    }}
+                                    style={{ 
+                                      padding: '2px 6px',
+                                      height: '24px',
+                                      minWidth: '24px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center'
+                                    }}
+                                    title={`Copy ${item!.label}`}
+                                  />
+                                </div>
                               }
                             />
                           </List.Item>
