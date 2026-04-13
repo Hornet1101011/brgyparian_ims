@@ -443,8 +443,132 @@ const LoginForm = () => {
           {/* System Notice Alert - Full Width */}
           {!settingsLoading && <SystemNoticeAlert />}
 
-          {/* Top area: three columns per wireframe - Quick Stats, Barangay Officials, Sign In */}
-          <Row className="three-column-row" gutter={[22, 22]} align="stretch" justify="center" style={{ marginTop: 18 }}>
+          {/* Enhanced Header Section */}
+          <div className="login-header">
+            <div className="header-content">
+              <div className="header-logo-section">
+                <div className="header-logo-wrapper">
+                  <img
+                    src={`${process.env.PUBLIC_URL}/logo-parian2.png`}
+                    alt={systemSettings?.siteName || 'Logo'}
+                    className="header-logo"
+                  />
+                </div>
+                <div className="header-text">
+                  <Typography.Title level={1} className="header-title">
+                    {systemSettings?.siteName || 'Barangay Information System'}
+                  </Typography.Title>
+                  <Typography.Text className="header-subtitle">
+                    Secure Access Portal
+                  </Typography.Text>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Main Content Area: Login Form at Top, then Stats and Officials */}
+          <Row className="three-column-row" gutter={[32, 32]} align="stretch" justify="center" style={{ marginTop: 24 }}>
+            <Col xs={24} sm={24} md={12} lg={12} className="login-col" style={{ display: 'flex', justifyContent: 'center', alignItems: 'stretch', height: '100%' }}>
+              <div className="pane-inner" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                <Card 
+                  className="glass-card login-card" 
+                  variant="outlined"
+                >
+                  <div className="login-card-header">
+                    <div className="login-card-icon">
+                      <UserOutlined />
+                    </div>
+                    <div className="login-card-title-section">
+                      <Typography.Title level={3} className="login-card-title">
+                        Welcome Back
+                      </Typography.Title>
+                      <Typography.Text className="login-card-subtitle">
+                        Sign in to access your account
+                      </Typography.Text>
+                    </div>
+                  </div>
+
+                  <div className="login-form-container">
+                    <Form 
+                      name="login" 
+                      layout="vertical" 
+                      onFinish={onFinish} 
+                      autoComplete="off" 
+                      requiredMark={false}
+                      className="login-form"
+                    >
+                      <div className="form-fields-group">
+                        <Form.Item 
+                          label="Email or Username"
+                          name="username" 
+                          rules={[{ required: true, message: 'Please input your email or username!' }]}
+                          className="login-form-item"
+                        >
+                          <Input 
+                            prefix={<UserOutlined className="input-icon" />} 
+                            placeholder="Enter your email or username" 
+                            size="large"
+                            className="login-input"
+                          />
+                        </Form.Item>
+
+                        <Form.Item 
+                          label="Password"
+                          name="password" 
+                          rules={[{ required: true, message: 'Please input your password!' }, { min: 6, message: 'Password must be at least 6 characters' }]}
+                          className="login-form-item"
+                        >
+                          <Input.Password 
+                            autoComplete="current-password" 
+                            prefix={<LockOutlined className="input-icon" />} 
+                            placeholder="Enter your password" 
+                            size="large"
+                            className="login-input"
+                          />
+                        </Form.Item>
+                      </div>
+
+                      <div className="form-actions-group">
+                        <Form.Item className="login-button-item">
+                          <Button 
+                            htmlType="submit" 
+                            size="large" 
+                            loading={loading} 
+                            className="signin-btn"
+                            block
+                          >
+                            {loading ? 'Signing In...' : 'Sign In'}
+                          </Button>
+                        </Form.Item>
+
+                        <div className="login-links">
+                          <div className="primary-links">
+                            <Button 
+                              type="link" 
+                              onClick={() => { setForgotPasswordModalVisible(true); setForgotPasswordSent(false); forgotPasswordForm.resetFields(); }}
+                              className="login-link"
+                            >
+                              Forgot Password?
+                            </Button>
+                            <RouterLink to="/register" className="login-link register-link">
+                              Create Account
+                            </RouterLink>
+                          </div>
+                          <Button 
+                            type="link" 
+                            onClick={() => setEmergencyModalVisible(true)}
+                            className="emergency-link"
+                          >
+                            ð Emergency Hotline
+                          </Button>
+                        </div>
+                      </div>
+                    </Form>
+                  </div>
+                </Card>
+              </div>
+            </Col>
+
             <Col xs={24} sm={24} md={12} lg={12} className="left-col" style={{ display: 'flex', justifyContent: 'center', height: '100%' }}>
               <div className="pane-inner" style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={{ width: '100%', flex: 1, display: 'flex', flexDirection: 'column' }}>
@@ -470,7 +594,7 @@ const LoginForm = () => {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
                       <div style={{ width: 3, height: 16, background: 'linear-gradient(180deg, #667eea 0%, #764ba2 100%)', borderRadius: 2 }} />
                       <Typography.Title level={5} style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#0f172a' }}>
-                        🏛️ Barangay Officials
+                        ð Barangay Officials
                       </Typography.Title>
                     </div>
                     <div className="officials-list-wrap" ref={officialsCarouselRef} style={{ paddingRight: 6, flex: 1 }} onMouseEnter={() => setAutoPaused(true)} onMouseLeave={() => setAutoPaused(false)} onTouchStart={() => setAutoPaused(true)} onTouchEnd={() => setAutoPaused(false)}>
@@ -495,157 +619,6 @@ const LoginForm = () => {
                     </div>
                   </Card>
                 </div>
-              </div>
-            </Col>
-
-            <Col xs={24} sm={24} md={12} lg={12} className="login-col" style={{ display: 'flex', justifyContent: 'center', alignItems: 'stretch', height: '100%' }}>
-              <div className="pane-inner" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                <Card 
-                  className="glass-card login-card" 
-                  variant="outlined"
-                  style={{
-                    background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 255, 0.96) 100%)',
-                    border: '1.5px solid rgba(102, 126, 234, 0.2)',
-                    borderRadius: 14,
-                    backdropFilter: 'blur(20px)',
-                    boxShadow: '0 20px 40px rgba(102, 126, 234, 0.2), 0 0 1px rgba(102, 126, 234, 0.4)',
-                    padding: 32,
-                    height: '100%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    flex: 1
-                  }}
-                >
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
-                    <img
-                      src={`${process.env.PUBLIC_URL}/logo-parian2.png`}
-                      alt={systemSettings?.siteName || 'Logo'}
-                      className="login-logo"
-                    />
-                    <Typography.Title
-                      level={2}
-                      style={{
-                        textAlign: 'center',
-                        marginBottom: 8,
-                        fontSize: 28,
-                        fontWeight: 800,
-                        color: '#0f172a'
-                      }}
-                    >
-                      {systemSettings?.siteName || 'Barangay Information System'}
-                    </Typography.Title>
-                    <Typography.Text
-                      style={{
-                        display: 'block',
-                        color: '#64748b',
-                        fontWeight: 500,
-                        fontSize: 12
-                      }}
-                    >
-                      Sign In
-                    </Typography.Text>
-                  </div>
-
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                    <Form 
-                      name="login" 
-                      layout="vertical" 
-                      onFinish={onFinish} 
-                      autoComplete="off" 
-                      requiredMark={false}
-                      style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', flex: 1 }}
-                    >
-                    <Form.Item 
-                      label={<span style={{ fontWeight: 600, color: '#0f172a', fontSize: 11 }}>Email or Username</span>}
-                      name="username" 
-                      rules={[{ required: true, message: 'Please input your email or username!' }]}
-                      style={{ marginBottom: 18 }}
-                    >
-                      <Input 
-                        prefix={<UserOutlined style={{ color: '#667eea' }} />} 
-                        placeholder="raymond@example.com" 
-                        size="large"
-                        style={{
-                          borderRadius: 8,
-                          border: '1.5px solid #e2e8f0',
-                          fontSize: 12,
-                          padding: '9px 13px',
-                          transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                          background: 'rgba(248, 250, 255, 0.6)'
-                        }}
-                      />
-                    </Form.Item>
-
-                    <Form.Item 
-                      label={<span style={{ fontWeight: 600, color: '#0f172a', fontSize: 11 }}>Password</span>}
-                      name="password" 
-                      rules={[{ required: true, message: 'Please input your password!' }, { min: 6, message: 'Password must be at least 6 characters' }]}
-                      style={{ marginBottom: 22 }}
-                    >
-                      <Input.Password 
-                        autoComplete="current-password" 
-                        prefix={<LockOutlined style={{ color: '#667eea' }} />} 
-                        placeholder="••••••••" 
-                        size="large"
-                        style={{
-                          borderRadius: 8,
-                          border: '1.5px solid #e2e8f0',
-                          fontSize: 12,
-                          padding: '9px 13px',
-                          transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                          background: 'rgba(248, 250, 255, 0.6)'
-                        }}
-                      />
-                    </Form.Item>
-
-                    <Form.Item style={{ marginBottom: 11 }}>
-                      <Button 
-                        htmlType="submit" 
-                        size="large" 
-                        loading={loading} 
-                        className="signin-btn"
-                        style={{
-                          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                          border: 'none',
-                          fontWeight: 700,
-                          fontSize: 12,
-                          borderRadius: 8,
-                          height: 38,
-                          color: '#ffffff',
-                          boxShadow: '0 10px 19px rgba(102, 126, 234, 0.35)',
-                          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                          letterSpacing: '-0.24px'
-                        }}
-                        block
-                      >
-                        {loading ? 'Signing In...' : 'Sign In'}
-                      </Button>
-                    </Form.Item>
-
-                    <div className="links-section" style={{ marginBottom: 0 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginBottom: 11, paddingBottom: 11, borderBottom: '1.5px solid rgba(102, 126, 234, 0.1)' }}>
-                        <Button 
-                          type="link" 
-                          onClick={() => { setForgotPasswordModalVisible(true); setForgotPasswordSent(false); forgotPasswordForm.resetFields(); }}
-                          style={{ padding: 0, color: '#667eea', fontWeight: 600, fontSize: 11, textDecoration: 'none', transition: 'all 0.2s' }}
-                        >
-                          Forgot Password?
-                        </Button>
-                        <Button 
-                          type="link" 
-                          onClick={() => setEmergencyModalVisible(true)}
-                          style={{ padding: 0, color: '#ef4444', fontWeight: 700, fontSize: 10, transition: 'all 0.2s', letterSpacing: '-0.16px' }}
-                        >
-                          🚨 Emergency Hotline
-                        </Button>
-                        <RouterLink to="/register" style={{ color: '#667eea', fontWeight: 600, textDecoration: 'none', fontSize: 11, transition: 'all 0.2s' }}>
-                          Create Account
-                        </RouterLink>
-                      </div>
-                    </div>
-                    </Form>
-                  </div>
-                </Card>
               </div>
             </Col>
           </Row>

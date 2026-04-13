@@ -26,6 +26,9 @@ import {
   Empty,
   ConfigProvider,
   theme,
+  Progress,
+  Tooltip,
+  Alert,
 } from 'antd';
 import AppAvatar from '../AppAvatar';
 import {
@@ -96,27 +99,146 @@ const UserManagement = () => {
   const [form] = Form.useForm();
   const [editForm] = Form.useForm();
 
+  // Enhanced profile completion calculation with comprehensive field validation
+  const calculateProfileCompletion = (user: any, resident: any) => {
+    // Helper function to check if a field has meaningful content
+    const hasValidContent = (value: any) => {
+      if (value === null || value === undefined) return false;
+      if (typeof value === 'string') {
+        const trimmed = value.trim().toLowerCase();
+        return trimmed !== '' && trimmed !== 'n/a' && trimmed !== 'na' && trimmed !== 'not applicable' && trimmed !== 'none';
+      }
+      if (typeof value === 'number') return !isNaN(value) && value >= 0;
+      return true;
+    };
+
+    // Comprehensive user account fields
+    const userFields = [
+      'username', 'email', 'contactNumber', 'address'
+    ];
+
+    // Comprehensive personal information fields
+    const personalFields = [
+      // Basic Information
+      'firstName', 'lastName', 'middleName', 'nameExtension', 'age', 'birthDate', 
+      'dateOfResidency', 'sex', 'civilStatus',
+      
+      // Personal Details
+      'nationality', 'placeOfBirth', 'religion', 'maritalStatus', 
+      'passportNumber', 'governmentIdNumber', 'bloodType', 'disabilityStatus', 
+      'occupation', 'educationalAttainment',
+      
+      // Contact Information
+      'facebook', 'landlineNumber', 'emergencyContact', 
+      'emergencyContactName', 'emergencyContactRelationship',
+      
+      // Family Information - Spouse
+      'spouseName', 'spouseAge', 'spouseBirthDate', 'spouseMiddleName', 
+      'spouseLastName', 'spouseOccupation', 'spouseStatus', 'spouseNationality', 
+      'spouseContactNumber',
+      
+      // Family Information - Parents
+      'motherName', 'motherAge', 'motherBirthDate', 'motherOccupation', 'motherStatus',
+      'fatherName', 'fatherAge', 'fatherBirthDate', 'fatherOccupation', 'fatherStatus',
+      
+      // Family Information - Children
+      'numberOfChildren', 'childrenNames', 'childrenAges',
+      
+      // Business Information
+      'businessName', 'businessType', 'natureOfBusiness', 'businessAddress', 
+      'dateEstablished', 'tin', 'registrationNumber', 'businessPermitNumber', 
+      'barangayClearanceNumber', 'numberOfEmployees', 'capitalInvestment', 
+      'annualGrossIncome', 'businessContactPerson', 'businessContactNumber', 'businessEmail'
+    ];
+
+    let completedFields = 0;
+    let totalFields = userFields.length;
+
+    // Check user data fields
+    userFields.forEach(field => {
+      if (user && hasValidContent(user[field])) {
+        completedFields++;
+      }
+    });
+
+    // Check personal data fields - handle different resident data structures
+    if (resident) {
+      totalFields += personalFields.length;
+      personalFields.forEach(field => {
+        // Check if field exists in resident data
+        if (hasValidContent(resident[field])) {
+          completedFields++;
+        }
+      });
+    }
+
+    // Fallback: if no resident data, calculate based on available user fields only
+    if (!resident && user && user.role === 'resident') {
+      // Add some basic resident-specific checks on user data
+      const residentSpecificFields = ['firstName', 'lastName', 'birthDate', 'age', 'sex'];
+      totalFields += residentSpecificFields.length;
+      residentSpecificFields.forEach(field => {
+        if (hasValidContent(user[field])) {
+          completedFields++;
+        }
+      });
+    }
+
+    // Calculate percentage with proper rounding
+    const percentage = totalFields > 0 ? (completedFields / totalFields) * 100 : 0;
+    console.log(`Profile completion for ${user?.fullName}: ${completedFields}/${totalFields} = ${Math.round(percentage)}%`);
+    return Math.round(percentage);
+  };
+
   const fetchUsers = () => {
     setLoading(true);
     adminAPI.getUsers()
-      .then((data: any[]) => {
-        setUsers(
-          data.map((user, idx) => ({
-            key: user._id || idx,
-            _id: user._id || null,
-            fullName: user.fullName || user.username || '',
-            email: user.email,
-            role: user.role,
-            isActive: user.isActive,
-            restricted: !!user.restricted,
-            warning: !!user.warning,
-            verified: !!user.verified,
-            createdAt: user.createdAt,
-            lastLogin: user.lastLogin,
-            avatar: user.avatar || null,
-            barangayId: user.barangayId || user.barangayID || user.barangay_id || null,
-          }))
+      .then(async (data: any[]) => {
+        // Fetch resident data for residents to calculate accurate profile completion
+        const usersWithResidentData = await Promise.all(
+          data.map(async (user, idx) => {
+            let residentData = null;
+            if (user.role === 'resident') {
+              try {
+                // Use the getUserWithResident API to fetch complete user and resident data
+                const userWithResident = await adminAPI.getUserWithResident(user._id);
+                residentData = userWithResident?.residentData || userWithResident?.resident || null;
+                console.log('Resident data for user', user._id, ':', residentData);
+              } catch (err) {
+                console.log('No resident data found for user:', user._id);
+                // Try alternative approach - get resident by barangay ID if available
+                if (user.barangayId || user.barangayID || user.barangay_id) {
+                  try {
+                    const barangayId = user.barangayId || user.barangayID || user.barangay_id;
+                    const resident = await adminAPI.getResidentByBarangayID(barangayId);
+                    residentData = resident || null;
+                    console.log('Resident data by barangay ID', barangayId, ':', residentData);
+                  } catch (err2) {
+                    console.log('No resident data found by barangay ID either');
+                  }
+                }
+              }
+            }
+            
+            return {
+              key: user._id || idx,
+              _id: user._id || null,
+              fullName: user.fullName || user.username || '',
+              email: user.email,
+              role: user.role,
+              isActive: user.isActive,
+              restricted: !!user.restricted,
+              warning: !!user.warning,
+              verified: !!user.verified,
+              createdAt: user.createdAt,
+              lastLogin: user.lastLogin,
+              avatar: user.avatar || null,
+              barangayId: user.barangayId || user.barangayID || user.barangay_id || null,
+              residentData: residentData,
+            };
+          })
         );
+        setUsers(usersWithResidentData);
       })
       .catch(() => setUsers([]))
       .finally(() => setLoading(false));
@@ -430,6 +552,36 @@ const UserManagement = () => {
         { text: 'No', value: false },
       ],
       onFilter: (value: any, record: any) => record.verified === value,
+    },
+    {
+      title: 'Profile Completion',
+      dataIndex: 'profileCompletion',
+      key: 'profileCompletion',
+      width: 140,
+      render: (_, record: any) => {
+        if (record.role !== 'resident') return <Text type="secondary">N/A</Text>;
+        
+        // Use resident data from the record itself
+        const completion = calculateProfileCompletion(record, record.residentData);
+        
+        return (
+          <Tooltip title={`Profile completion: ${completion}%`}>
+            <Progress 
+              percent={completion} 
+              size="small" 
+              status={completion === 100 ? 'success' : 'active'}
+              strokeColor={completion >= 80 ? '#52c41a' : completion >= 50 ? '#faad14' : '#ff4d4f'}
+              style={{ width: 80, margin: 0 }}
+              format={(percent) => `${percent}%`}
+            />
+          </Tooltip>
+        );
+      },
+      sorter: (a: any, b: any) => {
+        const aCompletion = a.role === 'resident' ? calculateProfileCompletion(a, a.residentData) : 0;
+        const bCompletion = b.role === 'resident' ? calculateProfileCompletion(b, b.residentData) : 0;
+        return aCompletion - bCompletion;
+      },
     },
     {
       title: 'Created',
@@ -808,98 +960,137 @@ const UserManagement = () => {
                       {residentLoading ? (
                         <Spin />
                       ) : selectedResident ? (
-                        <Tabs
-                          defaultActiveKey="personal"
-                          type="card"
-                          items={[
-                            {
-                              key: 'personal',
-                              label: 'Personal',
-                              children: (
-                                <Descriptions column={1} size="small" bordered>
-                                  <Descriptions.Item label="Name">
-                                    {`${selectedResident.firstName || ''} ${selectedResident.middleName || ''} ${selectedResident.lastName || ''}`.trim() ||
-                                      '—'}
-                                  </Descriptions.Item>
-                                  <Descriptions.Item label="Email">
-                                    {selectedResident.email ||
-                                      selectedUser.email ||
-                                      '—'}
-                                  </Descriptions.Item>
-                                  <Descriptions.Item label="Phone">
-                                    {selectedResident.contactNumber || '—'}
-                                  </Descriptions.Item>
-                                  <Descriptions.Item label="Landline">
-                                    {selectedResident.landlineNumber || '—'}
-                                  </Descriptions.Item>
-                                  <Descriptions.Item label="Address">
-                                    {selectedResident.address || '—'}
-                                  </Descriptions.Item>
-                                  <Descriptions.Item label="Birth Date">
-                                    {selectedResident.birthDate
-                                      ? dayjs(selectedResident.birthDate).format(
-                                          'MMM DD, YYYY'
-                                        )
-                                      : '—'}
-                                  </Descriptions.Item>
-                                  <Descriptions.Item label="Gender">
-                                    {selectedResident.sex ||
-                                      selectedResident.gender ||
-                                      '—'}
-                                  </Descriptions.Item>
-                                  <Descriptions.Item label="Occupation">
-                                    {selectedResident.occupation || '—'}
-                                  </Descriptions.Item>
-                                </Descriptions>
-                              ),
-                            },
-                            {
-                              key: 'family',
-                              label: 'Family',
-                              children: (
-                                <Descriptions column={1} size="small" bordered>
-                                  <Descriptions.Item label="Spouse">
-                                    {selectedResident.spouseName
-                                      ? `${selectedResident.spouseName} ${selectedResident.spouseLastName || ''}`
-                                      : '—'}
-                                  </Descriptions.Item>
-                                  <Descriptions.Item label="Children">
-                                    {selectedResident.numberOfChildren ??
-                                      '—'}{' '}
-                                    child(ren)
-                                  </Descriptions.Item>
-                                  <Descriptions.Item label="Father">
-                                    {selectedResident.fatherName || '—'}
-                                  </Descriptions.Item>
-                                  <Descriptions.Item label="Mother">
-                                    {selectedResident.motherName || '—'}
-                                  </Descriptions.Item>
-                                </Descriptions>
-                              ),
-                            },
-                            {
-                              key: 'identification',
-                              label: 'Identification',
-                              children: (
-                                <Descriptions column={1} size="small" bordered>
-                                  <Descriptions.Item label="Passport">
-                                    {selectedResident.passportNumber || '—'}
-                                  </Descriptions.Item>
-                                  <Descriptions.Item label="Gov ID">
-                                    {selectedResident.governmentIdNumber ||
-                                      '—'}
-                                  </Descriptions.Item>
-                                  <Descriptions.Item label="TIN">
-                                    {selectedResident.tin || '—'}
-                                  </Descriptions.Item>
-                                  <Descriptions.Item label="Blood Type">
-                                    {selectedResident.bloodType || '—'}
-                                  </Descriptions.Item>
-                                </Descriptions>
-                              ),
-                            },
-                          ]}
-                        />
+                        <>
+                          {/* Profile Completion Overview */}
+                          <Alert
+                            message="Resident Profile Overview"
+                            description={
+                              <div style={{ marginTop: 8 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                  <Text strong>Profile Completion:</Text>
+                                  <Text>{calculateProfileCompletion(selectedUser, selectedResident)}%</Text>
+                                </div>
+                                <Progress 
+                                  percent={calculateProfileCompletion(selectedUser, selectedResident)} 
+                                  status={calculateProfileCompletion(selectedUser, selectedResident) === 100 ? 'success' : 'active'}
+                                />
+                              </div>
+                            }
+                            type="info"
+                            showIcon
+                            style={{ marginBottom: 16 }}
+                          />
+                          
+                          <Tabs
+                            defaultActiveKey="personal"
+                            type="card"
+                            items={[
+                              {
+                                key: 'personal',
+                                label: 'Personal',
+                                children: (
+                                  <Descriptions column={1} size="small" bordered>
+                                    <Descriptions.Item label="Full Name">
+                                      {`${selectedResident.firstName || ''} ${selectedResident.middleName || ''} ${selectedResident.lastName || ''}`.trim() ||
+                                        ' - '}
+                                    </Descriptions.Item>
+                                    <Descriptions.Item label="Email">
+                                      {selectedResident.email ||
+                                        selectedUser.email ||
+                                        ' - '}
+                                    </Descriptions.Item>
+                                    <Descriptions.Item label="Contact Number">
+                                      {selectedResident.contactNumber || ' - '}
+                                    </Descriptions.Item>
+                                    <Descriptions.Item label="Landline">
+                                      {selectedResident.landlineNumber || ' - '}
+                                    </Descriptions.Item>
+                                    <Descriptions.Item label="Address">
+                                      {selectedResident.address || ' - '}
+                                    </Descriptions.Item>
+                                    <Descriptions.Item label="Birth Date">
+                                      {selectedResident.birthDate
+                                        ? dayjs(selectedResident.birthDate).format(
+                                            'MMM DD, YYYY'
+                                          )
+                                        : ' - '}
+                                    </Descriptions.Item>
+                                    <Descriptions.Item label="Age">
+                                      {selectedResident.age || ' - '}
+                                    </Descriptions.Item>
+                                    <Descriptions.Item label="Gender">
+                                      {selectedResident.sex ||
+                                        selectedResident.gender ||
+                                        ' - '}
+                                    </Descriptions.Item>
+                                    <Descriptions.Item label="Civil Status">
+                                      {selectedResident.civilStatus || ' - '}
+                                    </Descriptions.Item>
+                                    <Descriptions.Item label="Nationality">
+                                      {selectedResident.nationality || ' - '}
+                                    </Descriptions.Item>
+                                    <Descriptions.Item label="Religion">
+                                      {selectedResident.religion || ' - '}
+                                    </Descriptions.Item>
+                                    <Descriptions.Item label="Place of Birth">
+                                      {selectedResident.placeOfBirth || ' - '}
+                                    </Descriptions.Item>
+                                    <Descriptions.Item label="Date of Residency">
+                                      {selectedResident.dateOfResidency
+                                        ? dayjs(selectedResident.dateOfResidency).format('MMM DD, YYYY')
+                                        : ' - '}
+                                    </Descriptions.Item>
+                                  </Descriptions>
+                                ),
+                              },
+                              {
+                                key: 'family',
+                                label: 'Family',
+                                children: (
+                                  <Descriptions column={1} size="small" bordered>
+                                    <Descriptions.Item label="Spouse">
+                                      {selectedResident.spouseName
+                                        ? `${selectedResident.spouseName} ${selectedResident.spouseLastName || ''}`
+                                        : ' - '}
+                                    </Descriptions.Item>
+                                    <Descriptions.Item label="Children">
+                                      {selectedResident.numberOfChildren ??
+                                        ' - '}{' '}
+                                      child(ren)
+                                    </Descriptions.Item>
+                                    <Descriptions.Item label="Father">
+                                      {selectedResident.fatherName || ' - '}
+                                    </Descriptions.Item>
+                                    <Descriptions.Item label="Mother">
+                                      {selectedResident.motherName || ' - '}
+                                    </Descriptions.Item>
+                                  </Descriptions>
+                                ),
+                              },
+                              {
+                                key: 'identification',
+                                label: 'Identification',
+                                children: (
+                                  <Descriptions column={1} size="small" bordered>
+                                    <Descriptions.Item label="Passport">
+                                      {selectedResident.passportNumber || ' - '}
+                                    </Descriptions.Item>
+                                    <Descriptions.Item label="Gov ID">
+                                      {selectedResident.governmentIdNumber ||
+                                        ' - '}
+                                    </Descriptions.Item>
+                                    <Descriptions.Item label="TIN">
+                                      {selectedResident.tin || ' - '}
+                                    </Descriptions.Item>
+                                    <Descriptions.Item label="Blood Type">
+                                      {selectedResident.bloodType || ' - '}
+                                    </Descriptions.Item>
+                                  </Descriptions>
+                                ),
+                              },
+                            ]}
+                          />
+                        </>
                       ) : (
                         <Empty description="No resident information available" />
                       )}
@@ -976,7 +1167,7 @@ const UserManagement = () => {
 
         {/* Edit Resident Modal */}
         <Modal
-          title="Edit Resident"
+          title="Edit Resident Information"
           open={editModalOpen}
           onCancel={() => setEditModalOpen(false)}
           onOk={async () => {
@@ -997,7 +1188,8 @@ const UserManagement = () => {
               console.error('Failed to update resident', err);
             }
           }}
-          width={700}
+          width={900}
+          style={{ top: 20 }}
         >
           <Form
             form={editForm}
@@ -1005,50 +1197,443 @@ const UserManagement = () => {
             initialValues={selectedResident}
             onValuesChange={(_, values) => setEditFormValues(values)}
           >
-            <Row gutter={16}>
-              <Col xs={24} sm={8}>
-                <Form.Item name="firstName" label="First Name">
-                  <Input />
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={8}>
-                <Form.Item name="middleName" label="Middle Name">
-                  <Input />
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={8}>
-                <Form.Item name="lastName" label="Last Name">
-                  <Input />
-                </Form.Item>
-              </Col>
-            </Row>
-            <Row gutter={16}>
-              <Col xs={24} sm={12}>
-                <Form.Item name="email" label="Email" rules={[{ type: 'email' }]}>
-                  <Input />
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={12}>
-                <Form.Item name="contactNumber" label="Phone">
-                  <Input />
-                </Form.Item>
-              </Col>
-            </Row>
-            <Row gutter={16}>
-              <Col xs={24} sm={12}>
-                <Form.Item name="birthDate" label="Birth Date">
-                  <Input type="date" />
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={12}>
-                <Form.Item name="sex" label="Gender">
-                  <Input />
-                </Form.Item>
-              </Col>
-            </Row>
-            <Form.Item name="address" label="Address">
-              <Input.TextArea rows={2} />
-            </Form.Item>
+            <Tabs
+              defaultActiveKey="personal"
+              items={[
+                {
+                  key: 'personal',
+                  label: 'Personal Information',
+                  children: (
+                    <div style={{ padding: '8px 0' }}>
+                      <Row gutter={[16, 8]}>
+                        <Col xs={24} sm={8}>
+                          <Form.Item name="firstName" label="First Name" rules={[{ required: true, message: 'First name is required' }]}>
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={8}>
+                          <Form.Item name="middleName" label="Middle Name">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={8}>
+                          <Form.Item name="lastName" label="Last Name" rules={[{ required: true, message: 'Last name is required' }]}>
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                      <Row gutter={[16, 8]}>
+                        <Col xs={24} sm={8}>
+                          <Form.Item name="age" label="Age">
+                            <Input type="number" />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={8}>
+                          <Form.Item name="birthDate" label="Birth Date">
+                            <DatePicker 
+                              value={editForm.getFieldValue('birthDate') ? dayjs(editForm.getFieldValue('birthDate')) : null}
+                              onChange={(date) => { 
+                                if (date) { 
+                                  const birthDate = date.format('YYYY-MM-DD'); 
+                                  const age = dayjs().diff(date, 'year'); 
+                                  editForm.setFieldsValue({ birthDate, age }); 
+                                } else {
+                                  editForm.setFieldsValue({ birthDate: '', age: undefined }); 
+                                } 
+                              }} 
+                              disabledDate={(current) => current && current > dayjs().endOf('day')}
+                              style={{ width: '100%' }}
+                              placeholder="Select birth date"
+                            />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={8}>
+                          <Form.Item name="sex" label="Gender">
+                            <Select options={[
+                              { label: 'Male', value: 'Male' },
+                              { label: 'Female', value: 'Female' },
+                              { label: 'Other', value: 'Other' }
+                            ]} />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                      <Row gutter={[16, 8]}>
+                        <Col xs={24} sm={8}>
+                          <Form.Item name="civilStatus" label="Civil Status">
+                            <Select options={[
+                              { label: 'Single', value: 'Single' },
+                              { label: 'Married', value: 'Married' },
+                              { label: 'Widowed', value: 'Widowed' },
+                              { label: 'Separated', value: 'Separated' },
+                              { label: 'Divorced', value: 'Divorced' },
+                              { label: 'Annulled', value: 'Annulled' },
+                              { label: 'Domestic Partnership', value: 'Domestic Partnership' },
+                              { label: 'Other', value: 'Other' }
+                            ]} />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={8}>
+                          <Form.Item name="nationality" label="Nationality">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={8}>
+                          <Form.Item name="religion" label="Religion">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                      <Row gutter={[16, 8]}>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="placeOfBirth" label="Place of Birth">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="dateOfResidency" label="Date of Residency">
+                            <DatePicker 
+                              value={editForm.getFieldValue('dateOfResidency') ? dayjs(editForm.getFieldValue('dateOfResidency')) : null}
+                              onChange={(date) => { 
+                                const dateOfResidency = date ? date.format('YYYY-MM-DD') : ''; 
+                                editForm.setFieldsValue({ dateOfResidency }); 
+                              }} 
+                              disabledDate={(current) => current && current > dayjs().endOf('day')}
+                              style={{ width: '100%' }}
+                              placeholder="Select residency start date"
+                            />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                      <Form.Item name="address" label="Address">
+                        <Input.TextArea rows={2} />
+                      </Form.Item>
+                    </div>
+                  ),
+                },
+                {
+                  key: 'contact',
+                  label: 'Contact Information',
+                  children: (
+                    <div style={{ padding: '8px 0' }}>
+                      <Row gutter={[16, 8]}>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="email" label="Email" rules={[{ type: 'email' }]}>
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="contactNumber" label="Contact Number">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                      <Row gutter={[16, 8]}>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="landlineNumber" label="Landline Number">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="facebook" label="Facebook">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                      <Row gutter={[16, 8]}>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="emergencyContactName" label="Emergency Contact Name">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="emergencyContactRelationship" label="Emergency Contact Relationship">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                      <Form.Item name="emergencyContact" label="Emergency Contact Number">
+                        <Input />
+                      </Form.Item>
+                    </div>
+                  ),
+                },
+                {
+                  key: 'professional',
+                  label: 'Professional Information',
+                  children: (
+                    <div style={{ padding: '8px 0' }}>
+                      <Row gutter={[16, 8]}>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="occupation" label="Occupation">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="educationalAttainment" label="Educational Attainment">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                    </div>
+                  ),
+                },
+                {
+                  key: 'family',
+                  label: 'Family Information',
+                  children: (
+                    <div style={{ padding: '8px 0' }}>
+                      <Row gutter={[16, 8]}>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="spouseName" label="Spouse Name">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="spouseAge" label="Spouse Age">
+                            <Input type="number" />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                      <Row gutter={[16, 8]}>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="spouseBirthDate" label="Spouse Birth Date">
+                            <Input type="date" />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="spouseOccupation" label="Spouse Occupation">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                      <Row gutter={[16, 8]}>
+                        <Col xs={24} sm={8}>
+                          <Form.Item name="spouseStatus" label="Spouse Status">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={8}>
+                          <Form.Item name="spouseContactNumber" label="Spouse Contact">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={8}>
+                          <Form.Item name="spouseNationality" label="Spouse Nationality">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                      <Row gutter={[16, 8]}>
+                        <Col xs={24} sm={8}>
+                          <Form.Item name="numberOfChildren" label="Number of Children">
+                            <Input type="number" />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={8}>
+                          <Form.Item name="childrenNames" label="Children Names">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={8}>
+                          <Form.Item name="childrenAges" label="Children Ages">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                      <Divider orientation="left">Parent Information</Divider>
+                      <Row gutter={[16, 8]}>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="motherName" label="Mother Name">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="motherAge" label="Mother Age">
+                            <Input type="number" />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                      <Row gutter={[16, 8]}>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="motherBirthDate" label="Mother Birth Date">
+                            <Input type="date" />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="motherOccupation" label="Mother Occupation">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                      <Form.Item name="motherStatus" label="Mother Status">
+                        <Input />
+                      </Form.Item>
+                      <Row gutter={[16, 8]}>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="fatherName" label="Father Name">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="fatherAge" label="Father Age">
+                            <Input type="number" />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                      <Row gutter={[16, 8]}>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="fatherBirthDate" label="Father Birth Date">
+                            <Input type="date" />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="fatherOccupation" label="Father Occupation">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                      <Form.Item name="fatherStatus" label="Father Status">
+                        <Input />
+                      </Form.Item>
+                    </div>
+                  ),
+                },
+                {
+                  key: 'business',
+                  label: 'Business Information',
+                  children: (
+                    <div style={{ padding: '8px 0' }}>
+                      <Row gutter={[16, 8]}>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="businessName" label="Business Name">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="businessType" label="Business Type">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                      <Row gutter={[16, 8]}>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="natureOfBusiness" label="Nature of Business">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="dateEstablished" label="Date Established">
+                            <Input type="date" />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                      <Form.Item name="businessAddress" label="Business Address">
+                        <Input.TextArea rows={2} />
+                      </Form.Item>
+                      <Row gutter={[16, 8]}>
+                        <Col xs={24} sm={8}>
+                          <Form.Item name="tin" label="TIN">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={8}>
+                          <Form.Item name="registrationNumber" label="Registration Number">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={8}>
+                          <Form.Item name="businessPermitNumber" label="Business Permit Number">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                      <Row gutter={[16, 8]}>
+                        <Col xs={24} sm={8}>
+                          <Form.Item name="barangayClearanceNumber" label="Barangay Clearance Number">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={8}>
+                          <Form.Item name="numberOfEmployees" label="Number of Employees">
+                            <Input type="number" />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={8}>
+                          <Form.Item name="capitalInvestment" label="Capital Investment">
+                            <Input type="number" />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                      <Row gutter={[16, 8]}>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="annualGrossIncome" label="Annual Gross Income">
+                            <Input type="number" />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="businessContactPerson" label="Contact Person">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                      <Row gutter={[16, 8]}>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="businessContactNumber" label="Business Contact Number">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="businessEmail" label="Business Email">
+                            <Input type="email" />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                    </div>
+                  ),
+                },
+                {
+                  key: 'additional',
+                  label: 'Additional Information',
+                  children: (
+                    <div style={{ padding: '8px 0' }}>
+                      <Row gutter={[16, 8]}>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="passportNumber" label="Passport Number">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="governmentIdNumber" label="Government ID Number">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                      <Row gutter={[16, 8]}>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="bloodType" label="Blood Type">
+                            <Select options={[
+                              { label: 'A+', value: 'A+' },
+                              { label: 'A-', value: 'A-' },
+                              { label: 'B+', value: 'B+' },
+                              { label: 'B-', value: 'B-' },
+                              { label: 'O+', value: 'O+' },
+                              { label: 'O-', value: 'O-' },
+                              { label: 'AB+', value: 'AB+' },
+                              { label: 'AB-', value: 'AB-' }
+                            ]} />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="disabilityStatus" label="Disability Status">
+                            <Input />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                    </div>
+                  ),
+                },
+              ]}
+            />
           </Form>
         </Modal>
       </div>

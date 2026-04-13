@@ -4,13 +4,36 @@ import { useTranslation } from 'react-i18next';
 import { residentPersonalInfoAPI, axiosInstance, verificationAPI } from '../services/api';
 import { initNotificationSocket, onNotificationEvent, offNotificationEvent } from '../services/notificationSocket';
 import { AxiosResponse } from 'axios';
-import { Form, Input, Button, Select, Typography, Row, Col, Card, Space, message, Upload, Alert, Tooltip, Progress } from 'antd';
-import { UploadOutlined, InfoCircleOutlined, SyncOutlined } from '@ant-design/icons';
+import { Form, Input, Button, Select, Typography, Row, Col, Card, Space, message, Upload, Alert, Tooltip, Progress, Tabs, Badge, Tag, Descriptions, Statistic, Divider, DatePicker } from 'antd';
+import { UploadOutlined, InfoCircleOutlined, SyncOutlined, EditOutlined, SaveOutlined, CheckCircleOutlined, ClockCircleOutlined, ExclamationCircleOutlined, UserOutlined, TeamOutlined, SafetyOutlined, FileTextOutlined } from '@ant-design/icons';
 import ResidentCreateModal from './ResidentCreateModal';
 import { useAuth } from '../contexts/AuthContext';
 import AvatarImage from './AvatarImage';
+import dayjs from 'dayjs';
+
+const { Text } = Typography;
+
+// Helper function to calculate residency duration
+const calculateResidencyDuration = (dateOfResidency: string) => {
+  if (!dateOfResidency) return null;
+  
+  const residencyStart = dayjs(dateOfResidency);
+  const now = dayjs();
+  
+  const years = now.diff(residencyStart, 'year');
+  const months = now.diff(residencyStart, 'month') % 12;
+  const days = now.diff(residencyStart, 'day') % 30;
+  
+  const parts = [];
+  if (years > 0) parts.push(`${years} year${years !== 1 ? 's' : ''}`);
+  if (months > 0) parts.push(`${months} month${months !== 1 ? 's' : ''}`);
+  if (days > 0) parts.push(`${days} day${days !== 1 ? 's' : ''}`);
+  
+  return parts.length > 0 ? parts.join(', ') : '0 days';
+};
 
 interface ResidentProfile {
+	createdAt: any;
 	_id: string;
 	username: string;
 	email: string;
@@ -21,12 +44,26 @@ interface ResidentProfile {
 	// Optional display name provided by the user (used to derive first/last name)
 	fullName?: string;
 }
-// Personal info fields (example, adjust as needed)
+// Personal info fields (comprehensive resident information)
 interface PersonalInfo {
+	// Basic Information
 	barangayID?: string;
-	spouseMiddleName?: string;
-	spouseLastName?: string;
+	firstName: string;
+	lastName: string;
 	middleName?: string;
+	nameExtension?: string;
+	age?: number;
+	birthDate?: string;
+	dateOfResidency?: string;
+	sex?: string;
+	civilStatus?: string;
+	facebook?: string;
+	email?: string;
+	contactNumber?: string;
+	landlineNumber?: string;
+	emergencyContact?: string;
+	
+	// Personal Details
 	nationality?: string;
 	placeOfBirth?: string;
 	religion?: string;
@@ -37,14 +74,33 @@ interface PersonalInfo {
 	disabilityStatus?: string;
 	occupation?: string;
 	educationalAttainment?: string;
+	
 	// Family Information
+	spouseName?: string;
+	spouseAge?: number;
+	spouseBirthDate?: string;
+	spouseMiddleName?: string;
+	spouseLastName?: string;
+	spouseOccupation?: string;
+	spouseStatus?: string;
+	spouseNationality?: string;
+	spouseContactNumber?: string;
+	motherName?: string;
+	motherAge?: number;
+	motherBirthDate?: string;
+	motherOccupation?: string;
+	motherStatus?: string;
+	fatherName?: string;
+	fatherAge?: number;
+	fatherBirthDate?: string;
+	fatherOccupation?: string;
+	fatherStatus?: string;
 	numberOfChildren?: number;
 	childrenNames?: string;
 	childrenAges?: string;
-	spouseNationality?: string;
-	spouseContactNumber?: string;
 	emergencyContactName?: string;
 	emergencyContactRelationship?: string;
+	
 	// Business Information
 	businessName?: string;
 	businessType?: string;
@@ -61,35 +117,6 @@ interface PersonalInfo {
 	businessContactPerson?: string;
 	businessContactNumber?: string;
 	businessEmail?: string;
-	firstName: string;
-	lastName: string;
-	age?: number;
-	birthDate?: string;
-	dateOfResidency?: string;
-	sex?: string;
-	civilStatus?: string;
-	facebook?: string;
-	email?: string;
-	contactNumber?: string;
-	emergencyContact?: string;
-	landlineNumber?: string;
-	spouseName?: string;
-	spouseAge?: number;
-	spouseBirthDate?: string;
-	spouseOccupation?: string;
-	spouseStatus?: string;
-	motherName?: string;
-	motherAge?: number;
-	motherBirthDate?: string;
-	motherOccupation?: string;
-	motherStatus?: string;
-	fatherName?: string;
-	fatherAge?: number;
-	fatherBirthDate?: string;
-	fatherOccupation?: string;
-	fatherStatus?: string;
-	nameExtension?: string;
-	// Add more as needed
 }
 
 interface DocumentRequest {
@@ -101,6 +128,7 @@ interface DocumentRequest {
 }
 
 export default function ResidentPortal() {
+	const { setUser, isAdmin, isStaff, isResident } = useAuth();
 	const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
 	const [residentMissing, setResidentMissing] = useState(false);
 	const [showCreateModal, setShowCreateModal] = useState(false);
@@ -116,9 +144,89 @@ export default function ResidentPortal() {
 	const [verificationProgress, setVerificationProgress] = useState<number>(0);
 	const previewUrlsRef = useRef<Set<string>>(new Set());
 
-	// autoCreateResident removed (unused in this component)
+	// Enhanced state for comprehensive profile management
+	const [activeTab, setActiveTab] = useState('overview');
+	const [profileCompletion, setProfileCompletion] = useState(0);
+	const [saving, setSaving] = useState(false);
+	const [verificationStatus, setVerificationStatus] = useState<'pending' | 'verified' | 'rejected'>('pending');
 
-	const { setUser } = useAuth();
+	// Enhanced profile completion calculation with comprehensive field validation
+	const calculateProfileCompletion = (userData: any, personalData: any) => {
+		// Helper function to check if a field has meaningful content
+		const hasValidContent = (value: any) => {
+			if (value === null || value === undefined) return false;
+			if (typeof value === 'string') {
+				const trimmed = value.trim().toLowerCase();
+				return trimmed !== '' && trimmed !== 'n/a' && trimmed !== 'na' && trimmed !== 'not applicable' && trimmed !== 'none';
+			}
+			if (typeof value === 'number') return !isNaN(value) && value >= 0;
+			return true;
+		};
+
+		// Comprehensive user account fields
+		const userFields = [
+			'username', 'email', 'contactNumber', 'address'
+		];
+
+		// Comprehensive personal information fields
+		const personalFields = [
+			// Basic Information
+			'firstName', 'lastName', 'middleName', 'nameExtension', 'age', 'birthDate', 
+			'dateOfResidency', 'sex', 'civilStatus',
+			
+			// Personal Details
+			'nationality', 'placeOfBirth', 'religion', 'maritalStatus', 
+			'passportNumber', 'governmentIdNumber', 'bloodType', 'disabilityStatus', 
+			'occupation', 'educationalAttainment',
+			
+			// Contact Information
+			'facebook', 'landlineNumber', 'emergencyContact', 
+			'emergencyContactName', 'emergencyContactRelationship',
+			
+			// Family Information - Spouse
+			'spouseName', 'spouseAge', 'spouseBirthDate', 'spouseMiddleName', 
+			'spouseLastName', 'spouseOccupation', 'spouseStatus', 'spouseNationality', 
+			'spouseContactNumber',
+			
+			// Family Information - Parents
+			'motherName', 'motherAge', 'motherBirthDate', 'motherOccupation', 'motherStatus',
+			'fatherName', 'fatherAge', 'fatherBirthDate', 'fatherOccupation', 'fatherStatus',
+			
+			// Family Information - Children
+			'numberOfChildren', 'childrenNames', 'childrenAges',
+			
+			// Business Information
+			'businessName', 'businessType', 'natureOfBusiness', 'businessAddress', 
+			'dateEstablished', 'tin', 'registrationNumber', 'businessPermitNumber', 
+			'barangayClearanceNumber', 'numberOfEmployees', 'capitalInvestment', 
+			'annualGrossIncome', 'businessContactPerson', 'businessContactNumber', 'businessEmail'
+		];
+
+		let completedFields = 0;
+		let totalFields = userFields.length;
+
+		// Check user data fields
+		userFields.forEach(field => {
+			if (userData && hasValidContent(userData[field])) {
+				completedFields++;
+			}
+		});
+
+		// Check personal data fields
+		if (personalData) {
+			totalFields += personalFields.length;
+			personalFields.forEach(field => {
+				if (hasValidContent(personalData[field])) {
+					completedFields++;
+				}
+			});
+		}
+
+		// Calculate percentage with proper rounding
+		const percentage = totalFields > 0 ? (completedFields / totalFields) * 100 : 0;
+		return Math.round(percentage);
+	};
+
 	// handle avatar upload for resident portal banner
 	const handleBannerAvatarUpload = async (file: File | null) => {
 		if (!file) return;
@@ -223,12 +331,15 @@ export default function ResidentPortal() {
 	useEffect(() => {
 	// Fetch resident profile and requests
 	axiosInstance.get('/resident/profile').then((res: AxiosResponse<any>) => {
-		setProfile(res.data);
-		setForm(res.data);
-		if (res.data?.profileImage) {
-			const url = res.data.profileImage.startsWith('http') ? res.data.profileImage : `${window.location.origin}${res.data.profileImage}`;
+		const profileData = res.data;
+		setProfile(profileData);
+		setForm(profileData);
+		if (profileData?.profileImage) {
+			const url = profileData.profileImage.startsWith('http') ? profileData.profileImage : `${window.location.origin}${profileData.profileImage}`;
 			setAvatarPreview(url);
 		}
+		// Update verification status
+		setVerificationStatus(profileData?.verified ? 'verified' : 'pending');
 	});
     residentPersonalInfoAPI.getPersonalInfo()
       .then((data: any) => {
@@ -361,6 +472,12 @@ export default function ResidentPortal() {
 	}
 
 }, []);
+
+	// Update profile completion when data changes
+	useEffect(() => {
+		const completion = calculateProfileCompletion(form, personalInfo);
+		setProfileCompletion(completion);
+	}, [form, personalInfo]);
 
 // Cleanup any created object URLs for upload previews when component unmounts
 useEffect(() => {
@@ -615,22 +732,22 @@ useEffect(() => {
 			    return (
 				    <>
 				    <div className="max-w-3xl mx-auto p-6">
-						{/* Resident Portal Banner -> avatar + upload */}
+						{/* Enhanced Resident Portal Banner with role-aware features */}
 						<Card
 							style={{
-								background: 'linear-gradient(90deg, #f7f8fa 0%, #e0e7ff 100%)',
-								borderRadius: 16,
-								boxShadow: '0 4px 24px #40c9ff22',
+								background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+								borderRadius: 20,
+								boxShadow: '0 8px 32px rgba(31, 38, 135, 0.37)',
 								marginBottom: 32,
 								border: 'none',
 								padding: 0,
 							}}
-								bodyStyle={{ padding: '24px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+								bodyStyle={{ padding: '32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
 								bordered={false}
 						>
-							<div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-								{/* Left column: avatar, verification tag, timestamp */}
-								<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+							<div style={{ display: 'flex', alignItems: 'center', gap: 24, width: '100%' }}>
+								{/* Left column: avatar and role info */}
+								<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
 									<Upload
 										showUploadList={false}
 										accept="image/*"
@@ -673,186 +790,81 @@ useEffect(() => {
 											)}
 										</div>
 									</Upload>
-									{/* Verification status removed; provide a simple refresh control */}
-									{/* removed inline refresh button; using floating refresh control */}
-									<div style={{ marginTop: 4 }}><Typography.Text type="secondary">{currentTime}</Typography.Text></div>
+									{/* Role and verification badges */}
+									<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+										<Tag color={isAdmin() ? 'gold' : isStaff() ? 'blue' : 'green'} style={{ fontSize: 12, fontWeight: 600 }}>
+											{isAdmin() ? <SafetyOutlined /> : isStaff() ? <TeamOutlined /> : <UserOutlined />}
+											{isAdmin() ? 'Admin' : isStaff() ? 'Staff' : 'Resident'}
+										</Tag>
+										<Tag color={verificationStatus === 'verified' ? 'success' : verificationStatus === 'rejected' ? 'error' : 'warning'} style={{ fontSize: 10 }}>
+											{verificationStatus === 'verified' ? <CheckCircleOutlined /> : verificationStatus === 'rejected' ? <ExclamationCircleOutlined /> : <ClockCircleOutlined />}
+											{verificationStatus === 'verified' ? 'Verified' : verificationStatus === 'rejected' ? 'Rejected' : 'Pending'}
+										</Tag>
+									</div>
 								</div>
-								{/* Right column: user info */}
-								<div>
-									<Typography.Title level={3} style={{ margin: 0, fontWeight: 800 }}>{profile?.username || profile?.email || 'Resident'}</Typography.Title>
-									<Typography.Text type="secondary">Barangay ID: {profile?.barangayID || 'N/A'}</Typography.Text>
+								
+								{/* Center column: user info and profile completion */}
+								<div style={{ flex: 1, textAlign: 'center' }}>
+									<Typography.Title level={2} style={{ margin: 0, fontWeight: 800, color: 'white' }}>
+										{profile?.username || profile?.email || 'Resident'}
+									</Typography.Title>
+									<Typography.Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 14 }}>
+										Barangay ID: {profile?.barangayID || 'N/A'}
+									</Typography.Text>
+									{personalInfo?.dateOfResidency && (
+										<Typography.Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 14 }}>
+											Resident for: {calculateResidencyDuration(personalInfo.dateOfResidency)}
+										</Typography.Text>
+									)}
+									
+									{/* Profile Completion Progress */}
+									<div style={{ marginTop: 16, maxWidth: 300, margin: '16px auto 0' }}>
+										<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+											<Typography.Text style={{ color: 'white', fontWeight: 600, fontSize: 12 }}>
+												Profile Completion
+											</Typography.Text>
+											<Typography.Text style={{ color: 'white', fontWeight: 600, fontSize: 12 }}>
+												{profileCompletion}%
+											</Typography.Text>
+										</div>
+										<Progress 
+											percent={profileCompletion} 
+											size="small"
+											status={profileCompletion === 100 ? 'success' : 'active'}
+											strokeColor={profileCompletion === 100 ? '#52c41a' : '#ffffff'}
+											trailColor="rgba(255,255,255,0.3)"
+										/>
+										{profileCompletion < 100 && (
+											<Typography.Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 11, marginTop: 4, display: 'block' }}>
+												Complete your profile to unlock all features
+											</Typography.Text>
+										)}
+									</div>
+								</div>
+								
+								{/* Right column: timestamp and quick actions */}
+								<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
+									<Typography.Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>
+										{currentTime}
+									</Typography.Text>
+									{!editingUser && !editingPersonal && (
+										<Button 
+											type="primary" 
+											ghost 
+											size="small"
+											icon={<EditOutlined />}
+											onClick={() => setEditingUser(true)}
+											style={{ borderRadius: 20 }}
+										>
+											Quick Edit
+										</Button>
+									)}
 								</div>
 							</div>
 						</Card>
 
 						{/* Verification Uploads Section (styled like User Info) */}
-						<Card
-							style={{
-								background: 'linear-gradient(135deg, #f8fafc 0%, #e3e6f3 40%, #f6f1f7 100%)',
-								borderRadius: 20,
-								boxShadow: '0 8px 32px #bfc7d6cc',
-								marginBottom: 32,
-								border: 'none',
-								backdropFilter: 'blur(2px)',
-							}}
-								bodyStyle={{ padding: 40 }}
-								bordered={false}
-						>
-							<div style={{ maxWidth: 900, margin: '0 auto' }}>
-								<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-									<div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-										<Typography.Title level={3} style={{
-											fontWeight: 900,
-											margin: 0,
-											letterSpacing: 1,
-											textAlign: 'left',
-											fontSize: 28,
-											background: 'linear-gradient(90deg, #40c9ff, #e81cff)',
-											WebkitBackgroundClip: 'text',
-											WebkitTextFillColor: 'transparent',
-										}}>Verification Documents</Typography.Title>
-										{/* verification status removed from UI */}
-									</div>
-									{/* removed inline refresh button; using floating refresh control */}
-								</div>
-								<Form layout="vertical">
-									<Row gutter={24}>
-										<Col xs={24} sm={24} md={12} lg={8}>
-											<Form.Item label={<div style={{display: 'flex', alignItems: 'center', gap: 8}}>Proof of Residency<Tooltip title="Upload a document showing your address (e.g., utility bill, lease, or bank statement)."><InfoCircleOutlined style={{ color: '#888' }} /></Tooltip></div>}>
-												<Upload
-													accept="image/*,application/pdf"
-													fileList={proofList}
-													beforeUpload={(file: File) => false}
-													onChange={(info: any) => {
-														const fileList = info?.fileList || [];
-														// revoke existing previews for this slot
-														proofList.forEach((pf: any) => {
-															if (pf && pf.thumbUrl) {
-																try { URL.revokeObjectURL(String(pf.thumbUrl)); } catch (e) {}
-																previewUrlsRef.current.delete(String(pf.thumbUrl));
-															}
-														});
-														const list = (fileList || []).slice(-1);
-														list.forEach((f: any) => {
-															if (f.originFileObj && !f.thumbUrl && f.type && f.type.startsWith('image/')) {
-																const url = URL.createObjectURL(f.originFileObj);
-																f.thumbUrl = url;
-																previewUrlsRef.current.add(url);
-															}
-														});
-														setProofList(list as any[]);
-														setProofFile((list[0] && (list[0].originFileObj as File)) || null);
-													}}
-													listType="picture-card"
-													showUploadList={{ showPreviewIcon: true, showRemoveIcon: true }}
-													maxCount={1}
-												>
-													<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><UploadOutlined /> <span style={{ fontWeight: 600 }}>Select Proof</span></div>
-												</Upload>
-											</Form.Item>
-										</Col>
-										<Col xs={24} sm={24} md={12} lg={8}>
-											<Form.Item label={<div style={{display: 'flex', alignItems: 'center', gap: 8}}>Government-issued ID<Tooltip title="Upload a government-issued ID such as passport, driver's license, or national ID."><InfoCircleOutlined style={{ color: '#888' }} /></Tooltip></div>}>
-												<Upload
-													accept="image/*,application/pdf"
-													fileList={govIdList}
-													beforeUpload={(file: File) => false}
-													onChange={(info: any) => {
-														const fileList = info?.fileList || [];
-														// revoke existing previews for this slot
-														govIdList.forEach((gf: any) => {
-															if (gf && gf.thumbUrl) {
-																try { URL.revokeObjectURL(String(gf.thumbUrl)); } catch (e) {}
-																previewUrlsRef.current.delete(String(gf.thumbUrl));
-															}
-														});
-														const list = (fileList || []).slice(-1);
-														list.forEach((f: any) => {
-															if (f.originFileObj && !f.thumbUrl && f.type && f.type.startsWith('image/')) {
-																const url = URL.createObjectURL(f.originFileObj);
-																f.thumbUrl = url;
-																previewUrlsRef.current.add(url);
-															}
-														});
-														setGovIdList(list as any[]);
-														setGovIdFile((list[0] && (list[0].originFileObj as File)) || null);
-													}}
-													listType="picture-card"
-													showUploadList={{ showPreviewIcon: true, showRemoveIcon: true }}
-													maxCount={1}
-												>
-													<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><UploadOutlined /> <span style={{ fontWeight: 600 }}>Select ID</span></div>
-												</Upload>
-											</Form.Item>
-										</Col>
-										<Col xs={24} sm={24} md={12} lg={8}>
-											<Form.Item label={<div style={{display: 'flex', alignItems: 'center', gap: 8}}>Selfie with ID<Tooltip title="Take a clear photo of yourself holding your government ID next to your face."><InfoCircleOutlined style={{ color: '#888' }} /></Tooltip></div>}>
-												<Upload
-													accept="image/*"
-													fileList={selfieList}
-													beforeUpload={(file: File) => false}
-													onChange={(info: any) => {
-														const fileList = info?.fileList || [];
-														// revoke existing previews for this slot
-														selfieList.forEach((sf: any) => {
-															if (sf && sf.thumbUrl) {
-																try { URL.revokeObjectURL(String(sf.thumbUrl)); } catch (e) {}
-																previewUrlsRef.current.delete(String(sf.thumbUrl));
-															}
-														});
-														const list = (fileList || []).slice(-1);
-														list.forEach((f: any) => {
-															if (f.originFileObj && !f.thumbUrl && f.type && f.type.startsWith('image/')) {
-																const url = URL.createObjectURL(f.originFileObj);
-																f.thumbUrl = url;
-																previewUrlsRef.current.add(url);
-															}
-														});
-														setSelfieList(list as any[]);
-														setSelfieFile((list[0] && (list[0].originFileObj as File)) || null);
-													}}
-													listType="picture-card"
-													showUploadList={{ showPreviewIcon: true, showRemoveIcon: true }}
-													maxCount={1}
-												>
-													<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><UploadOutlined /> <span style={{ fontWeight: 600 }}>Select Selfie</span></div>
-												</Upload>
-											</Form.Item>
-										</Col>
-									</Row>
-									<Row gutter={24} style={{ marginTop: 16 }}>
-										<Col span={24} style={{ display: 'flex', justifyContent: 'flex-start', gap: 12 }}>
-											<Button type="dashed" onClick={() => {
-												// revoke all current preview URLs for verification files
-												[ ...proofList, ...govIdList, ...selfieList ].forEach((f: any) => {
-													if (f && f.thumbUrl) {
-														try { URL.revokeObjectURL(String(f.thumbUrl)); } catch (e) {}
-														previewUrlsRef.current.delete(String(f.thumbUrl));
-													}
-												});
-												setProofFile(null); setGovIdFile(null); setSelfieFile(null); setProofList([]); setGovIdList([]); setSelfieList([]);
-											}}>Clear</Button>
-											<Button type="primary" loading={verificationUploading} disabled={!(proofFile && govIdFile && selfieFile)} onClick={handleVerificationUpload}>Upload Verification Documents</Button>
-										</Col>
-									</Row>
-													{(verificationUploading || verificationProgress > 0) && (
-														<Row gutter={24} style={{ marginTop: 12 }}>
-															<Col span={24}>
-																<div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-																	<div style={{ flex: 1 }}>
-																		<Progress percent={verificationProgress} status={verificationProgress < 100 ? 'active' : 'success'} strokeColor={{ '0%': '#e81cff', '100%': '#40c9ff' }} />
-																	</div>
-																	<div style={{ minWidth: 110 }}>
-																		<Typography.Text type="secondary">{verificationUploading ? `Uploading (${verificationProgress}%)` : verificationProgress === 100 ? 'Upload complete' : ''}</Typography.Text>
-																	</div>
-																</div>
-															</Col>
-														</Row>
-													)}
-								</Form>
-							</div>
-						</Card>
-																		{/* Prompt to create resident info if missing */}
+																								{/* Prompt to create resident info if missing */}
 																		{residentMissing && (
 																			<div style={{ marginBottom: 16 }}>
 																				<Alert
@@ -880,350 +892,955 @@ useEffect(() => {
 																			defaultEmail={profile?.email || ''}
 																		/>
 																		{/* Resident Tool Tips moved to Dashboard */}
-																		{/* User Info Section */}
-												<Card
-												   style={{
-													   background: 'linear-gradient(135deg, #f8fafc 0%, #e3e6f3 40%, #f6f1f7 100%)',
-													   borderRadius: 20,
-													   boxShadow: '0 8px 32px #bfc7d6cc',
-													   marginBottom: 32,
-													   border: 'none',
-												   	backdropFilter: 'blur(2px)',
-												   	}}
-												   	bodyStyle={{ padding: 40 }}
-												   	bordered={false}
-												   	>
-																										 <div style={{ maxWidth: 900, margin: '0 auto' }}>
-																											<Typography.Title level={3} style={{
-																												fontWeight: 900,
-																												marginBottom: 24,
-																												letterSpacing: 1,
-																												textAlign: 'left',
-																												fontSize: 28,
-																												background: 'linear-gradient(90deg, #40c9ff, #e81cff)',
-																												WebkitBackgroundClip: 'text',
-																												WebkitTextFillColor: 'transparent',
-																											}}>{t('userInformation')}</Typography.Title>
-																											 {form && (
-																																	 <Form layout="vertical">
-																																		 <Row gutter={24}>
-																																			 <Col xs={24} sm={12}><Form.Item label={t('username')}><Input name="username" value={form?.username || ''} onChange={handleChangeUser} disabled={!editingUser} /></Form.Item></Col>
-																																			 <Col xs={24} sm={12}><Form.Item label={t('email')}><Input name="email" value={form?.email || ''} onChange={handleChangeUser} disabled={!editingUser} /></Form.Item></Col>
-																																		 </Row>
-																																		 <Row gutter={24}>
-																																			 <Col xs={24} sm={12}><Form.Item label={t('address')}><Input name="address" value={form?.address || ''} onChange={handleChangeUser} disabled={!editingUser} /></Form.Item></Col>
-																																			 <Col xs={24} sm={12}><Form.Item label={t('contactNumber')}><Input name="contactNumber" value={form?.contactNumber || ''} onChange={handleChangeUser} disabled={!editingUser} /></Form.Item></Col>
-																																		 </Row>
-																																		 <Row gutter={24}>
-																																			 <Col xs={24} sm={12}><Form.Item label={t('barangayID') || 'Barangay ID'}><Input name="barangayID" value={form?.barangayID || ''} disabled /></Form.Item></Col>
-																																			 <Col xs={24} sm={12}><Form.Item label={t('role') || 'Role'}><Input name="role" value={form?.role || ''} disabled /></Form.Item></Col>
-																																		 </Row>
-																																		 <Space style={{ marginTop: 24 }}>
-																																			 {editingUser ? (
-																																				 <>
-																																					 <Button type="primary" onClick={handleSaveUser} style={{ background: 'linear-gradient(90deg, #43e97b 0%, #38f9d7 100%)', border: 'none', fontWeight: 600 }}>Save</Button>
-																																					 <Button onClick={handleCancelUser}>Cancel</Button>
-																																				 </>
-																																			 ) : (
-																																				 <Button onClick={handleEditUser} style={{ fontWeight: 600 }}>Edit</Button>
-																																										  )}
-																																			 <Button
-																																				 type="dashed"
-																																				 onClick={handleRequestStaff}
-																																				 disabled={staffRequestSent || requesting}
-																																				 style={{ color: '#341f97', borderColor: '#341f97', fontWeight: 600 }}
-																																			 >
-																																				 {staffRequestSent ? 'Request Sent' : 'Request Staff Access'}
-																																			 </Button>
-																																		 </Space>
-																																	 </Form>
-																																 )}
-																										 </div>
-												</Card>
-
-												{/* Personal Info Section */}
-												   {personalForm && (
-													<Card
-													   style={{
-														   background: 'linear-gradient(135deg, #f8fafc 0%, #e3e6f3 40%, #f6f1f7 100%)',
-														   borderRadius: 20,
-														   boxShadow: '0 8px 32px #bfc7d6cc',
-														   marginBottom: 32,
-														   border: 'none',
-														   backdropFilter: 'blur(2px)',
-													   }}
-													   bodyStyle={{ padding: 40 }}
-													   bordered={false}
-													   >
-														   <Form layout="vertical" style={{ maxWidth: 900, margin: '0 auto' }}>
-															   {/* Resident Info Main Title */}
-															<Typography.Title level={2} style={{
-																fontWeight: 900,
-																marginBottom: 24,
-																letterSpacing: 1,
-																textAlign: 'left',
-																fontSize: 34,
-																background: 'linear-gradient(90deg, #40c9ff, #e81cff)',
-																WebkitBackgroundClip: 'text',
-																WebkitTextFillColor: 'transparent',
-															}}>Resident Information</Typography.Title>
-															   {/* Personal Info Subcategory */}
-															<Typography.Title level={3} style={{
-																fontWeight: 900,
-																marginBottom: 16,
-																letterSpacing: 1,
-																textAlign: 'left',
-																fontSize: 24,
-																background: 'linear-gradient(90deg, #ffb347, #ff4e50)',
-																WebkitBackgroundClip: 'text',
-																WebkitTextFillColor: 'transparent',
-															}}>Personal Information</Typography.Title>
-															<Row gutter={24}>
-																<Col xs={24} sm={12} md={6}><Form.Item label="First Name"><Input name="firstName" value={personalForm?.firstName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																<Col xs={24} sm={12} md={6}><Form.Item label="Middle Name"><Input name="middleName" value={personalForm?.middleName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																<Col xs={24} sm={12} md={6}><Form.Item label="Last Name"><Input name="lastName" value={personalForm?.lastName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																<Col xs={24} sm={12} md={6}><Form.Item label="Name Extension"><Input name="nameExtension" placeholder="e.g., Jr., Sr., III" value={personalForm?.nameExtension || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															</Row>
-															<Row gutter={24}>
-																<Col xs={24} sm={12} md={6}><Form.Item label="Age"><Input name="age" type="number" value={personalForm?.age || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																<Col xs={24} sm={12} md={6}><Form.Item label="Birth Date"><Input name="birthDate" type="date" value={personalForm.birthDate || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																<Col xs={24} sm={12} md={6}><Form.Item label="Place of Birth"><Input name="placeOfBirth" value={personalForm.placeOfBirth || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																<Col xs={24} sm={12} md={6}><Form.Item label="Nationality"><Input name="nationality" value={personalForm.nationality || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																<Col xs={24} sm={12} md={6}><Form.Item label="Religion"><Input name="religion" value={personalForm.religion || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															</Row>
-															<Row gutter={16}>
-																<Col xs={24} sm={12} md={6}><Form.Item label="Date of Residency"><Input name="dateOfResidency" type="date" value={personalForm.dateOfResidency || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																<Col xs={24} sm={12} md={6}><Form.Item label="Sex">
-																		<Select
-																			value={personalForm.sex || ''}
-																			onChange={(value: string) => setPersonalForm(prev => prev ? { ...prev, sex: value } : prev)}
-																			disabled={!editingPersonal}
-																		>
-																			<Select.Option value="">Select</Select.Option>
-																			<Select.Option value="Male">Male</Select.Option>
-																			<Select.Option value="Female">Female</Select.Option>
-																			<Select.Option value="Other">Other</Select.Option>
-																		</Select>
-																</Form.Item></Col>
-																<Col xs={24} sm={12} md={6}><Form.Item label="Blood Type"><Input name="bloodType" value={personalForm.bloodType || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																<Col xs={24} sm={12} md={6}><Form.Item label="Disability Status"><Input name="disabilityStatus" value={personalForm.disabilityStatus || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															</Row>
-																				<Row gutter={16}>
-																					<Col xs={24} sm={12} md={6}><Form.Item label="Passport Number"><Input name="passportNumber" value={personalForm.passportNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																					<Col xs={24} sm={12} md={6}><Form.Item label="Government ID Number"><Input name="governmentIdNumber" value={personalForm.governmentIdNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																					<Col xs={24} sm={12} md={6}><Form.Item label="Occupation"><Input name="occupation" value={personalForm.occupation || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																					<Col xs={24} sm={12} md={6}><Form.Item label="Educational Attainment"><Input name="educationalAttainment" value={personalForm.educationalAttainment || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																				</Row>
-															   <Row gutter={16}>
-																   <Col xs={24} sm={24} md={12} lg={8}>
-																	   <Form.Item label="Civil Status">
-																			<Select
-																			   value={personalForm.civilStatus || ''}
-																			   onChange={(value: string) => setPersonalForm(prev => prev ? { ...prev, civilStatus: value } : prev)}
-																			   disabled={!editingPersonal}
-																		   >
-																			   <Select.Option value="">Select</Select.Option>
-																			   <Select.Option value="Single">Single</Select.Option>
-																			   <Select.Option value="Married">Married</Select.Option>
-																			   <Select.Option value="Widowed">Widowed</Select.Option>
-																			   <Select.Option value="Divorced">Divorced</Select.Option>
-																			   <Select.Option value="Separated">Separated</Select.Option>
-																			   <Select.Option value="Annulled">Annulled</Select.Option>
-																			   <Select.Option value="Domestic Partnership">Domestic Partnership</Select.Option>
-																			   <Select.Option value="Other">Other</Select.Option>
-																		   </Select>
-																	   </Form.Item>
-																   </Col>
-															   </Row>
-															   {/* Social Media Info Subcategory */}
-															<Typography.Title level={3} style={{
-																fontWeight: 900,
-																marginBottom: 16,
-																letterSpacing: 1,
-																textAlign: 'left',
-																fontSize: 24,
-																background: 'linear-gradient(90deg, #ffb347, #ff4e50)',
-																WebkitBackgroundClip: 'text',
-																WebkitTextFillColor: 'transparent',
-															}}>Social Media Information</Typography.Title>
-															   <Row gutter={16}>
-																<Col xs={24} sm={24} md={24} lg={8}><Form.Item label="Facebook"><Input name="facebook" value={personalForm.facebook || ''} onChange={handleChangePersonal} disabled={!editingPersonal} placeholder="Facebook profile/link" /></Form.Item></Col>
-																<Col xs={24} sm={24} md={24} lg={8}><Form.Item label="Valid Email"><Input name="email" type="email" value={personalForm.email || ''} onChange={handleChangePersonal} disabled={!editingPersonal} placeholder="Email address" /></Form.Item></Col>
-																<Col xs={24} sm={24} md={24} lg={8}><Form.Item label="Contact Number"><Input name="contactNumber" type="number" value={personalForm.contactNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} placeholder="Contact No." /></Form.Item></Col>
-															</Row>
-															<Row gutter={16}>
-																<Col xs={24} sm={24} md={24} lg={12}><Form.Item label="Emergency Contact"><Input name="emergencyContact" type="number" value={personalForm.emergencyContact || ''} onChange={handleChangePersonal} disabled={!editingPersonal} placeholder="Emergency contact number" /></Form.Item></Col>
-																<Col xs={24} sm={24} md={24} lg={12}><Form.Item label="Landline Number"><Input name="landlineNumber" type="number" value={personalForm.landlineNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} placeholder="Landline number" /></Form.Item></Col>
-															</Row>
-														   {/* Family Info Subcategory */}
+																		{/* Comprehensive Profile Management with Tabbed Interface */}
+						<Card
+							style={{
+								background: 'linear-gradient(135deg, #f8fafc 0%, #e3e6f3 40%, #f6f1f7 100%)',
+								borderRadius: 20,
+								boxShadow: '0 8px 32px #bfc7d6cc',
+								marginBottom: 32,
+								border: 'none',
+								backdropFilter: 'blur(2px)',
+							}}
+							bodyStyle={{ padding: 0 }}
+							bordered={false}
+						>
+							<Tabs
+								activeKey={activeTab}
+								onChange={setActiveTab}
+								size="large"
+								style={{ padding: '24px 24px 0' }}
+								items={[
+									{
+										key: 'overview',
+										label: (
+											<span>
+												<UserOutlined />
+												Overview
+											</span>
+										),
+										children: (
+											<div style={{ padding: '0 24px 24px' }}>
+												<Typography.Title level={3} style={{
+													fontWeight: 900,
+													marginBottom: 24,
+													letterSpacing: 1,
+													textAlign: 'left',
+													fontSize: 28,
+													background: 'linear-gradient(90deg, #40c9ff, #e81cff)',
+													WebkitBackgroundClip: 'text',
+													WebkitTextFillColor: 'transparent',
+												}}>Account Overview</Typography.Title>
+												
+												<Row gutter={[24, 16]}>
+													<Col xs={24} md={12}>
+														<Card size="small" title="Account Information">
+															{form && (
+																<Form layout="vertical" disabled={!editingUser}>
+																	<Form.Item label="Username">
+																		<Input name="username" value={form?.username || ''} onChange={handleChangeUser} />
+																	</Form.Item>
+																	<Form.Item label="Email">
+																		<Input name="email" value={form?.email || ''} onChange={handleChangeUser} />
+																	</Form.Item>
+																	<Form.Item label="Contact Number">
+																		<Input name="contactNumber" value={form?.contactNumber || ''} onChange={handleChangeUser} />
+																	</Form.Item>
+																	<Form.Item label="Address">
+																		<Input name="address" value={form?.address || ''} onChange={handleChangeUser} />
+																	</Form.Item>
+																</Form>
+															)}
+														</Card>
+													</Col>
+													<Col xs={24} md={12}>
+														<Card size="small" title="Quick Stats">
+															<Space direction="vertical" style={{ width: '100%' }}>
+																<Statistic 
+																	title="Profile Completion" 
+																	value={profileCompletion} 
+																	suffix="%" 
+																	valueStyle={{ color: profileCompletion >= 80 ? '#52c41a' : profileCompletion >= 50 ? '#faad14' : '#ff4d4f' }}
+																/>
+																<Divider style={{ margin: '12px 0' }} />
+																<div style={{ display: 'flex', justifyContent: 'space-between' }}>
+																	<Text>Verification Status:</Text>
+																	<Tag color={verificationStatus === 'verified' ? 'success' : 'warning'}>
+																		{verificationStatus}
+																	</Tag>
+																</div>
+																<div style={{ display: 'flex', justifyContent: 'space-between' }}>
+																	<Text>Member Since:</Text>
+																	<Text>{profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString() : 'Unknown'}</Text>
+																</div>
+																<div style={{ display: 'flex', justifyContent: 'space-between' }}>
+																	<Text>Role:</Text>
+																	<Tag color={isAdmin() ? 'gold' : isStaff() ? 'blue' : 'green'}>
+																		{isAdmin() ? 'Admin' : isStaff() ? 'Staff' : 'Resident'}
+																	</Tag>
+																</div>
+															</Space>
+														</Card>
+													</Col>
+												</Row>
+												
+												<Space style={{ marginTop: 24 }}>
+													{editingUser ? (
+														<>
+															<Button type="primary" onClick={handleSaveUser} icon={<SaveOutlined />}>
+																Save Changes
+															</Button>
+															<Button onClick={handleCancelUser}>Cancel</Button>
+														</>
+													) : (
+														<Button onClick={handleEditUser} icon={<EditOutlined />}>
+															Edit Profile
+														</Button>
+													)}
+													{isResident() && (
+														<Button
+															type="dashed"
+															onClick={handleRequestStaff}
+															disabled={staffRequestSent || requesting}
+														>
+															{staffRequestSent ? 'Request Sent' : 'Request Staff Access'}
+														</Button>
+													)}
+												</Space>
+											</div>
+										),
+									},
+									{
+										key: 'personal',
+										label: (
+											<span>
+												<FileTextOutlined />
+												Personal Info
+											</span>
+										),
+										children: (
+											<div style={{ padding: '0 24px 24px' }}>
+												{personalForm && (
+													<>
 														<Typography.Title level={3} style={{
 															fontWeight: 900,
-															marginBottom: 16,
+															marginBottom: 24,
 															letterSpacing: 1,
 															textAlign: 'left',
-															fontSize: 24,
-															background: 'linear-gradient(90deg, #ffb347, #ff4e50)',
+															fontSize: 28,
+															background: 'linear-gradient(90deg, #40c9ff, #e81cff)',
 															WebkitBackgroundClip: 'text',
 															WebkitTextFillColor: 'transparent',
-														}}>Family Information</Typography.Title>
-														   <Row gutter={16}>
-															   <Col xs={24} sm={12} md={6}><Form.Item label="Spouse Name"><Input name="spouseName" value={personalForm.spouseName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col xs={24} sm={12} md={6}><Form.Item label="Spouse Middle Name"><Input name="spouseMiddleName" value={personalForm.spouseMiddleName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col xs={24} sm={12} md={6}><Form.Item label="Spouse Last Name"><Input name="spouseLastName" value={personalForm.spouseLastName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col xs={24} sm={12} md={6}><Form.Item label="Spouse Age"><Input name="spouseAge" type="number" value={personalForm.spouseAge || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-														   </Row>
-														   <Row gutter={16}>
-															   <Col xs={24} sm={12} md={6}><Form.Item label="Spouse Birthdate"><Input name="spouseBirthDate" type="date" value={personalForm.spouseBirthDate || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col xs={24} sm={12} md={6}><Form.Item label="Spouse Nationality"><Input name="spouseNationality" value={personalForm.spouseNationality || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col xs={24} sm={12} md={6}><Form.Item label="Spouse Occupation"><Input name="spouseOccupation" value={personalForm.spouseOccupation || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col xs={24} sm={12} md={6}><Form.Item label="Spouse Contact Number"><Input name="spouseContactNumber" value={personalForm.spouseContactNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-														   </Row>
-														   <Row gutter={16}>
-															   <Col xs={24} sm={12} md={6}><Form.Item label="Spouse Status">
-																		   <Select
-																			   value={personalForm.spouseStatus || ''}
-																			   onChange={(value: string) => setPersonalForm(prev => prev ? { ...prev, spouseStatus: value } : prev)}
-																			   disabled={!editingPersonal}
-																		   >
-																		   <Select.Option value="">Select status</Select.Option>
-																		   <Select.Option value="Alive">Alive</Select.Option>
-																		   <Select.Option value="Deceased">Deceased</Select.Option>
-																		   <Select.Option value="Unknown">Unknown</Select.Option>
-																		   <Select.Option value="Missing">Missing</Select.Option>
-																		   <Select.Option value="Abroad">Abroad</Select.Option>
-																		   <Select.Option value="With Family">With Family</Select.Option>
-																		   <Select.Option value="Separated">Separated</Select.Option>
-																		   <Select.Option value="Other">Other</Select.Option>
-																	   </Select>
-															   </Form.Item></Col>
-															   <Col xs={24} sm={12} md={6}><Form.Item label="Number of Children"><Input name="numberOfChildren" type="number" value={personalForm.numberOfChildren || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col xs={24} sm={12} md={6}><Form.Item label="Children's Names"><Input name="childrenNames" value={personalForm.childrenNames || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col xs={24} sm={12} md={6}><Form.Item label="Children's Ages"><Input name="childrenAges" value={personalForm.childrenAges || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-														   </Row>
-														   <Row gutter={16}>
-															   <Col xs={24} sm={12} md={6}><Form.Item label="Emergency Contact Name"><Input name="emergencyContactName" value={personalForm.emergencyContactName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col xs={24} sm={12} md={6}><Form.Item label="Emergency Contact Relationship"><Input name="emergencyContactRelationship" value={personalForm.emergencyContactRelationship || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-														   </Row>
-															<Row gutter={16}>
-																<Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Mother's Name"><Input name="motherName" value={personalForm.motherName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																<Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Mother's Age"><Input name="motherAge" type="number" value={personalForm.motherAge || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																<Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Mother's Birthdate"><Input name="motherBirthDate" type="date" value={personalForm.motherBirthDate || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															</Row>
-															<Row gutter={16}>
-																<Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Mother's Occupation"><Input name="motherOccupation" value={personalForm.motherOccupation || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																<Col xs={24} sm={24} md={12} lg={8}>
-																	<Form.Item label="Mother's Status">
-																		<Select
-																			value={personalForm.motherStatus || ''}
-																			onChange={(value: string) => setPersonalForm(prev => prev ? { ...prev, motherStatus: value } : prev)}
-																			disabled={!editingPersonal}
-																		>
-																			<Select.Option value="">Select status</Select.Option>
-																			<Select.Option value="Alive">Alive</Select.Option>
-																			<Select.Option value="Deceased">Deceased</Select.Option>
-																			<Select.Option value="Unknown">Unknown</Select.Option>
-																			<Select.Option value="Missing">Missing</Select.Option>
-																			<Select.Option value="Abroad">Abroad</Select.Option>
-																			<Select.Option value="With Family">With Family</Select.Option>
-																			<Select.Option value="Separated">Separated</Select.Option>
-																			<Select.Option value="Other">Other</Select.Option>
-																		</Select>
-																	</Form.Item>
-																</Col>
-															</Row>
-															<Row gutter={16}>
-																<Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Father's Name"><Input name="fatherName" value={personalForm.fatherName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																<Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Father's Age"><Input name="fatherAge" type="number" value={personalForm.fatherAge || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																<Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Father's Birthdate"><Input name="fatherBirthDate" type="date" value={personalForm.fatherBirthDate || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															</Row>
-															<Row gutter={16}>
-																<Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Father's Occupation"><Input name="fatherOccupation" value={personalForm.fatherOccupation || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-																<Col xs={24} sm={24} md={12} lg={8}>
-																	<Form.Item label="Father's Status">
-																		<Select
-																			value={personalForm.fatherStatus || ''}
-																			onChange={(value: string) => setPersonalForm(prev => prev ? { ...prev, fatherStatus: value } : prev)}
-																			disabled={!editingPersonal}
-																		>
-																			<Select.Option value="">Select status</Select.Option>
-																			<Select.Option value="Alive">Alive</Select.Option>
-																			<Select.Option value="Deceased">Deceased</Select.Option>
-																			<Select.Option value="Unknown">Unknown</Select.Option>
-																			<Select.Option value="Missing">Missing</Select.Option>
-																			<Select.Option value="Abroad">Abroad</Select.Option>
-																			<Select.Option value="With Family">With Family</Select.Option>
-																			<Select.Option value="Separated">Separated</Select.Option>
-																			<Select.Option value="Other">Other</Select.Option>
-																		</Select>
-																	</Form.Item>
-																</Col>
-															</Row>
-														   {/* Business Info Subcategory */}
-														<Typography.Title level={3} style={{
-															fontWeight: 900,
-															marginBottom: 16,
-															letterSpacing: 1,
-															textAlign: 'left',
-															fontSize: 24,
-															background: 'linear-gradient(90deg, #ffb347, #ff4e50)',
-															WebkitBackgroundClip: 'text',
-															WebkitTextFillColor: 'transparent',
-														}}>Business Information</Typography.Title>
-														   <Row gutter={16}>
-															   <Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Business Name"><Input name="businessName" value={personalForm.businessName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Business Type">
-																   <Select value={personalForm.businessType || ''} onChange={(value: string) => setPersonalForm(prev => prev ? { ...prev, businessType: value } : prev)} disabled={!editingPersonal}>
-																	   <Select.Option value="">Select</Select.Option>
-																	   <Select.Option value="Sole Proprietorship">Sole Proprietorship</Select.Option>
-																	   <Select.Option value="Partnership">Partnership</Select.Option>
-																	   <Select.Option value="Corporation">Corporation</Select.Option>
-																	   <Select.Option value="Cooperative">Cooperative</Select.Option>
-																	   <Select.Option value="Other">Other</Select.Option>
-																   </Select>
-															   </Form.Item></Col>
-															   <Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Nature of Business"><Input name="natureOfBusiness" value={personalForm.natureOfBusiness || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-														   </Row>
-														   <Row gutter={16}>
-															   <Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Business Address"><Input name="businessAddress" value={personalForm.businessAddress || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Date Established"><Input name="dateEstablished" type="date" value={personalForm.dateEstablished || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col xs={24} sm={24} md={12} lg={8}><Form.Item label="TIN"><Input name="tin" value={personalForm.tin || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-														   </Row>
-														   <Row gutter={16}>
-															   <Col xs={24} sm={24} md={12} lg={8}><Form.Item label="DTI/SEC/CDA Registration No."><Input name="registrationNumber" value={personalForm.registrationNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Business Permit No."><Input name="businessPermitNumber" value={personalForm.businessPermitNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Barangay Clearance No."><Input name="barangayClearanceNumber" value={personalForm.barangayClearanceNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-														   </Row>
-														   <Row gutter={16}>
-															   <Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Number of Employees"><Input name="numberOfEmployees" type="number" value={personalForm.numberOfEmployees || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Capital Investment"><Input name="capitalInvestment" type="number" value={personalForm.capitalInvestment || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Annual Gross Income"><Input name="annualGrossIncome" type="number" value={personalForm.annualGrossIncome || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-														   </Row>
-														   <Row gutter={16}>
-															   <Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Contact Person"><Input name="businessContactPerson" value={personalForm.businessContactPerson || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Contact Number"><Input name="businessContactNumber" value={personalForm.businessContactNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-															   <Col xs={24} sm={24} md={12} lg={8}><Form.Item label="Email Address"><Input name="businessEmail" type="email" value={personalForm.businessEmail || ''} onChange={handleChangePersonal} disabled={!editingPersonal} /></Form.Item></Col>
-														   </Row>
-														   <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-															   {editingPersonal ? (
-																   <>
-																	   <Button type="primary" onClick={handleSavePersonal} style={{ fontWeight: 600 }}>Save</Button>
-																	   <Button onClick={handleCancelPersonal}>Cancel</Button>
-																   </>
-															   ) : (
-																   <>
-																	   <Button onClick={handleEditPersonal} style={{ fontWeight: 600, marginRight: 8 }}>Edit</Button>
-																	   {personalInfo && personalInfo.barangayID ? (
-																			<Button type="primary" disabled style={{ fontWeight: 600, background: '#b2bec3', border: 'none' }}>Registered</Button>
-																		) : (
-																			<Button type="primary" style={{ fontWeight: 600 }} onClick={handleRegisterResident}>Register</Button>
-																	   )}
-																   </>
-															   )}
-														   </div>
-														   </Form>
-													   </Card>
+														}}>Personal Information</Typography.Title>
+														
+														<Tabs
+															defaultActiveKey="basic"
+															type="card"
+															size="small"
+															items={[
+																{
+																	key: 'basic',
+																	label: 'Basic Info',
+																	children: (
+																		<div style={{ padding: '16px 0' }}>
+																			<Row gutter={[16, 8]}>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="First Name">
+																						<Input name="firstName" value={personalForm?.firstName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Middle Name">
+																						<Input name="middleName" value={personalForm?.middleName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Last Name">
+																						<Input name="lastName" value={personalForm?.lastName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																			</Row>
+																			<Row gutter={[16, 8]}>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Name Extension">
+																						<Input name="nameExtension" value={personalForm?.nameExtension || ''} onChange={handleChangePersonal} disabled={!editingPersonal} placeholder="Jr., Sr., II, III" />
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Age">
+																						<Input name="age" type="number" value={personalForm?.age || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Birth Date">
+																						<DatePicker 
+																							name="birthDate" 
+																							value={personalForm.birthDate ? dayjs(personalForm.birthDate) : null} 
+																							onChange={(date) => {
+																								if (date) {
+																									const birthDate = date.format('YYYY-MM-DD');
+																									const age = dayjs().diff(date, 'year');
+																									setPersonalForm(prev => prev ? { ...prev, birthDate, age } : prev);
+																								} else {
+																									setPersonalForm(prev => prev ? { ...prev, birthDate: '', age: undefined } : prev);
+																								}
+																							}} 
+																							disabled={!editingPersonal}
+																							disabledDate={(current) => current && current > dayjs().endOf('day')}
+																							style={{ width: '100%' }}
+																							placeholder="Select birth date"
+																						/>
+																					</Form.Item>
+																				</Col>
+																			</Row>
+																			<Row gutter={[16, 8]}>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Sex">
+																						<Select
+																							value={personalForm.sex || ''}
+																							onChange={(value: string) => setPersonalForm(prev => prev ? { ...prev, sex: value } : prev)}
+																							disabled={!editingPersonal}
+																						>
+																							<Select.Option value="">Select</Select.Option>
+																							<Select.Option value="Male">Male</Select.Option>
+																							<Select.Option value="Female">Female</Select.Option>
+																							<Select.Option value="Other">Other</Select.Option>
+																						</Select>
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Civil Status">
+																						<Select
+																							value={personalForm.civilStatus || ''}
+																							onChange={(value: string) => setPersonalForm(prev => prev ? { ...prev, civilStatus: value } : prev)}
+																							disabled={!editingPersonal}
+																						>
+																							<Select.Option value="">Select</Select.Option>
+																							<Select.Option value="Single">Single</Select.Option>
+																							<Select.Option value="Married">Married</Select.Option>
+																							<Select.Option value="Widowed">Widowed</Select.Option>
+																							<Select.Option value="Divorced">Divorced</Select.Option>
+																							<Select.Option value="Separated">Separated</Select.Option>
+																							<Select.Option value="Annulled">Annulled</Select.Option>
+																							<Select.Option value="Domestic Partnership">Domestic Partnership</Select.Option>
+																							<Select.Option value="Other">Other</Select.Option>
+																						</Select>
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Date of Residency">
+																						<DatePicker 
+																							name="dateOfResidency" 
+																							value={personalForm.dateOfResidency ? dayjs(personalForm.dateOfResidency) : null} 
+																							onChange={(date) => {
+																								const dateOfResidency = date ? date.format('YYYY-MM-DD') : '';
+																								setPersonalForm(prev => prev ? { ...prev, dateOfResidency } : prev);
+																							}} 
+																							disabled={!editingPersonal}
+																							disabledDate={(current) => current && current > dayjs().endOf('day')}
+																							style={{ width: '100%' }}
+																							placeholder="Select residency start date"
+																						/>
+																					</Form.Item>
+																				</Col>
+																			</Row>
+																			<Row gutter={[16, 8]}>
+																				<Col xs={24} sm={12}>
+																					<Form.Item label="Nationality">
+																						<Input name="nationality" value={personalForm.nationality || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={12}>
+																					<Form.Item label="Place of Birth">
+																						<Input name="placeOfBirth" value={personalForm.placeOfBirth || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																			</Row>
+																			<Row gutter={[16, 8]}>
+																				<Col xs={24} sm={12}>
+																					<Form.Item label="Religion">
+																						<Input name="religion" value={personalForm.religion || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={12}>
+																					<Form.Item label="Marital Status">
+																						<Select
+																							value={personalForm.maritalStatus || ''}
+																							onChange={(value: string) => setPersonalForm(prev => prev ? { ...prev, maritalStatus: value } : prev)}
+																							disabled={!editingPersonal}
+																						>
+																							<Select.Option value="">Select</Select.Option>
+																							<Select.Option value="Single">Single</Select.Option>
+																							<Select.Option value="Married">Married</Select.Option>
+																							<Select.Option value="Widowed">Widowed</Select.Option>
+																							<Select.Option value="Divorced">Divorced</Select.Option>
+																							<Select.Option value="Separated">Separated</Select.Option>
+																							<Select.Option value="Other">Other</Select.Option>
+																						</Select>
+																					</Form.Item>
+																				</Col>
+																			</Row>
+																			<Row gutter={[16, 8]}>
+																				<Col xs={24} sm={12}>
+																					<Form.Item label="Passport Number">
+																						<Input name="passportNumber" value={personalForm.passportNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={12}>
+																					<Form.Item label="Government ID Number">
+																						<Input name="governmentIdNumber" value={personalForm.governmentIdNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																			</Row>
+																			<Row gutter={[16, 8]}>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Blood Type">
+																						<Select
+																							value={personalForm.bloodType || ''}
+																							onChange={(value: string) => setPersonalForm(prev => prev ? { ...prev, bloodType: value } : prev)}
+																							disabled={!editingPersonal}
+																						>
+																							<Select.Option value="">Select</Select.Option>
+																							<Select.Option value="A+">A+</Select.Option>
+																							<Select.Option value="A-">A-</Select.Option>
+																							<Select.Option value="B+">B+</Select.Option>
+																							<Select.Option value="B-">B-</Select.Option>
+																							<Select.Option value="O+">O+</Select.Option>
+																							<Select.Option value="O-">O-</Select.Option>
+																							<Select.Option value="AB+">AB+</Select.Option>
+																							<Select.Option value="AB-">AB-</Select.Option>
+																						</Select>
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Disability Status">
+																						<Input name="disabilityStatus" value={personalForm.disabilityStatus || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Occupation">
+																						<Input name="occupation" value={personalForm.occupation || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																			</Row>
+																			<Row gutter={[16, 8]}>
+																				<Col xs={24}>
+																					<Form.Item label="Educational Attainment">
+																						<Select
+																							value={personalForm.educationalAttainment || ''}
+																							onChange={(value: string) => setPersonalForm(prev => prev ? { ...prev, educationalAttainment: value } : prev)}
+																							disabled={!editingPersonal}
+																						>
+																							<Select.Option value="">Select</Select.Option>
+																							<Select.Option value="No Formal Education">No Formal Education</Select.Option>
+																							<Select.Option value="Elementary">Elementary</Select.Option>
+																							<Select.Option value="High School">High School</Select.Option>
+																							<Select.Option value="College">College</Select.Option>
+																							<Select.Option value="Bachelor's Degree">Bachelor's Degree</Select.Option>
+																							<Select.Option value="Master's Degree">Master's Degree</Select.Option>
+																							<Select.Option value="Doctorate">Doctorate</Select.Option>
+																							<Select.Option value="Vocational">Vocational</Select.Option>
+																							<Select.Option value="Other">Other</Select.Option>
+																						</Select>
+																					</Form.Item>
+																				</Col>
+																			</Row>
+																		</div>
+																	),
+																},
+																{
+																	key: 'contact',
+																	label: 'Contact',
+																	children: (
+																		<div style={{ padding: '16px 0' }}>
+																			<Row gutter={[16, 8]}>
+																				<Col xs={24} sm={12}>
+																					<Form.Item label="Facebook">
+																						<Input name="facebook" value={personalForm.facebook || ''} onChange={handleChangePersonal} disabled={!editingPersonal} placeholder="Facebook profile/link" />
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={12}>
+																					<Form.Item label="Email">
+																						<Input name="email" type="email" value={personalForm.email || ''} onChange={handleChangePersonal} disabled={!editingPersonal} placeholder="Email address" />
+																					</Form.Item>
+																				</Col>
+																			</Row>
+																			<Row gutter={[16, 8]}>
+																				<Col xs={24} sm={12}>
+																					<Form.Item label="Contact Number">
+																						<Input name="contactNumber" value={personalForm.contactNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} placeholder="Contact No." />
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={12}>
+																					<Form.Item label="Landline Number">
+																						<Input name="landlineNumber" value={personalForm.landlineNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} placeholder="Landline number" />
+																					</Form.Item>
+																				</Col>
+																			</Row>
+																			<Row gutter={[16, 8]}>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Emergency Contact">
+																						<Input name="emergencyContact" value={personalForm.emergencyContact || ''} onChange={handleChangePersonal} disabled={!editingPersonal} placeholder="Emergency contact number" />
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Emergency Contact Name">
+																						<Input name="emergencyContactName" value={personalForm.emergencyContactName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Emergency Contact Relationship">
+																						<Input name="emergencyContactRelationship" value={personalForm.emergencyContactRelationship || ''} onChange={handleChangePersonal} disabled={!editingPersonal} placeholder="Relationship to emergency contact" />
+																					</Form.Item>
+																				</Col>
+																			</Row>
+																		</div>
+																	),
+																},
+																{
+																	key: 'family',
+																	label: 'Family',
+																	children: (
+																		<div style={{ padding: '16px 0' }}>
+																			<Typography.Title level={4} style={{ marginBottom: 16 }}>Spouse Information</Typography.Title>
+																			<Row gutter={[16, 8]}>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Spouse Name">
+																						<Input name="spouseName" value={personalForm.spouseName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Spouse Age">
+																						<Input name="spouseAge" type="number" value={personalForm.spouseAge || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Spouse Birth Date">
+																						<DatePicker 
+																							name="spouseBirthDate" 
+																							value={personalForm.spouseBirthDate ? dayjs(personalForm.spouseBirthDate) : null} 
+																							onChange={(date) => {
+																								const spouseBirthDate = date ? date.format('YYYY-MM-DD') : '';
+																								setPersonalForm(prev => prev ? { ...prev, spouseBirthDate } : prev);
+																							}} 
+																							disabled={!editingPersonal}
+																							disabledDate={(current) => current && current > dayjs().endOf('day')}
+																							style={{ width: '100%' }}
+																							placeholder="Select spouse birth date"
+																						/>
+																					</Form.Item>
+																				</Col>
+																			</Row>
+																			<Row gutter={[16, 8]}>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Spouse Middle Name">
+																						<Input name="spouseMiddleName" value={personalForm.spouseMiddleName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Spouse Last Name">
+																						<Input name="spouseLastName" value={personalForm.spouseLastName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Spouse Occupation">
+																						<Input name="spouseOccupation" value={personalForm.spouseOccupation || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																			</Row>
+																			<Row gutter={[16, 8]}>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Spouse Status">
+																						<Select
+																							value={personalForm.spouseStatus || ''}
+																							onChange={(value: string) => setPersonalForm(prev => prev ? { ...prev, spouseStatus: value } : prev)}
+																							disabled={!editingPersonal}
+																						>
+																							<Select.Option value="">Select</Select.Option>
+																							<Select.Option value="Living">Living</Select.Option>
+																							<Select.Option value="Deceased">Deceased</Select.Option>
+																							<Select.Option value="Separated">Separated</Select.Option>
+																						</Select>
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Spouse Nationality">
+																						<Input name="spouseNationality" value={personalForm.spouseNationality || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Spouse Contact Number">
+																						<Input name="spouseContactNumber" value={personalForm.spouseContactNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																			</Row>
+																			<Divider />
+																			<Typography.Title level={4} style={{ marginBottom: 16 }}>Parent Information</Typography.Title>
+																			<Row gutter={[16, 8]}>
+																				<Col xs={24} sm={12}>
+																					<Form.Item label="Mother's Name">
+																						<Input name="motherName" value={personalForm.motherName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={12}>
+																					<Form.Item label="Father's Name">
+																						<Input name="fatherName" value={personalForm.fatherName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																			</Row>
+																			<Row gutter={[16, 8]}>
+																				<Col xs={24} sm={6}>
+																					<Form.Item label="Mother's Age">
+																						<Input name="motherAge" type="number" value={personalForm.motherAge || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={6}>
+																					<Form.Item label="Father's Age">
+																						<Input name="fatherAge" type="number" value={personalForm.fatherAge || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={6}>
+																					<Form.Item label="Mother's Birth Date">
+																						<DatePicker 
+																							name="motherBirthDate" 
+																							value={personalForm.motherBirthDate ? dayjs(personalForm.motherBirthDate) : null} 
+																							onChange={(date) => {
+																								const motherBirthDate = date ? date.format('YYYY-MM-DD') : '';
+																								setPersonalForm(prev => prev ? { ...prev, motherBirthDate } : prev);
+																							}} 
+																							disabled={!editingPersonal}
+																							disabledDate={(current) => current && current > dayjs().endOf('day')}
+																							style={{ width: '100%' }}
+																							placeholder="Select mother birth date"
+																						/>
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={6}>
+																					<Form.Item label="Father's Birth Date">
+																						<DatePicker 
+																							name="fatherBirthDate" 
+																							value={personalForm.fatherBirthDate ? dayjs(personalForm.fatherBirthDate) : null} 
+																							onChange={(date) => {
+																								const fatherBirthDate = date ? date.format('YYYY-MM-DD') : '';
+																								setPersonalForm(prev => prev ? { ...prev, fatherBirthDate } : prev);
+																							}} 
+																							disabled={!editingPersonal}
+																							disabledDate={(current) => current && current > dayjs().endOf('day')}
+																							style={{ width: '100%' }}
+																							placeholder="Select father birth date"
+																						/>
+																					</Form.Item>
+																				</Col>
+																			</Row>
+																			<Row gutter={[16, 8]}>
+																				<Col xs={24} sm={6}>
+																					<Form.Item label="Mother's Occupation">
+																						<Input name="motherOccupation" value={personalForm.motherOccupation || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={6}>
+																					<Form.Item label="Father's Occupation">
+																						<Input name="fatherOccupation" value={personalForm.fatherOccupation || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={6}>
+																					<Form.Item label="Mother's Status">
+																						<Select
+																							value={personalForm.motherStatus || ''}
+																							onChange={(value: string) => setPersonalForm(prev => prev ? { ...prev, motherStatus: value } : prev)}
+																							disabled={!editingPersonal}
+																						>
+																							<Select.Option value="">Select</Select.Option>
+																							<Select.Option value="Living">Living</Select.Option>
+																							<Select.Option value="Deceased">Deceased</Select.Option>
+																						</Select>
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={6}>
+																					<Form.Item label="Father's Status">
+																						<Select
+																							value={personalForm.fatherStatus || ''}
+																							onChange={(value: string) => setPersonalForm(prev => prev ? { ...prev, fatherStatus: value } : prev)}
+																							disabled={!editingPersonal}
+																						>
+																							<Select.Option value="">Select</Select.Option>
+																							<Select.Option value="Living">Living</Select.Option>
+																							<Select.Option value="Deceased">Deceased</Select.Option>
+																						</Select>
+																					</Form.Item>
+																				</Col>
+																			</Row>
+																			<Divider />
+																			<Typography.Title level={4} style={{ marginBottom: 16 }}>Children Information</Typography.Title>
+																			<Row gutter={[16, 8]}>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Number of Children">
+																						<Input name="numberOfChildren" type="number" value={personalForm.numberOfChildren || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Children Names">
+																						<Input name="childrenNames" value={personalForm.childrenNames || ''} onChange={handleChangePersonal} disabled={!editingPersonal} placeholder="List children names separated by comma" />
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Children Ages">
+																						<Input name="childrenAges" value={personalForm.childrenAges || ''} onChange={handleChangePersonal} disabled={!editingPersonal} placeholder="List children ages separated by comma" />
+																					</Form.Item>
+																				</Col>
+																			</Row>
+																		</div>
+																	),
+																},
+																{
+																	key: 'business',
+																	label: 'Business',
+																	children: (
+																		<div style={{ padding: '16px 0' }}>
+																			<Row gutter={[16, 8]}>
+																				<Col xs={24} sm={12}>
+																					<Form.Item label="Business Name">
+																						<Input name="businessName" value={personalForm.businessName || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={12}>
+																					<Form.Item label="Business Type">
+																						<Select value={personalForm.businessType || ''} onChange={(value: string) => setPersonalForm(prev => prev ? { ...prev, businessType: value } : prev)} disabled={!editingPersonal}>
+																							<Select.Option value="">Select</Select.Option>
+																							<Select.Option value="Sole Proprietorship">Sole Proprietorship</Select.Option>
+																							<Select.Option value="Partnership">Partnership</Select.Option>
+																							<Select.Option value="Corporation">Corporation</Select.Option>
+																							<Select.Option value="Cooperative">Cooperative</Select.Option>
+																							<Select.Option value="Other">Other</Select.Option>
+																						</Select>
+																					</Form.Item>
+																				</Col>
+																			</Row>
+																			<Row gutter={[16, 8]}>
+																				<Col xs={24} sm={12}>
+																					<Form.Item label="Nature of Business">
+																						<Input name="natureOfBusiness" value={personalForm.natureOfBusiness || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={12}>
+																					<Form.Item label="Business Address">
+																						<Input name="businessAddress" value={personalForm.businessAddress || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																			</Row>
+																			<Row gutter={[16, 8]}>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Date Established">
+																						<DatePicker 
+																							name="dateEstablished" 
+																							value={personalForm.dateEstablished ? dayjs(personalForm.dateEstablished) : null} 
+																							onChange={(date) => {
+																								const dateEstablished = date ? date.format('YYYY-MM-DD') : '';
+																								setPersonalForm(prev => prev ? { ...prev, dateEstablished } : prev);
+																							}} 
+																							disabled={!editingPersonal}
+																							disabledDate={(current) => current && current > dayjs().endOf('day')}
+																							style={{ width: '100%' }}
+																							placeholder="Select business establishment date"
+																						/>
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="TIN">
+																						<Input name="tin" value={personalForm.tin || ''} onChange={handleChangePersonal} disabled={!editingPersonal} placeholder="Tax Identification Number" />
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Registration Number">
+																						<Input name="registrationNumber" value={personalForm.registrationNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																			</Row>
+																			<Row gutter={[16, 8]}>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Business Permit Number">
+																						<Input name="businessPermitNumber" value={personalForm.businessPermitNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Barangay Clearance Number">
+																						<Input name="barangayClearanceNumber" value={personalForm.barangayClearanceNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Number of Employees">
+																						<Input name="numberOfEmployees" type="number" value={personalForm.numberOfEmployees || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																			</Row>
+																			<Row gutter={[16, 8]}>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Capital Investment">
+																						<Input name="capitalInvestment" type="number" value={personalForm.capitalInvestment || ''} onChange={handleChangePersonal} disabled={!editingPersonal} placeholder="Amount in PHP" />
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Annual Gross Income">
+																						<Input name="annualGrossIncome" type="number" value={personalForm.annualGrossIncome || ''} onChange={handleChangePersonal} disabled={!editingPersonal} placeholder="Amount in PHP" />
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={8}>
+																					<Form.Item label="Business Contact Person">
+																						<Input name="businessContactPerson" value={personalForm.businessContactPerson || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																			</Row>
+																			<Row gutter={[16, 8]}>
+																				<Col xs={24} sm={12}>
+																					<Form.Item label="Business Contact Number">
+																						<Input name="businessContactNumber" value={personalForm.businessContactNumber || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																					</Form.Item>
+																				</Col>
+																				<Col xs={24} sm={12}>
+																					<Form.Item label="Business Email">
+																						<Input name="businessEmail" type="email" value={personalForm.businessEmail || ''} onChange={handleChangePersonal} disabled={!editingPersonal} placeholder="Business email address" />
+																					</Form.Item>
+																				</Col>
+																			</Row>
+																		</div>
+																	),
+																},
+															]}
+														/>
+														
+														<div style={{ display: 'flex', gap: 8, marginTop: 24 }}>
+															{editingPersonal ? (
+																<>
+																	<Button type="primary" onClick={handleSavePersonal} icon={<SaveOutlined />}>
+																		Save Personal Info
+																	</Button>
+																	<Button onClick={handleCancelPersonal}>Cancel</Button>
+																</>
+															) : (
+																<Button onClick={handleEditPersonal} icon={<EditOutlined />}>
+																	Edit Personal Info
+																</Button>
+															)}
+															{personalInfo && personalInfo.barangayID ? (
+																<Button type="primary" disabled>Registered</Button>
+															) : (
+																<Button type="primary" onClick={handleRegisterResident}>Register</Button>
+															)}
+														</div>
+													</>
 												)}
+											</div>
+										),
+									},
+									{
+										key: 'verification',
+										label: (
+											<span>
+												<SafetyOutlined />
+												Verification
+											</span>
+										),
+										children: (
+											<div style={{ padding: '0 24px 24px' }}>
+												<Typography.Title level={3} style={{
+													fontWeight: 900,
+													marginBottom: 24,
+													letterSpacing: 1,
+													textAlign: 'left',
+													fontSize: 28,
+													background: 'linear-gradient(90deg, #40c9ff, #e81cff)',
+													WebkitBackgroundClip: 'text',
+													WebkitTextFillColor: 'transparent',
+												}}>Verification Documents</Typography.Title>
+												
+												<Alert
+													message="Verification Status"
+													description={
+														<div>
+															<p>Upload your verification documents to verify your identity and unlock all features.</p>
+															<div style={{ marginTop: 8 }}>
+																<Tag color={verificationStatus === 'verified' ? 'success' : 'warning'}>
+																	{verificationStatus === 'verified' ? <CheckCircleOutlined /> : <ClockCircleOutlined />}
+																	{verificationStatus === 'verified' ? 'Verified' : 'Pending Verification'}
+																</Tag>
+															</div>
+														</div>
+													}
+													type={verificationStatus === 'verified' ? 'success' : 'info'}
+													showIcon
+													style={{ marginBottom: 24 }}
+												/>
+												
+												<Form layout="vertical">
+													<Row gutter={24}>
+														<Col xs={24} sm={24} md={12} lg={8}>
+															<Form.Item label={
+																<div style={{display: 'flex', alignItems: 'center', gap: 8}}>
+																	Proof of Residency
+																	<Tooltip title="Upload a document showing your address (e.g., utility bill, lease, or bank statement).">
+																		<InfoCircleOutlined style={{ color: '#888' }} />
+																	</Tooltip>
+																</div>
+															}>
+																<Upload
+																	accept="image/*,application/pdf"
+																	fileList={proofList}
+																	beforeUpload={(file: File) => false}
+																	onChange={(info: any) => {
+																		const fileList = info?.fileList || [];
+																		proofList.forEach((pf: any) => {
+																			if (pf && pf.thumbUrl) {
+																				try { URL.revokeObjectURL(String(pf.thumbUrl)); } catch (e) {}
+																				previewUrlsRef.current.delete(String(pf.thumbUrl));
+																			}
+																		});
+																		const list = (fileList || []).slice(-1);
+																		list.forEach((f: any) => {
+																			if (f.originFileObj && !f.thumbUrl && f.type && f.type.startsWith('image/')) {
+																				const url = URL.createObjectURL(f.originFileObj);
+																				f.thumbUrl = url;
+																				previewUrlsRef.current.add(url);
+																			}
+																		});
+																		setProofList(list as any[]);
+																		setProofFile((list[0] && (list[0].originFileObj as File)) || null);
+																	}}
+																	listType="picture-card"
+																	showUploadList={{ showPreviewIcon: true, showRemoveIcon: true }}
+																	maxCount={1}
+																>
+																	<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+																		<UploadOutlined /> <span style={{ fontWeight: 600 }}>Select Proof</span>
+																	</div>
+																</Upload>
+															</Form.Item>
+														</Col>
+														<Col xs={24} sm={24} md={12} lg={8}>
+															<Form.Item label={
+																<div style={{display: 'flex', alignItems: 'center', gap: 8}}>
+																	Government-issued ID
+																	<Tooltip title="Upload a government-issued ID such as passport, driver's license, or national ID.">
+																		<InfoCircleOutlined style={{ color: '#888' }} />
+																	</Tooltip>
+																</div>
+															}>
+																<Upload
+																	accept="image/*,application/pdf"
+																	fileList={govIdList}
+																	beforeUpload={(file: File) => false}
+																	onChange={(info: any) => {
+																		const fileList = info?.fileList || [];
+																		govIdList.forEach((gf: any) => {
+																			if (gf && gf.thumbUrl) {
+																				try { URL.revokeObjectURL(String(gf.thumbUrl)); } catch (e) {}
+																				previewUrlsRef.current.delete(String(gf.thumbUrl));
+																			}
+																		});
+																		const list = (fileList || []).slice(-1);
+																		list.forEach((f: any) => {
+																			if (f.originFileObj && !f.thumbUrl && f.type && f.type.startsWith('image/')) {
+																				const url = URL.createObjectURL(f.originFileObj);
+																				f.thumbUrl = url;
+																				previewUrlsRef.current.add(url);
+																			}
+																		});
+																		setGovIdList(list as any[]);
+																		setGovIdFile((list[0] && (list[0].originFileObj as File)) || null);
+																	}}
+																	listType="picture-card"
+																	showUploadList={{ showPreviewIcon: true, showRemoveIcon: true }}
+																	maxCount={1}
+																>
+																	<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+																		<UploadOutlined /> <span style={{ fontWeight: 600 }}>Select ID</span>
+																	</div>
+																</Upload>
+															</Form.Item>
+														</Col>
+														<Col xs={24} sm={24} md={12} lg={8}>
+															<Form.Item label={
+																<div style={{display: 'flex', alignItems: 'center', gap: 8}}>
+																	Selfie with ID
+																	<Tooltip title="Take a clear photo of yourself holding your government ID next to your face.">
+																		<InfoCircleOutlined style={{ color: '#888' }} />
+																	</Tooltip>
+																</div>
+															}>
+																<Upload
+																	accept="image/*"
+																	fileList={selfieList}
+																	beforeUpload={(file: File) => false}
+																	onChange={(info: any) => {
+																		const fileList = info?.fileList || [];
+																		selfieList.forEach((sf: any) => {
+																			if (sf && sf.thumbUrl) {
+																				try { URL.revokeObjectURL(String(sf.thumbUrl)); } catch (e) {}
+																				previewUrlsRef.current.delete(String(sf.thumbUrl));
+																			}
+																		});
+																		const list = (fileList || []).slice(-1);
+																		list.forEach((f: any) => {
+																			if (f.originFileObj && !f.thumbUrl && f.type && f.type.startsWith('image/')) {
+																				const url = URL.createObjectURL(f.originFileObj);
+																				f.thumbUrl = url;
+																				previewUrlsRef.current.add(url);
+																			}
+																		});
+																		setSelfieList(list as any[]);
+																		setSelfieFile((list[0] && (list[0].originFileObj as File)) || null);
+																	}}
+																	listType="picture-card"
+																	showUploadList={{ showPreviewIcon: true, showRemoveIcon: true }}
+																	maxCount={1}
+																>
+																	<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+																		<UploadOutlined /> <span style={{ fontWeight: 600 }}>Select Selfie</span>
+																	</div>
+																</Upload>
+															</Form.Item>
+														</Col>
+													</Row>
+													<Row gutter={24} style={{ marginTop: 16 }}>
+														<Col span={24} style={{ display: 'flex', justifyContent: 'flex-start', gap: 12 }}>
+															<Button type="dashed" onClick={() => {
+																[ ...proofList, ...govIdList, ...selfieList ].forEach((f: any) => {
+																	if (f && f.thumbUrl) {
+																		try { URL.revokeObjectURL(String(f.thumbUrl)); } catch (e) {}
+																		previewUrlsRef.current.delete(String(f.thumbUrl));
+																	}
+																});
+																setProofFile(null); setGovIdFile(null); setSelfieFile(null); setProofList([]); setGovIdList([]); setSelfieList([]);
+															}}>Clear</Button>
+															<Button type="primary" loading={verificationUploading} disabled={!(proofFile && govIdFile && selfieFile)} onClick={handleVerificationUpload}>
+																Upload Verification Documents
+															</Button>
+														</Col>
+													</Row>
+													{(verificationUploading || verificationProgress > 0) && (
+														<Row gutter={24} style={{ marginTop: 12 }}>
+															<Col span={24}>
+																<div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+																	<div style={{ flex: 1 }}>
+																		<Progress percent={verificationProgress} status={verificationProgress < 100 ? 'active' : 'success'} strokeColor={{ '0%': '#e81cff', '100%': '#40c9ff' }} />
+																	</div>
+																	<div style={{ minWidth: 110 }}>
+																		<Typography.Text type="secondary">
+																			{verificationUploading ? `Uploading (${verificationProgress}%)` : verificationProgress === 100 ? 'Upload complete' : ''}
+																		</Typography.Text>
+																	</div>
+																</div>
+															</Col>
+														</Row>
+													)}
+												</Form>
+											</div>
+										),
+									},
+								]}
+							/>
+						</Card>
 
+												
 			</div>
 
 					{/* Floating refresh button (bottom-left) */}

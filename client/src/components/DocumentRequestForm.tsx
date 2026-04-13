@@ -1017,7 +1017,10 @@ const DocumentRequestForm: React.FC = () => {
                   {/* Family Information */}
                   {(personalInfo.spouseName || personalInfo.spouseAge || personalInfo.spouseBirthDate || personalInfo.spouseOccupation || 
                     personalInfo.spouseStatus || personalInfo.spouseContactNumber || personalInfo.spouseNationality || personalInfo.spouseMiddleName || 
-                    personalInfo.spouseLastName || personalInfo.numberOfChildren || personalInfo.childrenNames || personalInfo.childrenAges) && (
+                    personalInfo.spouseLastName || personalInfo.numberOfChildren || personalInfo.childrenNames || personalInfo.childrenAges ||
+                    personalInfo.motherName || personalInfo.motherAge || personalInfo.motherBirthDate || personalInfo.motherOccupation ||
+                    personalInfo.motherStatus || personalInfo.fatherName || personalInfo.fatherAge || personalInfo.fatherBirthDate ||
+                    personalInfo.fatherOccupation || personalInfo.fatherStatus) && (
                     <>
                       <Divider style={{ margin: '16px 0' }} />
                       <div style={{ marginBottom: 20 }}>
@@ -1160,20 +1163,7 @@ const DocumentRequestForm: React.FC = () => {
             <Empty description="Loading resident information..." />
           )}
         </div>
-        <Divider />
-        <div style={{ textAlign: 'right' }}>
-          <Button 
-            type="primary" 
-            onClick={() => setShowInfoModal(false)}
-            style={{ 
-              background: 'linear-gradient(135deg, #40c9ff 0%, #e81cff 100%)',
-              borderColor: 'transparent'
-            }}
-          >
-            Close
-          </Button>
-        </div>
-      </Modal>
+              </Modal>
 
       {/* Modal prompting unverified resident to verify their profile */}
       <Modal

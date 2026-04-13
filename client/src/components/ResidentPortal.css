@@ -10,6 +10,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .resident-banner-avatar__img {
@@ -19,6 +20,41 @@
   max-height: 96px !important;
   object-fit: cover !important;
   display: block;
+}
+
+/* Mobile container and layout improvements */
+.resident-portal-container {
+  max-width: 100%;
+  overflow-x: hidden;
+  padding: 1rem;
+}
+
+.resident-banner {
+  margin-bottom: 1rem;
+}
+
+.resident-banner-content {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+/* Enhanced mobile breakpoints */
+@media (max-width: 768px) {
+  .resident-portal-container {
+    padding: 0.75rem;
+  }
+  
+  .resident-banner-content {
+    flex-direction: column;
+    text-align: center;
+    gap: 1rem;
+  }
+  
+  .resident-banner {
+    margin-bottom: 0.75rem;
+  }
 }
 
 @media (max-width: 600px) {
@@ -35,4 +71,353 @@
     max-width: 84px !important;
     max-height: 84px !important;
   }
+  
+  .resident-portal-container {
+    padding: 0.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .resident-banner-avatar {
+    width: 72px;
+    height: 72px;
+    min-width: 72px;
+    min-height: 72px;
+    border-radius: 8px;
+  }
+  .resident-banner-avatar__img {
+    width: 72px !important;
+    height: 72px !important;
+    max-width: 72px !important;
+    max-height: 72px !important;
+  }
+  
+  .resident-portal-container {
+    padding: 0.5rem;
+  }
+  
+  .resident-banner-content {
+    padding: 0.75rem;
+    gap: 0.75rem;
+  }
+}
+
+@media (max-width: 360px) {
+  .resident-banner-avatar {
+    width: 64px;
+    height: 64px;
+    min-width: 64px;
+    min-height: 64px;
+    border-radius: 8px;
+  }
+  .resident-banner-avatar__img {
+    width: 64px !important;
+    height: 64px !important;
+    max-width: 64px !important;
+    max-height: 64px !important;
+  }
+  
+  .resident-portal-container {
+    padding: 0.25rem;
+  }
+  
+  .resident-banner-content {
+    padding: 0.5rem;
+    gap: 0.5rem;
+  }
+}
+
+/* Card and form responsiveness */
+.resident-card {
+  margin-bottom: 1rem;
+  border-radius: 12px;
+}
+
+@media (max-width: 768px) {
+  .resident-card {
+    margin-bottom: 0.75rem;
+    border-radius: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .resident-card {
+    margin-bottom: 0.5rem;
+    border-radius: 6px;
+  }
+}
+
+/* Form inputs mobile responsiveness */
+.resident-form .ant-input,
+.resident-form .ant-select-selector,
+.resident-form .ant-input-number,
+.resident-form textarea {
+  font-size: 16px; /* Prevents zoom on iOS */
+}
+
+@media (max-width: 480px) {
+  .resident-form .ant-input,
+  .resident-form .ant-select-selector,
+  .resident-form .ant-input-number,
+  .resident-form textarea {
+    font-size: 16px;
+  }
+  
+  .resident-form .ant-btn {
+    height: 44px;
+    font-size: 16px;
+  }
+}
+
+/* Progress bar mobile responsiveness */
+.resident-progress {
+  max-width: 100%;
+}
+
+@media (max-width: 480px) {
+  .resident-progress {
+    max-width: 280px;
+  }
+}
+
+/* Tags and badges mobile responsiveness */
+.resident-tag {
+  font-size: 12px;
+  padding: 2px 8px;
+}
+
+@media (max-width: 480px) {
+  .resident-tag {
+    font-size: 11px;
+    padding: 1px 6px;
+  }
+}
+
+/* Upload section mobile responsiveness */
+.resident-upload {
+  width: 100%;
+}
+
+@media (max-width: 480px) {
+  .resident-upload .ant-upload {
+    width: 100%;
+  }
+  
+  .resident-upload .ant-btn {
+    width: 100%;
+    height: 44px;
+  }
+}
+
+/* Enhanced form section styling */
+.resident-form-section {
+  margin-bottom: 2rem;
+}
+
+.resident-form-section h4 {
+  color: #1f2937;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.resident-form-section .ant-divider {
+  margin: 1.5rem 0;
+  border-color: #e5e7eb;
+}
+
+/* Enhanced form field styling */
+.resident-form .ant-form-item {
+  margin-bottom: 1rem;
+}
+
+.resident-form .ant-form-item-label {
+  font-weight: 500;
+  color: #374151;
+}
+
+.resident-form .ant-form-item-label > label {
+  font-size: 14px;
+}
+
+/* Enhanced tab styling */
+.resident-tabs .ant-tabs-tab {
+  font-weight: 500;
+}
+
+.resident-tabs .ant-tabs-tab-active {
+  font-weight: 600;
+}
+
+.resident-tabs .ant-tabs-content-holder {
+  background: #fafafa;
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+/* Enhanced field group styling */
+.resident-field-group {
+  background: white;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.resident-field-group h4 {
+  color: #1f2937;
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+/* Enhanced responsive styling for new sections */
+@media (max-width: 768px) {
+  .resident-form-section {
+    margin-bottom: 1.5rem;
+  }
+  
+  .resident-form-section h4 {
+    font-size: 15px;
+  }
+  
+  .resident-field-group {
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+  
+  .resident-field-group h4 {
+    font-size: 14px;
+  }
+  
+  .resident-tabs .ant-tabs-content-holder {
+    padding: 0.75rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .resident-form-section {
+    margin-bottom: 1rem;
+  }
+  
+  .resident-form-section h4 {
+    font-size: 14px;
+    margin-bottom: 0.75rem;
+  }
+  
+  .resident-field-group {
+    padding: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+  
+  .resident-field-group h4 {
+    font-size: 13px;
+    margin-bottom: 0.5rem;
+  }
+  
+  .resident-form .ant-form-item {
+    margin-bottom: 0.75rem;
+  }
+  
+  .resident-form .ant-form-item-label > label {
+    font-size: 13px;
+  }
+  
+  .resident-tabs .ant-tabs-content-holder {
+    padding: 0.5rem;
+  }
+}
+
+/* Enhanced input styling for better visual hierarchy */
+.resident-form .ant-input,
+.resident-form .ant-select-selector,
+.resident-form .ant-input-number,
+.resident-form textarea {
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  transition: all 0.2s ease;
+}
+
+.resident-form .ant-input:hover,
+.resident-form .ant-select-selector:hover,
+.resident-form .ant-input-number:hover,
+.resident-form textarea:hover {
+  border-color: #9ca3af;
+}
+
+.resident-form .ant-input:focus,
+.resident-form .ant-input-focused,
+.resident-form .ant-select-focused .ant-select-selector,
+.resident-form .ant-input-number:focus,
+.resident-form textarea:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+/* Enhanced select dropdown styling */
+.resident-form .ant-select-dropdown {
+  border-radius: 6px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.resident-form .ant-select-item {
+  border-radius: 4px;
+  margin: 2px 4px;
+}
+
+.resident-form .ant-select-item-option-active {
+  background-color: #f3f4f6;
+}
+
+.resident-form .ant-select-item-option-selected {
+  background-color: #3b82f6;
+  color: white;
+}
+
+/* Enhanced button styling */
+.resident-form .ant-btn {
+  border-radius: 6px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.resident-form .ant-btn-primary {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  border: none;
+}
+
+.resident-form .ant-btn-primary:hover {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
+}
+
+/* Enhanced loading and disabled states */
+.resident-form .ant-input[disabled],
+.resident-form .ant-select-disabled .ant-select-selector,
+.resident-form .ant-input-number[disabled],
+.resident-form textarea[disabled] {
+  background-color: #f9fafb;
+  color: #6b7280;
+  cursor: not-allowed;
+}
+
+/* Enhanced validation styling */
+.resident-form .ant-form-item-has-error .ant-input,
+.resident-form .ant-form-item-has-error .ant-select-selector,
+.resident-form .ant-form-item-has-error .ant-input-number,
+.resident-form .ant-form-item-has-error textarea {
+  border-color: #ef4444;
+}
+
+.resident-form .ant-form-item-has-error .ant-input:focus,
+.resident-form .ant-form-item-has-error .ant-input-focused,
+.resident-form .ant-form-item-has-error .ant-select-focused .ant-select-selector,
+.resident-form .ant-form-item-has-error .ant-input-number:focus,
+.resident-form .ant-form-item-has-error textarea:focus {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.1);
 }
