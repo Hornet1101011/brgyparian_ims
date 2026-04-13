@@ -19,6 +19,7 @@ declare module 'express-serve-static-core' {
 
 import { Request, Response } from 'express';
 import { Notification } from '../models/Notification';
+import { UserRole } from '../models/User';
 import * as notificationService from '../services/notificationService';
 import { io, userSockets } from '../index';
 // Helper to emit to all sockets for a user
@@ -157,13 +158,13 @@ export const approveStaff = async (req: Request, res: Response) => {
     if (!user) return res.status(404).json({ message: 'User not found' });
     
     // If already staff, just mark notification read
-    if (user.role === 'staff') {
+    if (user.role === UserRole.STAFF) {
       await Notification.findByIdAndUpdate(notifId, { read: true });
       return res.json({ message: 'User already staff, notification marked read' });
     }
     
     // Promote to staff
-    user.role = 'staff';
+    user.role = UserRole.STAFF;
     user.isActive = true;
     await user.save();
     
