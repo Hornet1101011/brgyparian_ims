@@ -3,7 +3,8 @@ import { axiosInstance } from './api';
 export async function generateFilledDocx(fileId: string, fieldValues: Record<string, string>, requestId?: string) {
   const payload: any = { fieldValues };
   if (requestId) payload.requestId = requestId;
-  const response = await axiosInstance.post(`/documents/${fileId}/generate-filled`, payload, {
+  // Request a fresh generated copy to ensure QR/image updates are reflected
+  const response = await axiosInstance.post(`/documents/${fileId}/generate-filled?refresh=true`, payload, {
     responseType: 'blob',
   });
   // Parse filename from Content-Disposition header if present

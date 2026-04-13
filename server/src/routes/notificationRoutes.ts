@@ -5,7 +5,9 @@ import {
 	markNotificationRead,
 	markManyNotificationsRead,
 	deleteNotification,
-	deleteManyNotifications
+	deleteManyNotifications,
+	approveStaff,
+	rejectStaff
 } from '../controllers/notificationController';
 
 const router = express.Router();
@@ -29,5 +31,11 @@ router.delete('/:id', auth, deleteNotification);
 
 // DELETE /api/notifications (bulk)
 router.delete('/', auth, deleteManyNotifications);
+
+// POST /api/notifications/approve-staff/:userId/:notifId
+router.post('/approve-staff/:userId/:notifId', auth, authorize(['admin']), approveStaff);
+
+// POST /api/notifications/reject-staff/:notifId
+router.post('/reject-staff/:notifId', auth, authorize(['admin']), rejectStaff);
 
 export default router;

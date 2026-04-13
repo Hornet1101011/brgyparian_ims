@@ -31,15 +31,17 @@ router.get('/:id', async (req, res) => {
 // GET /:id/image - serve the announcement image (from DB if available else disk file)
 router.get('/:id/image', async (req, res) => {
   try {
-    const ann = await Announcement.findById(req.params.id).lean();
+    // Load the full Mongoose document (do not use .lean()) so Buffer fields
+    // are preserved as actual Buffer instances when retrieved from MongoDB.
+    const ann = await Announcement.findById(req.params.id);
     if (!ann) return res.status(404).json({ message: 'Announcement not found' });
-    // TypeScript may infer a union that includes array types from various model typings.
     // Normalize to `any` for property access to avoid spurious compile errors while still
     // performing runtime checks for the expected fields.
     const annAny: any = ann as any;
     if (annAny && annAny.imageData && annAny.imageContentType) {
       res.set('Content-Type', annAny.imageContentType);
-      // ann.imageData may be a Buffer or a BSON Binary; normalize to Buffer
+      // When using a real Mongoose document the `imageData` field will be a Buffer.
+      // Send it directly to avoid accidental conversion to a JSON object.
       const data = annAny.imageData as any;
       const buf = Buffer.isBuffer(data) ? data : (data && data.buffer ? Buffer.from(data.buffer) : Buffer.from(data));
       return res.send(buf);

@@ -602,7 +602,116 @@ const DocumentRequestForm: React.FC = () => {
 
               {selectedFields.map((field, idx) => {
                 const fieldValidation = getValidation(field);
-                const isDate = /date|dob|birth|issued/i.test(field);
+                
+                // Determine field type from validation config, fallback to name-based detection
+                const getFieldType = () => {
+                  if (fieldValidation?.fieldType) {
+                    return fieldValidation.fieldType;
+                  }
+                  // Fallback to name-based detection for backward compatibility
+                  if (/date|dob|birth|issued/i.test(field)) return 'date';
+                  return 'string';
+                };
+                
+                const fieldType = getFieldType();
+                
+                // Render appropriate input based on field type
+                const renderFieldInput = () => {
+                  const commonProps = {
+                    style: { width: '100%' },
+                    className: "document-request-input",
+                    disabled: fieldValidation?.disabled || false,
+                    readOnly: fieldValidation?.readOnly || false,
+                  };
+
+                  switch (fieldType) {
+                    case 'date':
+                      return (
+                        <DatePicker 
+                          {...commonProps}
+                          format="MM/DD/YYYY"
+                          disabledDate={(current) => {
+                            if (!current) return false;
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            
+                            // Check past dates restriction
+                            if (fieldValidation?.enablePastDates === false && current < today) {
+                              return true;
+                            }
+                            
+                            // Check future dates restriction
+                            if (fieldValidation?.enableFutureDates === false && current > today) {
+                              return true;
+                            }
+                            
+                            return false;
+                          }}
+                        />
+                      );
+                    
+                    case 'integer':
+                      return (
+                        <Input 
+                          {...commonProps}
+                          type="number"
+                          placeholder={`Enter ${field}`}
+                          onKeyPress={(e) => {
+                            // Allow only numbers, minus sign, and decimal point
+                            const char = String.fromCharCode(e.which);
+                            if (!/[0-9.-]/.test(char)) {
+                              e.preventDefault();
+                            }
+                          }}
+                        />
+                      );
+                    
+                    case 'email':
+                      return (
+                        <Input 
+                          {...commonProps}
+                          type="email"
+                          placeholder={`Enter ${field}`}
+                        />
+                      );
+                    
+                    case 'phone':
+                      return (
+                        <Input 
+                          {...commonProps}
+                          type="tel"
+                          placeholder={`Enter ${field}`}
+                          onKeyPress={(e) => {
+                            // Allow only numbers, plus, minus, parentheses, and spaces
+                            const char = String.fromCharCode(e.which);
+                            if (!/[0-9+\-() ]/.test(char)) {
+                              e.preventDefault();
+                            }
+                          }}
+                        />
+                      );
+                    
+                    case 'text':
+                      return (
+                        <Input.TextArea 
+                          {...commonProps}
+                          placeholder={`Enter ${field}`}
+                          rows={3}
+                          maxLength={fieldValidation?.maxCharacters}
+                        />
+                      );
+                    
+                    case 'string':
+                    default:
+                      return (
+                        <Input 
+                          {...commonProps}
+                          placeholder={`Enter ${field}`}
+                          maxLength={fieldValidation?.maxCharacters}
+                        />
+                      );
+                  }
+                };
                 
                 return (
                 <Col xs={24} sm={12} key={idx}>
@@ -620,7 +729,7 @@ const DocumentRequestForm: React.FC = () => {
                       </span>
                     }
                     rules={[
-                      { required: fieldValidation?.isRequired || true, message: `Please enter ${field}` },
+                      { required: fieldValidation?.isRequired || false, message: `Please enter ${field}` },
                       {
                         validator: (_, value) => {
                           if (!value) return Promise.resolve();
@@ -633,23 +742,7 @@ const DocumentRequestForm: React.FC = () => {
                       }
                     ]}
                   >
-                    {isDate ? 
-                      <DatePicker 
-                        style={{ width: '100%' }} 
-                        format="MM/DD/YYYY"
-                        className="document-request-input"
-                        disabled={fieldValidation?.disabled}
-                        readOnly={fieldValidation?.readOnly}
-                      /> 
-                      : 
-                      <Input 
-                        placeholder={`Enter ${field}`}
-                        className="document-request-input"
-                        maxLength={fieldValidation?.maxCharacters}
-                        disabled={fieldValidation?.disabled}
-                        readOnly={fieldValidation?.readOnly}
-                      /> 
-                    }
+                    {renderFieldInput()}
                   </Form.Item>
                 </Col>
                 );

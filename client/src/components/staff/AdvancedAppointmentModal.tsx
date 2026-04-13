@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Modal, Button, Space, DatePicker, InputNumber, Radio, Input, List, Divider, Row, Col, Tag, Select, Spin, Progress, message, Switch, Input as TextArea } from 'antd';
+import { Modal, Button, Space, DatePicker, InputNumber, Radio, Input, List, Divider, Row, Col, Tag, Select, Spin, Progress, message, Switch, Steps, Card, TimePicker, Input as TextArea } from 'antd';
 import { CloseOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { contactAPI, residentsListAPI } from '../../services/api';
@@ -463,14 +463,41 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
       const created = await contactAPI.submitInquiry(payload);
       if (!created || !created._id) { alert('Failed to create inquiry'); return; }
 
-      const scheduledDates = assignments.map(a => ({
-        date: a.date,
-        startTime: a.startTime,
-        endTime: a.endTime,
-        assignedUsernames: a.resident?.username ? [a.resident.username] : [],
-      }));
+      // Group assignments by date/start/end so assignedUsernames is an array per timeslot
+      const grouped = new Map<string, { date: string; startTime: string; endTime: string; assignedUsernames: string[] }>();
+      for (const a of assignments) {
+        const key = `${a.date}|${a.startTime}|${a.endTime}`;
+        if (!grouped.has(key)) grouped.set(key, { date: a.date, startTime: a.startTime, endTime: a.endTime, assignedUsernames: [] });
+        const entry = grouped.get(key)!;
+        const uname = a.resident?.username;
+        if (uname && !entry.assignedUsernames.includes(uname)) entry.assignedUsernames.push(uname);
+      }
+      const scheduledDates = Array.from(grouped.values());
+
+      // Client-side validation: ensure each scheduled slot has valid times and within office hours
+      const OFFICE_START = 8 * 60; // 08:00
+      const OFFICE_MID = 12 * 60; // 12:00
+      const OFFICE_MID_END = 13 * 60; // 13:00
+      const OFFICE_END = 17 * 60; // 17:00
+      for (const sd of scheduledDates) {
+        const s = toMinutes(sd.startTime);
+        const e = toMinutes(sd.endTime);
+        if (Number.isNaN(s) || Number.isNaN(e) || s >= e) {
+          message.error('Start time must be earlier than end time');
+          return;
+        }
+        const withinMorning = s >= OFFICE_START && e <= OFFICE_MID;
+        const withinAfternoon = s >= OFFICE_MID_END && e <= OFFICE_END;
+        if (!(withinMorning || withinAfternoon)) {
+          message.error('Selected time is outside office hours (08:00-12:00 or 13:00-17:00)');
+          return;
+        }
+      }
 
       const schedulingOptions: Record<string, unknown> = {
+        // map local intervalMode into schedulingOptions.mode expected by server
+        mode: intervalMode,
+        participants: participantCount,
         timeMode,
         participantDistribution,
         intervalMode,
@@ -490,7 +517,14 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
         urgency,
       };
 
-      await contactAPI.scheduleInquiry(String(created._id), scheduledDates, schedulingOptions);
+      try {
+        await contactAPI.scheduleInquiry(String(created._id), scheduledDates, schedulingOptions);
+      } catch (err: any) {
+        console.error('Schedule API error', err?.response || err);
+        const msg = err?.response?.data?.message || err?.message || 'Failed to schedule appointments';
+        message.error(msg);
+        return;
+      }
       setPreview(assignments);
       message.success('Advanced appointments scheduled.');
       onClose();
@@ -533,29 +567,23 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
     setResidentPickerOpen(false);
   };
 
+  const stepIndex = STAGES.findIndex(s => !stageCompleted[s.key]);
+  const currentStep = stepIndex === -1 ? Math.max(0, STAGES.length - 1) : stepIndex;
+
   return (
     <Modal title="Advanced Appointment Options" open={visible} onCancel={onClose} footer={null} width={900}>
-      {overallProgress > 0 && overallProgress < 100 && (
-        <div style={{ margin: '8px 0 12px 0' }}>
-          <Progress percent={Math.round(overallProgress)} showInfo={false} strokeWidth={6} />
-          <div style={{ display: 'flex', gap: 12, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            {STAGES.map(s => (
-              <div key={s.key} style={{ display: 'flex', gap: 6, alignItems: 'center', opacity: stageCompleted[s.key] ? 1 : 0.6 }}>
-                <CheckCircleOutlined style={{ color: stageCompleted[s.key] ? '#52c41a' : '#ddd' }} />
-                <div style={{ fontSize: 12 }}>{s.label}</div>
-              </div>
-            ))}
-            <div style={{ marginLeft: 'auto', fontSize: 12, color: '#666' }}>
-              {(() => {
-                const next = STAGES.find(s => !stageCompleted[s.key]);
-                return next ? `Current: ${next.label}` : 'Ready';
-              })()}
-            </div>
-          </div>
+      <div style={{ margin: '8px 0 12px 0' }}>
+        <style>{`.advanced-steps-wrapper{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:6px;-ms-overflow-style:none;scrollbar-width:none}.advanced-steps-wrapper::-webkit-scrollbar{display:none;height:0}.advanced-steps .ant-steps-item{flex:0 0 auto}.advanced-steps .ant-steps-item-title{white-space:nowrap;max-width:120px;overflow:hidden;text-overflow:ellipsis;font-size:12px}.advanced-steps .ant-steps-item-icon{min-width:28px}`}</style>
+        <div className="advanced-steps-wrapper">
+          <Steps className="advanced-steps" current={currentStep} size="small" style={{ marginBottom: 8 }}>
+            {STAGES.map(s => (<Steps.Step key={s.key} title={s.label} />))}
+          </Steps>
         </div>
-      )}
+        <Progress percent={Math.round(overallProgress)} showInfo={false} strokeWidth={6} />
+      </div>
+
       <div style={{ display: 'flex', gap: 16 }}>
-        <div style={{ flex: 1 }}>
+        <Card bordered={false} bodyStyle={{ padding: 16 }} style={{ flex: 1 }}>
           <div style={{ marginBottom: 8, fontWeight: 600 }}>Select Dates (max {defaultMaxDates})</div>
           <Space style={{ marginBottom: 8 }}>
             <DatePicker onChange={addDate} disabledDate={(cur) => !cur || cur.isBefore(dayjs(), 'day') || cur.day() === 0 || cur.day() === 6} />
@@ -655,9 +683,9 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
             </div>
           )}
 
-        </div>
+        </Card>
 
-        <div style={{ width: 420 }}>
+        <Card bordered={false} bodyStyle={{ padding: 16 }} style={{ width: 420 }}>
           <div style={{ fontWeight: 600, marginBottom: 8 }}>Location Type</div>
           <Select
             style={{ width: '100%', marginBottom: 16 }}
@@ -761,7 +789,7 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
             <Button type="primary" loading={submitting} onClick={submit}>Submit Schedule</Button>
             <Button onClick={onClose}>Cancel</Button>
           </Space>
-        </div>
+        </Card>
       </div>
 
       <Modal title="Select Residents" open={residentPickerOpen} onCancel={() => setResidentPickerOpen(false)} footer={null} width={600}>

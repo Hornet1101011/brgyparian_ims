@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import './DocumentProcessingHighlight.css';
 import styles from './DocumentProcessing.module.css';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Card, Typography, Modal, Spin, Table, Input, Tooltip, Tag, Space, Button, Radio, Select, DatePicker, notification } from 'antd';
+import { Card, Typography, Modal, Spin, Table, Input, Tooltip, Tag, Space, Button, Radio, Select, notification } from 'antd';
 import { SearchOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import { FileWordOutlined, FilePdfOutlined, FileImageOutlined, EyeOutlined } from '@ant-design/icons';
 import { documentsAPI, API_URL } from '../services/api';
@@ -34,9 +34,6 @@ const DocumentProcessing: React.FC = () => {
   const [processedDocId, setProcessedDocId] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState<boolean>(false);
   const [filterQuery, setFilterQuery] = useState<string>('');
-  const [filterType, setFilterType] = useState<string | null>(null);
-  const [filterStatus, setFilterStatus] = useState<string | null>(null);
-  const [filterRange, setFilterRange] = useState<any | null>(null);
   const [generateLoading, setGenerateLoading] = useState<boolean>(false);
   const location = useLocation();
   const navigate = useNavigate();
@@ -449,48 +446,6 @@ const DocumentProcessing: React.FC = () => {
                   size="large"
                 />
               </div>
-              <div style={{ flex: '0 1 180px' }}>
-                <Typography.Text style={{ fontSize: 12, fontWeight: 700, background: 'linear-gradient(90deg, #722ed1 0%, #1890ff 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', display: 'block', marginBottom: 8 }}>
-                  📋 Document Type
-                </Typography.Text>
-                <Select 
-                  allowClear 
-                  placeholder="All types" 
-                  value={filterType} 
-                  onChange={(v) => setFilterType(v)}
-                  style={{ width: '100%' }}
-                  size="large"
-                >
-                  {requestedTypes.map((t) => <Select.Option key={t} value={t}>{t}</Select.Option>)}
-                </Select>
-              </div>
-              <div style={{ flex: '0 1 140px' }}>
-                <Typography.Text style={{ fontSize: 12, fontWeight: 700, background: 'linear-gradient(90deg, #722ed1 0%, #1890ff 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', display: 'block', marginBottom: 8 }}>
-                  ⚡ Status
-                </Typography.Text>
-                <Select 
-                  allowClear 
-                  placeholder="All statuses" 
-                  value={filterStatus} 
-                  onChange={(v) => setFilterStatus(v)}
-                  style={{ width: '100%' }}
-                  size="large"
-                >
-                  <Select.Option value="pending">⏳ Pending</Select.Option>
-                  <Select.Option value="approved">✓ Approved</Select.Option>
-                  <Select.Option value="rejected">✕ Rejected</Select.Option>
-                </Select>
-              </div>
-              <div style={{ flex: '0 1 240px' }}>
-                <Typography.Text style={{ fontSize: 12, fontWeight: 700, background: 'linear-gradient(90deg, #722ed1 0%, #1890ff 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', display: 'block', marginBottom: 8 }}>
-                  📅 Date Range
-                </Typography.Text>
-                <DatePicker.RangePicker 
-                  onChange={(vals) => setFilterRange(vals)}
-                  style={{ width: '100%' }}
-                  size="large"
-                />
-              </div>
             </div>
           </Card>
         </div>
@@ -500,16 +455,6 @@ const DocumentProcessing: React.FC = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {files.filter((file: any) => {
               if (filterQuery && !(file.filename || '').toLowerCase().includes(filterQuery.toLowerCase())) return false;
-              if (filterType && ((file.type || '').toLowerCase() !== filterType.toLowerCase())) return false;
-              const primary = getPrimaryRequest(file._id);
-              const status = primary?.status || '';
-              if (filterStatus && status.toLowerCase() !== filterStatus.toLowerCase()) return false;
-              if (filterRange && filterRange[0] && filterRange[1] && file.uploadDate) {
-                const d = new Date(file.uploadDate);
-                const start = filterRange[0].toDate();
-                const end = filterRange[1].toDate();
-                if (d < start || d > end) return false;
-              }
               return true;
             }).length === 0 ? (
               <Card style={{ textAlign: 'center', padding: '40px 20px' }}>
@@ -519,16 +464,6 @@ const DocumentProcessing: React.FC = () => {
             ) : (
               files.filter((file: any) => {
                 if (filterQuery && !(file.filename || '').toLowerCase().includes(filterQuery.toLowerCase())) return false;
-                if (filterType && ((file.type || '').toLowerCase() !== filterType.toLowerCase())) return false;
-                const primary = getPrimaryRequest(file._id);
-                const status = primary?.status || '';
-                if (filterStatus && status.toLowerCase() !== filterStatus.toLowerCase()) return false;
-                if (filterRange && filterRange[0] && filterRange[1] && file.uploadDate) {
-                  const d = new Date(file.uploadDate);
-                  const start = filterRange[0].toDate();
-                  const end = filterRange[1].toDate();
-                  if (d < start || d > end) return false;
-                }
                 return true;
               }).map((file: any) => {
                 const name = file.filename || '';
@@ -592,6 +527,37 @@ const DocumentProcessing: React.FC = () => {
                         </div>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+                        {/* Per-file requestor selector (mobile) */}
+                        <div>
+                          {(() => {
+                            const requests = getRequestsForFile(file._id) || [];
+                            if (!requests.length) return <div style={{ color: '#888', fontSize: 12 }}>No requests</div>;
+                            const options = requests.map((r: any) => ({ label: (r.username || r.requesterName || 'Unknown') + (r.createdAt ? ` · ${formatDateUtil(r.createdAt)}` : ''), value: (r._id || r.requestId) }));
+                            const primary = getPrimaryRequest(file._id);
+                            const value = (primary && (primary._id || primary.requestId)) || options[0].value;
+                            return (
+                              <Select
+                                size="small"
+                                value={value}
+                                style={{ minWidth: 160 }}
+                                options={options}
+                                onChange={(val: any) => {
+                                  setFileRequestMap(prev => {
+                                    const cloned: Record<string, any> = { ...prev };
+                                    const arr = Array.isArray(cloned[file._id]) ? cloned[file._id].slice() : (cloned[file._id] ? [cloned[file._id]] : []);
+                                    const idx = arr.findIndex((x: any) => ((x._id || x.requestId) === val));
+                                    if (idx > 0) {
+                                      const [item] = arr.splice(idx, 1);
+                                      arr.unshift(item);
+                                    }
+                                    cloned[file._id] = arr;
+                                    return cloned;
+                                  });
+                                }}
+                              />
+                            );
+                          })()}
+                        </div>
                         <div style={{
                           padding: '6px 12px',
                           background: statusConfig.bgColor,
@@ -631,16 +597,6 @@ const DocumentProcessing: React.FC = () => {
               rowKey={(record: any) => record?._id || 'unknown'}
               dataSource={files.filter((file: any) => {
                 if (filterQuery && !(file.filename || '').toLowerCase().includes(filterQuery.toLowerCase())) return false;
-                if (filterType && ((file.type || '').toLowerCase() !== filterType.toLowerCase())) return false;
-                const primary = getPrimaryRequest(file._id);
-                const status = primary?.status || '';
-                if (filterStatus && status.toLowerCase() !== filterStatus.toLowerCase()) return false;
-                if (filterRange && filterRange[0] && filterRange[1] && file.uploadDate) {
-                  const d = new Date(file.uploadDate);
-                  const start = filterRange[0].toDate();
-                  const end = filterRange[1].toDate();
-                  if (d < start || d > end) return false;
-                }
                 return true;
               })}
               pagination={{ pageSize: 10, position: ['bottomCenter'] }}
@@ -692,6 +648,38 @@ const DocumentProcessing: React.FC = () => {
                   )
                 },
                 {
+                  title: '👥 Requestors',
+                  key: 'requestors',
+                  width: 300,
+                  render: (_: any, record: any) => {
+                    const requests = getRequestsForFile(record._id) || [];
+                    if (!requests.length) return <span style={{ color: '#888' }}>No requests</span>;
+                    const options = requests.map((r: any) => ({ label: (r.username || r.requesterName || 'Unknown') + (r.createdAt ? ` · ${formatDateUtil(r.createdAt)}` : ''), value: (r._id || r.requestId) }));
+                    const primary = getPrimaryRequest(record._id);
+                    const value = (primary && (primary._id || primary.requestId)) || options[0].value;
+                    return (
+                      <Select
+                        value={value}
+                        options={options}
+                        style={{ minWidth: 200 }}
+                        onChange={(val: any) => {
+                          setFileRequestMap(prev => {
+                            const cloned: Record<string, any> = { ...prev };
+                            const arr = Array.isArray(cloned[record._id]) ? cloned[record._id].slice() : (cloned[record._id] ? [cloned[record._id]] : []);
+                            const idx = arr.findIndex((x: any) => ((x._id || x.requestId) === val));
+                            if (idx > 0) {
+                              const [item] = arr.splice(idx, 1);
+                              arr.unshift(item);
+                            }
+                            cloned[record._id] = arr;
+                            return cloned;
+                          });
+                        }}
+                      />
+                    );
+                  }
+                },
+                {
                   title: '🔧 Actions',
                   key: 'actions',
                   width: 200,
@@ -704,13 +692,6 @@ const DocumentProcessing: React.FC = () => {
                         style={{ borderRadius: 6, fontSize: 12, border: '1px solid rgba(114, 46, 209, 0.3)', fontWeight: 600 }}
                       >
                         Preview
-                      </Button>
-                      <Button 
-                        type="primary"
-                        onClick={() => { setSelectedFile(record); setModalVisible(true); }}
-                        style={{ borderRadius: 6, fontSize: 12, fontWeight: 600, background: 'linear-gradient(135deg, #722ed1 0%, #1890ff 50%, #13c2c2 100%)', border: 'none', boxShadow: '0 4px 12px rgba(114, 46, 209, 0.3)' }}
-                      >
-                        Process
                       </Button>
                     </Space>
                   )

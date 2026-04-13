@@ -38,6 +38,15 @@ const Inbox: React.FC = () => {
   // Check JWT-decoded user for restriction status (not localStorage which may be stale)
   const isRestricted = Boolean(user && user.restricted);
 
+  // Read current user profile from localStorage for author heuristics (safe parse)
+  const storedProfile = (() => {
+    try {
+      return localStorage.getItem('userProfile') ? JSON.parse(localStorage.getItem('userProfile') || 'null') : null;
+    } catch {
+      return null;
+    }
+  })();
+
   const getInitial = (val: any, fallback = '?'): string => {
     if (!val) return fallback;
     try {

@@ -84,29 +84,18 @@ const StatsPanel: React.FC = () => {
         </div>
       </div>
 
-      <Row gutter={[14, 14]} style={{ padding: '0 20px 20px 20px' }}>
-        {items.map((it: any) => (
-          <Col key={it.key} xs={12} sm={12} md={12} lg={4} style={{ display: 'flex' }}>
-            <div 
-              style={{ 
-                display: 'flex', 
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 10, 
-                width: '100%',
-                background: it.bgColor,
-                border: '1px solid ' + it.borderColor + '30',
-                borderRadius: 12,
-                padding: '14px 12px',
-                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                cursor: 'pointer'
-              } as React.CSSProperties}
+      <div style={{ padding: '0 20px 20px 20px', overflowX: 'hidden' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, alignItems: 'stretch', width: '100%' }}>
+          {items.map((it: any) => (
+            <div
+              key={it.key}
+              role="button"
+              tabIndex={0}
               onMouseEnter={(e) => {
                 const el = e.currentTarget as HTMLDivElement;
-                el.style.transform = 'translateY(-3px)';
-                el.style.boxShadow = '0 12px 24px ' + it.borderColor + '25';
-                el.style.background = it.bgColor.replace('0.08', '0.12');
+                el.style.transform = 'translateY(-6px)';
+                el.style.boxShadow = '0 14px 30px ' + it.borderColor + '22';
+                el.style.background = (it.bgColor || '').toString().replace('0.08', '0.14');
               }}
               onMouseLeave={(e) => {
                 const el = e.currentTarget as HTMLDivElement;
@@ -114,35 +103,32 @@ const StatsPanel: React.FC = () => {
                 el.style.boxShadow = 'none';
                 el.style.background = it.bgColor;
               }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                minHeight: 80,
+                width: '100%',
+                background: it.bgColor,
+                border: '1px solid ' + it.borderColor + '22',
+                borderRadius: 14,
+                padding: '10px 12px',
+                boxSizing: 'border-box',
+                transition: 'all 0.22s cubic-bezier(0.4, 0, 0.2, 1)'
+              } as React.CSSProperties}
             >
-              <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 6, textAlign: 'center', width: '100%' }}>
-                {it.title}
+              <div style={{ width: 46, height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#ffffff', borderRadius: 12, boxShadow: '0 8px 18px rgba(2,6,23,0.06)', border: '1px solid rgba(255, 255, 255, 0.8)' }}>
+                {it.icon}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, width: '100%' }}>
-                <div 
-                  style={{ 
-                    width: 44, 
-                    height: 44, 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'center', 
-                    background: '#ffffff',
-                    borderRadius: 10,
-                    flexShrink: 0,
-                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
-                    border: '1px solid rgba(255, 255, 255, 0.6)'
-                  }}
-                >
-                  {it.icon}
-                </div>
-                <div style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', lineHeight: 1 }}>
-                  {it.value}
-                </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 700, textTransform: 'none' }}>{it.title}</div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', marginTop: 6 }}>{it.value}</div>
               </div>
             </div>
-          </Col>
-        ))}
-      </Row>
+          ))}
+        </div>
+      </div>
     </Card>
   );
 };

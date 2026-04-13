@@ -533,8 +533,12 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }: { children: React.Rea
             minHeight: `calc(100vh - ${screenSize === 'mobile' ? 56 : HEADER_HEIGHT}px)`,
           }}
         >
-          {(user?.role === 'resident' || user?.role === 'staff') && <AnnouncementsBanner />}
-          {children}
+          <div style={screenSize === 'mobile' ? { display: 'flex', justifyContent: 'center', width: '100%' } : { width: '100%' }}>
+            <div style={screenSize === 'mobile' ? { width: '100%', maxWidth: 640, boxSizing: 'border-box' } : { width: '100%' }}>
+              {(user?.role === 'resident' || user?.role === 'staff') && <AnnouncementsBanner />}
+              {children}
+            </div>
+          </div>
         </Content>
       </Layout>
     </Layout>

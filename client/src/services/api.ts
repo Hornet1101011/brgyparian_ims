@@ -533,8 +533,20 @@ export const contactAPI = {
   scheduleInquiry: async (id: string, scheduledDates: ScheduledAppointment[], schedulingOptions?: Record<string, unknown>) => {
     const payload: Record<string, unknown> = { scheduledDates, status: 'scheduled' };
     if (schedulingOptions !== undefined) payload.schedulingOptions = schedulingOptions;
-    const resp = await axiosInstance.post(`/inquiries/${id}`, payload);
-    return resp.data as { success?: boolean; conflicts?: ConflictItem[] } | any;
+    try {
+      // Use explicit schedule endpoint which maps to the same update logic on server
+      const resp = await axiosInstance.put(`/inquiries/${id}/schedule`, payload);
+      return resp.data as { success?: boolean; conflicts?: ConflictItem[] } | any;
+    } catch (err: any) {
+      // Surface server error payload for callers to display useful messages
+      if (err && err.response && err.response.data) {
+        const serverMsg = err.response.data;
+        const e: any = new Error(serverMsg?.message || 'Server error');
+        e.response = { data: serverMsg, status: err.response.status };
+        throw e;
+      }
+      throw err;
+    }
   },
   // Send invite/notification for an inquiry (server may implement to trigger emails/SMS)
   sendInvite: async (id: string) => {

@@ -3,8 +3,9 @@ declare module "*.json" {
   export default value;
 }
 
-declare module 'react';
-declare module 'react/jsx-runtime';
+// Allow importing plain CSS files in TS without errors
+declare module "*.css";
+
 declare module 'antd';
 declare module '@ant-design/icons';
 declare module 'react-router-dom';

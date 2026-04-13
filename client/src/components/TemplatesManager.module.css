@@ -114,6 +114,27 @@
   transform: translateY(-2px);
 }
 
+/* Actions container inside each card - keep buttons contained and wrapping */
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* Make Ant Design buttons inside actions behave as flexible items that can shrink
+   and wrap without overflowing the card. Use min-width: 0 to allow flex items
+   to shrink below their content width when necessary. */
+.actions .ant-btn {
+  flex: 1 1 120px;
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Modal Styles */
 .previewModal {
   position: fixed;

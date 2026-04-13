@@ -83,6 +83,7 @@ import { rangesOverlap } from '../utils/scheduling';
 import schedulingService from '../services/schedulingService';
 import auditService from '../services/auditService';
 import { sendMail } from '../services/EmailService';
+import SystemSetting from '../models/SystemSetting';
 // Runtime require for sendGridService (used for direct email sending like forget password)
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const sendGridService: any = require('../../services/emailService.js');
@@ -1378,62 +1379,53 @@ export const deleteInquiry = async (req: any, res: Response, next: NextFunction)
         `;
       }
 
-      // Complete professional email template
+      // Load site settings for branding and contact info (optional)
+      const settings = await SystemSetting.findOne().lean().catch(() => null);
+      const frontendUrl = (process.env.FRONTEND_URL || 'https://alphaversion.onrender.com').replace(/\/$/, '');
+      const viewLink = `${frontendUrl}/inquiries${id ? '?openInquiryId=' + id : ''}`;
+      const siteName = (settings && (settings.siteName || settings.barangayName)) || 'Barangay Information Management System';
+      const contactEmail = settings?.contactEmail || '';
+
+      // Polished, mobile-friendly appointment invite template
       const html = `
-        <!DOCTYPE html>
+        <!doctype html>
         <html>
         <head>
-          <meta charset="UTF-8">
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: linear-gradient(135deg, #1890ff 0%, #096dd9 100%); color: white; padding: 20px; border-radius: 5px; text-align: center; }
-            .header h1 { margin: 0; font-size: 24px; }
-            .content { padding: 20px 0; }
-            .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #999; text-align: center; }
-            .cta-button { display: inline-block; background: #1890ff; color: white; padding: 12px 30px; border-radius: 5px; text-decoration: none; margin-top: 20px; font-weight: bold; }
-          </style>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
         </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1>✉️ Appointment Invitation</h1>
-              <p style="margin: 10px 0 0 0; font-size: 14px;">Barangay Service Request</p>
-            </div>
+        <body style="font-family: Arial, Helvetica, sans-serif; background:#f4f6f8; margin:0; padding:0;">
+          <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+            <table width="600" style="background:#ffffff; margin:24px; border-radius:8px; overflow:hidden; box-shadow:0 6px 20px rgba(0,0,0,0.06);">
+              <tr style="background:linear-gradient(90deg,#1890ff,#096dd9); color:#fff;">
+                <td style="padding:18px 24px; text-align:center;">
+                  <h1 style="margin:0; font-size:18px; font-weight:700;">${subject}</h1>
+                  <div style="font-size:13px; opacity:0.95; margin-top:6px;">${siteName}</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:20px 24px;">
+                  <p style="margin:0 0 12px 0; font-size:15px; color:#333;">Dear ${inquiry.residentName || inquiry.username || 'Resident'},</p>
+                  <p style="margin:0 0 14px 0; font-size:14px; color:#444;">Your appointment has been scheduled. Please find the details below.</p>
 
-            <div class="content">
-              <p style="font-size: 16px;">Dear Valued Resident,</p>
-              
-              <p style="font-size: 14px; margin: 15px 0;">
-                Your appointment request has been processed and a date/time has been scheduled. 
-                Please find the details below:
-              </p>
+                  ${dateTimeHtml}
+                  ${locationHtml}
+                  ${detailsHtml}
 
-              ${dateTimeHtml}
-              ${locationHtml}
-              ${detailsHtml}
+                  <p style="text-align:center; margin:20px 0 0 0;">
+                    <a href="${viewLink}" style="display:inline-block; padding:12px 20px; background:#1890ff; color:#fff; text-decoration:none; border-radius:6px; font-weight:600;">View Appointment</a>
+                  </p>
 
-              <p style="margin-top: 30px; padding: 15px; background: #e6f7ff; border-radius: 5px; font-size: 14px;">
-                <strong>📌 Next Steps:</strong><br>
-                Please log in to your account to confirm your attendance. Your confirmation helps us 
-                plan accordingly and ensures the best service for you.
-              </p>
-
-              <div style="text-align: center;">
-                <a href="${process.env.FRONTEND_URL || 'https://alphaversion.onrender.com'}/resident/dashboard" class="cta-button">
-                  View Appointment Details
-                </a>
-              </div>
-            </div>
-
-            <div class="footer">
-              <p>
-                <strong>Barangay Information Management System</strong><br>
-                This is an automated message. Please do not reply to this email.<br>
-                For inquiries, please log in to your account or contact the barangay office.
-              </p>
-            </div>
-          </div>
+                  <p style="font-size:13px; color:#666; margin-top:16px;">If you have questions, contact ${contactEmail || 'the barangay office'}.</p>
+                </td>
+              </tr>
+              <tr>
+                <td style="background:#fafafa; padding:12px 20px; font-size:12px; color:#9aa0a6; text-align:center;">
+                  This is an automated message from ${siteName}. Please do not reply to this email.
+                </td>
+              </tr>
+            </table>
+          </td></tr></table>
         </body>
         </html>
       `;

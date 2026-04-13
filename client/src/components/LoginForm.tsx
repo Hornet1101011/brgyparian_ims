@@ -34,7 +34,7 @@ import { useContactInfo, ContactInfoItem } from '../hooks/useContactInfo';
  * - button styles
  */
 
-const LoginForm: React.FC = () => {
+const LoginForm = () => {
     
   const { login, isAuthenticated, user, setUser } = useAuth() as any;
   const [guestModalVisible, setGuestModalVisible] = useState(false);
@@ -47,14 +47,14 @@ const LoginForm: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
   const [forgotPasswordSent, setForgotPasswordSent] = useState(false);
-  const [forgotPasswordMode, setForgotPasswordMode] = useState<'link' | 'otp'>('otp');
-  const [forgotPasswordSubmittedEmail, setForgotPasswordSubmittedEmail] = useState<string | null>(null);
+  const [forgotPasswordMode, setForgotPasswordMode] = useState('otp' as 'link' | 'otp');
+  const [forgotPasswordSubmittedEmail, setForgotPasswordSubmittedEmail] = useState(null as string | null);
   const [otpVerified, setOtpVerified] = useState(false);
   const [otpVerifying, setOtpVerifying] = useState(false);
-  const [officials, setOfficials] = useState<PublicOfficial[]>([]);
-  const [, setOfficialsStatus] = useState<string>('loading');
-  const officialsCarouselRef = useRef<HTMLDivElement | null>(null);
-  const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
+  const [officials, setOfficials] = useState([] as PublicOfficial[]);
+  const [, setOfficialsStatus] = useState('loading' as string);
+  const officialsCarouselRef = useRef(null as any);
+  const [slideDirection, setSlideDirection] = useState(null as 'left' | 'right' | null);
   
   // Use system settings hook - automatically fetches and refreshes every 30 seconds
   const { settings: systemSettings, loading: settingsLoading } = useSystemSettings(true);
@@ -114,6 +114,61 @@ const LoginForm: React.FC = () => {
     })();
     return () => { mounted = false; };
   }, [isAuthenticated]);
+
+  // Pause state for CSS-based auto-scroll (used below)
+  const [autoPaused, setAutoPaused] = useState(false);
+
+  // JS-based auto-scroll for officials list (seamless loop without DOM duplication)
+  useEffect(() => {
+    const el = officialsCarouselRef.current as HTMLElement | null;
+    if (!el) return;
+
+    let rafId: number = 0;
+    let last = performance.now();
+    let paused = false;
+    const speed = 28; // px per second
+
+    const onEnter = () => { paused = true; setAutoPaused(true); };
+    const onLeave = () => { paused = false; setAutoPaused(false); last = performance.now(); };
+
+    el.addEventListener('mouseenter', onEnter);
+    el.addEventListener('mouseleave', onLeave);
+    el.addEventListener('touchstart', onEnter, { passive: true });
+    el.addEventListener('touchend', onLeave, { passive: true });
+
+    const step = (time: number) => {
+      const dt = Math.max(0, time - last);
+      last = time;
+
+      if (!paused && el.scrollHeight > el.clientHeight) {
+        const delta = (speed * dt) / 1000;
+        el.scrollTop = el.scrollTop + delta;
+
+        // When the first child has completely scrolled out of view,
+        // move it to the end and reduce scrollTop accordingly to create a seamless loop.
+        // Use a while loop in case dt causes multiple items to pass.
+        while (el.firstElementChild && el.scrollTop >= (el.firstElementChild as HTMLElement).offsetHeight) {
+          const first = el.firstElementChild as HTMLElement;
+          const h = first.offsetHeight || 0;
+          // Move the item to the end and keep visual continuity
+          el.scrollTop = el.scrollTop - h;
+          el.appendChild(first);
+        }
+      }
+
+      rafId = requestAnimationFrame(step);
+    };
+
+    rafId = requestAnimationFrame(step);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      el.removeEventListener('mouseenter', onEnter);
+      el.removeEventListener('mouseleave', onLeave);
+      el.removeEventListener('touchstart', onEnter);
+      el.removeEventListener('touchend', onLeave);
+    };
+  }, [officials]);
 
   // Fetch system settings on mount and periodically refresh
   // Fetch system settings on mount and periodically refresh
@@ -224,7 +279,7 @@ const LoginForm: React.FC = () => {
           backdropFilter: 'blur(20px)',
           boxShadow: '0 20px 40px rgba(102, 126, 234, 0.15), 0 0 1px rgba(102, 126, 234, 0.3)',
           padding: 19,
-          height: '100%',
+          minHeight: 320,
           display: 'flex',
           flexDirection: 'column'
         }}
@@ -243,46 +298,37 @@ const LoginForm: React.FC = () => {
             <Typography.Text type="secondary" style={{ display: 'block', marginTop: 12, fontSize: 12 }}>Loading information...</Typography.Text>
           </div>
         ) : (
-          <div className="barangay-info-list" style={{ display: 'flex', flexDirection: 'column', gap: 11, flex: 1 }}>
+          <div className="barangay-info-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, flex: 1 }}>
             {barangayItems.length === 0 ? (
               <Typography.Text type="secondary" style={{ padding: '20px', textAlign: 'center' }}>No barangay information available</Typography.Text>
             ) : (
               barangayItems.map(item => (
-                <div 
-                  key={item._id} 
-                  className="info-list-item"
+                <div
+                  key={item._id}
+                  className="info-grid-item"
                   style={{
                     background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.6) 0%, rgba(248, 250, 255, 0.4) 100%)',
-                    border: '1.5px solid rgba(102, 126, 234, 0.2)',
-                    borderRadius: 10,
-                    padding: 13,
+                    border: '1px solid rgba(102, 126, 234, 0.12)',
+                    borderRadius: 12,
+                    padding: 20,
                     textAlign: 'center',
-                    boxShadow: '0 6px 16px rgba(102, 126, 234, 0.08)',
-                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                    cursor: 'pointer',
-                    opacity: item.isPlaceholder ? 0.6 : 1
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!item.isPlaceholder) {
-                      (e.currentTarget as HTMLDivElement).style.boxShadow = '0 12px 28px rgba(102, 126, 234, 0.25)';
-                      (e.currentTarget as HTMLDivElement).style.borderColor = '#667eea';
-                      (e.currentTarget as HTMLDivElement).style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 250, 255, 0.7) 100%)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLDivElement).style.boxShadow = '0 8px 20px rgba(102, 126, 234, 0.08)';
-                    (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(102, 126, 234, 0.2)';
-                    (e.currentTarget as HTMLDivElement).style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.6) 0%, rgba(248, 250, 255, 0.4) 100%)';
+                    boxShadow: '0 8px 20px rgba(102, 126, 234, 0.04)',
+                    transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                    minHeight: 120,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center'
                   }}
                 >
-                  <div style={{ fontSize: 22, marginBottom: 8, filter: item.isPlaceholder ? 'grayscale(1) opacity(0.5)' : 'none' }}>
+                  <div style={{ fontSize: 20, marginBottom: 8 }}>
                     {item.icon === 'home' && '🏛️'}
                     {item.icon === 'environment' && '📍'}
                     {item.icon === 'map' && '🗺️'}
                     {item.icon === 'info' && 'ℹ️'}
                   </div>
-                  <div style={{ color: '#667eea', fontSize: 9, marginBottom: 6, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.48px' }}>{item.label}</div>
-                  <div style={{ fontWeight: 700, fontSize: 11, color: '#0f172a', lineHeight: 1.5 }}>
+                  <div style={{ color: '#667eea', fontSize: 11, marginBottom: 6, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px' }}>{item.label}</div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', lineHeight: 1.4 }}>
                     {item.value}
                   </div>
                 </div>
@@ -307,7 +353,7 @@ const LoginForm: React.FC = () => {
           backdropFilter: 'blur(20px)',
           boxShadow: '0 20px 40px rgba(102, 126, 234, 0.15), 0 0 1px rgba(102, 126, 234, 0.3)',
           padding: 19,
-          height: '100%',
+          minHeight: 220,
           display: 'flex',
           flexDirection: 'column'
         }}
@@ -326,54 +372,36 @@ const LoginForm: React.FC = () => {
             <Typography.Text type="secondary" style={{ display: 'block', marginTop: 12, fontSize: 12 }}>Loading contacts...</Typography.Text>
           </div>
         ) : (
-          <div className="contact-info-list" style={{ display: 'flex', flexDirection: 'column', gap: 11, flex: 1 }}>
-            {contactItems.length === 0 ? (
-              <Typography.Text type="secondary" style={{ padding: '20px', textAlign: 'center' }}>No contact information available</Typography.Text>
-            ) : (
-              contactItems.map(item => (
-                <a 
-                  key={item._id}
-                  href={item.link || '#'}
-                  className="contact-list-item"
-                  style={{
-                    background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.6) 0%, rgba(248, 250, 255, 0.4) 100%)',
-                    border: '1.5px solid rgba(102, 126, 234, 0.2)',
-                    borderRadius: 10,
-                    padding: 13,
-                    textAlign: 'center',
-                    boxShadow: '0 6px 16px rgba(102, 126, 234, 0.08)',
-                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                    cursor: item.isPlaceholder ? 'default' : 'pointer',
-                    textDecoration: 'none',
-                    color: 'inherit',
-                    opacity: item.isPlaceholder ? 0.6 : 1,
-                    display: 'block'
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!item.isPlaceholder) {
-                      (e.currentTarget as HTMLAnchorElement).style.boxShadow = '0 12px 28px rgba(102, 126, 234, 0.25)';
-                      (e.currentTarget as HTMLAnchorElement).style.borderColor = '#667eea';
-                      (e.currentTarget as HTMLAnchorElement).style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 250, 255, 0.7) 100%)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLAnchorElement).style.boxShadow = '0 8px 20px rgba(102, 126, 234, 0.08)';
-                    (e.currentTarget as HTMLAnchorElement).style.borderColor = 'rgba(102, 126, 234, 0.2)';
-                    (e.currentTarget as HTMLAnchorElement).style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.6) 0%, rgba(248, 250, 255, 0.4) 100%)';
-                  }}
-                >
-                  <div style={{ fontSize: 22, marginBottom: 8, filter: item.isPlaceholder ? 'grayscale(1) opacity(0.5)' : 'none' }}>
-                    {item.icon === 'mail' && '📧'}
-                    {item.icon === 'phone' && '📱'}
-                    {item.icon === 'info' && 'ℹ️'}
-                  </div>
-                  <div style={{ color: '#667eea', fontSize: 9, marginBottom: 6, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.48px' }}>{item.label}</div>
-                  <div style={{ fontWeight: 700, fontSize: 11, color: '#0f172a', lineHeight: 1.5, wordBreak: 'break-word' }}>
-                    {item.value}
-                  </div>
-                </a>
-              ))
-            )}
+          <div className="contact-info-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, flex: 1 }}>
+              {contactItems.length === 0 ? (
+                <Typography.Text type="secondary" style={{ padding: '20px', textAlign: 'center', gridColumn: '1 / -1' }}>No contact information available</Typography.Text>
+              ) : (
+                contactItems.map(item => (
+                  <a
+                    key={item._id}
+                    href={item.link || '#'}
+                    className={`contact-grid-item ${item.isPlaceholder ? 'placeholder' : ''}`}
+                    onMouseEnter={(e) => {
+                      if (!item.isPlaceholder) {
+                        (e.currentTarget as HTMLAnchorElement).style.boxShadow = '0 12px 28px rgba(102, 126, 234, 0.25)';
+                        (e.currentTarget as HTMLAnchorElement).style.borderColor = '#667eea';
+                        (e.currentTarget as HTMLAnchorElement).style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 250, 255, 0.7) 100%)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLAnchorElement).style.boxShadow = '0 8px 20px rgba(102, 126, 234, 0.08)';
+                      (e.currentTarget as HTMLAnchorElement).style.borderColor = 'rgba(102, 126, 234, 0.2)';
+                      (e.currentTarget as HTMLAnchorElement).style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.6) 0%, rgba(248, 250, 255, 0.4) 100%)';
+                    }}
+                  >
+                    <div className="contact-item-head">
+                      <span className="contact-item-icon">{item.icon === 'mail' ? '📧' : item.icon === 'phone' ? '📱' : 'ℹ️'}</span>
+                      <div className="contact-item-label">{item.label}</div>
+                    </div>
+                    <div className="contact-item-value">{item.value}</div>
+                  </a>
+                ))
+              )}
           </div>
         )}
       </Card>
@@ -410,359 +438,236 @@ const LoginForm: React.FC = () => {
 
   return (
     <>
-    <div className="login-page three-column" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', minHeight: '100vh', width: '100%', padding: '40px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div className="login-container three-column-container" style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', gap: 20 }}>
-        {/* System Notice Alert - Full Width */}
-        {!settingsLoading && <SystemNoticeAlert />}
-        
-        <Row gutter={[22, 22]} align="stretch" justify="center" className="three-column-row" style={{ height: 'auto', display: 'flex', flex: 1, minHeight: 0, flexDirection: 'column' }}>
-          
-          {/* LOGIN FORM - Top */}
-          <Col xs={24} sm={24} md={24} lg={24} className="pane right-pane" style={{ display: 'flex', minHeight: 0, alignSelf: 'stretch' }}>
-            <div className="pane-inner center-inner" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', height: 'auto', width: '100%', minHeight: 0, alignSelf: 'stretch' }}>
-              <Card 
-                className="glass-card login-card" 
-                variant="outlined"
-                style={{
-                  background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 255, 0.96) 100%)',
-                  border: '1.5px solid rgba(102, 126, 234, 0.2)',
-                  borderRadius: 14,
-                  backdropFilter: 'blur(20px)',
-                  boxShadow: '0 20px 40px rgba(102, 126, 234, 0.2), 0 0 1px rgba(102, 126, 234, 0.4)',
-                  padding: 35
-                }}
-              >
-                <div style={{ textAlign: 'center', marginBottom: 29 }}>
-                  <Typography.Title 
-                    level={3} 
-                    className="title-blue" 
-                    style={{ 
-                      textAlign: 'center', 
-                      marginBottom: 11,
-                      fontSize: 21,
-                      fontWeight: 800,
-                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                      backgroundClip: 'text',
-                      WebkitBackgroundClip: 'text',
-                      WebkitTextFillColor: 'transparent',
-                      color: 'transparent',
-                      letterSpacing: '-0.48px'
-                    }}
-                  >
-                    {systemSettings?.siteName || 'Barangay System'}
-                  </Typography.Title>
-                  <Typography.Text 
-                    style={{ 
-                      display: 'block', 
-                      color: '#64748b', 
-                      fontWeight: 500, 
-                      fontSize: 10
-                    }}
-                  >
-                    Sign in to your account
-                  </Typography.Text>
+      <div className="login-page three-column">
+        <div className="login-container">
+          {/* System Notice Alert - Full Width */}
+          {!settingsLoading && <SystemNoticeAlert />}
+
+          {/* Top area: three columns per wireframe - Quick Stats, Barangay Officials, Sign In */}
+          <Row className="three-column-row" gutter={[22, 22]} align="stretch" justify="center" style={{ marginTop: 18 }}>
+            <Col xs={24} sm={24} md={12} lg={12} className="left-col" style={{ display: 'flex', justifyContent: 'center', height: '100%' }}>
+              <div className="pane-inner" style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ width: '100%', flex: 1, display: 'flex', flexDirection: 'column' }}>
+                  <StatsPanel />
                 </div>
 
-                <Form 
-                  name="login" 
-                  layout="vertical" 
-                  onFinish={onFinish} 
-                  autoComplete="off" 
-                  requiredMark={false}
-                  style={{ marginBottom: 0 }}
-                >
-                  <Form.Item 
-                    label={<span style={{ fontWeight: 600, color: '#0f172a', fontSize: 11 }}>Email or Username</span>}
-                    name="username" 
-                    rules={[{ required: true, message: 'Please input your email or username!' }]}
-                    style={{ marginBottom: 18 }}
-                  >
-                    <Input 
-                      prefix={<UserOutlined style={{ color: '#667eea' }} />} 
-                      placeholder="raymond@example.com" 
-                      size="large"
-                      style={{
-                        borderRadius: 8,
-                        border: '1.5px solid #e2e8f0',
-                        fontSize: 12,
-                        padding: '9px 13px',
-                        transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                        background: 'rgba(248, 250, 255, 0.6)'
-                      }}
-                      onFocus={(e) => {
-                        (e.target as HTMLInputElement).style.borderColor = '#667eea';
-                        (e.target as HTMLInputElement).style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
-                        (e.target as HTMLInputElement).style.background = 'rgba(248, 250, 255, 1)';
-                      }}
-                      onBlur={(e) => {
-                        (e.target as HTMLInputElement).style.borderColor = '#e2e8f0';
-                        (e.target as HTMLInputElement).style.boxShadow = 'none';
-                        (e.target as HTMLInputElement).style.background = 'rgba(248, 250, 255, 0.6)';
-                      }}
-                    />
-                  </Form.Item>
-
-                  <Form.Item 
-                    label={<span style={{ fontWeight: 600, color: '#0f172a', fontSize: 11 }}>Password</span>}
-                    name="password" 
-                    rules={[{ required: true, message: 'Please input your password!' }, { min: 6, message: 'Password must be at least 6 characters' }]}
-                    style={{ marginBottom: 22 }}
-                  >
-                    <Input.Password 
-                      autoComplete="current-password" 
-                      prefix={<LockOutlined style={{ color: '#667eea' }} />} 
-                      placeholder="••••••••" 
-                      size="large"
-                      style={{
-                        borderRadius: 8,
-                        border: '1.5px solid #e2e8f0',
-                        fontSize: 12,
-                        padding: '9px 13px',
-                        transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                        background: 'rgba(248, 250, 255, 0.6)'
-                      }}
-                      onFocus={(e) => {
-                        (e.target as HTMLInputElement).style.borderColor = '#667eea';
-                        (e.target as HTMLInputElement).style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
-                        (e.target as HTMLInputElement).style.background = 'rgba(248, 250, 255, 1)';
-                      }}
-                      onBlur={(e) => {
-                        (e.target as HTMLInputElement).style.borderColor = '#e2e8f0';
-                        (e.target as HTMLInputElement).style.boxShadow = 'none';
-                        (e.target as HTMLInputElement).style.background = 'rgba(248, 250, 255, 0.6)';
-                      }}
-                    />
-                  </Form.Item>
-
-                  <Form.Item style={{ marginBottom: 11 }}>
-                    <Button 
-                      htmlType="submit" 
-                      size="large" 
-                      loading={loading} 
-                      className="signin-btn"
-                      style={{
-                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                        border: 'none',
-                        fontWeight: 700,
-                        fontSize: 12,
-                        borderRadius: 8,
-                        height: 38,
-                        color: '#ffffff',
-                        boxShadow: '0 10px 19px rgba(102, 126, 234, 0.35)',
-                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                        letterSpacing: '-0.24px'
-                      }}
-                      onMouseEnter={(e) => {
-                        (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 16px 32px rgba(102, 126, 234, 0.45)';
-                        (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(-2px)';
-                      }}
-                      onMouseLeave={(e) => {
-                        (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 12px 24px rgba(102, 126, 234, 0.35)';
-                        (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(0)';
-                      }}
-                      block
-                    >
-                      {loading ? 'Signing In...' : 'Sign In'}
-                    </Button>
-                  </Form.Item>
-
-                  <Form.Item style={{ marginBottom: 14, display: 'none' }}>
-                    <Button 
-                      onClick={() => setGuestModalVisible(true)} 
-                      size="large" 
-                      className="guest-btn"
-                      style={{
-                        background: 'rgba(102, 126, 234, 0.1)',
-                        border: '2px solid #667eea',
-                        color: '#667eea',
-                        fontWeight: 700,
-                        fontSize: 12,
-                        borderRadius: 8,
-                        height: 38,
-                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                        letterSpacing: '-0.24px'
-                      }}
-                      onMouseEnter={(e) => {
-                        (e.currentTarget as HTMLButtonElement).style.background = '#667eea';
-                        (e.currentTarget as HTMLButtonElement).style.color = '#ffffff';
-                        (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 8px 20px rgba(102, 126, 234, 0.3)';
-                      }}
-                      onMouseLeave={(e) => {
-                        (e.currentTarget as HTMLButtonElement).style.background = 'rgba(102, 126, 234, 0.1)';
-                        (e.currentTarget as HTMLButtonElement).style.color = '#667eea';
-                        (e.currentTarget as HTMLButtonElement).style.boxShadow = 'none';
-                      }}
-                      block
-                    >
-                      Continue as Guest
-                    </Button>
-                  </Form.Item>
-
-                  <div className="links-section" style={{ marginBottom: 0 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginBottom: 11, paddingBottom: 11, borderBottom: '1.5px solid rgba(102, 126, 234, 0.1)' }}>
-                      <Button 
-                        type="link" 
-                        onClick={() => { setForgotPasswordModalVisible(true); setForgotPasswordSent(false); forgotPasswordForm.resetFields(); }}
-                        style={{ padding: 0, color: '#667eea', fontWeight: 600, fontSize: 11, textDecoration: 'none', transition: 'all 0.2s' }}
-                        onMouseEnter={(e) => {
-                          (e.currentTarget as HTMLButtonElement).style.color = '#764ba2';
-                        }}
-                        onMouseLeave={(e) => {
-                          (e.currentTarget as HTMLButtonElement).style.color = '#667eea';
-                        }}
-                      >
-                        Forgot Password?
-                      </Button>
-                      <Button 
-                        type="link" 
-                        onClick={() => setEmergencyModalVisible(true)}
-                        style={{ padding: 0, color: '#ef4444', fontWeight: 700, fontSize: 10, transition: 'all 0.2s', letterSpacing: '-0.16px' }}
-                        onMouseEnter={(e) => {
-                          (e.currentTarget as HTMLButtonElement).style.color = '#dc2626';
-                        }}
-                        onMouseLeave={(e) => {
-                          (e.currentTarget as HTMLButtonElement).style.color = '#ef4444';
-                        }}
-                      >
-                        🚨 Emergency Hotline
-                      </Button>
-                      <RouterLink to="/register" style={{ color: '#667eea', fontWeight: 600, textDecoration: 'none', fontSize: 11, transition: 'all 0.2s' }} onMouseEnter={(e) => (e.currentTarget as HTMLAnchorElement).style.color = '#764ba2'} onMouseLeave={(e) => (e.currentTarget as HTMLAnchorElement).style.color = '#667eea'}>
-                        Create Account
-                      </RouterLink>
-                    </div>
-                  </div>
-                </Form>
-              </Card>
-            </div>
-          </Col>
-
-          {/* QUICK STATS - After Login Form */}
-          <Col xs={24} sm={24} md={24} lg={24} style={{ display: 'flex', minHeight: 0 }}>
-            <StatsPanel />
-          </Col>
-
-          {/* BARANGAY OFFICIALS */}
-          <Col xs={24} sm={24} md={24} lg={24} className="pane left-pane stats-pane" style={{ display: 'flex', minHeight: 0 }}>
-            <div className="pane-inner left-inner" style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%', width: '100%', minHeight: 0 }}>
-
-              {/* Officials Card */}
-              <Card 
-                className="glass-card officials-card" 
-                variant="outlined"
-                style={{
-                  background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 255, 0.96) 100%)',
-                  border: '1.5px solid rgba(102, 126, 234, 0.2)',
-                  borderRadius: 13,
-                  backdropFilter: 'blur(20px)',
-                  boxShadow: '0 16px 32px rgba(102, 126, 234, 0.15), 0 0 1px rgba(102, 126, 234, 0.3)',
-                  padding: 19,
-                  flex: 1,
-                  minHeight: 0,
-                  display: 'flex',
-                  flexDirection: 'column'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, paddingBottom: 13, borderBottom: '1.5px solid rgba(102, 126, 234, 0.1)' }}>
-                  <div style={{ width: 3, height: 19, background: 'linear-gradient(180deg, #667eea 0%, #764ba2 100%)', borderRadius: 2 }} />
-                  <Typography.Title level={5} style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#0f172a', letterSpacing: '-0.3px' }}>
-                    🏛️ Barangay Officials
-                  </Typography.Title>
-                </div>
-
-                <div className="carousel-wrap vertical" style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'stretch', justifyContent: 'flex-start', flex: 1, minHeight: 0, gap: 10 }}>
-                  <div 
-                    ref={officialsCarouselRef} 
-                    className={`carousel-scroll vertical ${slideDirection ? `slide-${slideDirection}` : ''}`}
-                    style={{ 
-                      overflowY: 'auto', 
-                      display: 'flex', 
+                <div style={{ width: '100%', flex: 1, display: 'flex', flexDirection: 'column' }}>
+                  <Card 
+                    className="glass-card officials-card" 
+                    variant="outlined"
+                    style={{
+                      background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 255, 0.96) 100%)',
+                      border: '1.5px solid rgba(102, 126, 234, 0.2)',
+                      borderRadius: 13,
+                      backdropFilter: 'blur(20px)',
+                      boxShadow: '0 16px 32px rgba(102, 126, 234, 0.15), 0 0 1px rgba(102, 126, 234, 0.3)',
+                      padding: 14,
+                      display: 'flex',
                       flexDirection: 'column',
-                      gap: 10, 
-                      paddingRight: 8,
-                      scrollBehavior: 'smooth',
-                      minHeight: 0,
                       flex: 1
-                    }}>
-                    {officials.length === 0 ? (
-                      <Typography.Text type="secondary" style={{ padding: '20px', textAlign: 'center' }}>No officials available</Typography.Text>
-                    ) : (
-                      officials.map(off => (
-                        <div 
-                          key={off._id} 
-                          className="official-card-vertical"
-                          style={{
-                          background: '#ffffff',
-                          border: '1px solid #e2e8f0',
-                          borderRadius: 8,
-                          padding: 10,
-                          textAlign: 'left',
-                          boxShadow: '0 3px 10px rgba(0, 0, 0, 0.05)',
-                          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                          display: 'flex',
-                          gap: 8,
-                            alignItems: 'flex-start',
-                            cursor: 'pointer'
-                          }}
-                          onMouseEnter={(e) => {
-                            (e.currentTarget as HTMLDivElement).style.boxShadow = '0 12px 24px rgba(102, 126, 234, 0.15)';
-                            (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)';
-                            (e.currentTarget as HTMLDivElement).style.borderColor = '#667eea';
-                          }}
-                          onMouseLeave={(e) => {
-                            (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.06)';
-                            (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)';
-                            (e.currentTarget as HTMLDivElement).style.borderColor = '#e2e8f0';
-                          }}
-                        >
-                          <div 
-                            className="official-avatar"
-                            style={{
-                            width: 38,
-                            height: 38,
-                            borderRadius: 6,
-                              overflow: 'hidden',
-                              flexShrink: 0,
-                              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              border: '2px solid rgba(102, 126, 234, 0.2)'
-                            }}
-                          >
-                            <OfficialPhotoImage
-                              official={off as any}
-                              size={48}
-                            />
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontWeight: 700, fontSize: 11, color: '#0f172a', marginBottom: 3, lineHeight: 1.3 }}>{off.name}</div>
-                            <div style={{ color: '#64748b', fontSize: 9, marginBottom: 2, fontWeight: 500 }}>{off.title}</div>
-                            <div style={{ color: '#94a3b8', fontSize: 8 }}>{off.term}</div>
-                          </div>
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                      <div style={{ width: 3, height: 16, background: 'linear-gradient(180deg, #667eea 0%, #764ba2 100%)', borderRadius: 2 }} />
+                      <Typography.Title level={5} style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#0f172a' }}>
+                        🏛️ Barangay Officials
+                      </Typography.Title>
+                    </div>
+                    <div className="officials-list-wrap" ref={officialsCarouselRef} style={{ paddingRight: 6, flex: 1 }} onMouseEnter={() => setAutoPaused(true)} onMouseLeave={() => setAutoPaused(false)} onTouchStart={() => setAutoPaused(true)} onTouchEnd={() => setAutoPaused(false)}>
+                      {officials.length === 0 ? (
+                        <Typography.Text type="secondary" style={{ padding: '12px', display: 'block' }}>No officials available</Typography.Text>
+                      ) : (
+                        <div className="carousel-scroll vertical" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                          {officials.map(off => (
+                            <div key={off._id} className="official-card-vertical">
+                              <div style={{ width: 56, height: 56, borderRadius: 10, overflow: 'hidden', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                                <OfficialPhotoImage official={off as any} size={56} />
+                              </div>
+
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ fontWeight: 700, fontSize: 14 }}>{off.name}</div>
+                                <div style={{ color: '#64748b', fontSize: 12 }}>{off.title}</div>
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                      ))
-                    )}
-                  </div>
+                      )}
+                    </div>
+                  </Card>
                 </div>
-              </Card>
-            </div>
-          </Col>
+              </div>
+            </Col>
 
-          {/* CENTER COLUMN - Barangay Information & Contact Info */}
-          <Col xs={24} sm={24} md={24} lg={24} className="pane center-pane login-pane" style={{ display: 'flex', minHeight: 0 }}>
-            <div className="pane-inner right-inner" style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%', width: '100%', minHeight: 0 }}>
-              
-              {/* Barangay Information */}
-              <BarangayInfoCard />
+            <Col xs={24} sm={24} md={12} lg={12} className="login-col" style={{ display: 'flex', justifyContent: 'center', alignItems: 'stretch', height: '100%' }}>
+              <div className="pane-inner" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                <Card 
+                  className="glass-card login-card" 
+                  variant="outlined"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 255, 0.96) 100%)',
+                    border: '1.5px solid rgba(102, 126, 234, 0.2)',
+                    borderRadius: 14,
+                    backdropFilter: 'blur(20px)',
+                    boxShadow: '0 20px 40px rgba(102, 126, 234, 0.2), 0 0 1px rgba(102, 126, 234, 0.4)',
+                    padding: 32,
+                    height: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    flex: 1
+                  }}
+                >
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
+                    <img
+                      src={`${process.env.PUBLIC_URL}/logo-parian2.png`}
+                      alt={systemSettings?.siteName || 'Logo'}
+                      className="login-logo"
+                    />
+                    <Typography.Title
+                      level={2}
+                      style={{
+                        textAlign: 'center',
+                        marginBottom: 8,
+                        fontSize: 28,
+                        fontWeight: 800,
+                        color: '#0f172a'
+                      }}
+                    >
+                      {systemSettings?.siteName || 'Barangay Information System'}
+                    </Typography.Title>
+                    <Typography.Text
+                      style={{
+                        display: 'block',
+                        color: '#64748b',
+                        fontWeight: 500,
+                        fontSize: 12
+                      }}
+                    >
+                      Sign In
+                    </Typography.Text>
+                  </div>
 
-              {/* Contact Info Card */}
-              <div style={{ flexShrink: 0, minHeight: 0 }}><ContactInfoCard /></div>
-            </div>
-          </Col>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                    <Form 
+                      name="login" 
+                      layout="vertical" 
+                      onFinish={onFinish} 
+                      autoComplete="off" 
+                      requiredMark={false}
+                      style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', flex: 1 }}
+                    >
+                    <Form.Item 
+                      label={<span style={{ fontWeight: 600, color: '#0f172a', fontSize: 11 }}>Email or Username</span>}
+                      name="username" 
+                      rules={[{ required: true, message: 'Please input your email or username!' }]}
+                      style={{ marginBottom: 18 }}
+                    >
+                      <Input 
+                        prefix={<UserOutlined style={{ color: '#667eea' }} />} 
+                        placeholder="raymond@example.com" 
+                        size="large"
+                        style={{
+                          borderRadius: 8,
+                          border: '1.5px solid #e2e8f0',
+                          fontSize: 12,
+                          padding: '9px 13px',
+                          transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                          background: 'rgba(248, 250, 255, 0.6)'
+                        }}
+                      />
+                    </Form.Item>
 
-        </Row>
+                    <Form.Item 
+                      label={<span style={{ fontWeight: 600, color: '#0f172a', fontSize: 11 }}>Password</span>}
+                      name="password" 
+                      rules={[{ required: true, message: 'Please input your password!' }, { min: 6, message: 'Password must be at least 6 characters' }]}
+                      style={{ marginBottom: 22 }}
+                    >
+                      <Input.Password 
+                        autoComplete="current-password" 
+                        prefix={<LockOutlined style={{ color: '#667eea' }} />} 
+                        placeholder="••••••••" 
+                        size="large"
+                        style={{
+                          borderRadius: 8,
+                          border: '1.5px solid #e2e8f0',
+                          fontSize: 12,
+                          padding: '9px 13px',
+                          transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                          background: 'rgba(248, 250, 255, 0.6)'
+                        }}
+                      />
+                    </Form.Item>
+
+                    <Form.Item style={{ marginBottom: 11 }}>
+                      <Button 
+                        htmlType="submit" 
+                        size="large" 
+                        loading={loading} 
+                        className="signin-btn"
+                        style={{
+                          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                          border: 'none',
+                          fontWeight: 700,
+                          fontSize: 12,
+                          borderRadius: 8,
+                          height: 38,
+                          color: '#ffffff',
+                          boxShadow: '0 10px 19px rgba(102, 126, 234, 0.35)',
+                          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                          letterSpacing: '-0.24px'
+                        }}
+                        block
+                      >
+                        {loading ? 'Signing In...' : 'Sign In'}
+                      </Button>
+                    </Form.Item>
+
+                    <div className="links-section" style={{ marginBottom: 0 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginBottom: 11, paddingBottom: 11, borderBottom: '1.5px solid rgba(102, 126, 234, 0.1)' }}>
+                        <Button 
+                          type="link" 
+                          onClick={() => { setForgotPasswordModalVisible(true); setForgotPasswordSent(false); forgotPasswordForm.resetFields(); }}
+                          style={{ padding: 0, color: '#667eea', fontWeight: 600, fontSize: 11, textDecoration: 'none', transition: 'all 0.2s' }}
+                        >
+                          Forgot Password?
+                        </Button>
+                        <Button 
+                          type="link" 
+                          onClick={() => setEmergencyModalVisible(true)}
+                          style={{ padding: 0, color: '#ef4444', fontWeight: 700, fontSize: 10, transition: 'all 0.2s', letterSpacing: '-0.16px' }}
+                        >
+                          🚨 Emergency Hotline
+                        </Button>
+                        <RouterLink to="/register" style={{ color: '#667eea', fontWeight: 600, textDecoration: 'none', fontSize: 11, transition: 'all 0.2s' }}>
+                          Create Account
+                        </RouterLink>
+                      </div>
+                    </div>
+                    </Form>
+                  </div>
+                </Card>
+              </div>
+            </Col>
+          </Row>
+
+          {/* Bottom full-width: barangay information and contact details (stacked) */}
+          <Row gutter={[22, 22]} style={{ marginTop: 28 }}>
+            <Col xs={24}>
+              <div className="pane-inner" style={{ width: '100%' }}>
+                <BarangayInfoCard />
+              </div>
+            </Col>
+          </Row>
+
+          <Row gutter={[22, 22]} style={{ marginTop: 18, marginBottom: 40 }}>
+            <Col xs={24}>
+              <div className="pane-inner" style={{ width: '100%' }}>
+                <ContactInfoCard />
+              </div>
+            </Col>
+          </Row>
+        </div>
       </div>
-  </div>  
   <Modal
       title="Continue as Guest"
       open={guestModalVisible}

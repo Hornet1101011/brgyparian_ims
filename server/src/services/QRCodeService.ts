@@ -7,15 +7,13 @@ export class QRCodeService {
 
   static async generateDocumentQR(documentId: string, isOnline: boolean = true): Promise<string> {
     try {
-      const verificationUrl = isOnline
-        ? `${this.BASE_URL}/verify-document/${documentId}`
-        : `offline://document/${documentId}`;
-      
-      // Generate QR code as data URL (base64)
-      const qrDataUrl = await QRCode.toDataURL(verificationUrl, {
+      // For document verification we only encode the transaction/document id itself
+      const payload = String(documentId || '');
+      // Generate QR code as data URL (base64) with a slightly smaller size
+      const qrDataUrl = await QRCode.toDataURL(payload, {
         errorCorrectionLevel: 'H', // High error correction level
-        margin: 2,
-        width: 200,
+        margin: 1,
+        width: 120,
         color: {
           dark: '#000000',
           light: '#ffffff'
@@ -31,15 +29,13 @@ export class QRCodeService {
 
   static async generateDocumentQRBuffer(documentId: string, isOnline: boolean = true): Promise<Buffer> {
     try {
-      const verificationUrl = isOnline
-        ? `${this.BASE_URL}/verify-document/${documentId}`
-        : `offline://document/${documentId}`;
-      
-      // Generate QR code as buffer
-      const qrBuffer = await QRCode.toBuffer(verificationUrl, {
+      // Only encode the transaction/document id in the QR
+      const payload = String(documentId || '');
+      // Generate QR code as buffer (smaller size)
+      const qrBuffer = await QRCode.toBuffer(payload, {
         errorCorrectionLevel: 'H',
-        margin: 2,
-        width: 200,
+        margin: 1,
+        width: 120,
         color: {
           dark: '#000000',
           light: '#ffffff'

@@ -136,7 +136,7 @@ export const generateFilledDocument = async (req, res) => {
 <w:r xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">
   <w:drawing>
     <wp:inline>
-      <wp:extent cx="952500" cy="952500"/>
+      <wp:extent cx="400000" cy="400000"/>
       <wp:docPr id="1" name="QR"/>
       <a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
         <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
@@ -145,12 +145,12 @@ export const generateFilledDocument = async (req, res) => {
               <pic:cNvPr id="0" name="QR"/>
               <pic:cNvPicPr/>
             </pic:nvPicPr>
-              <pic:blipFill>
+            <pic:blipFill>
               <a:blip r:embed="${newRid}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>
               <a:stretch><a:fillRect/></a:stretch>
             </pic:blipFill>
             <pic:spPr>
-              <a:xfrm><a:off x="0" y="0"/><a:ext cx="952500" cy="952500"/></a:xfrm>
+              <a:xfrm><a:off x="0" y="0"/><a:ext cx="400000" cy="400000"/></a:xfrm>
               <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
             </pic:spPr>
           </pic:pic>

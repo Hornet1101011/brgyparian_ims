@@ -136,8 +136,8 @@ const TemplatesManager: React.FC = () => {
               <Card
                 key={file._id}
                 hoverable
+                className={`${styles.card} ${styles.cardAnimation}`}
                 style={{
-                  borderRadius: 12,
                   border: '1px solid rgba(24, 144, 255, 0.12)',
                   boxShadow: '0 2px 12px rgba(24, 144, 255, 0.08)',
                   transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -193,7 +193,7 @@ const TemplatesManager: React.FC = () => {
                   </div>
 
                   {/* Actions */}
-                  <div style={{ display: 'flex', gap: 8, marginTop: 'auto' }}>
+                  <div className={styles.actions}>
                     <Tooltip title="Preview Template">
                       <Button
                         size="middle"
@@ -210,7 +210,8 @@ const TemplatesManager: React.FC = () => {
                             setPreviewModalVisible(true);
                           }
                         }}
-                        style={{ borderRadius: 8, flex: 1, borderColor: 'rgba(24, 144, 255, 0.3)' }}
+                        className={styles.actionButton}
+                        style={{ borderRadius: 8, borderColor: 'rgba(24, 144, 255, 0.3)' }}
                       >
                         Preview
                       </Button>
@@ -225,7 +226,8 @@ const TemplatesManager: React.FC = () => {
                             setSelectedTemplateForValidation(file);
                             setValidationConfigVisible(true);
                           }}
-                          style={{ borderRadius: 8, flex: 1, borderColor: 'rgba(102, 126, 234, 0.3)' }}
+                          className={styles.actionButton}
+                          style={{ borderRadius: 8, borderColor: 'rgba(102, 126, 234, 0.3)' }}
                         >
                           Configure
                         </Button>
@@ -256,7 +258,8 @@ const TemplatesManager: React.FC = () => {
                               message.error('Download failed');
                             }
                           }}
-                          style={{ borderRadius: 8, flex: 1, background: 'linear-gradient(135deg, #52c41a 0%, #13c2c2 100%)', border: 'none', fontWeight: 600 }}
+                          className={styles.actionButton}
+                          style={{ borderRadius: 8, background: 'linear-gradient(135deg, #52c41a 0%, #13c2c2 100%)', border: 'none', fontWeight: 600 }}
                         >
                           Download
                         </Button>
@@ -293,13 +296,14 @@ const TemplatesManager: React.FC = () => {
                                   setError('Delete failed.');
                                   message.error('Delete failed');
                                 }
-                              setLoading(false);
-                            }
-                          });
-                        }}
-                        style={{ borderRadius: 8, borderColor: 'rgba(255, 77, 79, 0.3)' }}
-                      />
-                    </Tooltip>
+                                setLoading(false);
+                              }
+                            });
+                          }}
+                          className={styles.actionButton}
+                          style={{ borderRadius: 8, borderColor: 'rgba(255, 77, 79, 0.3)' }}
+                        />
+                      </Tooltip>
                     )}
                   </div>
                 </div>
