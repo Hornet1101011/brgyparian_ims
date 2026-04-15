@@ -811,12 +811,7 @@ useEffect(() => {
 									<Typography.Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 14 }}>
 										Barangay ID: {profile?.barangayID || 'N/A'}
 									</Typography.Text>
-									{personalInfo?.dateOfResidency && (
-										<Typography.Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 14 }}>
-											Resident for: {calculateResidencyDuration(personalInfo.dateOfResidency)}
-										</Typography.Text>
-									)}
-									
+																		
 									{/* Profile Completion Progress */}
 									<div style={{ marginTop: 16, maxWidth: 300, margin: '16px auto 0' }}>
 										<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -970,8 +965,8 @@ useEffect(() => {
 																	</Tag>
 																</div>
 																<div style={{ display: 'flex', justifyContent: 'space-between' }}>
-																	<Text>Member Since:</Text>
-																	<Text>{profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString() : 'Unknown'}</Text>
+																	<Text>Resident For:</Text>
+																	<Text>{personalInfo?.dateOfResidency ? calculateResidencyDuration(personalInfo.dateOfResidency) : 'Unknown'}</Text>
 																</div>
 																<div style={{ display: 'flex', justifyContent: 'space-between' }}>
 																	<Text>Role:</Text>
@@ -1067,12 +1062,35 @@ useEffect(() => {
 																					</Form.Item>
 																				</Col>
 																				<Col xs={24} sm={8}>
-																					<Form.Item label="Age">
+																					<Form.Item 
+																						label="Age"
+																						tooltip="Your age will be calculated automatically based on your birth date."
+																					>
 																						<Input name="age" type="number" value={personalForm?.age || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
 																					</Form.Item>
 																				</Col>
 																				<Col xs={24} sm={8}>
-																					<Form.Item label="Birth Date">
+																					<Form.Item 
+																						label="Birth Date"
+																						tooltip="Select your date of birth. Age will be calculated automatically."
+																						rules={[
+																							{ required: true, message: 'Please select your birth date' },
+																							{
+																								validator: (_, value) => {
+																									if (value) {
+																										const age = dayjs().diff(value, 'year');
+																										if (age < 0) {
+																											return Promise.reject('Birth date cannot be in the future');
+																										}
+																										if (age > 120) {
+																											return Promise.reject('Please enter a valid birth date');
+																										}
+																									}
+																									return Promise.resolve();
+																								}
+																							}
+																						]}
+																					>
 																						<DatePicker 
 																							name="birthDate" 
 																							value={personalForm.birthDate ? dayjs(personalForm.birthDate) : null} 
@@ -1086,9 +1104,16 @@ useEffect(() => {
 																								}
 																							}} 
 																							disabled={!editingPersonal}
-																							disabledDate={(current) => current && current > dayjs().endOf('day')}
+																							disabledDate={(current) => {
+																								// Disable future dates and dates more than 120 years ago
+																								const today = dayjs();
+																								const minDate = today.subtract(120, 'year');
+																								return current && (current > today.endOf('day') || current < minDate.startOf('day'));
+																							}}
 																							style={{ width: '100%' }}
 																							placeholder="Select birth date"
+																							format="MMMM D, YYYY"
+																							showToday={false}
 																						/>
 																					</Form.Item>
 																				</Col>
@@ -1128,18 +1153,59 @@ useEffect(() => {
 																					</Form.Item>
 																				</Col>
 																				<Col xs={24} sm={8}>
-																					<Form.Item label="Date of Residency">
+																					<Form.Item 
+																						label="Date of Residency"
+																						tooltip="Select the date you became a resident of this barangay."
+																						rules={[
+																							{ required: true, message: 'Please select your date of residency' },
+																							{
+																								validator: (_, value) => {
+																									if (value) {
+																										const today = dayjs();
+																										if (value > today.endOf('day')) {
+																											return Promise.reject('Date of residency cannot be in the future');
+																										}
+																										// Check if residency date is before birth date
+																										if (personalForm.birthDate && value < dayjs(personalForm.birthDate)) {
+																											return Promise.reject('Date of residency cannot be before birth date');
+																										}
+																										// Check if residency date is more than 100 years ago
+																										const minDate = today.subtract(100, 'year');
+																										if (value < minDate.startOf('day')) {
+																											return Promise.reject('Please enter a more recent residency date');
+																										}
+																									}
+																									return Promise.resolve();
+																								}
+																							}
+																						]}
+																					>
 																						<DatePicker 
 																							name="dateOfResidency" 
 																							value={personalForm.dateOfResidency ? dayjs(personalForm.dateOfResidency) : null} 
 																							onChange={(date) => {
 																								const dateOfResidency = date ? date.format('YYYY-MM-DD') : '';
 																								setPersonalForm(prev => prev ? { ...prev, dateOfResidency } : prev);
+																								// Re-validate birth date if it exists to ensure consistency
+																								if (personalForm.birthDate && date) {
+																									// This will trigger validation to check the relationship between dates
+																									setTimeout(() => {
+																										// Force re-validation by updating the form
+																										setPersonalForm(prev => prev ? { ...prev } : prev);
+																									}, 100);
+																								}
 																							}} 
 																							disabled={!editingPersonal}
-																							disabledDate={(current) => current && current > dayjs().endOf('day')}
+																							disabledDate={(current) => {
+																								// Disable future dates and dates more than 100 years ago
+																								const today = dayjs();
+																								const minDate = today.subtract(100, 'year');
+																								return current && (current > today.endOf('day') || current < minDate.startOf('day'));
+																							}}
 																							style={{ width: '100%' }}
 																							placeholder="Select residency start date"
+																							format="MMMM D, YYYY"
+																							showToday={false}
 																						/>
 																					</Form.Item>
 																				</Col>
@@ -1315,19 +1381,47 @@ useEffect(() => {
 																					</Form.Item>
 																				</Col>
 																				<Col xs={24} sm={8}>
-																					<Form.Item label="Spouse Birth Date">
-																						<DatePicker 
-																							name="spouseBirthDate" 
-																							value={personalForm.spouseBirthDate ? dayjs(personalForm.spouseBirthDate) : null} 
-																							onChange={(date) => {
-																								const spouseBirthDate = date ? date.format('YYYY-MM-DD') : '';
-																								setPersonalForm(prev => prev ? { ...prev, spouseBirthDate } : prev);
-																							}} 
-																							disabled={!editingPersonal}
-																							disabledDate={(current) => current && current > dayjs().endOf('day')}
-																							style={{ width: '100%' }}
-																							placeholder="Select spouse birth date"
-																						/>
+																					<Form.Item 
+																		label="Spouse Birth Date"
+																		tooltip="Select your spouse's date of birth."
+																		rules={[
+																			{
+																				validator: (_, value) => {
+																					if (value) {
+																						const age = dayjs().diff(value, 'year');
+																						if (age < 0) {
+																							return Promise.reject('Spouse birth date cannot be in the future');
+																						}
+																						if (age > 120) {
+																							return Promise.reject('Please enter a valid birth date');
+																						}
+																					}
+																					return Promise.resolve();
+																				}
+																			}
+																		]}
+																	>
+																		<DatePicker 
+																			name="spouseBirthDate" 
+																			value={personalForm.spouseBirthDate ? dayjs(personalForm.spouseBirthDate) : null} 
+																			onChange={(date) => {
+																				const spouseBirthDate = date ? date.format('YYYY-MM-DD') : '';
+																				// Calculate spouse age automatically
+																				const spouseAge = date ? dayjs().diff(date, 'year') : undefined;
+																				setPersonalForm(prev => prev ? { ...prev, spouseBirthDate, spouseAge } : prev);
+																			}} 
+																			disabled={!editingPersonal}
+																			disabledDate={(current) => {
+																				// Disable future dates and dates more than 120 years ago
+																				const today = dayjs();
+																				const minDate = today.subtract(120, 'year');
+																				return current && (current > today.endOf('day') || current < minDate.startOf('day'));
+																			}}
+																			style={{ width: '100%' }}
+																			placeholder="Select spouse birth date"
+																			format="MMMM D, YYYY"
+																			showToday={false}
+																		/>
 																					</Form.Item>
 																				</Col>
 																			</Row>
@@ -1400,35 +1494,97 @@ useEffect(() => {
 																					</Form.Item>
 																				</Col>
 																				<Col xs={24} sm={6}>
-																					<Form.Item label="Mother's Birth Date">
-																						<DatePicker 
-																							name="motherBirthDate" 
-																							value={personalForm.motherBirthDate ? dayjs(personalForm.motherBirthDate) : null} 
-																							onChange={(date) => {
-																								const motherBirthDate = date ? date.format('YYYY-MM-DD') : '';
-																								setPersonalForm(prev => prev ? { ...prev, motherBirthDate } : prev);
-																							}} 
-																							disabled={!editingPersonal}
-																							disabledDate={(current) => current && current > dayjs().endOf('day')}
-																							style={{ width: '100%' }}
-																							placeholder="Select mother birth date"
-																						/>
+																					<Form.Item 
+																		label="Mother's Birth Date"
+																		tooltip="Select your mother's date of birth."
+																		rules={[
+																			{
+																				validator: (_, value) => {
+																					if (value) {
+																						const age = dayjs().diff(value, 'year');
+																						if (age < 0) {
+																							return Promise.reject('Mother birth date cannot be in the future');
+																						}
+																						if (age < 15) {
+																							return Promise.reject('Mother birth date seems too recent');
+																						}
+																						if (age > 120) {
+																							return Promise.reject('Please enter a valid birth date');
+																						}
+																					}
+																					return Promise.resolve();
+																				}
+																			}
+																		]}
+																	>
+																		<DatePicker 
+																			name="motherBirthDate" 
+																			value={personalForm.motherBirthDate ? dayjs(personalForm.motherBirthDate) : null} 
+																			onChange={(date) => {
+																				const motherBirthDate = date ? date.format('YYYY-MM-DD') : '';
+																				// Calculate mother age automatically
+																				const motherAge = date ? dayjs().diff(date, 'year') : undefined;
+																				setPersonalForm(prev => prev ? { ...prev, motherBirthDate, motherAge } : prev);
+																			}} 
+																			disabled={!editingPersonal}
+																			disabledDate={(current) => {
+																				// Disable future dates and dates more than 120 years ago
+																				const today = dayjs();
+																				const minDate = today.subtract(120, 'year');
+																				return current && (current > today.endOf('day') || current < minDate.startOf('day'));
+																			}}
+																			style={{ width: '100%' }}
+																			placeholder="Select mother birth date"
+																			format="MMMM D, YYYY"
+																			showToday={false}
+																		/>
 																					</Form.Item>
 																				</Col>
 																				<Col xs={24} sm={6}>
-																					<Form.Item label="Father's Birth Date">
-																						<DatePicker 
-																							name="fatherBirthDate" 
-																							value={personalForm.fatherBirthDate ? dayjs(personalForm.fatherBirthDate) : null} 
-																							onChange={(date) => {
-																								const fatherBirthDate = date ? date.format('YYYY-MM-DD') : '';
-																								setPersonalForm(prev => prev ? { ...prev, fatherBirthDate } : prev);
-																							}} 
-																							disabled={!editingPersonal}
-																							disabledDate={(current) => current && current > dayjs().endOf('day')}
-																							style={{ width: '100%' }}
-																							placeholder="Select father birth date"
-																						/>
+																					<Form.Item 
+																		label="Father's Birth Date"
+																		tooltip="Select your father's date of birth."
+																		rules={[
+																			{
+																				validator: (_, value) => {
+																					if (value) {
+																						const age = dayjs().diff(value, 'year');
+																						if (age < 0) {
+																							return Promise.reject('Father birth date cannot be in the future');
+																						}
+																						if (age < 15) {
+																							return Promise.reject('Father birth date seems too recent');
+																						}
+																						if (age > 120) {
+																							return Promise.reject('Please enter a valid birth date');
+																						}
+																					}
+																					return Promise.resolve();
+																				}
+																			}
+																		]}
+																	>
+																		<DatePicker 
+																			name="fatherBirthDate" 
+																			value={personalForm.fatherBirthDate ? dayjs(personalForm.fatherBirthDate) : null} 
+																			onChange={(date) => {
+																				const fatherBirthDate = date ? date.format('YYYY-MM-DD') : '';
+																				// Calculate father age automatically
+																				const fatherAge = date ? dayjs().diff(date, 'year') : undefined;
+																				setPersonalForm(prev => prev ? { ...prev, fatherBirthDate, fatherAge } : prev);
+																			}} 
+																			disabled={!editingPersonal}
+																			disabledDate={(current) => {
+																				// Disable future dates and dates more than 120 years ago
+																				const today = dayjs();
+																				const minDate = today.subtract(120, 'year');
+																				return current && (current > today.endOf('day') || current < minDate.startOf('day'));
+																			}}
+																			style={{ width: '100%' }}
+																			placeholder="Select father birth date"
+																			format="MMMM D, YYYY"
+																			showToday={false}
+																		/>
 																					</Form.Item>
 																				</Col>
 																			</Row>

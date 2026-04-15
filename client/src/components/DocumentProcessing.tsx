@@ -33,6 +33,7 @@ const DocumentProcessing: React.FC = () => {
   const [generatedModalVisible, setGeneratedModalVisible] = useState(false);
   const [processedDocId, setProcessedDocId] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState<boolean>(false);
+  const [documentCreationDates, setDocumentCreationDates] = useState<Record<string, Date>>({});
   const [filterQuery, setFilterQuery] = useState<string>('');
   const [generateLoading, setGenerateLoading] = useState<boolean>(false);
   const location = useLocation();
@@ -45,6 +46,36 @@ const DocumentProcessing: React.FC = () => {
     if (!v) return [];
     return Array.isArray(v) ? v : [v];
   }, [fileRequestMap]);
+
+  // Check for unclaimed documents and send follow-up emails
+  React.useEffect(() => {
+    const checkUnclaimedDocuments = async () => {
+      const now = new Date();
+      Object.entries(documentCreationDates).forEach(([requestId, creationDate]) => {
+        const daysSinceCreation = Math.floor((now.getTime() - creationDate.getTime()) / (1000 * 60 * 60 * 24));
+        
+        // Send follow-up email after 3 days if document is still pending
+        if (daysSinceCreation === 3) {
+          const requests = getRequestsForFile(selectedFile?._id || '');
+          const request = requests?.find((r: any) => (r._id || r.requestId) === requestId);
+          if (request && request.status === 'approved') {
+            documentsAPI.sendPickupReminder(
+              requestId,
+              request.username || request.requesterName || 'Unknown',
+              selectedFile?.filename || 'document'
+            ).catch(err => {
+              console.error('Failed to send pickup reminder:', err);
+            });
+          }
+        }
+      });
+    };
+
+    // Check every hour for unclaimed documents
+    const interval = setInterval(checkUnclaimedDocuments, 60 * 60 * 1000); // 1 hour in milliseconds
+    
+    return () => clearInterval(interval);
+  }, [documentCreationDates, selectedFile, getRequestsForFile, fileRequestMap]);
 
   const getPrimaryRequest = (fileId: string) => {
     const arr = getRequestsForFile(fileId);
@@ -531,10 +562,13 @@ const DocumentProcessing: React.FC = () => {
                         <div>
                           {(() => {
                             const requests = getRequestsForFile(file._id) || [];
-                            if (!requests.length) return <div style={{ color: '#888', fontSize: 12 }}>No requests</div>;
-                            const options = requests.map((r: any) => ({ label: (r.username || r.requesterName || 'Unknown') + (r.createdAt ? ` · ${formatDateUtil(r.createdAt)}` : ''), value: (r._id || r.requestId) }));
+                            // Filter to only show pending requests
+                            const pendingRequests = requests.filter((r: any) => r.status === 'pending');
+                            if (!pendingRequests.length) return <div style={{ color: '#888', fontSize: 12 }}>No pending requests</div>;
+                            const options = pendingRequests.map((r: any) => ({ label: (r.username || r.requesterName || 'Unknown') + (r.createdAt ? ` · ${formatDateUtil(r.createdAt)}` : ''), value: (r._id || r.requestId) }));
                             const primary = getPrimaryRequest(file._id);
-                            const value = (primary && (primary._id || primary.requestId)) || options[0].value;
+                            // Only use primary if it's pending, otherwise use first pending
+                            const value = (primary && primary.status === 'pending' && (primary._id || primary.requestId)) || options[0].value;
                             return (
                               <Select
                                 size="small"
@@ -653,10 +687,11 @@ const DocumentProcessing: React.FC = () => {
                   width: 300,
                   render: (_: any, record: any) => {
                     const requests = getRequestsForFile(record._id) || [];
-                    if (!requests.length) return <span style={{ color: '#888' }}>No requests</span>;
-                    const options = requests.map((r: any) => ({ label: (r.username || r.requesterName || 'Unknown') + (r.createdAt ? ` · ${formatDateUtil(r.createdAt)}` : ''), value: (r._id || r.requestId) }));
+                    const pendingRequests = requests.filter((r: any) => r.status === 'pending');
+                    if (!pendingRequests.length) return <span style={{ color: '#888' }}>No pending requests</span>;
+                    const options = pendingRequests.map((r: any) => ({ label: (r.username || r.requesterName || 'Unknown') + (r.createdAt ? ` · ${formatDateUtil(r.createdAt)}` : ''), value: (r._id || r.requestId) }));
                     const primary = getPrimaryRequest(record._id);
-                    const value = (primary && (primary._id || primary.requestId)) || options[0].value;
+                    const value = (primary && primary.status === 'pending' && (primary._id || primary.requestId)) || options[0].value;
                     return (
                       <Select
                         value={value}
@@ -935,11 +970,34 @@ const DocumentProcessing: React.FC = () => {
                     const requestId = request._id || request.requestId;
                     try {
                       await documentsAPI.updateDocumentStatus(requestId, { status: 'approved' });
-                      notification.open({
-                        message: 'Success!',
-                        description: 'Document generated and request marked as approved.',
-                        duration: 3,
-                      });
+                      
+                      // Send pickup notification email
+                      try {
+                        await documentsAPI.sendPickupNotification(
+                          requestId,
+                          request.username || request.requesterName || 'Unknown',
+                          selectedFile.filename || 'document'
+                        );
+                        
+                        // Record creation date for 3-day tracking
+                        setDocumentCreationDates(prev => ({
+                          ...prev,
+                          [requestId]: new Date()
+                        }));
+                        
+                        notification.open({
+                          message: 'Success!',
+                          description: 'Document generated and request marked as approved. Pickup notification sent.',
+                          duration: 3,
+                        });
+                      } catch (emailErr) {
+                        console.error('Failed to send pickup notification:', emailErr);
+                        notification.open({
+                          message: 'Document Generated',
+                          description: 'Document generated but email notification failed.',
+                          duration: 3,
+                        });
+                      }
                     } catch (err) {
                       notification.open({
                         message: 'Document Generated',

@@ -6,7 +6,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { adminAPI, axiosPublic, axiosInstance } from '../services/api';
 import getOfficialPhotoSrc, { fetchPublicOfficials, PublicOfficial } from '../utils/officials';
 import OfficialPhotoImage from './OfficialPhotoImage';
-import StatsPanel from './StatsPanel';
 import './LoginForm.css';
 import { LeftOutlined, RightOutlined } from '@ant-design/icons';
 import { useSystemSettings, SystemSettingsPublic } from '../hooks/useSystemSettings';
@@ -572,7 +571,6 @@ const LoginForm = () => {
             <Col xs={24} sm={24} md={12} lg={12} className="left-col" style={{ display: 'flex', justifyContent: 'center', height: '100%' }}>
               <div className="pane-inner" style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={{ width: '100%', flex: 1, display: 'flex', flexDirection: 'column' }}>
-                  <StatsPanel />
                 </div>
 
                 <div style={{ width: '100%', flex: 1, display: 'flex', flexDirection: 'column' }}>

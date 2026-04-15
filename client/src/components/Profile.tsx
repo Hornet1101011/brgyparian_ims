@@ -46,6 +46,25 @@ import dayjs from 'dayjs';
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
 
+// Helper function to calculate residency duration
+const calculateResidencyDuration = (dateOfResidency: string) => {
+  if (!dateOfResidency) return null;
+  
+  const residencyStart = dayjs(dateOfResidency);
+  const now = dayjs();
+  
+  const years = now.diff(residencyStart, 'year');
+  const months = now.diff(residencyStart, 'month') % 12;
+  const days = now.diff(residencyStart, 'day') % 30;
+  
+  const parts = [];
+  if (years > 0) parts.push(`${years} year${years !== 1 ? 's' : ''}`);
+  if (months > 0) parts.push(`${months} month${months !== 1 ? 's' : ''}`);
+  if (days > 0) parts.push(`${days} day${days !== 1 ? 's' : ''}`);
+  
+  return parts.length > 0 ? parts.join(', ') : '0 days';
+};
+
 interface ProfileProps {
   profile: any | null;
   onProfileUpdate: (profile: any) => void;
@@ -419,13 +438,7 @@ const Profile: React.FC<ProfileProps> = ({ profile, onProfileUpdate }) => {
                   <span className="meta-value">{profile.barangayID}</span>
                 </div>
               )}
-              {personalInfo?.dateOfResidency && (
-                <div className="meta-item">
-                  <span className="meta-label">Resident For:</span>
-                  <span className="meta-value">{calculateResidencyDuration(personalInfo.dateOfResidency)}</span>
-                </div>
-              )}
-              {isResident() && (
+                            {isResident() && (
                 <div className="meta-item">
                   <span className="meta-label">Verification Status</span>
                   <span className="meta-value">
@@ -565,7 +578,28 @@ const Profile: React.FC<ProfileProps> = ({ profile, onProfileUpdate }) => {
                         </Form.Item>
                       </Col>
                       <Col xs={24} sm={8}>
-                        <Form.Item name="birthDate" label="Birth Date">
+                        <Form.Item 
+                          name="birthDate" 
+                          label="Birth Date"
+                          tooltip="Select your date of birth. Age will be calculated automatically."
+                          rules={[
+                            { required: true, message: 'Please select your birth date' },
+                            {
+                              validator: (_, value) => {
+                                if (value) {
+                                  const age = dayjs().diff(value, 'year');
+                                  if (age < 0) {
+                                    return Promise.reject('Birth date cannot be in the future');
+                                  }
+                                  if (age > 120) {
+                                    return Promise.reject('Please enter a valid birth date');
+                                  }
+                                }
+                                return Promise.resolve();
+                              }
+                            }
+                          ]}
+                        >
                           <DatePicker 
                             value={residentForm.getFieldValue('birthDate') ? dayjs(residentForm.getFieldValue('birthDate')) : null}
                             onChange={(date) => { 
@@ -577,9 +611,16 @@ const Profile: React.FC<ProfileProps> = ({ profile, onProfileUpdate }) => {
                                 residentForm.setFieldsValue({ birthDate: '', age: undefined }); 
                               } 
                             }} 
-                            disabledDate={(current) => current && current > dayjs().endOf('day')}
+                            disabledDate={(current) => {
+                              // Disable future dates and dates more than 120 years ago
+                              const today = dayjs();
+                              const minDate = today.subtract(120, 'year');
+                              return current && (current > today.endOf('day') || current < minDate.startOf('day'));
+                            }}
                             style={{ width: '100%' }}
                             placeholder="Select birth date"
+                            format="MMMM D, YYYY"
+                            showToday={false}
                           />
                         </Form.Item>
                       </Col>
@@ -609,16 +650,56 @@ const Profile: React.FC<ProfileProps> = ({ profile, onProfileUpdate }) => {
                         </Form.Item>
                       </Col>
                       <Col xs={24} sm={8}>
-                        <Form.Item name="dateOfResidency" label="Date of Residency">
+                        <Form.Item 
+                          name="dateOfResidency" 
+                          label="Date of Residency"
+                          tooltip="Select the date you became a resident of this barangay."
+                          rules={[
+                            { required: true, message: 'Please select your date of residency' },
+                            {
+                              validator: (_, value) => {
+                                if (value) {
+                                  const today = dayjs();
+                                  if (value > today.endOf('day')) {
+                                    return Promise.reject('Date of residency cannot be in the future');
+                                  }
+                                  // Check if residency date is before birth date
+                                  const birthDate = residentForm.getFieldValue('birthDate');
+                                  if (birthDate && value < dayjs(birthDate)) {
+                                    return Promise.reject('Date of residency cannot be before birth date');
+                                  }
+                                  // Check if residency date is more than 100 years ago
+                                  const minDate = today.subtract(100, 'year');
+                                  if (value < minDate.startOf('day')) {
+                                    return Promise.reject('Please enter a more recent residency date');
+                                  }
+                                }
+                                return Promise.resolve();
+                              }
+                            }
+                          ]}
+                        >
                           <DatePicker 
                             value={residentForm.getFieldValue('dateOfResidency') ? dayjs(residentForm.getFieldValue('dateOfResidency')) : null}
                             onChange={(date) => { 
                               const dateOfResidency = date ? date.format('YYYY-MM-DD') : ''; 
                               residentForm.setFieldsValue({ dateOfResidency }); 
+                              // Re-validate birth date if it exists to ensure consistency
+                              const birthDate = residentForm.getFieldValue('birthDate');
+                              if (birthDate && date) {
+                                residentForm.validateFields(['birthDate']);
+                              }
                             }} 
-                            disabledDate={(current) => current && current > dayjs().endOf('day')}
+                            disabledDate={(current) => {
+                              // Disable future dates and dates more than 100 years ago
+                              const today = dayjs();
+                              const minDate = today.subtract(100, 'year');
+                              return current && (current > today.endOf('day') || current < minDate.startOf('day'));
+                            }}
                             style={{ width: '100%' }}
                             placeholder="Select residency start date"
+                            format="MMMM D, YYYY"
+                            showToday={false}
                           />
                         </Form.Item>
                       </Col>

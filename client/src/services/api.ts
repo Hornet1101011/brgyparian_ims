@@ -488,6 +488,23 @@ export const documentsAPI = {
     axiosInstance.get(`/document-requests/${id}/filled`).then(response => response.data),
   previewFilledDocument: (data: any) =>
     axiosInstance.post('/document-requests/preview-filled', data).then(response => response.data),
+  // Email notification API for document pickup
+  sendPickupNotification: async (requestId: string, requestorEmail: string, documentName: string) => {
+    return axiosInstance.post('/notifications/document-pickup', {
+      requestId,
+      requestorEmail,
+      documentName,
+      type: 'pickup_ready'
+    }).then(response => response.data);
+  },
+  sendPickupReminder: async (requestId: string, requestorEmail: string, documentName: string) => {
+    return axiosInstance.post('/notifications/document-pickup', {
+      requestId,
+      requestorEmail,
+      documentName,
+      type: 'pickup_reminder'
+    }).then(response => response.data);
+  },
 };
 
 export const contactAPI = {
