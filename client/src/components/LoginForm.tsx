@@ -571,9 +571,6 @@ const LoginForm = () => {
             <Col xs={24} sm={24} md={12} lg={12} className="left-col" style={{ display: 'flex', justifyContent: 'center', height: '100%' }}>
               <div className="pane-inner" style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={{ width: '100%', flex: 1, display: 'flex', flexDirection: 'column' }}>
-                </div>
-
-                <div style={{ width: '100%', flex: 1, display: 'flex', flexDirection: 'column' }}>
                   <Card 
                     className="glass-card officials-card" 
                     variant="outlined"

@@ -34,7 +34,6 @@ import Goodbye from './components/Goodbye';
 import Logout from './components/Logout';
 import InquiryTracker from './pages/InquiryTracker';
 import ResidentPortal from './components/ResidentPortal';
-import LandingPage from './components/LandingPage';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import AdminNotifications from './components/admin/AdminNotifications';
@@ -70,8 +69,8 @@ const App: FC<AppProps> = () => {
         <Router>
           <AuthProvider>
             <Routes>
-              {/* Login Page as root */}
-              <Route path="/" element={<LoginForm />} />
+              {/* Root: redirect to login or dashboard based on auth */}
+              <Route path="/" element={<RootRedirect />} />
               <Route path="/redirect" element={<RootRedirect />} />
               {/* Public Routes */}
               <Route path="/login" element={<LoginForm />} />
