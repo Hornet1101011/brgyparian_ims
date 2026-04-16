@@ -70,8 +70,8 @@ const App: FC<AppProps> = () => {
         <Router>
           <AuthProvider>
             <Routes>
-              {/* Landing Page as root */}
-              <Route path="/" element={<LandingPage />} />
+              {/* Login Page as root */}
+              <Route path="/" element={<LoginForm />} />
               <Route path="/redirect" element={<RootRedirect />} />
               {/* Public Routes */}
               <Route path="/login" element={<LoginForm />} />

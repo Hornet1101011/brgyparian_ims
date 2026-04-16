@@ -500,29 +500,7 @@ const Profile: React.FC<ProfileProps> = ({ profile, onProfileUpdate }) => {
                         </Form>
                       </Card>
                     </Col>
-                    <Col xs={24} md={12}>
-                      <Card size="small" title="Quick Stats">
-                        <Space direction="vertical" style={{ width: '100%' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <Text>Profile Completion:</Text>
-                            <Tag color={profileCompletion >= 80 ? 'green' : profileCompletion >= 50 ? 'orange' : 'red'}>
-                              {profileCompletion}%
-                            </Tag>
-                          </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <Text>Verification Status:</Text>
-                            <Tag color={verificationStatus === 'verified' ? 'success' : 'warning'}>
-                              {verificationStatus}
-                            </Tag>
-                          </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <Text>Resident For:</Text>
-                            <Text>{personalInfo?.dateOfResidency ? calculateResidencyDuration(personalInfo.dateOfResidency) : 'Unknown'}</Text>
-                          </div>
-                        </Space>
-                      </Card>
-                    </Col>
-                  </Row>
+                                      </Row>
                 </div>
               ),
             },

@@ -948,36 +948,7 @@ useEffect(() => {
 															)}
 														</Card>
 													</Col>
-													<Col xs={24} md={12}>
-														<Card size="small" title="Quick Stats">
-															<Space direction="vertical" style={{ width: '100%' }}>
-																<Statistic 
-																	title="Profile Completion" 
-																	value={profileCompletion} 
-																	suffix="%" 
-																	valueStyle={{ color: profileCompletion >= 80 ? '#52c41a' : profileCompletion >= 50 ? '#faad14' : '#ff4d4f' }}
-																/>
-																<Divider style={{ margin: '12px 0' }} />
-																<div style={{ display: 'flex', justifyContent: 'space-between' }}>
-																	<Text>Verification Status:</Text>
-																	<Tag color={verificationStatus === 'verified' ? 'success' : 'warning'}>
-																		{verificationStatus}
-																	</Tag>
-																</div>
-																<div style={{ display: 'flex', justifyContent: 'space-between' }}>
-																	<Text>Resident For:</Text>
-																	<Text>{personalInfo?.dateOfResidency ? calculateResidencyDuration(personalInfo.dateOfResidency) : 'Unknown'}</Text>
-																</div>
-																<div style={{ display: 'flex', justifyContent: 'space-between' }}>
-																	<Text>Role:</Text>
-																	<Tag color={isAdmin() ? 'gold' : isStaff() ? 'blue' : 'green'}>
-																		{isAdmin() ? 'Admin' : isStaff() ? 'Staff' : 'Resident'}
-																	</Tag>
-																</div>
-															</Space>
-														</Card>
-													</Col>
-												</Row>
+																									</Row>
 												
 												<Space style={{ marginTop: 24 }}>
 													{editingUser ? (
