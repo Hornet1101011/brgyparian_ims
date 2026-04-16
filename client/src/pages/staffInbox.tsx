@@ -138,6 +138,20 @@ const StaffInbox: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Refresh inbox when inquiries are updated elsewhere (resident/staff scheduling)
+  useEffect(() => {
+    const handler = (ev: Event) => {
+      try {
+        // Fire a full refresh so the staff sees up-to-date inquiry state
+        fetchAll();
+      } catch (e) {
+        fetchAll();
+      }
+    };
+    window.addEventListener('inquiryUpdated', handler as EventListener);
+    return () => window.removeEventListener('inquiryUpdated', handler as EventListener);
+  }, []);
+
   useEffect(() => {
     if (isMobile) {
       setLoadingThread(false);

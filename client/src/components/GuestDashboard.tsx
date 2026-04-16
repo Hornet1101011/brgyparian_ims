@@ -89,8 +89,8 @@ const GuestDashboard: React.FC = () => {
 				}
 				// If no resident image, try the user profile endpoint via axios instance
 				try {
-					const api = await import('../services/api');
-					const r2 = await api.default.get('/resident/profile');
+					const { axiosInstance } = await import('../services/api');
+					const r2 = await axiosInstance.get('/resident/profile');
 					const data2 = r2.data;
 					if (data2?.profileImage) {
 						const url2 = data2.profileImage.startsWith('http') ? data2.profileImage : getAbsoluteApiUrl(data2.profileImage);

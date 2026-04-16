@@ -4,7 +4,8 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { axiosPublic } from '../services/api';
 
 const ResetPassword: React.FC = () => {
-  const { token } = useParams<{ token: string }>();
+  const params = useParams();
+  const token = (params as any).token as string | undefined;
   const navigate = useNavigate();
   const location = useLocation();
   const search = new URLSearchParams(location.search);

@@ -14,7 +14,7 @@ export type EmailProvider = 'custom' | 'mailtrap' | 'sendgrid' | 'gmail' | 'aws-
  * Provider configuration with required fields and defaults
  */
 interface ProviderConfig {
-  requiredFields: (keyof any)[];
+  requiredFields: string[];
   defaultPort: number;
   commonPorts: number[];
   supportsSecure: boolean;
@@ -72,7 +72,7 @@ export class EmailProviderManager {
   /**
    * Get required fields for a provider
    */
-  static getRequiredFields(provider: EmailProvider): (keyof any)[] {
+  static getRequiredFields(provider: EmailProvider): string[] {
     return PROVIDER_CONFIGS[provider]?.requiredFields || [];
   }
 

@@ -158,6 +158,9 @@ const DocumentRequestForm: React.FC = () => {
 
   const [personalInfo, setPersonalInfo] = useState<PersonalInfo | null>(null);
 
+  // Antd form instance so we can programmatically set field values
+  const [form] = Form.useForm();
+
   // Fetch authoritative profile on mount and keep it up to date
   useEffect(() => {
     let mounted = true;
@@ -184,6 +187,96 @@ const DocumentRequestForm: React.FC = () => {
     })();
     return () => { mounted = false; };
   }, []);
+
+  // Sync form values whenever fieldValues change or modal opens
+  React.useEffect(() => {
+    if (modalOpen && form) {
+      try {
+        form.setFieldsValue({ fields: fieldValues });
+      } catch (e) {
+        // ignore
+      }
+    }
+  }, [modalOpen, fieldValues, form]);
+
+  // Helper: compute initial field values (dates + name autofill based on account)
+  const computeInitialValues = (visibleFields: string[]) => {
+    const initialValues: Record<string, string> = {};
+    const now = new Date();
+    const day = now.getDate();
+    const monthNum = now.getMonth() + 1;
+    const monthName = now.toLocaleString(undefined, { month: 'long' });
+    const year = now.getFullYear();
+    const mm = String(monthNum).padStart(2, '0');
+    const dd = String(day).padStart(2, '0');
+    const currentDateFormatted = `${mm}/${dd}/${year}`;
+
+    const parseFullName = (name?: string) => {
+      if (!name) return { first: '', middle: '', last: '' };
+      const parts = name.trim().split(/\s+/).filter(Boolean);
+      if (parts.length === 0) return { first: '', middle: '', last: '' };
+      if (parts.length === 1) return { first: parts[0], middle: '', last: '' };
+      if (parts.length === 2) return { first: parts[0], middle: '', last: parts[1] };
+      return { first: parts[0], middle: parts.slice(1, -1).join(' '), last: parts[parts.length - 1] };
+    };
+
+    const fullFromProfile = parseFullName(profile?.fullName || '');
+    const firstFromPersonal = (personalInfo && (personalInfo.firstName || (personalInfo as any).first)) || fullFromProfile.first || ((profile as any)?.firstName) || ((authUser as any)?.firstName) || '';
+    const middleFromPersonal = (personalInfo && (personalInfo.middleName || (personalInfo as any).middleName)) || fullFromProfile.middle || ((profile as any)?.middleName) || ((authUser as any)?.middleName) || '';
+    const lastFromPersonal = (personalInfo && (personalInfo.lastName || (personalInfo as any).last)) || fullFromProfile.last || ((profile as any)?.lastName) || ((authUser as any)?.lastName) || '';
+    const assembledFull = [firstFromPersonal, middleFromPersonal, lastFromPersonal].filter(Boolean).join(' ').trim();
+
+    visibleFields.forEach(f => {
+      initialValues[f] = '';
+      const low = (f || '').toLowerCase();
+      // date shortcuts
+      if (/^current(day|dayof)?$/.test(low) || /currentday/.test(low)) {
+        initialValues[f] = String(day);
+        return;
+      }
+      if (/^current(month)?$/.test(low) || /currentmonth/.test(low)) {
+        initialValues[f] = monthName;
+        return;
+      }
+      if (/^current(year)?$/.test(low) || /currentyear/.test(low)) {
+        initialValues[f] = String(year);
+        return;
+      }
+      if (/currentdate|current_date|current date|dateofrequest|requesteddate/.test(low)) {
+        initialValues[f] = currentDateFormatted;
+        return;
+      }
+
+      // name autofill: firstname, middlename, lastname, fullname
+      if (/first(name)?/.test(low)) {
+        if (firstFromPersonal) initialValues[f] = firstFromPersonal;
+        return;
+      }
+      if (/middle(name)?/.test(low)) {
+        if (middleFromPersonal) initialValues[f] = middleFromPersonal;
+        return;
+      }
+      if (/(last(name)?|surname|familyname)/.test(low)) {
+        if (lastFromPersonal) initialValues[f] = lastFromPersonal;
+        return;
+      }
+      // fullname / name (standalone) / full_name
+      if (low === 'fullname' || low === 'full_name' || low === 'full name' || low === 'name' || (low.indexOf('full') !== -1 && low.indexOf('name') !== -1)) {
+        if (assembledFull) initialValues[f] = assembledFull;
+        return;
+      }
+
+      // Fallback: if personalInfo has a key that exactly matches field name, use it
+      if (personalInfo) {
+        const key = Object.keys(personalInfo).find(k => k.toLowerCase() === low);
+        if (key && (personalInfo as any)[key]) {
+          initialValues[f] = String((personalInfo as any)[key]);
+          return;
+        }
+      }
+    });
+    return initialValues;
+  };
 
   // Prefer `profile.verified` when available; fall back to `authUser.verified`.
   const userIsResidentUnverified = Boolean(
@@ -241,35 +334,15 @@ const DocumentRequestForm: React.FC = () => {
       // Hide QR field from the request form — it is generated server-side
       const visibleFields = fields.filter(f => f && f.toLowerCase() !== 'qr');
       setSelectedFields(visibleFields);
-      const initialValues: Record<string, string> = {};
-      // compute current date parts
-      const now = new Date();
-      const day = now.getDate();
-      const monthNum = now.getMonth() + 1;
-      const monthName = now.toLocaleString(undefined, { month: 'long' });
-      const year = now.getFullYear();
-      const mm = String(monthNum).padStart(2, '0');
-      const dd = String(day).padStart(2, '0');
-      const currentDateFormatted = `${mm}/${dd}/${year}`;
-
-      visibleFields.forEach(f => {
-        // default empty
-        initialValues[f] = '';
-        // auto-fill common "current" fields
-        if (/^current(day|dayof)?$/i.test(f) || /currentday/i.test(f)) {
-          initialValues[f] = String(day);
-        } else if (/current(month)?$/i.test(f) || /currentmonth/i.test(f)) {
-          // put human-readable month name
-          initialValues[f] = monthName;
-        } else if (/current(year)?$/i.test(f) || /currentyear/i.test(f)) {
-          initialValues[f] = String(year);
-        } else if (/currentdate|current_date|current date|dateofrequest|requesteddate/i.test(f)) {
-          // unified date field
-          initialValues[f] = currentDateFormatted;
-        }
-      });
+      const initialValues = computeInitialValues(visibleFields);
       setFieldValues(initialValues);
       setModalOpen(true);
+      // set form values when modal opens (use effect below will also sync)
+      try {
+        form.setFieldsValue({ fields: initialValues });
+      } catch (e) {
+        // ignore if form not ready yet
+      }
     } catch (error) {
       message.error('Failed to load document preview');
       setSelectedFields([]);
@@ -301,30 +374,15 @@ const DocumentRequestForm: React.FC = () => {
       }
       const visibleFields = fields.filter(f => f && f.toLowerCase() !== 'qr');
       setSelectedFields(visibleFields);
-      const initialValues: Record<string, string> = {};
-      const now = new Date();
-      const day = now.getDate();
-      const monthNum = now.getMonth() + 1;
-      const monthName = now.toLocaleString(undefined, { month: 'long' });
-      const year = now.getFullYear();
-      const mm = String(monthNum).padStart(2, '0');
-      const dd = String(day).padStart(2, '0');
-      const currentDateFormatted = `${mm}/${dd}/${year}`;
-
-      visibleFields.forEach(f => {
-        initialValues[f] = '';
-        if (/^current(day|dayof)?$/i.test(f) || /currentday/i.test(f)) {
-          initialValues[f] = String(day);
-        } else if (/current(month)?$/i.test(f) || /currentmonth/i.test(f)) {
-          initialValues[f] = monthName;
-        } else if (/current(year)?$/i.test(f) || /currentyear/i.test(f)) {
-          initialValues[f] = String(year);
-        } else if (/currentdate|current_date|current date|dateofrequest|requesteddate/i.test(f)) {
-          initialValues[f] = currentDateFormatted;
-        }
-      });
+      const initialValues = computeInitialValues(visibleFields);
       setFieldValues(initialValues);
       setModalOpen(true);
+      // set form values when modal opens (use effect below will also sync)
+      try {
+        form.setFieldsValue({ fields: initialValues });
+      } catch (e) {
+        // ignore if form not ready yet
+      }
     } catch (error) {
       message.error('Failed to load document preview');
       setSelectedFields([]);
@@ -551,6 +609,7 @@ const DocumentRequestForm: React.FC = () => {
           <Empty description="No fields found in this template" />
         ) : (
           <Form
+            form={form}
             layout="vertical"
             initialValues={{ fields: fieldValues }}
             onFinish={async (values: FormValues) => {

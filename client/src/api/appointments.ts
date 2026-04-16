@@ -96,6 +96,12 @@ export async function scheduleAppointment(payload: { id: string; scheduledDates:
     const { id, scheduledDates, type, recipient, recipientContact } = payload;
     // Use dedicated schedule endpoint for clarity and to support edit mode
     const resp = await axiosInstance.put(`/inquiries/${id}/schedule`, { scheduledDates, status: 'scheduled', type, recipient, recipientContact });
+    try {
+      const ev = new CustomEvent('inquiryUpdated', { detail: { id, action: 'scheduled', source: 'staff' } });
+      window.dispatchEvent(ev);
+    } catch (e) {
+      // ignore
+    }
     return resp.data;
   } catch (err: any) {
     return handleError(err);

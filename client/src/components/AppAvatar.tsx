@@ -17,6 +17,7 @@ type Props = {
   // background and text color for initials/icon badge
   background?: string;
   color?: string;
+  shape?: 'circle' | 'rounded' | 'square';
 };
 
 const mapSize = (s: Size): number => {
@@ -31,7 +32,7 @@ const mapSize = (s: Size): number => {
   }
 };
 
-const AppAvatar: React.FC<Props> = ({ src, user, profileImageId, size = 'default', alt, className, style, children, icon, background = '#1890ff', color = '#fff' }) => {
+const AppAvatar: React.FC<Props> = ({ src, user, profileImageId, size = 'default', alt, className, style, children, icon, background = '#1890ff', color = '#fff', shape = 'rounded' }) => {
   const s = mapSize(size);
 
   // If we have an image source or a user with an image id, render AvatarImage
@@ -40,13 +41,13 @@ const AppAvatar: React.FC<Props> = ({ src, user, profileImageId, size = 'default
   const sizeClass = typeof size === 'string' ? `app-avatar--${size}` : '';
   const classes = [baseClass, sizeClass, className].filter(Boolean).join(' ');
 
-  if (hasImage) {
+    if (hasImage) {
     const img = <AvatarImage src={src} user={user} profileImageId={profileImageId} size={s} alt={alt} className="app-avatar__img" />;
     if (typeof size === 'number') {
       const numericStyle: React.CSSProperties = {
         width: s,
         height: s,
-        borderRadius: 10,
+        borderRadius: shape === 'circle' ? '50%' : (shape === 'square' ? 0 : 10),
         overflow: 'hidden',
         display: 'inline-block',
         ...style,
@@ -57,8 +58,12 @@ const AppAvatar: React.FC<Props> = ({ src, user, profileImageId, size = 'default
         </div>
       );
     }
+    const wrapperStyle: React.CSSProperties = { ...(style || {}) };
+    if (shape === 'circle') wrapperStyle.borderRadius = '50%';
+    else if (shape === 'square') wrapperStyle.borderRadius = 0;
+    else wrapperStyle.borderRadius = wrapperStyle.borderRadius ?? 10;
     return (
-      <div className={classes} style={style} aria-hidden>
+      <div className={classes} style={wrapperStyle} aria-hidden>
         {img}
       </div>
     );
@@ -75,7 +80,7 @@ const AppAvatar: React.FC<Props> = ({ src, user, profileImageId, size = 'default
     const numericStyle: React.CSSProperties = {
       width: s,
       height: s,
-      borderRadius: 10,
+      borderRadius: shape === 'circle' ? '50%' : (shape === 'square' ? 0 : 10),
       display: 'inline-flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -91,8 +96,13 @@ const AppAvatar: React.FC<Props> = ({ src, user, profileImageId, size = 'default
     );
   }
 
+  const wrapperStyle: React.CSSProperties = { ...(style || {}) };
+  if (shape === 'circle') wrapperStyle.borderRadius = '50%';
+  else if (shape === 'square') wrapperStyle.borderRadius = 0;
+  else wrapperStyle.borderRadius = wrapperStyle.borderRadius ?? 10;
+
   return (
-    <div className={classes} style={style} aria-hidden>
+    <div className={classes} style={wrapperStyle} aria-hidden>
       {content}
     </div>
   );

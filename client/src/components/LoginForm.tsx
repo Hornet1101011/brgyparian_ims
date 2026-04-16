@@ -223,6 +223,132 @@ const LoginForm = () => {
     }
   };
 
+  // Component to display merged barangay and contact information in a single card
+  const MergedInfoCard = () => {
+    return (
+      <Card
+        className="glass-card merged-info-card"
+        variant="outlined"
+        style={{
+          background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 255, 0.96) 100%)',
+          border: '1.5px solid rgba(102, 126, 234, 0.2)',
+          borderRadius: 16,
+          backdropFilter: 'blur(20px)',
+          boxShadow: '0 20px 40px rgba(102, 126, 234, 0.15), 0 0 1px rgba(102, 126, 234, 0.3)',
+          padding: 18,
+          display: 'flex',
+          flexDirection: 'column'
+        }}
+      >
+        <div style={{ display: 'flex', gap: 18, flexDirection: 'row', alignItems: 'stretch', flexWrap: 'wrap' }}>
+          <div style={{ flex: 2, minWidth: 200 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, paddingBottom: 8, borderBottom: '1.25px solid rgba(102, 126, 234, 0.08)' }}>
+              <div style={{ width: 3, height: 16, background: 'linear-gradient(180deg, #667eea 0%, #764ba2 100%)', borderRadius: 2 }} />
+              <Typography.Title level={5} style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#0f172a' }}>
+                <EnvironmentOutlined style={{ marginRight: 6, color: '#667eea', fontSize: 13 }} />
+                Barangay Information
+              </Typography.Title>
+            </div>
+
+            {barangayLoading ? (
+              <div style={{ padding: '24px 12px', textAlign: 'center' }}>
+                <Spin size="small" />
+                <Typography.Text type="secondary" style={{ display: 'block', marginTop: 12, fontSize: 12 }}>Loading information...</Typography.Text>
+              </div>
+            ) : (
+              <div className="barangay-info-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
+                {barangayItems.length === 0 ? (
+                  <Typography.Text type="secondary" style={{ padding: '20px', textAlign: 'center' }}>No barangay information available</Typography.Text>
+                ) : (
+                  barangayItems.map(item => (
+                    <div
+                      key={item._id}
+                      className="info-grid-item"
+                      style={{
+                        background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.6) 0%, rgba(248, 250, 255, 0.4) 100%)',
+                        border: '1px solid rgba(102, 126, 234, 0.12)',
+                        borderRadius: 12,
+                        padding: 20,
+                        textAlign: 'center',
+                        boxShadow: '0 8px 20px rgba(102, 126, 234, 0.04)',
+                        transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                        minHeight: 120,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                    >
+                      <div style={{ fontSize: 20, marginBottom: 8 }}>
+                        {item.icon === 'home' && '🏛️'}
+                        {item.icon === 'environment' && '📍'}
+                        {item.icon === 'map' && '🗺️'}
+                        {item.icon === 'info' && 'ℹ️'}
+                      </div>
+                      <div style={{ color: '#667eea', fontSize: 11, marginBottom: 6, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px' }}>{item.label}</div>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', lineHeight: 1.4 }}>
+                        {item.value}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+
+          <div style={{ flex: 1, minWidth: 160 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, paddingBottom: 8, borderBottom: '1.25px solid rgba(102, 126, 234, 0.08)' }}>
+              <div style={{ width: 3, height: 16, background: 'linear-gradient(180deg, #667eea 0%, #764ba2 100%)', borderRadius: 2 }} />
+              <Typography.Title level={5} style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#0f172a' }}>
+                <PhoneOutlined style={{ marginRight: 6, color: '#667eea', fontSize: 13 }} />
+                Contact Information
+              </Typography.Title>
+            </div>
+
+            {contactLoading ? (
+              <div style={{ padding: '24px 12px', textAlign: 'center' }}>
+                <Spin size="small" />
+                <Typography.Text type="secondary" style={{ display: 'block', marginTop: 12, fontSize: 12 }}>Loading contacts...</Typography.Text>
+              </div>
+            ) : (
+              <div className="contact-info-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(1, 1fr)', gap: 10 }}>
+                {contactItems.length === 0 ? (
+                  <Typography.Text type="secondary" style={{ padding: '20px', textAlign: 'center' }}>No contact information available</Typography.Text>
+                ) : (
+                  contactItems.map(item => (
+                    <a
+                      key={item._id}
+                      href={item.link || '#'}
+                      className={`contact-grid-item ${item.isPlaceholder ? 'placeholder' : ''}`}
+                      onMouseEnter={(e) => {
+                        if (!item.isPlaceholder) {
+                          (e.currentTarget as HTMLAnchorElement).style.boxShadow = '0 12px 28px rgba(102, 126, 234, 0.25)';
+                          (e.currentTarget as HTMLAnchorElement).style.borderColor = '#667eea';
+                          (e.currentTarget as HTMLAnchorElement).style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 250, 255, 0.7) 100%)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLAnchorElement).style.boxShadow = '0 8px 20px rgba(102, 126, 234, 0.08)';
+                        (e.currentTarget as HTMLAnchorElement).style.borderColor = 'rgba(102, 126, 234, 0.2)';
+                        (e.currentTarget as HTMLAnchorElement).style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.6) 0%, rgba(248, 250, 255, 0.4) 100%)';
+                      }}
+                    >
+                      <div className="contact-item-head">
+                        <span className="contact-item-icon">{item.icon === 'mail' ? '📧' : item.icon === 'phone' ? '📱' : 'ℹ️'}</span>
+                        <div className="contact-item-label">{item.label}</div>
+                      </div>
+                      <div className="contact-item-value">{item.value}</div>
+                    </a>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </Card>
+    );
+  };
+
   const onForgotPasswordFinish = async (values: { email: string }) => {
     setForgotPasswordLoading(true);
     try {
@@ -615,23 +741,10 @@ const LoginForm = () => {
                   </Card>
                 </div>
               </div>
-            </Col>
-          </Row>
 
-          {/* Bottom full-width: barangay information and contact details (stacked) */}
-          <Row gutter={[22, 22]} style={{ marginTop: 28 }}>
-            <Col xs={24}>
-              <div className="pane-inner" style={{ width: '100%' }}>
-                <BarangayInfoCard />
-              </div>
-            </Col>
-          </Row>
-
-          <Row gutter={[22, 22]} style={{ marginTop: 18, marginBottom: 40 }}>
-            <Col xs={24}>
-              <div className="pane-inner" style={{ width: '100%' }}>
-                <ContactInfoCard />
-              </div>
+                <div style={{ width: '100%', marginTop: 12 }}>
+                  <MergedInfoCard />
+                </div>
             </Col>
           </Row>
         </div>

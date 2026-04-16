@@ -361,7 +361,7 @@ export const useDebouncedAnalyticsFilters = (
   delayMs: number = 500
 ) => {
   const [debouncedOptions, setDebouncedOptions] = useState<FetchOptions>(options);
-  const timeoutRef = useRef<NodeJS.Timeout>();
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   
   useEffect(() => {
     timeoutRef.current = setTimeout(() => {

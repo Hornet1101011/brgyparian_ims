@@ -408,7 +408,7 @@ const QuickAppointments = () => {
         </div>
       )
     }
-  ]);
+  ], []);
 
   // Main return
   return (

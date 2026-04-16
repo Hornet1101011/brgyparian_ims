@@ -263,7 +263,7 @@ function AppointmentDetailsModal({ visible, record, onClose, prefill }: Props) {
     }
   };
 
-  const [localStatus, setLocalStatus] = useState();
+  const [localStatus, setLocalStatus] = useState<string | undefined>(undefined);
 
   const confirm = async () => {
     const check = validateNoOverlap();

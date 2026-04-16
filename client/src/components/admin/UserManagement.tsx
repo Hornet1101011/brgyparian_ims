@@ -68,7 +68,7 @@ const statusOptions = [
   { label: 'Inactive', value: false },
 ];
 
-const roleColors: Record<string, { color: string; icon: React.ReactNode }> = {
+const roleColors: Record<string, { color: string; icon?: React.ReactNode }> = {
   admin: { color: 'gold', icon: <SafetyOutlined /> },
   staff: { color: 'blue', icon: <TeamOutlined /> },
   resident: { color: 'green', icon: <UserOutlined /> },

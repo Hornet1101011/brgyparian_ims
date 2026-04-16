@@ -40,6 +40,10 @@ interface AdminAPI {
   reorderOfficials: (order: string[]) => Promise<any>;
   disableUser: (userId: string, data?: { suspendedUntil?: string }) => Promise<any>;
   enableUser: (userId: string) => Promise<any>;
+  // Restrict or unrestrict a resident account (admin)
+  restrictUser: (userId: string, restricted?: boolean) => Promise<any>;
+  // Warn or remove warning from a resident account (admin)
+  warnUser: (userId: string, warning?: boolean) => Promise<any>;
   uploadOfficialPhoto: (id: string, file: File) => Promise<any>;
   approveStaffApplicant: (applicantId: string) => Promise<any>;
   createAnnouncement: (formData: FormData) => Promise<any>;
@@ -553,6 +557,12 @@ export const contactAPI = {
     try {
       // Use explicit schedule endpoint which maps to the same update logic on server
       const resp = await axiosInstance.put(`/inquiries/${id}/schedule`, payload);
+      try {
+        const ev = new CustomEvent('inquiryUpdated', { detail: { id, action: 'scheduled', source: 'resident' } });
+        window.dispatchEvent(ev);
+      } catch (e) {
+        // ignore event dispatch failures
+      }
       return resp.data as { success?: boolean; conflicts?: ConflictItem[] } | any;
     } catch (err: any) {
       // Surface server error payload for callers to display useful messages

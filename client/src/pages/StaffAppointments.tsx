@@ -402,7 +402,7 @@ const StaffAppointments = () => {
         </div>
       )
     }
-  ]);
+  ], []);
 
   // Main return follows
 
