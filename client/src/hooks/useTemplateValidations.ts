@@ -106,7 +106,21 @@ export const useTemplateValidations = (templateId: string) => {
 
     // Date validations
     if (validation.fieldType === 'date') {
-      const dateValue = new Date(value);
+      // Support dayjs/moment objects and plain strings/dates
+      let dateValue: Date;
+      try {
+        if (value && typeof (value as any).isValid === 'function') {
+          // dayjs/moment-like
+          const v: any = value;
+          if (!v.isValid || !v.isValid()) return { valid: false, error: 'Invalid date' };
+          dateValue = typeof v.toDate === 'function' ? v.toDate() : new Date(String(v));
+        } else {
+          dateValue = new Date(value as any);
+        }
+      } catch (e) {
+        return { valid: false, error: 'Invalid date' };
+      }
+
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 

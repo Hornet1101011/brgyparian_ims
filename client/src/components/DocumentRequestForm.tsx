@@ -4,6 +4,7 @@ import { documentsAPI, axiosInstance } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useTemplateValidations } from '../hooks/useTemplateValidations';
 import { FileWordOutlined, MoreOutlined, EyeOutlined, DownloadOutlined, InfoCircleOutlined, CopyOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
 import { 
   Card, 
   Row, 
@@ -128,7 +129,7 @@ const DocumentRequestForm: React.FC = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalDocName, setModalDocName] = useState('');
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
-  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+  const [fieldValues, setFieldValues] = useState<Record<string, any>>({});
   const [showVerifyModal, setShowVerifyModal] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [showRestrictedModal, setShowRestrictedModal] = useState(false);
@@ -201,7 +202,7 @@ const DocumentRequestForm: React.FC = () => {
 
   // Helper: compute initial field values (dates + name autofill based on account)
   const computeInitialValues = (visibleFields: string[]) => {
-    const initialValues: Record<string, string> = {};
+    const initialValues: Record<string, any> = {};
     const now = new Date();
     const day = now.getDate();
     const monthNum = now.getMonth() + 1;
@@ -229,7 +230,40 @@ const DocumentRequestForm: React.FC = () => {
     visibleFields.forEach(f => {
       initialValues[f] = '';
       const low = (f || '').toLowerCase();
-      // date shortcuts
+      const validation = getValidation ? getValidation(f) : null;
+
+      // If the template defines this placeholder as a date field, use dayjs objects
+      if (validation && validation.fieldType === 'date') {
+        // date shortcuts -> set dayjs objects
+        if (/currentdate|current_date|current date|dateofrequest|requesteddate/.test(low)) {
+          initialValues[f] = dayjs(currentDateFormatted, 'MM/DD/YYYY');
+          return;
+        }
+        if (/^current(day|dayof)?$/.test(low) || /currentday/.test(low)) {
+          // set to today (dayjs)
+          initialValues[f] = dayjs();
+          return;
+        }
+        if (/birth(date)?|dob/.test(low)) {
+          // prefer personalInfo birthDate if available
+          if (personalInfo && personalInfo.birthDate) {
+            initialValues[f] = dayjs(personalInfo.birthDate);
+            return;
+          }
+          if (profile && (profile as any).birthDate) {
+            initialValues[f] = dayjs((profile as any).birthDate);
+            return;
+          }
+          initialValues[f] = undefined;
+          return;
+        }
+        // default to empty (no prefill) for date fields
+        initialValues[f] = undefined;
+        return;
+      }
+
+      // Non-date fields: string-based defaults
+      // date-related non-date placeholders
       if (/^current(day|dayof)?$/.test(low) || /currentday/.test(low)) {
         initialValues[f] = String(day);
         return;
