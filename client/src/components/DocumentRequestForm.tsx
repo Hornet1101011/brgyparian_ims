@@ -300,6 +300,46 @@ const DocumentRequestForm: React.FC = () => {
         return;
       }
 
+      // Address autofill: handle address and its components
+      if (/address|fulladdress|full address|complete address|street|street address|house|houseno|housenumber|brgy|barangay|purok|city|municipality|province|zip|postal|zipcode/.test(low)) {
+        const profileAddress = profile && profile.address ? String(profile.address).trim() : '';
+        const p: any = personalInfo || {};
+        const components: string[] = [];
+        if (p.houseNumber) components.push(String(p.houseNumber));
+        if (p.street) components.push(String(p.street));
+        if (p.subdivision) components.push(String(p.subdivision));
+        if (p.address) components.push(String(p.address));
+        if (p.barangay || p.barangayID) components.push(String(p.barangay || p.barangayID));
+        if (p.city || p.municipality) components.push(String(p.city || p.municipality));
+        if (p.province) components.push(String(p.province));
+        if (p.postalCode || p.zip || p.zipCode) components.push(String(p.postalCode || p.zip || p.zipCode));
+        const assembledAddress = components.filter(Boolean).join(', ');
+
+        if (/barangay|brgy|purok/.test(low)) {
+          if (p.barangay) { initialValues[f] = String(p.barangay); return; }
+          if (p.barangayID) { initialValues[f] = String(p.barangayID); return; }
+          if (profile && (profile as any).barangayID) { initialValues[f] = String((profile as any).barangayID); return; }
+        }
+
+        if (/city|municipality/.test(low)) {
+          if (p.city) { initialValues[f] = String(p.city); return; }
+          if (p.municipality) { initialValues[f] = String(p.municipality); return; }
+        }
+
+        if (/province/.test(low)) {
+          if (p.province) { initialValues[f] = String(p.province); return; }
+        }
+
+        if (/zip|postal|zipcode/.test(low)) {
+          if (p.postalCode) { initialValues[f] = String(p.postalCode); return; }
+          if (p.zip) { initialValues[f] = String(p.zip); return; }
+          if (p.zipCode) { initialValues[f] = String(p.zipCode); return; }
+        }
+
+        if (profileAddress) { initialValues[f] = profileAddress; return; }
+        if (assembledAddress) { initialValues[f] = assembledAddress; return; }
+      }
+
       // Fallback: if personalInfo has a key that exactly matches field name, use it
       if (personalInfo) {
         const key = Object.keys(personalInfo).find(k => k.toLowerCase() === low);

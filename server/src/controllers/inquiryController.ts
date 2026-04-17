@@ -652,6 +652,15 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
           const cleaned = sanitizeAdvancedSchedulingOptions(rawSchedOpts);
           (inquiryDoc as any).schedulingOptions = cleaned ?? undefined;
         }
+        // Remove any now-scheduled dates from the inquiry's preferred appointmentDates
+        try {
+          const existingPrefs: string[] = Array.isArray(inquiryDoc.appointmentDates) ? inquiryDoc.appointmentDates.map((d: any) => String(d)) : [];
+          const scheduledSet = new Set(normalized.map((r: any) => String(r.date)));
+          const updatedPrefs = existingPrefs.filter((d: string) => !scheduledSet.has(String(d)));
+          inquiryDoc.appointmentDates = Array.from(new Set(updatedPrefs)).slice(0, 3);
+        } catch (e) {
+          console.warn('Failed to update appointmentDates while scheduling:', e);
+        }
         await inquiryDoc.save();
         return inquiryDoc;
       };

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { TimePicker, Row, Col, Typography, Tooltip } from 'antd';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
@@ -9,6 +9,8 @@ type Props = {
   date: string; // YYYY-MM-DD
   existingRanges?: Array<{ start: string; end: string; inquiryId?: string; residentUsername?: string; residentName?: string }>; // times as HH:mm
   onChange: (start?: string, end?: string) => void;
+  initialStart?: string;
+  initialEnd?: string;
 };
 
 // Convert HH:mm to minutes since midnight
@@ -18,9 +20,26 @@ const toMinutes = (t: string) => {
   return hh * 60 + mm;
 };
 
-const TimeRangeSelector: React.FC<Props> = ({ date, existingRanges = [], onChange }) => {
+const TimeRangeSelector: React.FC<Props> = ({ date, existingRanges = [], onChange, initialStart, initialEnd }) => {
   const [start, setStart] = useState<Dayjs | null>(null);
   const [end, setEnd] = useState<Dayjs | null>(null);
+
+  // initialize from props when provided (e.g., editing existing scheduled times)
+  useEffect(() => {
+    try {
+      if (initialStart) {
+        const s = dayjs(initialStart, 'HH:mm');
+        setStart(s.isValid() ? s : null);
+      } else setStart(null);
+      if (initialEnd) {
+        const e = dayjs(initialEnd, 'HH:mm');
+        setEnd(e.isValid() ? e : null);
+      } else setEnd(null);
+    } catch (e) {
+      // ignore
+    }
+    // do not call onChange here; initial values should come from parent
+  }, [initialStart, initialEnd]);
 
   // build minute-level blocks
   const blocks = useMemo(() => {

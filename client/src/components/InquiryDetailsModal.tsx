@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import dayjs from 'dayjs';
-import { UserOutlined } from '@ant-design/icons';
-import { Modal, Descriptions, Tag, Spin, Button, Divider, List, Typography, message, Input, Space, DatePicker } from 'antd';
-import { MailOutlined } from '@ant-design/icons';
+import { UserOutlined, MailOutlined, CalendarOutlined, EditOutlined } from '@ant-design/icons';
+import { Modal, Descriptions, Tag, Spin, Button, Divider, List, Typography, message, Input, Space, DatePicker, Tooltip } from 'antd';
 import { useAppointmentDetailsQuery } from '../hooks/useAppointments';
 import appointmentsAPI from '../api/appointments';
 import AppointmentDetailsModal from './AppointmentDetailsModal';
@@ -285,10 +284,13 @@ function InquiryDetailsModal({ visible, inquiryId, onClose, onChanged }: Props) 
   };
 
   const openScheduleEditor = () => {
-    openRescheduleModal();
+    // Open the full schedule editor modal (AppointmentDetailsModal)
+    setOpenSchedule(true);
   };
 
   const closeScheduleEditor = () => {
+    // Close both small reschedule modal and full schedule editor if open
+    setOpenSchedule(false);
     closeRescheduleModal();
   };
 
@@ -340,21 +342,54 @@ function InquiryDetailsModal({ visible, inquiryId, onClose, onChanged }: Props) 
       title={(
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <Typography.Title level={4} style={{ margin: 0 }}>{data?.title || data?.subject || 'Inquiry Details'}</Typography.Title>
-          <div>
-            <Button icon={<MailOutlined />} onClick={async () => {
-              if (!inquiryId) return;
-              if (!window.confirm('Send invites/notifications for this quick appointment now?')) return;
-              try {
-                await contactAPI.sendInvite(inquiryId);
-                message.success('Invites sent (if configured)');
-                try { query.refetch(); if (onChanged) onChanged(); } catch (_) {}
-              } catch (err: any) {
-                console.error('Failed to send invite', err);
-                message.error((err && err.message) ? err.message : 'Failed to send invite');
-              }
-            }} style={{ marginRight: 8 }}>
-              Send Invite
-            </Button>
+          <div style={{ marginRight: 36, display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Tooltip title="Send Invite">
+              <Button
+                size="small"
+                shape="circle"
+                icon={<MailOutlined />}
+                onClick={() => {
+                  if (!inquiryId) return;
+                  Modal.confirm({
+                    title: 'Send Invite',
+                    content: 'Send invites/notifications for this quick appointment now?',
+                    centered: true,
+                    okText: 'Send',
+                    cancelText: 'Cancel',
+                    onOk: async () => {
+                      try {
+                        await contactAPI.sendInvite(inquiryId);
+                        message.success('Invites sent (if configured)');
+                        try { query.refetch(); if (onChanged) onChanged(); } catch (_) {}
+                      } catch (err: any) {
+                        console.error('Failed to send invite', err);
+                        message.error((err && err.message) ? err.message : 'Failed to send invite');
+                        // rethrow to keep the confirm dialog showing the error state if needed
+                        throw err;
+                      }
+                    }
+                  });
+                }}
+              />
+            </Tooltip>
+            {data && data.status !== 'scheduled' && (
+              <Tooltip title="Schedule">
+                <Button size="small" type="primary" shape="circle" icon={<CalendarOutlined />} onClick={openRescheduleModal} />
+              </Tooltip>
+            )}
+            {data && data.status === 'scheduled' && (
+              <>
+                {data.type === 'QUICK_APPOINTMENT' ? (
+                  <Tooltip title="Edit Info">
+                    <Button size="small" shape="circle" icon={<EditOutlined />} onClick={() => setQuickEditVisible(true)} />
+                  </Tooltip>
+                ) : (
+                  <Tooltip title="Edit">
+                    <Button size="small" shape="circle" icon={<EditOutlined />} onClick={openScheduleEditor} />
+                  </Tooltip>
+                )}
+              </>
+            )}
           </div>
         </div>
       )}
@@ -409,14 +444,8 @@ function InquiryDetailsModal({ visible, inquiryId, onClose, onChanged }: Props) 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <div style={{ fontWeight: 600 }}>Appointment</div>
             <div>
-              {data && data.status !== 'scheduled' && (
-                <Button type="primary" onClick={openRescheduleModal} style={{ marginRight: 8 }}>Schedule</Button>
-              )}
               {data && data.status === 'scheduled' && (
                 <>
-                  {data.type === 'QUICK_APPOINTMENT' ? (
-                    <Button type="default" onClick={() => setQuickEditVisible(true)} style={{ marginRight: 8 }}>Edit Info</Button>
-                  ) : null}
                   <Button type="default" onClick={openRescheduleModal} style={{ marginRight: 8 }}>Reschedule</Button>
                   <Button danger onClick={handleCancel}>Cancel</Button>
                 </>

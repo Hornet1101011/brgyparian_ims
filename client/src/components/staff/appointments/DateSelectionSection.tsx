@@ -99,6 +99,8 @@ const DateSelectionSection: React.FC<Props> = ({ requestedDates, maxToSchedule, 
                   ...(existingScheduledByDate[d] || []),
                   ...((slotsByDate[d] || []).map(s => ({ start: s.startTime, end: s.endTime, residentName: s.residentName })))
                 ]}
+                initialStart={timeRanges[d] ? timeRanges[d].start : undefined}
+                initialEnd={timeRanges[d] ? timeRanges[d].end : undefined}
                 onChange={(s, e) => {
                   // local validation: prevent choosing ranges overlapping server slots
                   const serverSlots = slotsByDate[d] || [];

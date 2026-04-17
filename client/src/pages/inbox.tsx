@@ -79,9 +79,9 @@ const Inbox: React.FC = () => {
       <div className={styles['message-container']}>
         {align === 'left' && avatar}
         <div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#333' }}>{author}</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: '#333' }}>{author}</div>
           <div style={{ marginTop: 6 }}>{content}</div>
-          {datetime && <div style={{ marginTop: 6, fontSize: 12, color: '#999' }}>{datetime}</div>}
+          {datetime && <div style={{ marginTop: 6, fontSize: 13, color: '#999' }}>{datetime}</div>}
         </div>
         {align === 'right' && avatar}
       </div>
@@ -283,7 +283,10 @@ const Inbox: React.FC = () => {
     }}>
       {/* Shiny Container */}
       <div style={{
-        flex: 1,
+        height: isMobile ? 'calc(100vh - 80px)' : 760,
+        maxWidth: 1200,
+        width: '100%',
+        margin: isMobile ? 0 : '16px auto',
         display: 'flex',
         flexDirection: 'column',
         background: '#ffffff',
@@ -441,18 +444,18 @@ const Inbox: React.FC = () => {
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, gap: 8, alignItems: 'center' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                            <QuestionCircleOutlined className={styles.typeIcon} style={{ color: '#0a66c2', fontSize: isMobile ? 14 : 16, flexShrink: 0 }} />
-                            <Typography.Text strong style={{ fontSize: isMobile ? 12 : 13, color: '#000', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <QuestionCircleOutlined className={styles.typeIcon} style={{ color: '#0a66c2', fontSize: isMobile ? 15 : 17, flexShrink: 0 }} />
+                            <Typography.Text strong style={{ fontSize: isMobile ? 14 : 15, color: '#000', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {displayName}
                             </Typography.Text>
                           </div>
-                          <Typography.Text style={{ fontSize: isMobile ? 11 : 12, color: '#65676b', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                          <Typography.Text style={{ fontSize: isMobile ? 13 : 14, color: '#65676b', flexShrink: 0, whiteSpace: 'nowrap' }}>
                             {timeAgo(lastResponse?.createdAt || inquiry.createdAt)}
                           </Typography.Text>
                         </div>
                         <Typography.Text 
                           style={{ 
-                            fontSize: isMobile ? 11 : 12, 
+                            fontSize: isMobile ? 13 : 14, 
                             color: '#65676b', 
                             display: 'block', 
                             overflow: 'hidden', 
@@ -539,9 +542,9 @@ const Inbox: React.FC = () => {
                 background: 'linear-gradient(135deg, #f9fafb 0%, #f5f8fc 100%)'
               }}>
                 {/* Original message */}
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
                   <div style={{ maxWidth: isMobile ? '90%' : '70%' }}>
-                    <Typography.Text style={{ fontSize: isMobile ? 11 : 12, color: '#9ca3af', marginBottom: 6, display: 'block', textAlign: 'right' }}>
+                    <Typography.Text style={{ fontSize: isMobile ? 13 : 14, color: '#9ca3af', marginBottom: 6, display: 'block', textAlign: 'right' }}>
                       {selectedInquiry.createdAt ? new Date(selectedInquiry.createdAt).toLocaleString() : ''}
                     </Typography.Text>
                     <div style={{ 
@@ -552,7 +555,7 @@ const Inbox: React.FC = () => {
                       boxShadow: '0 2px 8px rgba(24, 144, 255, 0.15)',
                       border: '1px solid rgba(24, 144, 255, 0.2)'
                     }}>
-                      <Typography.Paragraph style={{ margin: 0, fontSize: isMobile ? 12 : 13, lineHeight: 1.5, color: '#000' }}>
+                      <Typography.Paragraph style={{ margin: 0, fontSize: isMobile ? 14 : 15, lineHeight: 1.6, color: '#000' }}>
                         {selectedInquiry.message}
                       </Typography.Paragraph>
                       {selectedInquiry.attachments && selectedInquiry.attachments.length > 0 && (
@@ -592,7 +595,7 @@ const Inbox: React.FC = () => {
                   return (
                     <div key={idx} style={{ display: 'flex', justifyContent: align, marginBottom: 8 }}>
                       <div style={{ maxWidth: '70%' }}>
-                        <Typography.Text style={{ fontSize: 12, color: '#9ca3af', marginBottom: 6, display: 'block', textAlign: align === 'flex-end' ? 'right' : 'left' }}>
+                        <Typography.Text style={{ fontSize: 14, color: '#9ca3af', marginBottom: 6, display: 'block', textAlign: align === 'flex-end' ? 'right' : 'left' }}>
                           {response.createdAt ? new Date(response.createdAt).toLocaleString() : ''}
                         </Typography.Text>
                         <div style={{ 
@@ -603,7 +606,7 @@ const Inbox: React.FC = () => {
                           boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
                           border: borderColor
                         }}>
-                          <Typography.Paragraph style={{ margin: 0, fontSize: 13, lineHeight: 1.5, color: '#000' }}>
+                          <Typography.Paragraph style={{ margin: 0, fontSize: 15, lineHeight: 1.6, color: '#000' }}>
                             {response.text}
                           </Typography.Paragraph>
                           {response.attachments && response.attachments.length > 0 && (
@@ -669,7 +672,7 @@ const Inbox: React.FC = () => {
                     padding: isMobile ? '10px 14px' : '12px 16px',
                     borderRadius: '8px',
                     border: '1px solid rgba(24, 144, 255, 0.2)',
-                    fontSize: isMobile ? 12 : 13,
+                    fontSize: isMobile ? 13 : 14,
                     outline: 'none',
                     fontFamily: 'Poppins, Arial, sans-serif',
                     color: '#1f2937',

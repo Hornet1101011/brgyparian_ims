@@ -200,22 +200,6 @@ const StaffAppointments = () => {
                         View Details
                       </Button>
                       <Button 
-                        type="primary"
-                        block
-                        size="small"
-                        onClick={() => { setSelectedRecord(record); setModalVisible(true); }}
-                        style={{
-                          borderRadius: 6,
-                          fontSize: 12,
-                          fontWeight: 600,
-                          background: record.status === 'scheduled' ? 'linear-gradient(135deg, #722ed1 0%, #1890ff 100%)' : 'linear-gradient(135deg, #1890ff 0%, #13c2c2 100%)',
-                          border: 'none',
-                          height: 36
-                        }}
-                      >
-                        {record.status === 'scheduled' ? 'Edit' : 'Schedule'}
-                      </Button>
-                      <Button 
                         danger
                         block
                         size="small"
@@ -368,22 +352,7 @@ const StaffAppointments = () => {
           >
             View Details
           </Button>
-          <Button 
-            type="primary"
-            block
-            size="small"
-            onClick={() => { setSelectedRecord(record); setModalVisible(true); }}
-            style={{
-              borderRadius: 6,
-              fontSize: 12,
-              fontWeight: 600,
-              background: record.status === 'scheduled' ? 'linear-gradient(135deg, #722ed1 0%, #1890ff 100%)' : 'linear-gradient(135deg, #1890ff 0%, #13c2c2 100%)',
-              border: 'none',
-              height: 36
-            }}
-          >
-            {record.status === 'scheduled' ? 'Edit' : 'Schedule'}
-          </Button>
+          {/* Schedule/Edit moved to View Details modal; omitted from list actions */}
           <Button 
             danger
             block

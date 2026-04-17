@@ -562,7 +562,7 @@ const StaffInbox: React.FC = () => {
                             background: 'linear-gradient(135deg, #722ed1 0%, #1890ff 50%, #13c2c2 100%)', 
                             color: '#ffffff', 
                             fontWeight: 700,
-                            fontSize: isMobile ? 12 : 14
+                            fontSize: isMobile ? 13 : 15
                           }} 
                           size={isMobile ? 40 : 48}
                         >
@@ -574,18 +574,18 @@ const StaffInbox: React.FC = () => {
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, gap: 8, alignItems: 'center' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                            <QuestionCircleOutlined style={{ color: '#dc2626', fontSize: isMobile ? 14 : 16, flexShrink: 0 }} />
-                            <Typography.Text strong style={{ fontSize: isMobile ? 12 : 13, color: '#0f172a', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <QuestionCircleOutlined style={{ color: '#dc2626', fontSize: isMobile ? 15 : 17, flexShrink: 0 }} />
+                            <Typography.Text strong style={{ fontSize: isMobile ? 13 : 14, color: '#0f172a', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {displayName}
                             </Typography.Text>
                           </div>
-                          <Typography.Text style={{ fontSize: isMobile ? 11 : 12, color: '#6b7280', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                          <Typography.Text style={{ fontSize: isMobile ? 12 : 13, color: '#6b7280', flexShrink: 0, whiteSpace: 'nowrap' }}>
                             {timeAgo(lastResponse?.createdAt || inquiry.createdAt)}
                           </Typography.Text>
                         </div>
                         <Typography.Text 
                           style={{ 
-                            fontSize: isMobile ? 11 : 12, 
+                            fontSize: isMobile ? 12 : 13, 
                             color: '#6b7280', 
                             display: 'block', 
                             overflow: 'hidden', 
@@ -635,12 +635,12 @@ const StaffInbox: React.FC = () => {
                   </button>
                 )}
                 <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12, flex: 1, minWidth: 0 }}>
-                  <AppAvatar 
+                    <AppAvatar 
                     size={isMobile ? 32 : 40} 
                     style={{ 
                       background: 'linear-gradient(135deg, #722ed1 0%, #1890ff 50%, #13c2c2 100%)', 
                       color: '#ffffff',
-                      fontSize: isMobile ? 12 : 14,
+                      fontSize: isMobile ? 13 : 15,
                       fontWeight: 700,
                       flexShrink: 0
                     }}
@@ -648,7 +648,7 @@ const StaffInbox: React.FC = () => {
                     {getInitial(selectedInquiry.residentName || selectedInquiry.username || 'U', 'U')}
                   </AppAvatar>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <Typography.Text strong style={{ display: 'block', fontSize: isMobile ? 12 : 14, background: 'linear-gradient(135deg, #722ed1 0%, #1890ff 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <Typography.Text strong style={{ display: 'block', fontSize: isMobile ? 13 : 15, background: 'linear-gradient(135deg, #722ed1 0%, #1890ff 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {selectedInquiry.residentName || selectedInquiry.username || 'Unknown'}
                     </Typography.Text>
                     <Typography.Text style={{ fontSize: isMobile ? 11 : 12, color: '#6b7280', display: 'block', marginTop: 2 }}>
@@ -672,7 +672,7 @@ const StaffInbox: React.FC = () => {
                 {/* Original message */}
                 <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 12 }}>
                   <div style={{ maxWidth: isMobile ? '90%' : '70%' }}>
-                    <Typography.Text style={{ fontSize: isMobile ? 11 : 12, color: '#6b7280', marginBottom: 4, display: 'block' }}>
+                    <Typography.Text style={{ fontSize: isMobile ? 12 : 13, color: '#6b7280', marginBottom: 4, display: 'block' }}>
                       {selectedInquiry.createdAt ? new Date(selectedInquiry.createdAt).toLocaleString() : ''}
                     </Typography.Text>
                     <div style={{ 
@@ -683,7 +683,7 @@ const StaffInbox: React.FC = () => {
                       border: '1px solid rgba(24, 144, 255, 0.1)',
                       boxShadow: '0 2px 8px rgba(24, 144, 255, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.6)'
                     }}>
-                      <Typography.Paragraph style={{ margin: 0, fontSize: isMobile ? 12 : 13, lineHeight: 1.5, color: '#0f172a' }}>
+                      <Typography.Paragraph style={{ margin: 0, fontSize: isMobile ? 13 : 14, lineHeight: 1.5, color: '#0f172a' }}>
                         {selectedInquiry.message}
                       </Typography.Paragraph>
                       {selectedInquiry.attachments && selectedInquiry.attachments.length > 0 && (
@@ -750,7 +750,7 @@ const StaffInbox: React.FC = () => {
                   return (
                     <div key={idx} style={{ display: 'flex', justifyContent: align, marginBottom: 8 }}>
                       <div style={{ maxWidth: '70%' }}>
-                        <Typography.Text style={{ fontSize: 12, color: '#6b7280', marginBottom: 4, display: 'block', textAlign: align === 'flex-end' ? 'right' : 'left' }}>
+                        <Typography.Text style={{ fontSize: 13, color: '#6b7280', marginBottom: 4, display: 'block', textAlign: align === 'flex-end' ? 'right' : 'left' }}>
                           <span style={{ fontWeight: 600, background: 'linear-gradient(135deg, #722ed1 0%, #1890ff 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>{isResidentReply ? 'Resident' : 'Staff'}</span> • {response.createdAt ? new Date(response.createdAt).toLocaleString() : ''}
                         </Typography.Text>
                         <div style={{ 
@@ -761,7 +761,7 @@ const StaffInbox: React.FC = () => {
                           border: '1px solid rgba(24, 144, 255, 0.1)',
                           boxShadow: '0 2px 8px rgba(24, 144, 255, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.6)'
                         }}>
-                          <Typography.Paragraph style={{ margin: 0, fontSize: 13, lineHeight: 1.5, color: '#0f172a' }}>
+                          <Typography.Paragraph style={{ margin: 0, fontSize: 14, lineHeight: 1.5, color: '#0f172a' }}>
                             {response.text}
                           </Typography.Paragraph>
                           {response.attachments && response.attachments.length > 0 && (
@@ -827,7 +827,7 @@ const StaffInbox: React.FC = () => {
                     padding: isMobile ? '8px 12px' : '10px 16px',
                     borderRadius: 20,
                     border: '1px solid rgba(114, 46, 209, 0.2)',
-                    fontSize: isMobile ? 12 : 13,
+                    fontSize: isMobile ? 13 : 14,
                     outline: 'none',
                     fontFamily: 'Poppins, Arial, sans-serif',
                     color: '#1f2937',

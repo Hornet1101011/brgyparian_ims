@@ -21,7 +21,7 @@ import {
 import { UploadOutlined, InfoCircleOutlined, SendOutlined, ReloadOutlined, MailOutlined } from '@ant-design/icons';
 import './InquiryForm.css';
 import { useAuth } from '../contexts/AuthContext';
-import { contactAPI, adminAPI } from '../services/api';
+import { contactAPI, adminAPI, residentsListAPI } from '../services/api';
 
 const { TextArea } = Input;
 
@@ -76,9 +76,12 @@ const InquiryForm = () => {
           const staff = response.filter((user: any) => user && user.role === 'staff');
           console.log('[InquiryForm] Filtered staff:', staff);
           setStaffList(staff);
-          // Set default value once staff is loaded
+          // Set default value once staff is loaded. Use `assignedTo` (not assignedRole).
           if (staff.length > 0 && formRef.current) {
-            formRef.current.setFieldsValue({ assignedRole: staff[0]._id });
+            // If a draft or existing value is present and matches a staff id, keep it.
+            const currentAssigned = formRef.current.getFieldValue('assignedTo');
+            const defaultAssigned = (currentAssigned && staff.find((s: any) => s._id === currentAssigned)) ? currentAssigned : staff[0]._id;
+            formRef.current.setFieldsValue({ assignedTo: defaultAssigned });
           }
         } else {
           console.warn('[InquiryForm] adminAPI.getUsers() returned non-array:', response);
@@ -91,6 +94,153 @@ const InquiryForm = () => {
     };
     fetchStaff();
   }, []);
+
+  // Businesses in barangay (populate Subject dropdown)
+  const [businessOptions, setBusinessOptions] = React.useState<any[]>([]);
+  const [businessLoading, setBusinessLoading] = React.useState(false);
+
+  // Predefined subject options (fixed list). Keep this list scrollable in the Select dropdown.
+  const PREDEFINED_SUBJECTS: string[] = [
+    'Noise complaint',
+    'Videoke disturbance',
+    'Animal nuisance (dogs, chickens, etc.)',
+    'Stray animal concern',
+    'Garbage / improper waste disposal',
+    'Drainage / flooding complaint',
+    'Illegal dumping',
+    'Boundary dispute',
+    'Land / lot conflict',
+    'Fence disagreement',
+    'Tree obstruction issue',
+    'Road obstruction complaint',
+    'Parking dispute',
+    'Neighbor conflict',
+    'Verbal altercation mediation',
+    'Minor physical altercation mediation',
+    'Debt / utang dispute',
+    'Small claims settlement',
+    'Family misunderstanding mediation',
+    'Tenant vs landlord issue',
+    'Eviction concern (initial mediation)',
+    'Request for barangay clearance',
+    'Request for certificate of residency',
+    'Request for certificate of indigency',
+    'Request for business clearance',
+    'Document verification issue',
+    'Correction of barangay records',
+    'Business permit application assistance',
+    'Business complaint filing',
+    'Business violation report',
+    'Request for business endorsement',
+    'Sari-sari store complaint',
+    'Online selling complaint (local disputes)',
+    'Construction permission request',
+    'Building complaint (illegal structure)',
+    'Renovation concern',
+    'Zoning concern',
+    'Encroachment issue',
+    'Request for barangay permit (events)',
+    'Event coordination (fiesta, sports fest, etc.)',
+    'Basketball league organization',
+    'Youth program meeting',
+    'Senior citizen concern',
+    "Women's desk concern (VAWC-related inquiry only, non-graphic)",
+    'Request for financial assistance',
+    'Medical assistance request',
+    'Burial assistance request',
+    'Scholarship inquiry',
+    '4Ps / government aid concern',
+    'Disaster relief request',
+    'Fire incident report follow-up',
+    'Flood assistance request',
+    'Blotter report filing',
+    'Police referral concern',
+    'Curfew violation concern',
+    'Request for barangay patrol',
+    'Theft report (initial barangay report)',
+    'Lost item report',
+    'Found item surrender',
+    'Community project proposal',
+    'Infrastructure request (roads, lights)',
+    'Streetlight repair request',
+    'Water supply issue',
+    'Electricity complaint (coordination)',
+    'Internet line complaint (coordination)',
+    'Petition signing / community petition',
+    'HOA / neighborhood association concern',
+    'Public disturbance report',
+    'Loitering complaint',
+    'Substance abuse concern (report/inquiry)',
+    'Child welfare concern (non-sensitive reporting)',
+    'School-related dispute (community level)',
+    'Transport/tricycle dispute',
+    'TODA (tricycle group) issue',
+    'Market/vendor concern',
+    'Price complaint (basic goods)',
+    'Permit for temporary stall',
+    'Relocation concern',
+    'Informal settler concern',
+    'ID application / verification',
+    'Residency transfer concern',
+    'Census / survey concern',
+    'Complaint against barangay staff',
+    'Feedback / suggestion meeting',
+    'General inquiry / consultation'
+  ];
+
+  React.useEffect(() => {
+    const fetchBusinesses = async () => {
+      if (!user) return;
+      try {
+        setBusinessLoading(true);
+        const residents = await residentsListAPI.getAllResidents();
+        const arr = Array.isArray(residents) ? residents : [];
+        const bizResidents = arr.filter((r: any) => {
+          // accept either legacy top-level businessName or nested personalInfo.businessName
+          const hasBiz = (r && ((r.businessName) || (r.personalInfo && r.personalInfo.businessName)));
+          return hasBiz && String(r.barangayID) === String(user?.barangayID);
+        });
+        const opts = bizResidents.map((r: any) => {
+          const name = (r.personalInfo && r.personalInfo.businessName) || r.businessName || r.username || 'Business';
+          const owner = r.fullName || r.username || '';
+          return { value: name, label: owner ? `${name} (${owner})` : name };
+        });
+        // Preserve any existing subject value (e.g., from draft) so Select can display it
+        try {
+          const currentSubject = formRef.current && formRef.current.getFieldValue && formRef.current.getFieldValue('subject');
+          if (currentSubject && !opts.find((o: any) => o.value === currentSubject)) {
+            setBusinessOptions([{ value: currentSubject, label: String(currentSubject) }, ...opts]);
+          } else {
+            setBusinessOptions(opts);
+          }
+        } catch (e) {
+          setBusinessOptions(opts);
+        }
+      } catch (err) {
+        console.error('Failed to fetch businesses for subject dropdown', err);
+        setBusinessOptions([]);
+      } finally {
+        setBusinessLoading(false);
+      }
+    };
+    fetchBusinesses();
+  }, [user]);
+
+  // Merge predefined subjects with business options (computed each render)
+  const predefinedSubjectOptions = React.useMemo(() => PREDEFINED_SUBJECTS.map(s => ({ value: s, label: s })), []);
+  const subjectOptions = React.useMemo(() => {
+    const map = new Map<string, any>();
+    predefinedSubjectOptions.forEach(o => map.set(o.value, o));
+    (businessOptions || []).forEach(o => map.set(o.value, o));
+    const arr = Array.from(map.values());
+    try {
+      const current = formRef.current && formRef.current.getFieldValue && formRef.current.getFieldValue('subject');
+      if (current && !map.has(current)) arr.unshift({ value: current, label: String(current) });
+    } catch (e) {
+      // ignore
+    }
+    return arr;
+  }, [predefinedSubjectOptions, businessOptions]);
 
   // Helper: Appointment scheduler state lives here when inquiry type is appointment
   const [appointmentMode, setAppointmentMode] = React.useState(false);
@@ -532,6 +682,7 @@ const InquiryForm = () => {
                   placeholder={staffLoading ? 'Loading staff...' : 'Select a staff member'}
                   className="inquiry-rounded-input"
                   loading={staffLoading}
+                  optionLabelProp="label"
                   notFoundContent={staffLoading ? 'Loading...' : (staffList.length === 0 ? 'No staff members found' : 'Not found')}
                 />
               </Form.Item>
@@ -541,7 +692,7 @@ const InquiryForm = () => {
                 label={
                   <span>
                     Subject <span style={{ color: 'red' }}>*</span>{' '}
-                    <Tooltip title="Enter a short subject line.">
+                    <Tooltip title="Select a business from your barangay or enter a short subject.">
                       <InfoCircleOutlined style={{ marginLeft: 6, color: '#8c8c8c' }} />
                     </Tooltip>
                   </span>
@@ -553,11 +704,27 @@ const InquiryForm = () => {
                 ]}
               >
                 <div>
-                  <Input
-                    placeholder="Enter subject"
+                  <Select
+                    showSearch
                     className="inquiry-rounded-input"
-                    maxLength={SUBJECT_MAX + 20} // allow typing beyond limit but show error
-                    onChange={(e) => setSubjectCount(e.target.value.length)}
+                    placeholder={businessLoading ? 'Loading businesses...' : 'Select or type subject'}
+                    options={subjectOptions}
+                    loading={businessLoading}
+                    optionFilterProp="label"
+                    filterOption={(input, option) => {
+                      const lab = (option && (option as any).label) || '';
+                      const val = (option && (option as any).value) || '';
+                      return String(lab).toLowerCase().includes(String(input).toLowerCase()) || String(val).toLowerCase().includes(String(input).toLowerCase());
+                    }}
+                    // keep Form in sync even though Select is wrapped in a div
+                    value={form.getFieldValue('subject')}
+                    onChange={(val: any) => {
+                      try { form.setFieldsValue({ subject: val }); } catch (e) { /* ignore */ }
+                      setSubjectCount(val ? String(val).length : 0);
+                    }}
+                    allowClear
+                    notFoundContent={businessLoading ? 'Loading...' : (subjectOptions.length === 0 ? 'No subjects found' : 'Not found')}
+                    dropdownStyle={{ maxHeight: 300, overflow: 'auto' }}
                   />
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
                     <small style={{ color: subjectCount > SUBJECT_MAX ? 'red' : '#8c8c8c' }}>{subjectCount}/{SUBJECT_MAX}</small>
@@ -589,7 +756,12 @@ const InquiryForm = () => {
                     placeholder="Enter your message"
                     className="inquiry-rounded-input inquiry-large-textarea"
                     maxLength={MESSAGE_MAX + 50}
-                    onChange={(e) => setMessageCount(e.target.value.length)}
+                    value={form.getFieldValue('message')}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      try { form.setFieldsValue({ message: v }); } catch (e) { /* ignore */ }
+                      setMessageCount(v.length);
+                    }}
                   />
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
                     <small style={{ color: messageCount > MESSAGE_MAX ? 'red' : '#8c8c8c' }}>{messageCount}/{MESSAGE_MAX}</small>
