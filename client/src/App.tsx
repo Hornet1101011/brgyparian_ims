@@ -115,6 +115,20 @@ const App: FC<AppProps> = () => {
                 <Route path="/profile" element={<PrivateRoute><ResidentPortal /></PrivateRoute>} />
                 <Route path="/document-history" element={<PrivateRoute><DocumentHistory /></PrivateRoute>} />
                 <Route path="/inbox" element={<PrivateRoute><Inbox /></PrivateRoute>} />
+                {/* Catch-all route for client-side routing */}
+                <Route path="*" element={
+                  <PrivateRoute>
+                    {({ user }) => {
+                      if (user?.role === 'admin') {
+                        return <Navigate to="/admin/dashboard" replace />;
+                      } else if (user?.role === 'staff') {
+                        return <Navigate to="/staff-dashboard" replace />;
+                      } else {
+                        return <Navigate to="/dashboard" replace />;
+                      }
+                    }}
+                  </PrivateRoute>
+                } />
               </Route>
             </Routes>
           </AuthProvider>
