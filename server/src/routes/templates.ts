@@ -106,36 +106,6 @@ router.get('/list', (req, res) => {
   });
 });
 
-// Get the contents of a specific template by filename
-router.get('/:filename', async (req, res) => {
-  const filename = req.params.filename;
-  const filePath = path.join(__dirname, '../../client/public/Templates', filename);
-  try {
-    let text = '';
-    if (mammoth && filename.endsWith('.docx')) {
-      try {
-        const result = await mammoth.extractRawText({ path: filePath });
-        text = result.value;
-      } catch (e) {
-        text = '';
-      }
-    }
-    if (!text) {
-      try {
-        text = fs.readFileSync(filePath, 'utf8');
-      } catch (e) {
-        console.log('Error reading file:', e);
-        return res.status(404).json({ error: 'File not found or unreadable' });
-      }
-    }
-    const matches = Array.from(text.matchAll(/\$\{([^}]+)\}/g)).map(m => m[1]);
-    res.json({ text, placeholders: matches });
-  } catch (err) {
-    console.log('Error reading template:', err);
-    res.status(500).json({ error: 'Failed to read template' });
-  }
-});
-
 // Save autofill mappings for a template
 router.post('/:id/autofill-mappings', (req, res) => {
   const { id } = req.params;
@@ -191,6 +161,36 @@ router.get('/:id/autofill-mappings', (req, res) => {
       res.status(500).json({ error: 'Invalid mappings data' });
     }
   });
+});
+
+// Get the contents of a specific template by filename (moved to end to avoid conflicts)
+router.get('/:filename', async (req, res) => {
+  const filename = req.params.filename;
+  const filePath = path.join(__dirname, '../../client/public/Templates', filename);
+  try {
+    let text = '';
+    if (mammoth && filename.endsWith('.docx')) {
+      try {
+        const result = await mammoth.extractRawText({ path: filePath });
+        text = result.value;
+      } catch (e) {
+        text = '';
+      }
+    }
+    if (!text) {
+      try {
+        text = fs.readFileSync(filePath, 'utf8');
+      } catch (e) {
+        console.log('Error reading file:', e);
+        return res.status(404).json({ error: 'File not found or unreadable' });
+      }
+    }
+    const matches = Array.from(text.matchAll(/\$\{([^}]+)\}/g)).map(m => m[1]);
+    res.json({ text, placeholders: matches });
+  } catch (err) {
+    console.log('Error reading template:', err);
+    res.status(500).json({ error: 'Failed to read template' });
+  }
 });
 
 // Move a template file to a subdirectory when clicked
