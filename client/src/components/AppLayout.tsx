@@ -353,7 +353,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }: { children: React.Rea
               <img 
                 src={`${process.env.PUBLIC_URL}/logo-parian2.png`} 
                 alt="Logo" 
-                style={{ width: 28, height: 28 }} 
+                style={{ width: 36, height: 36 }} 
               />
               <span style={{ fontSize: 16, fontWeight: 600 }}>Menu</span>
             </div>
@@ -452,8 +452,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }: { children: React.Rea
               src={`${process.env.PUBLIC_URL}/logo-parian2.png`} 
               alt="Logo" 
               style={{ 
-                width: screenSize === 'mobile' ? 28 : 36, 
-                height: screenSize === 'mobile' ? 28 : 36, 
+                width: screenSize === 'mobile' ? 36 : 48, 
+                height: screenSize === 'mobile' ? 36 : 48, 
                 marginRight: screenSize === 'mobile' ? 0 : 4,
                 flexShrink: 0,
               }} 

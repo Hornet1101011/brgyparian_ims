@@ -136,6 +136,63 @@ router.get('/:filename', async (req, res) => {
   }
 });
 
+// Save autofill mappings for a template
+router.post('/:id/autofill-mappings', (req, res) => {
+  const { id } = req.params;
+  const { mappings } = req.body;
+  
+  if (!mappings || typeof mappings !== 'object') {
+    return res.status(400).json({ error: 'Mappings object is required' });
+  }
+  
+  // Store mappings in a JSON file (you could also use a database)
+  const mappingsDir = path.join(__dirname, '../../data/autofill-mappings');
+  const mappingFile = path.join(mappingsDir, `${id}.json`);
+  
+  // Ensure directory exists
+  fs.mkdir(mappingsDir, { recursive: true }, (err) => {
+    if (err) {
+      console.error('Failed to create mappings directory:', err);
+      return res.status(500).json({ error: 'Failed to save mappings' });
+    }
+    
+    // Save mappings to file
+    fs.writeFile(mappingFile, JSON.stringify(mappings, null, 2), 'utf8', (writeErr) => {
+      if (writeErr) {
+        console.error('Failed to write mappings file:', writeErr);
+        return res.status(500).json({ error: 'Failed to save mappings' });
+      }
+      
+      res.json({ success: true, message: 'Autofill mappings saved successfully' });
+    });
+  });
+});
+
+// Get autofill mappings for a template
+router.get('/:id/autofill-mappings', (req, res) => {
+  const { id } = req.params;
+  const mappingFile = path.join(__dirname, '../../data/autofill-mappings', `${id}.json`);
+  
+  fs.readFile(mappingFile, 'utf8', (err, data) => {
+    if (err) {
+      if (err.code === 'ENOENT') {
+        // No mappings found, return empty object
+        return res.json({ mappings: {} });
+      }
+      console.error('Failed to read mappings file:', err);
+      return res.status(500).json({ error: 'Failed to load mappings' });
+    }
+    
+    try {
+      const mappings = JSON.parse(data);
+      res.json({ mappings });
+    } catch (parseErr) {
+      console.error('Failed to parse mappings:', parseErr);
+      res.status(500).json({ error: 'Invalid mappings data' });
+    }
+  });
+});
+
 // Move a template file to a subdirectory when clicked
 router.post('/move', (req, res) => {
   const { filename, targetDir } = req.body;

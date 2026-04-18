@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Button, Tooltip, Upload, message, Card, Spin, Empty, Modal, Space } from 'antd';
-import { UploadOutlined, EyeOutlined, DownloadOutlined, DeleteOutlined, FileWordOutlined, CloudUploadOutlined, SettingOutlined } from '@ant-design/icons';
+import { Button, Tooltip, Upload, message, Card, Spin, Empty, Modal, Space, Select, Form, Input, Divider, Tag, Typography } from 'antd';
+import { UploadOutlined, EyeOutlined, DownloadOutlined, DeleteOutlined, FileWordOutlined, CloudUploadOutlined, SettingOutlined, SettingFilled } from '@ant-design/icons';
 import { axiosInstance, axiosPublic } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import TemplateValidationConfig from './TemplateValidationConfig';
@@ -8,6 +8,95 @@ import styles from './TemplatesManager.module.css';
 
 const getLabel = (filename?: string) =>
   filename ? filename.replace(/_/g, " ").replace(/\.docx$/, "") : "Untitled";
+
+// Resident profile field mappings for autofill
+const RESIDENT_PROFILE_FIELDS = {
+  // Basic Information
+  'firstName': { label: 'First Name', category: 'Basic Information' },
+  'lastName': { label: 'Last Name', category: 'Basic Information' },
+  'middleName': { label: 'Middle Name', category: 'Basic Information' },
+  'fullName': { label: 'Full Name', category: 'Basic Information' },
+  'age': { label: 'Age', category: 'Basic Information' },
+  'birthDate': { label: 'Birth Date', category: 'Basic Information' },
+  'dateOfResidency': { label: 'Date of Residency', category: 'Basic Information' },
+  'sex': { label: 'Sex', category: 'Basic Information' },
+  'civilStatus': { label: 'Civil Status', category: 'Basic Information' },
+  'nationality': { label: 'Nationality', category: 'Basic Information' },
+  'placeOfBirth': { label: 'Place of Birth', category: 'Basic Information' },
+  'religion': { label: 'Religion', category: 'Basic Information' },
+  'bloodType': { label: 'Blood Type', category: 'Basic Information' },
+  
+  // Contact Information
+  'email': { label: 'Email', category: 'Contact Information' },
+  'contactNumber': { label: 'Contact Number', category: 'Contact Information' },
+  'landlineNumber': { label: 'Landline Number', category: 'Contact Information' },
+  'emergencyContact': { label: 'Emergency Contact', category: 'Contact Information' },
+  'emergencyContactName': { label: 'Emergency Contact Name', category: 'Contact Information' },
+  'emergencyContactRelationship': { label: 'Emergency Contact Relationship', category: 'Contact Information' },
+  
+  // Address Information
+  'address': { label: 'Address', category: 'Address Information' },
+  'barangayID': { label: 'Barangay ID', category: 'Address Information' },
+  
+  // Family Information
+  'spouseName': { label: 'Spouse Name', category: 'Family Information' },
+  'spouseAge': { label: 'Spouse Age', category: 'Family Information' },
+  'spouseBirthDate': { label: 'Spouse Birth Date', category: 'Family Information' },
+  'spouseMiddleName': { label: 'Spouse Middle Name', category: 'Family Information' },
+  'spouseLastName': { label: 'Spouse Last Name', category: 'Family Information' },
+  'spouseOccupation': { label: 'Spouse Occupation', category: 'Family Information' },
+  'spouseStatus': { label: 'Spouse Status', category: 'Family Information' },
+  'spouseNationality': { label: 'Spouse Nationality', category: 'Family Information' },
+  'spouseContactNumber': { label: 'Spouse Contact Number', category: 'Family Information' },
+  'motherName': { label: 'Mother Name', category: 'Family Information' },
+  'motherAge': { label: 'Mother Age', category: 'Family Information' },
+  'motherBirthDate': { label: 'Mother Birth Date', category: 'Family Information' },
+  'motherOccupation': { label: 'Mother Occupation', category: 'Family Information' },
+  'motherStatus': { label: 'Mother Status', category: 'Family Information' },
+  'fatherName': { label: 'Father Name', category: 'Family Information' },
+  'fatherAge': { label: 'Father Age', category: 'Family Information' },
+  'fatherBirthDate': { label: 'Father Birth Date', category: 'Family Information' },
+  'fatherOccupation': { label: 'Father Occupation', category: 'Family Information' },
+  'fatherStatus': { label: 'Father Status', category: 'Family Information' },
+  'numberOfChildren': { label: 'Number of Children', category: 'Family Information' },
+  'childrenNames': { label: 'Children Names', category: 'Family Information' },
+  'childrenAges': { label: 'Children Ages', category: 'Family Information' },
+  
+  // Business Information
+  'businessName': { label: 'Business Name', category: 'Business Information' },
+  'businessType': { label: 'Business Type', category: 'Business Information' },
+  'natureOfBusiness': { label: 'Nature of Business', category: 'Business Information' },
+  'businessAddress': { label: 'Business Address', category: 'Business Information' },
+  'dateEstablished': { label: 'Date Established', category: 'Business Information' },
+  'tin': { label: 'TIN', category: 'Business Information' },
+  'registrationNumber': { label: 'Registration Number', category: 'Business Information' },
+  'businessPermitNumber': { label: 'Business Permit Number', category: 'Business Information' },
+  'barangayClearanceNumber': { label: 'Barangay Clearance Number', category: 'Business Information' },
+  'numberOfEmployees': { label: 'Number of Employees', category: 'Business Information' },
+  'capitalInvestment': { label: 'Capital Investment', category: 'Business Information' },
+  'annualGrossIncome': { label: 'Annual Gross Income', category: 'Business Information' },
+  'businessContactPerson': { label: 'Business Contact Person', category: 'Business Information' },
+  'businessContactNumber': { label: 'Business Contact Number', category: 'Business Information' },
+  'businessEmail': { label: 'Business Email', category: 'Business Information' },
+  
+  // Additional Fields
+  'facebook': { label: 'Facebook', category: 'Additional Information' },
+  'passportNumber': { label: 'Passport Number', category: 'Additional Information' },
+  'governmentIdNumber': { label: 'Government ID Number', category: 'Additional Information' },
+  'disabilityStatus': { label: 'Disability Status', category: 'Additional Information' },
+  'occupation': { label: 'Occupation', category: 'Additional Information' },
+  'educationalAttainment': { label: 'Educational Attainment', category: 'Additional Information' },
+};
+
+// Composite field options (combinations of basic fields)
+const COMPOSITE_FIELDS = {
+  'firstName + middleName + lastName': { label: 'First Name + Middle Name + Last Name', fields: ['firstName', 'middleName', 'lastName'] },
+  'lastName + firstName': { label: 'Last Name, First Name', fields: ['lastName', 'firstName'] },
+  'lastName, firstName + middleName': { label: 'Last Name, First Name + Middle Name', fields: ['lastName', 'firstName', 'middleName'] },
+  'firstName + lastName': { label: 'First Name + Last Name', fields: ['firstName', 'lastName'] },
+  'barangayID + fullName': { label: 'Barangay ID + Full Name', fields: ['barangayID', 'fullName'] },
+  'address + barangayID': { label: 'Address + Barangay ID', fields: ['address', 'barangayID'] },
+};
 
 const TemplatesManager: React.FC = () => {
   const { user } = useAuth();
@@ -21,6 +110,88 @@ const TemplatesManager: React.FC = () => {
   const [previewModalVisible, setPreviewModalVisible] = useState(false);
   const [validationConfigVisible, setValidationConfigVisible] = useState(false);
   const [selectedTemplateForValidation, setSelectedTemplateForValidation] = useState<any>(null);
+  
+  // Autofill states
+  const [autofillModalVisible, setAutofillModalVisible] = useState(false);
+  const [selectedTemplateForAutofill, setSelectedTemplateForAutofill] = useState<any>(null);
+  const [templatePlaceholders, setTemplatePlaceholders] = useState<string[]>([]);
+  const [placeholderMappings, setPlaceholderMappings] = useState<Record<string, string>>({});
+  const [autofillForm] = Form.useForm();
+
+  // Function to extract placeholders from template content
+  const extractPlaceholders = async (templateId: string): Promise<string[]> => {
+    try {
+      const res = await axiosPublic.get(`/documents/preview/${templateId}?format=html`, { responseType: 'text' });
+      const htmlContent = res.data || '';
+      
+      // Extract placeholders from HTML content
+      // Common placeholder patterns: {{placeholder}}, [placeholder], {placeholder}, etc.
+      const placeholderPatterns = [
+        /\{\{([^}]+)\}\}/g,  // {{placeholder}}
+        /\[([^\]]+)\]/g,     // [placeholder]
+        /\{([^}]+)\}/g,      // {placeholder}
+        /\$\{([^}]+)\}/g,    // ${placeholder}
+      ];
+      
+      const placeholders = new Set<string>();
+      
+      placeholderPatterns.forEach(pattern => {
+        let match;
+        while ((match = pattern.exec(htmlContent)) !== null) {
+          placeholders.add(match[1].trim());
+        }
+      });
+      
+      return Array.from(placeholders);
+    } catch (err) {
+      console.error('Failed to extract placeholders:', err);
+      return [];
+    }
+  };
+
+  // Function to handle autofill setup
+  const handleAutofillSetup = async (template: any) => {
+    setLoading(true);
+    try {
+      const placeholders = await extractPlaceholders(template._id);
+      setTemplatePlaceholders(placeholders);
+      
+      // Initialize mappings with existing ones if any
+      const initialMappings: Record<string, string> = {};
+      placeholders.forEach(placeholder => {
+        initialMappings[placeholder] = '';
+      });
+      setPlaceholderMappings(initialMappings);
+      
+      setSelectedTemplateForAutofill(template);
+      setAutofillModalVisible(true);
+    } catch (err) {
+      message.error('Failed to load template placeholders');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Function to save autofill mappings
+  const handleSaveAutofillMappings = async () => {
+    try {
+      const mappings = autofillForm.getFieldsValue();
+      
+      // Save mappings to backend (you'll need to create this API endpoint)
+      await axiosInstance.post(`/templates/${selectedTemplateForAutofill._id}/autofill-mappings`, {
+        mappings: mappings
+      });
+      
+      message.success('Autofill mappings saved successfully');
+      setAutofillModalVisible(false);
+      setSelectedTemplateForAutofill(null);
+      setTemplatePlaceholders([]);
+      setPlaceholderMappings({});
+      autofillForm.resetFields();
+    } catch (err) {
+      message.error('Failed to save autofill mappings');
+    }
+  };
 
   React.useEffect(() => {
     const fetchTemplates = async () => {
@@ -230,6 +401,22 @@ const TemplatesManager: React.FC = () => {
                           style={{ borderRadius: 8, borderColor: 'rgba(102, 126, 234, 0.3)' }}
                         >
                           Configure
+                        </Button>
+                      </Tooltip>
+                    )}
+                    {!isStaff && (
+                      <Tooltip title="Setup Autofill">
+                        <Button
+                          size="middle"
+                          icon={<SettingFilled />}
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            await handleAutofillSetup(file);
+                          }}
+                          className={styles.actionButton}
+                          style={{ borderRadius: 8, borderColor: 'rgba(82, 196, 26, 0.3)' }}
+                        >
+                          Autofill
                         </Button>
                       </Tooltip>
                     )}
@@ -483,6 +670,187 @@ const TemplatesManager: React.FC = () => {
               // Optionally refresh the template list
             }}
           />
+        )}
+      </Modal>
+
+      {/* Autofill Modal */}
+      <Modal
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontWeight: 600, color: '#1f2937' }}>
+            <SettingFilled style={{ color: '#52c41a', fontSize: 18 }} />
+            Setup Autofill Mappings
+          </div>
+        }
+        open={autofillModalVisible}
+        onCancel={() => {
+          setAutofillModalVisible(false);
+          setSelectedTemplateForAutofill(null);
+          setTemplatePlaceholders([]);
+          setPlaceholderMappings({});
+          autofillForm.resetFields();
+        }}
+        footer={[
+          <Button 
+            key="cancel" 
+            onClick={() => {
+              setAutofillModalVisible(false);
+              setSelectedTemplateForAutofill(null);
+              setTemplatePlaceholders([]);
+              setPlaceholderMappings({});
+              autofillForm.resetFields();
+            }}
+            style={{ borderRadius: 8 }}
+          >
+            Cancel
+          </Button>,
+          <Button 
+            key="save" 
+            type="primary" 
+            onClick={handleSaveAutofillMappings}
+            style={{ borderRadius: 8, background: 'linear-gradient(135deg, #52c41a 0%, #13c2c2 100%)', border: 'none' }}
+          >
+            Save Mappings
+          </Button>
+        ]}
+        width={800}
+        bodyStyle={{ maxHeight: '75vh', overflowY: 'auto', padding: '24px' }}
+        style={{ borderRadius: 12 }}
+        centered
+      >
+        {selectedTemplateForAutofill && (
+          <div>
+            <div style={{ marginBottom: 20, padding: 16, background: '#f8f9fa', borderRadius: 8, border: '1px solid #e9ecef' }}>
+              <Typography.Text strong style={{ color: '#495057' }}>
+                Template: {getLabel(selectedTemplateForAutofill.filename)}
+              </Typography.Text>
+              <br />
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                Found {templatePlaceholders.length} placeholder(s) in this template
+              </Typography.Text>
+            </div>
+
+            {templatePlaceholders.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 40, color: '#6c757d' }}>
+                <Typography.Text>
+                  No placeholders found in this template. Placeholders should be in formats like:
+                  <br />
+                  <Tag color="blue">{'{placeholder}'}</Tag>
+                  <Tag color="green">[placeholder]</Tag>
+                  <Tag color="orange">{'{placeholder}'}</Tag>
+                  <Tag color="purple">{'${placeholder}'}</Tag>
+                </Typography.Text>
+              </div>
+            ) : (
+              <Form
+                form={autofillForm}
+                layout="vertical"
+                initialValues={placeholderMappings}
+              >
+                {templatePlaceholders.map((placeholder, index) => (
+                  <div key={placeholder} style={{ marginBottom: 16 }}>
+                    <div style={{ 
+                      padding: 12, 
+                      background: '#f1f3f4', 
+                      borderRadius: 8, 
+                      marginBottom: 8,
+                      border: '1px solid #e1e5e9'
+                    }}>
+                      <Typography.Text strong style={{ color: '#2c3e50' }}>
+                        Placeholder: <Tag color="blue">{placeholder}</Tag>
+                      </Typography.Text>
+                    </div>
+                    
+                    <Form.Item
+                      name={placeholder}
+                      label={`Map to Resident Profile Field:`}
+                      style={{ marginBottom: 0 }}
+                    >
+                      <Select
+                        placeholder="Select a field or create composite mapping"
+                        style={{ width: '100%' }}
+                        showSearch
+                        allowClear
+                        optionFilterProp="children"
+                        filterOption={(input, option) =>
+                          (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                        }
+                      >
+                        <Select.OptGroup label="Basic Fields">
+                          {Object.entries(RESIDENT_PROFILE_FIELDS)
+                            .filter(([_, info]) => info.category === 'Basic Information')
+                            .map(([field, info]) => (
+                              <Select.Option key={field} value={field}>
+                                {info.label}
+                              </Select.Option>
+                            ))}
+                        </Select.OptGroup>
+                        
+                        <Select.OptGroup label="Contact Information">
+                          {Object.entries(RESIDENT_PROFILE_FIELDS)
+                            .filter(([_, info]) => info.category === 'Contact Information')
+                            .map(([field, info]) => (
+                              <Select.Option key={field} value={field}>
+                                {info.label}
+                              </Select.Option>
+                            ))}
+                        </Select.OptGroup>
+                        
+                        <Select.OptGroup label="Address Information">
+                          {Object.entries(RESIDENT_PROFILE_FIELDS)
+                            .filter(([_, info]) => info.category === 'Address Information')
+                            .map(([field, info]) => (
+                              <Select.Option key={field} value={field}>
+                                {info.label}
+                              </Select.Option>
+                            ))}
+                        </Select.OptGroup>
+                        
+                        <Select.OptGroup label="Family Information">
+                          {Object.entries(RESIDENT_PROFILE_FIELDS)
+                            .filter(([_, info]) => info.category === 'Family Information')
+                            .map(([field, info]) => (
+                              <Select.Option key={field} value={field}>
+                                {info.label}
+                              </Select.Option>
+                            ))}
+                        </Select.OptGroup>
+                        
+                        <Select.OptGroup label="Business Information">
+                          {Object.entries(RESIDENT_PROFILE_FIELDS)
+                            .filter(([_, info]) => info.category === 'Business Information')
+                            .map(([field, info]) => (
+                              <Select.Option key={field} value={field}>
+                                {info.label}
+                              </Select.Option>
+                            ))}
+                        </Select.OptGroup>
+                        
+                        <Select.OptGroup label="Additional Information">
+                          {Object.entries(RESIDENT_PROFILE_FIELDS)
+                            .filter(([_, info]) => info.category === 'Additional Information')
+                            .map(([field, info]) => (
+                              <Select.Option key={field} value={field}>
+                                {info.label}
+                              </Select.Option>
+                            ))}
+                        </Select.OptGroup>
+                        
+                        <Select.OptGroup label="Composite Fields (Combinations)">
+                          {Object.entries(COMPOSITE_FIELDS).map(([composite, info]) => (
+                            <Select.Option key={composite} value={composite}>
+                              {info.label}
+                            </Select.Option>
+                          ))}
+                        </Select.OptGroup>
+                      </Select>
+                    </Form.Item>
+                    
+                    {index < templatePlaceholders.length - 1 && <Divider style={{ margin: '16px 0' }} />}
+                  </div>
+                ))}
+              </Form>
+            )}
+          </div>
         )}
       </Modal>
       </Spin>

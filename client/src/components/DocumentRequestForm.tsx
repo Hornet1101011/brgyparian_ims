@@ -122,7 +122,7 @@ interface FileData {
   category?: string;
 }
 
-const DocumentRequestForm: React.FC = () => {
+const DocumentRequestForm: React.FC<{}> = () => {
   // State management
   const [files, setFiles] = useState<FileData[]>([]);
   const [selectedFields, setSelectedFields] = useState<string[]>([]);
@@ -133,6 +133,8 @@ const DocumentRequestForm: React.FC = () => {
   const [showVerifyModal, setShowVerifyModal] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [showRestrictedModal, setShowRestrictedModal] = useState(false);
+  const [autofillMappings, setAutofillMappings] = useState<Record<string, string>>({});
+  const [residentProfile, setResidentProfile] = useState<ResidentProfile | null>(null);
   
   const [searchTerm, setSearchTerm] = useState('');
   // Removed category filter state
@@ -146,6 +148,40 @@ const DocumentRequestForm: React.FC = () => {
 
   const { user: authUser } = useAuth();
   // currentUser will be resolved inside handlers when needed
+
+  // Fetch autofill mappings for selected template
+  const fetchAutofillMappings = async (templateId: string) => {
+    try {
+      const response = await axiosInstance.get(`/templates/${templateId}/autofill-mappings`);
+      setAutofillMappings(response.data.mappings || {});
+    } catch (error) {
+      console.log('No autofill mappings found for this template');
+      setAutofillMappings({});
+    }
+  };
+
+  // Fetch resident profile data
+  const fetchResidentProfile = async () => {
+    try {
+      const response = await axiosInstance.get('/residents/profile');
+      setResidentProfile(response.data);
+    } catch (error) {
+      console.error('Failed to fetch resident profile:', error);
+    }
+  };
+
+  // Auto-fill fields based on mappings
+  const autoFillFields = (mappings: Record<string, string>, profile: ResidentProfile) => {
+    const autofilledValues: Record<string, any> = {};
+    
+    Object.entries(mappings).forEach(([placeholder, profileField]) => {
+      if (profileField && profile[profileField as keyof ResidentProfile]) {
+        autofilledValues[placeholder] = profile[profileField as keyof ResidentProfile];
+      }
+    });
+    
+    return autofilledValues;
+  };
 
   // Authoritative profile from server (preferred source of truth for verification)
   const [profile, setProfile] = useState<ResidentProfile | null>(() => {
@@ -363,8 +399,6 @@ const DocumentRequestForm: React.FC = () => {
     ((authUser as any) && (authUser as any).restricted === true)
   );
 
-  // Verification popups disabled while the feature is paused
-
   useEffect(() => {
     const fetchFiles = async () => {
       setLoading(true);
@@ -379,8 +413,44 @@ const DocumentRequestForm: React.FC = () => {
       }
     };
     fetchFiles();
-    // pending verification checks are disabled while feature is paused
   }, []);
+
+useEffect(() => {
+fetchResidentProfile();
+}, []);
+
+useEffect(() => {
+if (selectedTemplateId) {
+fetchAutofillMappings(selectedTemplateId);
+}
+}, [selectedTemplateId]);
+
+// Auto-fill fields when mappings and resident profile are available
+useEffect(() => {
+if (autofillMappings && residentProfile && Object.keys(autofillMappings).length > 0) {
+const autofilledValues = autoFillFields(autofillMappings, residentProfile);
+// Update field values with autofilled data
+setFieldValues(prevValues => ({
+...prevValues,
+...autofilledValues
+}));
+// Update form values if modal is open
+if (modalOpen && form) {
+try {
+const currentFormValues = form.getFieldsValue();
+form.setFieldsValue({
+...currentFormValues,
+fields: {
+...currentFormValues.fields,
+...autofilledValues
+}
+});
+} catch (e) {
+// ignore if form not ready yet
+}
+}
+}
+}, [autofillMappings, residentProfile, modalOpen, form]);
 
   const handleCardClick = async (file: FileData) => {
     if (userIsResidentUnverified) {
@@ -391,49 +461,6 @@ const DocumentRequestForm: React.FC = () => {
       setShowRestrictedModal(true);
       return;
     }
-    // If resident and not verified, normally we'd prompt for verification.
-    // That behavior is currently disabled while verification is paused.
-    setSelectedTemplateId(file._id);
-    setModalDocName(file.filename.replace(/\.docx$/i, ''));
-    try {
-      const api = await import('../services/api');
-      const res = await api.axiosPublic.get(`/documents/preview/${file._id}`, { params: { format: 'html' }, responseType: 'text' });
-      const html = res && res.data ? res.data : '';
-      const regex = /\{(.*?)\}/g;
-      const fields: string[] = [];
-      let match;
-      while ((match = regex.exec(html)) !== null) {
-        fields.push(match[1].trim());
-      }
-      // Hide QR field from the request form — it is generated server-side
-      const visibleFields = fields.filter(f => f && f.toLowerCase() !== 'qr');
-      setSelectedFields(visibleFields);
-      const initialValues = computeInitialValues(visibleFields);
-      setFieldValues(initialValues);
-      setModalOpen(true);
-      // set form values when modal opens (use effect below will also sync)
-      try {
-        form.setFieldsValue({ fields: initialValues });
-      } catch (e) {
-        // ignore if form not ready yet
-      }
-    } catch (error) {
-      message.error('Failed to load document preview');
-      setSelectedFields([]);
-      setFieldValues({});
-    }
-  };
-
-  // Minimal action buttons with tooltips for each document card
-  const handleView = async (file: FileData) => {
-    if (userIsResidentUnverified) {
-      setShowVerifyModal(true);
-      return;
-    }
-    if (userIsRestricted) {
-      setShowRestrictedModal(true);
-      return;
-    }
     setSelectedTemplateId(file._id);
     setModalDocName(file.filename.replace(/\.docx$/i, ''));
     try {
@@ -449,9 +476,9 @@ const DocumentRequestForm: React.FC = () => {
       const visibleFields = fields.filter(f => f && f.toLowerCase() !== 'qr');
       setSelectedFields(visibleFields);
       const initialValues = computeInitialValues(visibleFields);
+      await fetchAutofillMappings(file._id);
       setFieldValues(initialValues);
       setModalOpen(true);
-      // set form values when modal opens (use effect below will also sync)
       try {
         form.setFieldsValue({ fields: initialValues });
       } catch (e) {
@@ -750,11 +777,14 @@ const DocumentRequestForm: React.FC = () => {
                 
                 // Render appropriate input based on field type
                 const renderFieldInput = () => {
+                  // Check if this field has an autofill mapping
+                  const hasAutofillMapping = autofillMappings && autofillMappings[field];
+                  
                   const commonProps = {
                     style: { width: '100%' },
                     className: "document-request-input",
-                    disabled: fieldValidation?.disabled || false,
-                    readOnly: fieldValidation?.readOnly || false,
+                    disabled: fieldValidation?.disabled || hasAutofillMapping,
+                    readOnly: fieldValidation?.readOnly || hasAutofillMapping,
                   };
 
                   switch (fieldType) {

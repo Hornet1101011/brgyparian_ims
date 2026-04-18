@@ -65,15 +65,16 @@
 }
 
 .header-logo-wrapper {
-  width: 120px;
-  height: 120px;
-  min-width: 120px;
-  min-height: 120px;
-  max-width: 120px;
-  max-height: 120px;
+  position: relative;
+  width: 156px;
+  height: 156px;
+  min-width: 156px;
+  min-height: 156px;
+  max-width: 156px;
+  max-height: 156px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.98);
-  padding: 16px;
+  padding: 8px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15), 0 0 1px rgba(255, 255, 255, 0.5);
   border: 3px solid rgba(255, 255, 255, 0.9);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -86,8 +87,12 @@
 }
 
 .header-logo {
-  width: calc(100% - 32px);
-  height: calc(100% - 32px);
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 120%;
+  height: 120%;
+  transform: translate(-50%, -50%);
   object-fit: contain;
   object-position: center;
   display: block;
@@ -548,21 +553,28 @@
   }
 
   .header-logo-wrapper {
-    width: 80px;
-    height: 80px;
-    min-width: 80px;
-    min-height: 80px;
-    max-width: 80px;
-    max-height: 80px;
-    padding: 12px;
+    position: relative;
+    width: 104px;
+    height: 104px;
+    min-width: 104px;
+    min-height: 104px;
+    max-width: 104px;
+    max-height: 104px;
+    padding: 8px;
     border-radius: 50%;
     flex-shrink: 0;
     flex-grow: 0;
   }
 
   .header-logo {
-    width: calc(100% - 24px);
-    height: calc(100% - 24px);
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 120%;
+    height: 120%;
+    transform: translate(-50%, -50%);
+    object-fit: contain;
+    object-position: center;
   }
 
   /* Login Card Header Mobile */
@@ -1303,21 +1315,27 @@
   }
   
   .header-logo-wrapper {
-    width: 100px;
-    height: 100px;
-    min-width: 100px;
-    min-height: 100px;
-    max-width: 100px;
-    max-height: 100px;
-    padding: 14px;
+    width: 130px;
+    height: 130px;
+    min-width: 130px;
+    min-height: 130px;
+    max-width: 130px;
+    max-height: 130px;
+    padding: 8px;
     border-radius: 50%;
     flex-shrink: 0;
     flex-grow: 0;
   }
 
   .header-logo {
-    width: calc(100% - 28px);
-    height: calc(100% - 28px);
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 120%;
+    height: 120%;
+    transform: translate(-50%, -50%);
+    object-fit: contain;
+    object-position: center;
   }
   
   .header-title {
