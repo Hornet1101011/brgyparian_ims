@@ -107,7 +107,7 @@ router.get('/list', (req, res) => {
 });
 
 // Save autofill mappings for a template
-router.post('/:id/autofill-mappings', (req, res) => {
+router.post('/autofill-mappings/:id', (req, res) => {
   const { id } = req.params;
   const { mappings } = req.body;
   
@@ -139,7 +139,7 @@ router.post('/:id/autofill-mappings', (req, res) => {
 });
 
 // Get autofill mappings for a template
-router.get('/:id/autofill-mappings', (req, res) => {
+router.get('/autofill-mappings/:id', (req, res) => {
   const { id } = req.params;
   const mappingFile = path.join(__dirname, '../../data/autofill-mappings', `${id}.json`);
   
