@@ -152,7 +152,7 @@ const DocumentRequestForm: React.FC<{}> = () => {
   // Fetch autofill mappings for selected template
   const fetchAutofillMappings = async (templateId: string) => {
     try {
-      const response = await axiosInstance.get(`/templates/autofill-mappings/${templateId}`);
+      const response = await axiosInstance.get(`/templates/${templateId}/autofill-mappings`);
       setAutofillMappings(response.data.mappings || {});
     } catch (error) {
       console.log('No autofill mappings found for this template');

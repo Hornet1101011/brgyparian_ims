@@ -177,9 +177,9 @@ const TemplatesManager: React.FC = () => {
     try {
       const mappings = autofillForm.getFieldsValue();
       
-      // Save mappings to backend (you'll need to create this API endpoint)
-      await axiosInstance.post(`/templates/autofill-mappings/${selectedTemplateForAutofill._id}`, {
-        mappings: mappings
+      // Save mappings to backend (server route expects template id before segment)
+      await axiosInstance.post(`/templates/${selectedTemplateForAutofill._id}/autofill-mappings`, {
+        mappings
       });
       
       message.success('Autofill mappings saved successfully');
