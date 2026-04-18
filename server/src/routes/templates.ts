@@ -106,8 +106,40 @@ router.get('/list', (req, res) => {
   });
 });
 
-// Save autofill mappings for a template
+// Save autofill mappings for a template (multiple route patterns for reliability)
 router.post('/autofill-mappings/:id', (req, res) => {
+  const { id } = req.params;
+  const { mappings } = req.body;
+  
+  if (!mappings || typeof mappings !== 'object') {
+    return res.status(400).json({ error: 'Mappings object is required' });
+  }
+  
+  // Store mappings in a JSON file (you could also use a database)
+  const mappingsDir = path.join(__dirname, '../../data/autofill-mappings');
+  const mappingFile = path.join(mappingsDir, `${id}.json`);
+  
+  // Ensure directory exists
+  fs.mkdir(mappingsDir, { recursive: true }, (err) => {
+    if (err) {
+      console.error('Failed to create mappings directory:', err);
+      return res.status(500).json({ error: 'Failed to save mappings' });
+    }
+    
+    // Save mappings to file
+    fs.writeFile(mappingFile, JSON.stringify(mappings, null, 2), 'utf8', (writeErr) => {
+      if (writeErr) {
+        console.error('Failed to write mappings file:', writeErr);
+        return res.status(500).json({ error: 'Failed to save mappings' });
+      }
+      
+      res.json({ success: true, message: 'Autofill mappings saved successfully' });
+    });
+  });
+});
+
+// Alternative route pattern (backup)
+router.post('/templates/:id/autofill-mappings', (req, res) => {
   const { id } = req.params;
   const { mappings } = req.body;
   
