@@ -1,5 +1,6 @@
 import inboxRoutes from './routes/inboxRoutes';
 import templatesRoutes from './routes/templates';
+const autofillMappingsRoutes = require('./routes/autofillMappings');
 import residentsRoutes from './routes/residents';
 import documentsRoutes from './routes/documents';
 import documentRequestRoutes from './routes/documentRequestRoutes';
@@ -112,6 +113,7 @@ app.get('/', (req, res) => {
 
 // Use templates and API routes (imported as ES modules)
 app.use('/api/templates', templatesRoutes);
+app.use('/api', autofillMappingsRoutes);
 app.use('/api/resident', residentsRoutes);
 app.use('/api/document', documentsRoutes);
 app.use('/api/document-requests', documentRequestRoutes);
