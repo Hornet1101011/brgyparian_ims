@@ -609,9 +609,8 @@ export const getTotalDocumentsCount = async (req: Request, res: Response) => {
  */
 export const getPendingRequestsBreakdown = async (req: Request, res: Response) => {
   try {
-    const DocumentRequest = require('../models/DocumentRequest').default;
-    const Inquiry = require('../models/Inquiry').Inquiry;
-    const VerificationRequest = require('../models/VerificationRequest').VerificationRequest;
+    // Use the already imported models from the top of the file
+    const VerificationRequest = require('../models/VerificationRequest').default;
     const Request = require('../models/Request').default;
 
     // Count pending document requests

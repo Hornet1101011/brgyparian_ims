@@ -76,6 +76,7 @@ router.get('/:fileId/config', async (req, res) => {
 
     res.json({
       validations: config ? (config.validations || []) : [],
+      autofillMappings: config ? (config.autofillMappings || {}) : {},
       config: config || {}
     });
   } catch (err) {
@@ -84,14 +85,15 @@ router.get('/:fileId/config', async (req, res) => {
   }
 });
 
-// POST template configuration (including validations)
+// POST template configuration (including validations and autofill mappings)
 router.post('/:fileId/config', auth, authorize('admin', 'staff'), async (req, res) => {
   try {
     const mongoose = require('mongoose');
     const { ObjectId } = mongoose.Types;
-    const { validations, config } = req.body;
+    const { validations, config, autofillMappings } = req.body;
 
-    if (!validations || !Array.isArray(validations)) {
+    // Allow either validations array or autofillMappings object
+    if (validations && !Array.isArray(validations)) {
       return res.status(400).json({ success: false, message: 'Validations must be an array' });
     }
 
@@ -116,18 +118,32 @@ router.post('/:fileId/config', auth, authorize('admin', 'staff'), async (req, re
 
     const templateId = new ObjectId(req.params.fileId);
 
+    // Prepare update data
+    const updateData: any = {
+      templateId,
+      updatedAt: new Date(),
+      updatedBy: (req as any).user && (req as any).user._id ? (req as any).user._id : undefined
+    };
+
+    // Include validations if provided
+    if (validations) {
+      updateData.validations = validations;
+    }
+
+    // Include autofillMappings if provided
+    if (autofillMappings) {
+      updateData.autofillMappings = autofillMappings;
+    }
+
+    // Include config if provided
+    if (config) {
+      updateData.config = config;
+    }
+
     // Upsert template configuration
     const result = await db.collection('templateconfig').updateOne(
       { templateId },
-      {
-        $set: {
-          templateId,
-          validations,
-          config: config || {},
-          updatedAt: new Date(),
-          updatedBy: (req as any).user && (req as any).user._id ? (req as any).user._id : undefined
-        }
-      },
+      { $set: updateData },
       { upsert: true }
     );
 

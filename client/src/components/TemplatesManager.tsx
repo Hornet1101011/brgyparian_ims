@@ -156,12 +156,25 @@ const TemplatesManager: React.FC = () => {
       const placeholders = await extractPlaceholders(template._id);
       setTemplatePlaceholders(placeholders);
       
-      // Initialize mappings with existing ones if any
+      // Load existing autofill mappings using the same pattern as configurations
+      let existingMappings: Record<string, string> = {};
+      try {
+        const res = await axiosInstance.get(`/documents/${template._id}/config`);
+        const data = res.data || {};
+        existingMappings = data.autofillMappings || {};
+      } catch (err) {
+        console.log('No existing autofill mappings found, starting fresh');
+      }
+      
+      // Initialize mappings with existing ones if any, otherwise empty strings
       const initialMappings: Record<string, string> = {};
       placeholders.forEach(placeholder => {
-        initialMappings[placeholder] = '';
+        initialMappings[placeholder] = existingMappings[placeholder] || '';
       });
       setPlaceholderMappings(initialMappings);
+      
+      // Set form values after loading existing mappings
+      autofillForm.setFieldsValue(initialMappings);
       
       setSelectedTemplateForAutofill(template);
       setAutofillModalVisible(true);
@@ -177,9 +190,10 @@ const TemplatesManager: React.FC = () => {
     try {
       const mappings = autofillForm.getFieldsValue();
       
-      // Save mappings to backend (server route expects template id before segment)
-      await axiosInstance.post(`/templates/${selectedTemplateForAutofill._id}/autofill-mappings`, {
-        mappings
+      // Save mappings to backend using the same pattern as configurations
+      await axiosInstance.post(`/documents/${selectedTemplateForAutofill._id}/config`, {
+        autofillMappings: mappings,
+        config: {}
       });
       
       message.success('Autofill mappings saved successfully');
