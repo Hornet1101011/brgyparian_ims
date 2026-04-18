@@ -139,7 +139,7 @@ router.post('/autofill-mappings/:id', (req, res) => {
 });
 
 // Alternative route pattern (backup)
-router.post('/templates/:id/autofill-mappings', (req, res) => {
+router.post('/autofill-mappings/:id', (req, res) => {
   const { id } = req.params;
   const { mappings } = req.body;
   
