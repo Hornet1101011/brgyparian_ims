@@ -267,8 +267,9 @@ const Profile: React.FC<ProfileProps> = ({ profile, onProfileUpdate }) => {
         .then(res => {
           if (!mounted) return;
           const data = res.data || {};
-          residentForm.setFieldsValue(data);
-          setPersonalInfo(data);
+          const formData = { ...data, singleParent: data.singleParent || false };
+          residentForm.setFieldsValue(formData);
+          setPersonalInfo(formData);
           setVerificationStatus(data.verified ? 'verified' : 'pending');
           
           if (data?.profileImage) {
@@ -279,7 +280,7 @@ const Profile: React.FC<ProfileProps> = ({ profile, onProfileUpdate }) => {
         .catch((err) => {
           if (err?.response && err.response.status === 404) {
             setResidentMissing(true);
-            residentForm.setFieldsValue({});
+            residentForm.setFieldsValue({ singleParent: false });
           }
         });
     }

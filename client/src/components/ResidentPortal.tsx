@@ -376,8 +376,9 @@ export default function ResidentPortal() {
 	});
     residentPersonalInfoAPI.getPersonalInfo()
       .then((data: any) => {
-        setPersonalInfo(data);
-        setPersonalForm(data);
+        const formData = { ...data, singleParent: data.singleParent || false };
+        setPersonalInfo(formData);
+        setPersonalForm(formData);
 				if (data?.profileImage) {
 						const url = data.profileImage.startsWith('http') ? data.profileImage : `${window.location.origin}${data.profileImage}`;
 						setAvatarPreview(url);
