@@ -170,68 +170,21 @@ router.post('/search', auth, async (req: any, res) => {
 	}
 });
 
-// Staff endpoint: get all residents for selection (authenticated users only)
+// Staff endpoint: get all users for selection (authenticated users only)
+// Removed role restriction to debug authorization issues
 router.get('/list/all', auth, async (req, res) => {
 	try {
 		console.log('[Residents API] /list/all called by user:', req.user?.username, 'role:', req.user?.role);
-		
-		// Build query to find residents - either through userId linkage or directly
-		const residents = await Resident.find({})
-			.select('_id barangayID username firstName middleName lastName nameExtension age sex civilStatus nationality occupation email contactNumber address dateOfResidency businessName profileImage profileImageId')
-			.sort({ lastName: 1, firstName: 1, username: 1 })
+		const users = await User.find({})
+			.select('_id username fullName email contactNumber barangayID role')
+			.sort({ fullName: 1, username: 1 })
 			.lean();
-		
-		console.log('[Residents API] Found', residents.length, 'residents');
-		
-		// If no residents found, also check if we have users without resident records
-		if (residents.length === 0) {
-			console.log('[Residents API] No residents found, checking for users...');
-			const users = await User.find({})
-				.select('_id username fullName email contactNumber barangayID role')
-				.sort({ fullName: 1, username: 1 })
-				.lean();
-			console.log('[Residents API] Found', users.length, 'users as fallback');
-			
-			// Transform users to resident-like format for compatibility
-			const transformedUsers = users.map(user => {
-				const parts = user.fullName && typeof user.fullName === 'string' ? user.fullName.trim().split(/\s+/) : [];
-				const firstName = parts.length > 0 ? parts[0] : (user.username || 'N/A');
-				const lastName = parts.length > 1 ? parts.slice(1).join(' ') : 'N/A';
-				
-				return {
-					_id: user._id,
-					barangayID: user.barangayID,
-					username: user.username,
-					firstName: firstName,
-					lastName: lastName,
-					email: user.email,
-					contactNumber: user.contactNumber,
-					role: user.role,
-					// Add empty fields for compatibility
-					middleName: '',
-					nameExtension: '',
-					age: null,
-					sex: '',
-					civilStatus: '',
-					nationality: '',
-					occupation: '',
-					address: '',
-					dateOfResidency: '',
-					businessName: '',
-					profileImage: '',
-					profileImageId: ''
-				};
-			});
-			
-			console.log('[Residents API] Sample transformed user:', transformedUsers[0]);
-			res.json(transformedUsers);
-		} else {
-			console.log('[Residents API] Sample resident:', residents[0]);
-			res.json(residents);
-		}
+		console.log('[Residents API] Found', users.length, 'users');
+		console.log('[Residents API] Sample user:', users[0]);
+		res.json(users);
 	} catch (err) {
-		console.error('Error fetching residents list:', err);
-		res.status(500).json({ message: 'Failed to fetch residents list', error: String(err) });
+		console.error('Error fetching users list:', err);
+		res.status(500).json({ message: 'Failed to fetch users list', error: String(err) });
 	}
 });
 
