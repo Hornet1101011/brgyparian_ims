@@ -9,6 +9,7 @@ import { contactAPI, residentsListAPI } from '../../services/api';
 import { Input, Space as AntSpace, Calendar as AntCalendar } from 'antd';
 import { DISABLED_BG, AVAILABLE_GREEN, BOOKED_RED, LIMITED_GOLD, TODAY_BLUE } from '../../theme/colors';
 import dayjs from 'dayjs';
+import { isPhilippinesHoliday, PHILIPPINES_HOLIDAYS_2026 } from '../../utils/holidays';
 
 // Simple helpers
 const toMinutes = (t: string) => {
@@ -566,7 +567,9 @@ const StaffCalendar = () => {
     const wk = dt.getDay();
     // compare local midnights
     const isPast = dt.setHours(0,0,0,0) < today.getTime();
-    if (isPast || wk === 0 || wk === 6) return 'disabled';
+    // Check if it's a Philippines holiday
+    const isHoliday = isPhilippinesHoliday(dayjs(dateStr));
+    if (isPast || wk === 0 || wk === 6 || isHoliday) return 'disabled';
     const list = slotsByDate.get(dateStr) || [];
     const totalBlocks = DAY_BLOCKS.length;
     let bookedBlocks = 0;
@@ -705,10 +708,11 @@ const StaffCalendar = () => {
     // setQuickSelected([]);
   };
 
-  // Disabled dates: weekend
+  // Disabled dates: weekend and holidays
   const isOfficeClosed = (d: Date) => {
     const wk = d.getDay();
-    return wk === 0 || wk === 6;
+    const isHoliday = isPhilippinesHoliday(dayjs(d));
+    return wk === 0 || wk === 6 || isHoliday;
   };
 
   const isPastDate = (d: Date) => {
@@ -932,7 +936,8 @@ const StaffCalendar = () => {
                   if (!current) return false;
                   const day = current.day();
                   const isPast = current.isBefore(dayjs(), 'day');
-                  return isPast || day === 0 || day === 6; // Disable past dates and weekends
+                  const isHoliday = isPhilippinesHoliday(current);
+                  return isPast || day === 0 || day === 6 || isHoliday; // Disable past dates, weekends, and holidays
                 }}
               />
             </div>
@@ -1128,7 +1133,8 @@ const StaffCalendar = () => {
                   if (!current) return false;
                   const day = current.day();
                   const isPast = current.isBefore(dayjs(), 'day');
-                  return isPast || day === 0 || day === 6;
+                  const isHoliday = isPhilippinesHoliday(current);
+                  return isPast || day === 0 || day === 6 || isHoliday; // Disable past dates, weekends, and holidays
                 }}
               />
             </div>

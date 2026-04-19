@@ -22,6 +22,7 @@ export interface IResident extends MongooseDocument {
   educationalAttainment?: string;
   sex?: string;
   civilStatus?: string;
+  singleParent?: boolean;
   dateOfResidency?: string;
   address?: string;
   facebook?: string;
@@ -102,6 +103,7 @@ const ResidentSchema = new Schema<IResident>({
   educationalAttainment: { type: String },
   sex: { type: String },
   civilStatus: { type: String },
+  singleParent: { type: Boolean, default: false },
   dateOfResidency: { type: String },
   address: { type: String },
   facebook: { type: String },

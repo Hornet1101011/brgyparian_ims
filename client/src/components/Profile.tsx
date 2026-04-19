@@ -20,7 +20,8 @@ import {
   Space,
   Typography,
   Tooltip,
-  Tag
+  Tag,
+  Checkbox
 } from 'antd';
 import { 
   UserOutlined, 
@@ -42,6 +43,38 @@ import { getAbsoluteApiUrl } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { axiosInstance } from '../services/api';
 import dayjs from 'dayjs';
+
+// Philippines-specific options for dropdowns
+const PHILIPPINE_OPTIONS = {
+  civilStatus: [
+    'Single', 'Married', 'Widowed', 'Separated', 'Divorced', 'Annulled', 
+    'Domestic Partnership', 'Common Law Marriage', 'Legally Separated'
+  ],
+  bloodType: [
+    'A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'
+  ],
+  education: [
+    'No Formal Education', 'Elementary', 'High School', 'Vocational', 'College',
+    'Bachelor\'s Degree', 'Master\'s Degree', 'Doctorate', 'Professional License'
+  ],
+  occupation: [
+    'Student', 'Teacher', 'Engineer', 'Doctor', 'Nurse', 'Accountant', 'Lawyer',
+    'Architect', 'Police Officer', 'Soldier', 'Seaman', 'OFW', 'Business Owner',
+    'Farmer', 'Driver', 'Construction Worker', 'Salesperson', 'Clerk', 'Manager',
+    'IT Professional', 'Government Employee', 'Private Employee', 'Freelancer',
+    'Self-Employed', 'Retired', 'Unemployed', 'Homemaker'
+  ],
+  nationality: [
+    'Filipino', 'American', 'Chinese', 'Japanese', 'Korean', 'Indian',
+    'British', 'Canadian', 'Australian', 'Singaporean', 'Malaysian', 'Indonesian',
+    'Thai', 'Vietnamese', 'German', 'French', 'Italian', 'Spanish', 'Other'
+  ],
+  religion: [
+    'Roman Catholic', 'Islam', 'Iglesia ni Cristo', 'Methodist', 'Baptist',
+    'Seventh-day Adventist', 'Jehovah\'s Witness', 'Buddhist', 'Hindu',
+    'Aglipayan', 'United Church of Christ', 'Other Christian', 'Other'
+  ]
+};
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -615,16 +648,21 @@ const Profile: React.FC<ProfileProps> = ({ profile, onProfileUpdate }) => {
                       </Col>
                       <Col xs={24} sm={8}>
                         <Form.Item name="civilStatus" label="Civil Status">
-                          <Select options={[
-                            { label: 'Single', value: 'Single' },
-                            { label: 'Married', value: 'Married' },
-                            { label: 'Widowed', value: 'Widowed' },
-                            { label: 'Separated', value: 'Separated' },
-                            { label: 'Divorced', value: 'Divorced' },
-                            { label: 'Annulled', value: 'Annulled' },
-                            { label: 'Domestic Partnership', value: 'Domestic Partnership' },
-                            { label: 'Other', value: 'Other' }
-                          ]} />
+                          <Select 
+                            placeholder="Select civil status"
+                            options={PHILIPPINE_OPTIONS.civilStatus.map(status => ({ label: status, value: status }))}
+                            showSearch
+                            filterOption={(input, option) =>
+                              (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                            }
+                          />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+                    <Row gutter={[16, 8]}>
+                      <Col xs={24} sm={8}>
+                        <Form.Item name="singleParent" label="Single Parent">
+                          <Checkbox>I am a single parent</Checkbox>
                         </Form.Item>
                       </Col>
                       <Col xs={24} sm={8}>
@@ -688,7 +726,14 @@ const Profile: React.FC<ProfileProps> = ({ profile, onProfileUpdate }) => {
                     <Row gutter={[16, 8]}>
                       <Col xs={24} sm={12}>
                         <Form.Item name="nationality" label="Nationality">
-                          <Input />
+                          <Select 
+                            placeholder="Select nationality"
+                            options={PHILIPPINE_OPTIONS.nationality.map(nat => ({ label: nat, value: nat }))}
+                            showSearch
+                            filterOption={(input, option) =>
+                              (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                            }
+                          />
                         </Form.Item>
                       </Col>
                       <Col xs={24} sm={12}>
@@ -700,7 +745,14 @@ const Profile: React.FC<ProfileProps> = ({ profile, onProfileUpdate }) => {
                     <Row gutter={[16, 8]}>
                       <Col xs={24} sm={12}>
                         <Form.Item name="religion" label="Religion">
-                          <Input />
+                          <Select 
+                            placeholder="Select religion"
+                            options={PHILIPPINE_OPTIONS.religion.map(rel => ({ label: rel, value: rel }))}
+                            showSearch
+                            filterOption={(input, option) =>
+                              (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                            }
+                          />
                         </Form.Item>
                       </Col>
                       <Col xs={24} sm={12}>
@@ -730,43 +782,61 @@ const Profile: React.FC<ProfileProps> = ({ profile, onProfileUpdate }) => {
                     <Row gutter={[16, 8]}>
                       <Col xs={24} sm={8}>
                         <Form.Item name="bloodType" label="Blood Type">
-                          <Select options={[
-                            { label: 'A+', value: 'A+' },
-                            { label: 'A-', value: 'A-' },
-                            { label: 'B+', value: 'B+' },
-                            { label: 'B-', value: 'B-' },
-                            { label: 'O+', value: 'O+' },
-                            { label: 'O-', value: 'O-' },
-                            { label: 'AB+', value: 'AB+' },
-                            { label: 'AB-', value: 'AB-' }
-                          ]} />
+                          <Select 
+                            placeholder="Select blood type"
+                            options={PHILIPPINE_OPTIONS.bloodType.map(blood => ({ label: blood, value: blood }))}
+                            showSearch
+                            filterOption={(input, option) =>
+                              (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                            }
+                          />
                         </Form.Item>
                       </Col>
                       <Col xs={24} sm={8}>
                         <Form.Item name="disabilityStatus" label="Disability Status">
-                          <Input />
+                          <Select 
+                            placeholder="Select disability status"
+                            options={[
+                              { label: 'None', value: 'None' },
+                              { label: 'Physical Disability', value: 'Physical Disability' },
+                              { label: 'Visual Impairment', value: 'Visual Impairment' },
+                              { label: 'Hearing Impairment', value: 'Hearing Impairment' },
+                              { label: 'Speech/Language Disorder', value: 'Speech/Language Disorder' },
+                              { label: 'Mental Disability', value: 'Mental Disability' },
+                              { label: 'Learning Disability', value: 'Learning Disability' },
+                              { label: 'Other', value: 'Other' }
+                            ]}
+                            showSearch
+                            filterOption={(input, option) =>
+                              (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                            }
+                          />
                         </Form.Item>
                       </Col>
                       <Col xs={24} sm={8}>
                         <Form.Item name="occupation" label="Occupation">
-                          <Input />
+                          <Select 
+                            placeholder="Select occupation"
+                            options={PHILIPPINE_OPTIONS.occupation.map(occ => ({ label: occ, value: occ }))}
+                            showSearch
+                            filterOption={(input, option) =>
+                              (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                            }
+                          />
                         </Form.Item>
                       </Col>
                     </Row>
                     <Row gutter={[16, 8]}>
                       <Col xs={24}>
                         <Form.Item name="educationalAttainment" label="Educational Attainment">
-                          <Select options={[
-                            { label: 'No Formal Education', value: 'No Formal Education' },
-                            { label: 'Elementary', value: 'Elementary' },
-                            { label: 'High School', value: 'High School' },
-                            { label: 'College', value: 'College' },
-                            { label: 'Bachelor\'s Degree', value: 'Bachelor\'s Degree' },
-                            { label: 'Master\'s Degree', value: 'Master\'s Degree' },
-                            { label: 'Doctorate', value: 'Doctorate' },
-                            { label: 'Vocational', value: 'Vocational' },
-                            { label: 'Other', value: 'Other' }
-                          ]} />
+                          <Select 
+                            placeholder="Select educational attainment"
+                            options={PHILIPPINE_OPTIONS.education.map(edu => ({ label: edu, value: edu }))}
+                            showSearch
+                            filterOption={(input, option) =>
+                              (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                            }
+                          />
                         </Form.Item>
                       </Col>
                     </Row>
@@ -846,12 +916,26 @@ const Profile: React.FC<ProfileProps> = ({ profile, onProfileUpdate }) => {
                     <Row gutter={[16, 8]}>
                       <Col xs={24} sm={12}>
                         <Form.Item name="occupation" label="Occupation">
-                          <Input />
+                          <Select 
+                            placeholder="Select occupation"
+                            options={PHILIPPINE_OPTIONS.occupation.map(occ => ({ label: occ, value: occ }))}
+                            showSearch
+                            filterOption={(input, option) =>
+                              (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                            }
+                          />
                         </Form.Item>
                       </Col>
                       <Col xs={24} sm={12}>
                         <Form.Item name="educationalAttainment" label="Educational Attainment">
-                          <Input />
+                          <Select 
+                            placeholder="Select educational attainment"
+                            options={PHILIPPINE_OPTIONS.education.map(edu => ({ label: edu, value: edu }))}
+                            showSearch
+                            filterOption={(input, option) =>
+                              (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                            }
+                          />
                         </Form.Item>
                       </Col>
                     </Row>

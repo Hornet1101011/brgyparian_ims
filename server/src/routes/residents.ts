@@ -165,7 +165,15 @@ router.put('/personal-info', auth, async (req: any, res) => {
 	try {
 		// Only allow expected fields to be updated/created
 		const allowedFields = [
-			'firstName', 'lastName', 'nameExtension', 'barangayID', 'email', 'contactNumber', 'address', 'department'
+			'firstName', 'lastName', 'middleName', 'nameExtension', 'barangayID', 'email', 'contactNumber', 'address', 'department',
+			'age', 'birthDate', 'dateOfResidency', 'sex', 'civilStatus', 'singleParent',
+			'nationality', 'placeOfBirth', 'religion', 'maritalStatus', 'passportNumber', 'governmentIdNumber', 'bloodType', 'disabilityStatus', 'occupation', 'educationalAttainment',
+			'facebook', 'landlineNumber', 'emergencyContact', 'emergencyContactName', 'emergencyContactRelationship',
+			'spouseName', 'spouseAge', 'spouseBirthDate', 'spouseMiddleName', 'spouseLastName', 'spouseOccupation', 'spouseStatus', 'spouseNationality', 'spouseContactNumber',
+			'motherName', 'motherAge', 'motherBirthDate', 'motherOccupation', 'motherStatus',
+			'fatherName', 'fatherAge', 'fatherBirthDate', 'fatherOccupation', 'fatherStatus',
+			'numberOfChildren', 'childrenNames', 'childrenAges',
+			'businessName', 'businessType', 'natureOfBusiness', 'businessAddress', 'dateEstablished', 'tin', 'registrationNumber', 'businessPermitNumber', 'barangayClearanceNumber', 'numberOfEmployees', 'capitalInvestment', 'annualGrossIncome', 'businessContactPerson', 'businessContactNumber', 'businessEmail'
 		];
 		const residentData: any = { userId: user._id };
 		for (const field of allowedFields) {

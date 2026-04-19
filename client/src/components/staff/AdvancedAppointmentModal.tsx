@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Modal, Button, Space, DatePicker, InputNumber, Radio, Input, List, Divider, Row, Col, Tag, Select, Spin, Progress, message, Switch, Steps, Card, TimePicker, Input as TextArea } from 'antd';
 import { CloseOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
+import { isPhilippinesHoliday, PHILIPPINES_HOLIDAYS_2026 } from '../../utils/holidays';
 import { contactAPI, residentsListAPI } from '../../services/api';
 // appointment helpers not required in this modal
 
@@ -15,9 +16,19 @@ const toMinutes = (t: string) => {
 
 // (helper functions and office ranges omitted in this modal)
 
-type Resident = { username: string; fullName?: string; email?: string };
+type Resident = { username: string; fullName?: string; email?: string; sex?: string; age?: number; civilStatus?: string; residencyYears?: number; occupation?: string; disability?: string; bloodType?: string; education?: string; barangay?: string; nationality?: string; religion?: string };
 
 interface Assignment { resident: Resident; date: string; startTime: string; endTime: string }
+
+// Philippines-specific options
+const PHILIPPINE_OPTIONS = {
+  civilStatus: ['Single', 'Married', 'Widowed', 'Separated', 'Live-in'],
+  bloodType: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'],
+  education: ['No Formal Education', 'Elementary', 'High School', 'College Undergraduate', 'College Graduate', 'Vocational', 'Postgraduate'],
+  occupation: ['Student', 'Employee', 'Self-Employed', 'Professional', 'Skilled Worker', 'Unskilled Worker', 'Agricultural Worker', 'Business Owner', 'Government Employee', 'Private Sector Employee', 'OFW', 'Retired', 'Unemployed'],
+  nationality: ['Filipino', 'American', 'Chinese', 'Japanese', 'Korean', 'Indian', 'British', 'Australian', 'Canadian', 'Singaporean', 'Malaysian', 'Indonesian', 'Thai', 'Vietnamese'],
+  religion: ['Roman Catholic', 'Islam', 'Iglesia ni Cristo', 'Protestant', 'Buddhist', 'Hindu', 'Atheist', 'Agnostic', 'Other Christian']
+};
 
 const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { visible: boolean; onClose: () => void; defaultMaxDates?: number }) => {
   const [selectedDates, setSelectedDates] = useState([] as string[]);
@@ -46,6 +57,22 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
   const [residentsSelectionMode, setResidentsSelectionMode] = useState('manual' as 'manual'|'auto');
   const [autoMethod, setAutoMethod] = useState('first' as 'first'|'random');
   const [autoSelecting, setAutoSelecting] = useState(false);
+
+  // Advanced filtering states
+  const [filters, setFilters] = useState({
+    sex: 'none' as 'male'|'female'|'none',
+    ageRange: [18, 100] as [number, number],
+    civilStatus: [] as string[],
+    residencyYears: [0, 50] as [number, number],
+    occupation: [] as string[],
+    disability: 'none' as 'none'|'yes',
+    bloodType: [] as string[],
+    education: [] as string[],
+    barangay: [] as string[],
+    nationality: [] as string[],
+    religion: [] as string[]
+  });
+  const [filteredResidents, setFilteredResidents] = useState([] as Resident[]);
 
   const [loadingResidents, setLoadingResidents] = useState(false);
   const [preview, setPreview] = useState([] as Assignment[]);
@@ -203,48 +230,79 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
     setLoadingResidents(true);
     try {
       const r = await residentsListAPI.getAllResidents();
-      setResidentOptions(r || []);
+      const residents = r || [];
+      
+      // Apply advanced filtering
+      const filtered = residents.filter((resident: Resident) => {
+        // Sex filter
+        if (filters.sex !== 'none' && resident.sex !== filters.sex) {
+          return false;
+        }
+        
+        // Age filter
+        if (resident.age && (resident.age < filters.ageRange[0] || resident.age > filters.ageRange[1])) {
+          return false;
+        }
+        
+        // Civil status filter
+        if (filters.civilStatus.length > 0 && (!resident.civilStatus || !filters.civilStatus.includes(resident.civilStatus))) {
+          return false;
+        }
+        
+        // Residency years filter
+        if (resident.residencyYears && (resident.residencyYears < filters.residencyYears[0] || resident.residencyYears > filters.residencyYears[1])) {
+          return false;
+        }
+        
+        // Occupation filter
+        if (filters.occupation.length > 0 && (!resident.occupation || !filters.occupation.includes(resident.occupation))) {
+          return false;
+        }
+        
+        // Disability filter
+        if (filters.disability !== 'none' && resident.disability !== filters.disability) {
+          return false;
+        }
+        
+        // Blood type filter
+        if (filters.bloodType.length > 0 && (!resident.bloodType || !filters.bloodType.includes(resident.bloodType))) {
+          return false;
+        }
+        
+        // Education filter
+        if (filters.education.length > 0 && (!resident.education || !filters.education.includes(resident.education))) {
+          return false;
+        }
+        
+        // Barangay filter
+        if (filters.barangay.length > 0 && (!resident.barangay || !filters.barangay.includes(resident.barangay))) {
+          return false;
+        }
+        
+        // Nationality filter
+        if (filters.nationality.length > 0 && (!resident.nationality || !filters.nationality.includes(resident.nationality))) {
+          return false;
+        }
+        
+        // Religion filter
+        if (filters.religion.length > 0 && (!resident.religion || !filters.religion.includes(resident.religion))) {
+          return false;
+        }
+        
+        return true;
+      });
+      
+      setResidentOptions(residents);
+      setFilteredResidents(filtered);
     } catch (err) {
       setResidentOptions([]);
+      setFilteredResidents([]);
     } finally { setLoadingResidents(false); }
   };
 
   const openResidentPicker = async () => {
     await fetchResidents();
     setResidentPickerOpen(true);
-  };
-
-  const handleAutoSelect = async () => {
-    setAutoSelecting(true);
-    try {
-      // Ensure resident options are loaded
-      if (!residentOptions || residentOptions.length === 0) await fetchResidents();
-      const options = residentOptions || [];
-      const available = options.length;
-      if (available === 0) {
-        message.warning('No residents available to auto-select');
-        return;
-      }
-      const desired = Math.max(1, Math.floor(Number(numParticipants) || 1));
-      const pickCount = Math.min(desired, available);
-      let selected: Resident[] = [];
-      if (autoMethod === 'first') {
-        selected = options.slice(0, pickCount);
-      } else {
-        // random selection
-        const shuffled = [...options].sort(() => Math.random() - 0.5);
-        selected = shuffled.slice(0, pickCount);
-      }
-      setSelectedResidents(selected);
-      if (pickCount < desired) message.warning(`Only ${available} residents available; selected ${pickCount}.`);
-      // Update participants count to reflect actual selected count
-      setNumParticipants(pickCount);
-    } catch (err) {
-      console.error('Auto-select failed', err);
-      message.error('Failed to auto-select residents');
-    } finally {
-      setAutoSelecting(false);
-    }
   };
 
   const formatHM = (minutes: number) => {
@@ -537,6 +595,31 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
     setTimeout(() => setSubmitProgress(0), 600);
   };
 
+  const handleAutoSelect = async () => {
+    setAutoSelecting(true);
+    try {
+      // Ensure resident options are loaded
+      if (!filteredResidents || filteredResidents.length === 0) await fetchResidents();
+      const options = filteredResidents || [];
+      const available = options.length;
+      if (available === 0) {
+        message.warning('No residents available to select from');
+        return;
+      }
+      const toSelect = Math.min(numParticipants, available);
+      const pickCount = autoMethod === 'first' ? toSelect : Math.min(numParticipants, Math.floor(available / 2));
+      const shuffled = [...options].sort(() => Math.random() - 0.5);
+      const selected = shuffled.slice(0, pickCount);
+      setSelectedResidents(selected);
+      message.success(`Auto-selected ${selected.length} resident(s)`);
+    } catch (err) {
+      console.error('Auto-select failed', err);
+      message.error('Failed to auto-select residents');
+    } finally {
+      setAutoSelecting(false);
+    }
+  };
+
   const handleResidentPickerDone = () => {
     if (selectedResidents.length > numParticipants) {
       // Trim to allowed count and warn
@@ -586,7 +669,7 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
         <Card bordered={false} bodyStyle={{ padding: 16 }} style={{ flex: 1 }}>
           <div style={{ marginBottom: 8, fontWeight: 600 }}>Select Dates (max {defaultMaxDates})</div>
           <Space style={{ marginBottom: 8 }}>
-            <DatePicker onChange={addDate} disabledDate={(cur) => !cur || cur.isBefore(dayjs(), 'day') || cur.day() === 0 || cur.day() === 6} />
+            <DatePicker onChange={addDate} disabledDate={(cur) => !cur || cur.isBefore(dayjs(), 'day') || cur.day() === 0 || cur.day() === 6 || isPhilippinesHoliday(cur)} />
             <div>Selected: {selectedDates.length}</div>
           </Space>
           <div style={{ minHeight: 56, display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
@@ -792,8 +875,8 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
         </Card>
       </div>
 
-      <Modal title="Select Residents" open={residentPickerOpen} onCancel={() => setResidentPickerOpen(false)} footer={null} width={600}>
-        <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+      <Modal title="Select Residents" open={residentPickerOpen} onCancel={() => setResidentPickerOpen(false)} footer={null} width={800}>
+        <div style={{ maxHeight: 500, overflowY: 'auto' }}>
           <div style={{ position: 'sticky', top: 0, zIndex: 10, background: '#fff', padding: '8px 0', borderBottom: '1px solid #f0f0f0', marginBottom: 8, display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <Select value={autoMethod} onChange={(v:any) => setAutoMethod(v)} style={{ width: 160 }} options={[{ label: 'First N', value: 'first' }, { label: 'Random N', value: 'random' }]} disabled={loadingResidents} />
@@ -804,8 +887,178 @@ const AdvancedAppointmentModal = ({ visible, onClose, defaultMaxDates = 7 }: { v
               <Button type="primary" onClick={handleResidentPickerDone}>Done ({selectedResidents.length})</Button>
             </div>
           </div>
+          
+          {/* Advanced Filtering Section */}
+          <div style={{ marginBottom: 16, padding: 12, background: '#f5f5f5', borderRadius: 6 }}>
+            <div style={{ fontWeight: 600, marginBottom: 12 }}>Advanced Filtering</div>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+              {/* Sex Filter */}
+              <div>
+                <div style={{ marginBottom: 4, fontSize: 12, color: '#666' }}>Sex</div>
+                <Select 
+                  value={filters.sex} 
+                  onChange={(v:any) => setFilters(prev => ({ ...prev, sex: v }))} 
+                  style={{ width: '100%' }}
+                  options={[
+                    { label: 'None', value: 'none' },
+                    { label: 'Male', value: 'male' },
+                    { label: 'Female', value: 'female' }
+                  ]}
+                />
+              </div>
+              
+              {/* Age Range Filter */}
+              <div>
+                <div style={{ marginBottom: 4, fontSize: 12, color: '#666' }}>Age Range</div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <InputNumber 
+                    value={filters.ageRange[0]} 
+                    onChange={(v:any) => setFilters(prev => ({ ...prev, ageRange: [v, prev.ageRange[1]] }))} 
+                    placeholder="Min" 
+                    min={0} 
+                    max={120}
+                    style={{ width: '100%' }}
+                  />
+                  <InputNumber 
+                    value={filters.ageRange[1]} 
+                    onChange={(v:any) => setFilters(prev => ({ ...prev, ageRange: [prev.ageRange[0], v] }))} 
+                    placeholder="Max" 
+                    min={0} 
+                    max={120}
+                    style={{ width: '100%' }}
+                  />
+                </div>
+              </div>
+              
+              {/* Civil Status Filter */}
+              <div>
+                <div style={{ marginBottom: 4, fontSize: 12, color: '#666' }}>Civil Status</div>
+                <Select 
+                  mode="multiple"
+                  value={filters.civilStatus}
+                  onChange={(v:any) => setFilters(prev => ({ ...prev, civilStatus: v }))}
+                  style={{ width: '100%' }}
+                  options={PHILIPPINE_OPTIONS.civilStatus.map(status => ({ label: status, value: status }))}
+                />
+              </div>
+              
+              {/* Residency Years Filter */}
+              <div>
+                <div style={{ marginBottom: 4, fontSize: 12, color: '#666' }}>Residency Years</div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <InputNumber 
+                    value={filters.residencyYears[0]} 
+                    onChange={(v:any) => setFilters(prev => ({ ...prev, residencyYears: [v, prev.residencyYears[1]] }))} 
+                    placeholder="Min" 
+                    min={0} 
+                    max={50}
+                    style={{ width: '100%' }}
+                  />
+                  <InputNumber 
+                    value={filters.residencyYears[1]} 
+                    onChange={(v:any) => setFilters(prev => ({ ...prev, residencyYears: [prev.residencyYears[0], v] }))} 
+                    placeholder="Max" 
+                    min={0} 
+                    max={50}
+                    style={{ width: '100%' }}
+                  />
+                </div>
+              </div>
+            </div>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+              {/* Occupation Filter */}
+              <div>
+                <div style={{ marginBottom: 4, fontSize: 12, color: '#666' }}>Occupation</div>
+                <Select 
+                  mode="multiple"
+                  value={filters.occupation}
+                  onChange={(v:any) => setFilters(prev => ({ ...prev, occupation: v }))}
+                  style={{ width: '100%' }}
+                  options={PHILIPPINE_OPTIONS.occupation.map(occ => ({ label: occ, value: occ }))}
+                />
+              </div>
+              
+              {/* Disability Filter */}
+              <div>
+                <div style={{ marginBottom: 4, fontSize: 12, color: '#666' }}>Disability</div>
+                <Select 
+                  value={filters.disability}
+                  onChange={(v:any) => setFilters(prev => ({ ...prev, disability: v }))}
+                  style={{ width: '100%' }}
+                  options={[
+                    { label: 'None', value: 'none' },
+                    { label: 'Yes', value: 'yes' }
+                  ]}
+                />
+              </div>
+              
+              {/* Blood Type Filter */}
+              <div>
+                <div style={{ marginBottom: 4, fontSize: 12, color: '#666' }}>Blood Type</div>
+                <Select 
+                  mode="multiple"
+                  value={filters.bloodType}
+                  onChange={(v:any) => setFilters(prev => ({ ...prev, bloodType: v }))}
+                  style={{ width: '100%' }}
+                  options={PHILIPPINE_OPTIONS.bloodType.map(blood => ({ label: blood, value: blood }))}
+                />
+              </div>
+            </div>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+              {/* Education Filter */}
+              <div>
+                <div style={{ marginBottom: 4, fontSize: 12, color: '#666' }}>Educational Attainment</div>
+                <Select 
+                  mode="multiple"
+                  value={filters.education}
+                  onChange={(v:any) => setFilters(prev => ({ ...prev, education: v }))}
+                  style={{ width: '100%' }}
+                  options={PHILIPPINE_OPTIONS.education.map(edu => ({ label: edu, value: edu }))}
+                />
+              </div>
+              
+              {/* Barangay Filter */}
+              <div>
+                <div style={{ marginBottom: 4, fontSize: 12, color: '#666' }}>Barangay</div>
+                <Select 
+                  mode="multiple"
+                  value={filters.barangay}
+                  onChange={(v:any) => setFilters(prev => ({ ...prev, barangay: v }))}
+                  style={{ width: '100%' }}
+                  options={Array.from(new Set((residentOptions || []).map(r => r.barangay).filter(Boolean))).map(barangay => ({ label: barangay, value: barangay }))}
+                />
+              </div>
+              
+              {/* Nationality Filter */}
+              <div>
+                <div style={{ marginBottom: 4, fontSize: 12, color: '#666' }}>Nationality</div>
+                <Select 
+                  mode="multiple"
+                  value={filters.nationality}
+                  onChange={(v:any) => setFilters(prev => ({ ...prev, nationality: v }))}
+                  style={{ width: '100%' }}
+                  options={PHILIPPINE_OPTIONS.nationality.map(nat => ({ label: nat, value: nat }))}
+                />
+              </div>
+              
+              {/* Religion Filter */}
+              <div>
+                <div style={{ marginBottom: 4, fontSize: 12, color: '#666' }}>Religion</div>
+                <Select 
+                  mode="multiple"
+                  value={filters.religion}
+                  onChange={(v:any) => setFilters(prev => ({ ...prev, religion: v }))}
+                  style={{ width: '100%' }}
+                  options={PHILIPPINE_OPTIONS.religion.map(rel => ({ label: rel, value: rel }))}
+                />
+              </div>
+            </div>
+          </div>
           {loadingResidents ? <Spin /> : (
-            <List dataSource={residentOptions} renderItem={(r: any) => (
+            <List dataSource={filteredResidents} renderItem={(r: any) => (
               <List.Item onClick={() => {
                 // toggle selection: if already selected, remove; otherwise attempt to add
                 if (selectedResidents.some(x => x.username === r.username)) {

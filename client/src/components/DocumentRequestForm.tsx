@@ -132,6 +132,7 @@ const DocumentRequestForm: React.FC<{}> = () => {
   const [fieldValues, setFieldValues] = useState<Record<string, any>>({});
   const [showVerifyModal, setShowVerifyModal] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
+  const [infoSearchTerm, setInfoSearchTerm] = useState('');
   const [showRestrictedModal, setShowRestrictedModal] = useState(false);
   const [autofillMappings, setAutofillMappings] = useState<Record<string, string>>({});
   const [residentProfile, setResidentProfile] = useState<ResidentProfile | null>(null);
@@ -149,17 +150,6 @@ const DocumentRequestForm: React.FC<{}> = () => {
   const { user: authUser } = useAuth();
   // currentUser will be resolved inside handlers when needed
 
-  // Fetch autofill mappings for selected template
-  const fetchAutofillMappings = async (templateId: string) => {
-    try {
-      const response = await axiosInstance.get(`/templates/${templateId}/autofill-mappings`);
-      setAutofillMappings(response.data.mappings || {});
-    } catch (error) {
-      console.log('No autofill mappings found for this template');
-      setAutofillMappings({});
-    }
-  };
-
   // Fetch resident profile data
   const fetchResidentProfile = async () => {
     try {
@@ -170,13 +160,62 @@ const DocumentRequestForm: React.FC<{}> = () => {
     }
   };
 
-  // Auto-fill fields based on mappings
-  const autoFillFields = (mappings: Record<string, string>, profile: ResidentProfile) => {
+  // Fetch autofill mappings for selected template
+  const fetchAutofillMappings = async (templateId: string) => {
+    try {
+      const response = await axiosInstance.get(`/documents/${templateId}/config`);
+      setAutofillMappings(response.data.autofillMappings || {});
+    } catch (error) {
+      console.log('No autofill mappings found for this template');
+      setAutofillMappings({});
+    }
+  };
+
+  // Auto-fill fields based on mappings and profile data
+  const autoFillFields = (mappings: Record<string, string>) => {
     const autofilledValues: Record<string, any> = {};
     
     Object.entries(mappings).forEach(([placeholder, profileField]) => {
-      if (profileField && profile[profileField as keyof ResidentProfile]) {
-        autofilledValues[placeholder] = profile[profileField as keyof ResidentProfile];
+      if (!profileField) return;
+      
+      // Get value from different profile sources
+      let value: any = '';
+      
+      // Check residentProfile first
+      if (residentProfile && (residentProfile as any)[profileField]) {
+        value = (residentProfile as any)[profileField];
+      }
+      // Check personalInfo
+      else if (personalInfo && (personalInfo as any)[profileField]) {
+        value = (personalInfo as any)[profileField];
+      }
+      // Check profile
+      else if (profile && (profile as any)[profileField]) {
+        value = (profile as any)[profileField];
+      }
+      // Check authUser
+      else if (authUser && (authUser as any)[profileField]) {
+        value = (authUser as any)[profileField];
+      }
+      
+      if (value) {
+        // Check if this field is a date field based on validation
+        const validation = getValidation ? getValidation(placeholder) : null;
+        if (validation && validation.fieldType === 'date') {
+          // Convert date strings to dayjs objects
+          if (typeof value === 'string') {
+            const parsedDate = dayjs(value);
+            autofilledValues[placeholder] = parsedDate.isValid() ? parsedDate : null;
+          } else if (value instanceof Date) {
+            const parsedDate = dayjs(value);
+            autofilledValues[placeholder] = parsedDate.isValid() ? parsedDate : null;
+          } else {
+            autofilledValues[placeholder] = null;
+          }
+        } else {
+          // For non-date fields, convert to string
+          autofilledValues[placeholder] = String(value);
+        }
       }
     });
     
@@ -225,6 +264,43 @@ const DocumentRequestForm: React.FC<{}> = () => {
     return () => { mounted = false; };
   }, []);
 
+  useEffect(() => {
+    fetchResidentProfile();
+  }, []);
+
+  useEffect(() => {
+    if (selectedTemplateId) {
+      fetchAutofillMappings(selectedTemplateId);
+    }
+  }, [selectedTemplateId]);
+
+  // Auto-fill fields when mappings and resident profile are available
+  useEffect(() => {
+    if (autofillMappings && Object.keys(autofillMappings).length > 0) {
+      const autofilledValues = autoFillFields(autofillMappings);
+      // Update field values with autofilled data
+      setFieldValues(prevValues => ({
+        ...prevValues,
+        ...autofilledValues
+      }));
+      // Update form values if modal is open
+      if (modalOpen && form) {
+        try {
+          const currentFormValues = form.getFieldsValue();
+          form.setFieldsValue({
+            ...currentFormValues,
+            fields: {
+              ...currentFormValues.fields,
+              ...autofilledValues
+            }
+          });
+        } catch (e) {
+          // ignore if form not ready yet
+        }
+      }
+    }
+  }, [autofillMappings, residentProfile, personalInfo, modalOpen, form]);
+
   // Sync form values whenever fieldValues change or modal opens
   React.useEffect(() => {
     if (modalOpen && form) {
@@ -236,7 +312,49 @@ const DocumentRequestForm: React.FC<{}> = () => {
     }
   }, [modalOpen, fieldValues, form]);
 
-  // Helper: compute initial field values (dates + name autofill based on account)
+  // Helper function to filter information based on search
+  const filterInformation = (items: any[], searchTerm: string) => {
+    // Ensure items is always an array
+    if (!Array.isArray(items)) {
+      return [];
+    }
+    
+    // First, ensure all items are valid and have required properties
+    const validItems = items.filter(item => {
+      return item && 
+             typeof item === 'object' && 
+             item.label && 
+             item.value && 
+             typeof item.label === 'string' && 
+             typeof item.value !== 'undefined' &&
+             item.label !== null &&
+             item.value !== null;
+    });
+    
+    // Always apply key generation, even with no search term
+    let filteredItems = validItems;
+    
+    if (searchTerm) {
+      const lowerSearchTerm = searchTerm.toLowerCase();
+      // Apply search filtering
+      filteredItems = validItems.filter(item => {
+        return (
+          item.label.toLowerCase().includes(lowerSearchTerm) ||
+          String(item.value).toLowerCase().includes(lowerSearchTerm)
+        );
+      });
+    }
+    
+    // Always return items with keys, and ensure no null items
+    return filteredItems
+      .filter(item => item !== null && item !== undefined)
+      .map((item, index) => ({ 
+        ...item, 
+        key: `${item.label}-${index}` 
+      }));
+  };
+
+  // Helper: compute initial field values (only date-based defaults, no personal info autofill)
   const computeInitialValues = (visibleFields: string[]) => {
     const initialValues: Record<string, any> = {};
     const now = new Date();
@@ -247,21 +365,6 @@ const DocumentRequestForm: React.FC<{}> = () => {
     const mm = String(monthNum).padStart(2, '0');
     const dd = String(day).padStart(2, '0');
     const currentDateFormatted = `${mm}/${dd}/${year}`;
-
-    const parseFullName = (name?: string) => {
-      if (!name) return { first: '', middle: '', last: '' };
-      const parts = name.trim().split(/\s+/).filter(Boolean);
-      if (parts.length === 0) return { first: '', middle: '', last: '' };
-      if (parts.length === 1) return { first: parts[0], middle: '', last: '' };
-      if (parts.length === 2) return { first: parts[0], middle: '', last: parts[1] };
-      return { first: parts[0], middle: parts.slice(1, -1).join(' '), last: parts[parts.length - 1] };
-    };
-
-    const fullFromProfile = parseFullName(profile?.fullName || '');
-    const firstFromPersonal = (personalInfo && (personalInfo.firstName || (personalInfo as any).first)) || fullFromProfile.first || ((profile as any)?.firstName) || ((authUser as any)?.firstName) || '';
-    const middleFromPersonal = (personalInfo && (personalInfo.middleName || (personalInfo as any).middleName)) || fullFromProfile.middle || ((profile as any)?.middleName) || ((authUser as any)?.middleName) || '';
-    const lastFromPersonal = (personalInfo && (personalInfo.lastName || (personalInfo as any).last)) || fullFromProfile.last || ((profile as any)?.lastName) || ((authUser as any)?.lastName) || '';
-    const assembledFull = [firstFromPersonal, middleFromPersonal, lastFromPersonal].filter(Boolean).join(' ').trim();
 
     visibleFields.forEach(f => {
       initialValues[f] = '';
@@ -280,26 +383,12 @@ const DocumentRequestForm: React.FC<{}> = () => {
           initialValues[f] = dayjs();
           return;
         }
-        if (/birth(date)?|dob/.test(low)) {
-          // prefer personalInfo birthDate if available
-          if (personalInfo && personalInfo.birthDate) {
-            initialValues[f] = dayjs(personalInfo.birthDate);
-            return;
-          }
-          if (profile && (profile as any).birthDate) {
-            initialValues[f] = dayjs((profile as any).birthDate);
-            return;
-          }
-          initialValues[f] = undefined;
-          return;
-        }
-        // default to empty (no prefill) for date fields
-        initialValues[f] = undefined;
+        // default to null for date fields (not undefined)
+        initialValues[f] = null;
         return;
       }
 
-      // Non-date fields: string-based defaults
-      // date-related non-date placeholders
+      // Non-date fields: string-based defaults for date-related placeholders only
       if (/^current(day|dayof)?$/.test(low) || /currentday/.test(low)) {
         initialValues[f] = String(day);
         return;
@@ -316,74 +405,8 @@ const DocumentRequestForm: React.FC<{}> = () => {
         initialValues[f] = currentDateFormatted;
         return;
       }
-
-      // name autofill: firstname, middlename, lastname, fullname
-      if (/first(name)?/.test(low)) {
-        if (firstFromPersonal) initialValues[f] = firstFromPersonal;
-        return;
-      }
-      if (/middle(name)?/.test(low)) {
-        if (middleFromPersonal) initialValues[f] = middleFromPersonal;
-        return;
-      }
-      if (/(last(name)?|surname|familyname)/.test(low)) {
-        if (lastFromPersonal) initialValues[f] = lastFromPersonal;
-        return;
-      }
-      // fullname / name (standalone) / full_name
-      if (low === 'fullname' || low === 'full_name' || low === 'full name' || low === 'name' || (low.indexOf('full') !== -1 && low.indexOf('name') !== -1)) {
-        if (assembledFull) initialValues[f] = assembledFull;
-        return;
-      }
-
-      // Address autofill: handle address and its components
-      if (/address|fulladdress|full address|complete address|street|street address|house|houseno|housenumber|brgy|barangay|purok|city|municipality|province|zip|postal|zipcode/.test(low)) {
-        const profileAddress = profile && profile.address ? String(profile.address).trim() : '';
-        const p: any = personalInfo || {};
-        const components: string[] = [];
-        if (p.houseNumber) components.push(String(p.houseNumber));
-        if (p.street) components.push(String(p.street));
-        if (p.subdivision) components.push(String(p.subdivision));
-        if (p.address) components.push(String(p.address));
-        if (p.barangay || p.barangayID) components.push(String(p.barangay || p.barangayID));
-        if (p.city || p.municipality) components.push(String(p.city || p.municipality));
-        if (p.province) components.push(String(p.province));
-        if (p.postalCode || p.zip || p.zipCode) components.push(String(p.postalCode || p.zip || p.zipCode));
-        const assembledAddress = components.filter(Boolean).join(', ');
-
-        if (/barangay|brgy|purok/.test(low)) {
-          if (p.barangay) { initialValues[f] = String(p.barangay); return; }
-          if (p.barangayID) { initialValues[f] = String(p.barangayID); return; }
-          if (profile && (profile as any).barangayID) { initialValues[f] = String((profile as any).barangayID); return; }
-        }
-
-        if (/city|municipality/.test(low)) {
-          if (p.city) { initialValues[f] = String(p.city); return; }
-          if (p.municipality) { initialValues[f] = String(p.municipality); return; }
-        }
-
-        if (/province/.test(low)) {
-          if (p.province) { initialValues[f] = String(p.province); return; }
-        }
-
-        if (/zip|postal|zipcode/.test(low)) {
-          if (p.postalCode) { initialValues[f] = String(p.postalCode); return; }
-          if (p.zip) { initialValues[f] = String(p.zip); return; }
-          if (p.zipCode) { initialValues[f] = String(p.zipCode); return; }
-        }
-
-        if (profileAddress) { initialValues[f] = profileAddress; return; }
-        if (assembledAddress) { initialValues[f] = assembledAddress; return; }
-      }
-
-      // Fallback: if personalInfo has a key that exactly matches field name, use it
-      if (personalInfo) {
-        const key = Object.keys(personalInfo).find(k => k.toLowerCase() === low);
-        if (key && (personalInfo as any)[key]) {
-          initialValues[f] = String((personalInfo as any)[key]);
-          return;
-        }
-      }
+      
+      // All other fields remain empty (no autofill)
     });
     return initialValues;
   };
@@ -415,43 +438,6 @@ const DocumentRequestForm: React.FC<{}> = () => {
     fetchFiles();
   }, []);
 
-useEffect(() => {
-fetchResidentProfile();
-}, []);
-
-useEffect(() => {
-if (selectedTemplateId) {
-fetchAutofillMappings(selectedTemplateId);
-}
-}, [selectedTemplateId]);
-
-// Auto-fill fields when mappings and resident profile are available
-useEffect(() => {
-if (autofillMappings && residentProfile && Object.keys(autofillMappings).length > 0) {
-const autofilledValues = autoFillFields(autofillMappings, residentProfile);
-// Update field values with autofilled data
-setFieldValues(prevValues => ({
-...prevValues,
-...autofilledValues
-}));
-// Update form values if modal is open
-if (modalOpen && form) {
-try {
-const currentFormValues = form.getFieldsValue();
-form.setFieldsValue({
-...currentFormValues,
-fields: {
-...currentFormValues.fields,
-...autofilledValues
-}
-});
-} catch (e) {
-// ignore if form not ready yet
-}
-}
-}
-}, [autofillMappings, residentProfile, modalOpen, form]);
-
   const handleCardClick = async (file: FileData) => {
     if (userIsResidentUnverified) {
       setShowVerifyModal(true);
@@ -476,7 +462,6 @@ fields: {
       const visibleFields = fields.filter(f => f && f.toLowerCase() !== 'qr');
       setSelectedFields(visibleFields);
       const initialValues = computeInitialValues(visibleFields);
-      await fetchAutofillMappings(file._id);
       setFieldValues(initialValues);
       setModalOpen(true);
       try {
@@ -956,6 +941,18 @@ fields: {
         width={700}
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+            <Button 
+              icon={<InfoCircleOutlined />}
+              onClick={() => { 
+              setShowInfoModal(false); 
+              setTimeout(() => {
+                window.open('/resident/profile', '_blank');
+              }, 100);
+            }}
+              style={{ marginRight: 'auto' }}
+            >
+              Update Profile
+            </Button>
             <Button onClick={() => setShowInfoModal(false)}>Close</Button>
           </div>
         }
@@ -979,23 +976,33 @@ fields: {
         )}
       >
         <div style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+          {/* Search Bar */}
+          <div style={{ marginBottom: 16, padding: '0 8px' }}>
+            <Input
+              placeholder="Search information (e.g., name, email, contact)..."
+              value={infoSearchTerm}
+              onChange={e => setInfoSearchTerm(e.target.value)}
+              prefix={<InfoCircleOutlined style={{ color: '#1890ff' }} />}
+              allowClear
+              style={{ marginBottom: 8 }}
+            />
+          </div>
           {profile || personalInfo ? (
             <div>
-              {/* Profile Section */}
               {profile && (
                 <>
                   <div style={{ marginBottom: 20 }}>
                     <h3 style={{ color: '#333', fontWeight: 600, marginBottom: 12, fontSize: 16 }}>Account Information</h3>
                     <List
                       className="info-list"
-                      dataSource={[
-                        profile.fullName ? { label: 'Full Name', value: profile.fullName } : null,
-                        profile.username ? { label: 'Username', value: profile.username } : null,
-                        profile.email ? { label: 'Email', value: profile.email } : null,
-                        profile.contactNumber ? { label: 'Contact Number', value: profile.contactNumber } : null,
-                        profile.barangayID ? { label: 'Barangay ID', value: profile.barangayID } : null,
-                        profile.address ? { label: 'Address', value: profile.address } : null,
-                      ].filter(Boolean)}
+                      dataSource={filterInformation([
+                        profile?.fullName ? { label: 'Full Name', value: profile.fullName } : null,
+                        profile?.username ? { label: 'Username', value: profile.username } : null,
+                        profile?.email ? { label: 'Email', value: profile.email } : null,
+                        profile?.contactNumber ? { label: 'Contact Number', value: profile.contactNumber } : null,
+                        profile?.barangayID ? { label: 'Barangay ID', value: profile.barangayID } : null,
+                        profile?.address ? { label: 'Address', value: profile.address } : null,
+                      ].filter(item => item && item.label && item.value), infoSearchTerm)}
                       renderItem={(item) => (
                         <List.Item className="info-list-item">
                           <List.Item.Meta
@@ -1051,18 +1058,18 @@ fields: {
                       <h3 style={{ color: '#333', fontWeight: 600, marginBottom: 12, fontSize: 16 }}>Basic Information</h3>
                       <List
                         className="info-list"
-                        dataSource={[
-                          personalInfo.firstName ? { label: 'First Name', value: personalInfo.firstName } : null,
-                          personalInfo.lastName ? { label: 'Last Name', value: personalInfo.lastName } : null,
-                          personalInfo.middleName ? { label: 'Middle Name', value: personalInfo.middleName } : null,
-                          personalInfo.age ? { label: 'Age', value: personalInfo.age } : null,
-                          personalInfo.birthDate ? { label: 'Date of Birth', value: new Date(personalInfo.birthDate).toLocaleDateString() } : null,
-                          personalInfo.sex ? { label: 'Sex', value: personalInfo.sex } : null,
-                          personalInfo.civilStatus ? { label: 'Civil Status', value: personalInfo.civilStatus } : null,
-                          personalInfo.nationality ? { label: 'Nationality', value: personalInfo.nationality } : null,
-                          personalInfo.placeOfBirth ? { label: 'Place of Birth', value: personalInfo.placeOfBirth } : null,
-                          personalInfo.religion ? { label: 'Religion', value: personalInfo.religion } : null,
-                        ].filter(Boolean)}
+                        dataSource={filterInformation([
+                          personalInfo?.firstName ? { label: 'First Name', value: personalInfo.firstName } : null,
+                          personalInfo?.lastName ? { label: 'Last Name', value: personalInfo.lastName } : null,
+                          personalInfo?.middleName ? { label: 'Middle Name', value: personalInfo.middleName } : null,
+                          personalInfo?.age ? { label: 'Age', value: personalInfo.age } : null,
+                          personalInfo?.birthDate ? { label: 'Date of Birth', value: new Date(personalInfo.birthDate).toLocaleDateString() } : null,
+                          personalInfo?.sex ? { label: 'Sex', value: personalInfo.sex } : null,
+                          personalInfo?.civilStatus ? { label: 'Civil Status', value: personalInfo.civilStatus } : null,
+                          personalInfo?.nationality ? { label: 'Nationality', value: personalInfo.nationality } : null,
+                          personalInfo?.placeOfBirth ? { label: 'Place of Birth', value: personalInfo.placeOfBirth } : null,
+                          personalInfo?.religion ? { label: 'Religion', value: personalInfo.religion } : null,
+                        ].filter(item => item && item.label && item.value), infoSearchTerm)}
                         renderItem={(item) => (
                           <List.Item className="info-list-item">
                             <List.Item.Meta
@@ -1115,14 +1122,14 @@ fields: {
                         <h3 style={{ color: '#333', fontWeight: 600, marginBottom: 12, fontSize: 16 }}>Contact Information</h3>
                         <List
                           className="info-list"
-                          dataSource={[
+                          dataSource={filterInformation([
                             personalInfo.contactNumber ? { label: 'Contact Number', value: personalInfo.contactNumber } : null,
                             personalInfo.landlineNumber ? { label: 'Landline Number', value: personalInfo.landlineNumber } : null,
                             personalInfo.facebook ? { label: 'Facebook', value: personalInfo.facebook } : null,
                             personalInfo.emergencyContactName ? { label: 'Emergency Contact Name', value: personalInfo.emergencyContactName } : null,
                             personalInfo.emergencyContactRelationship ? { label: 'Emergency Contact Relationship', value: personalInfo.emergencyContactRelationship } : null,
                             personalInfo.emergencyContact ? { label: 'Emergency Contact', value: personalInfo.emergencyContact } : null,
-                          ].filter(Boolean)}
+                          ].filter(item => item && item.label && item.value), infoSearchTerm)}
                           renderItem={(item) => (
                             <List.Item className="info-list-item">
                               <List.Item.Meta
@@ -1152,10 +1159,10 @@ fields: {
                         <h3 style={{ color: '#333', fontWeight: 600, marginBottom: 12, fontSize: 16 }}>Professional Information</h3>
                         <List
                           className="info-list"
-                          dataSource={[
-                            personalInfo.occupation ? { label: 'Occupation', value: personalInfo.occupation } : null,
-                            personalInfo.educationalAttainment ? { label: 'Educational Attainment', value: personalInfo.educationalAttainment } : null,
-                          ].filter(Boolean)}
+                          dataSource={filterInformation([
+                            personalInfo?.occupation ? { label: 'Occupation', value: personalInfo.occupation } : null,
+                            personalInfo?.educationalAttainment ? { label: 'Educational Attainment', value: personalInfo.educationalAttainment } : null,
+                          ].filter(item => item && item.label && item.value), infoSearchTerm)}
                           renderItem={(item) => (
                             <List.Item className="info-list-item">
                               <List.Item.Meta
@@ -1190,28 +1197,30 @@ fields: {
                         <h3 style={{ color: '#333', fontWeight: 600, marginBottom: 12, fontSize: 16 }}>Family Information</h3>
                         <List
                           className="info-list"
-                          dataSource={[
-                            personalInfo.spouseName ? { label: 'Spouse Name', value: personalInfo.spouseName } : null,
-                            personalInfo.spouseAge ? { label: 'Spouse Age', value: personalInfo.spouseAge } : null,
-                            personalInfo.spouseBirthDate ? { label: 'Spouse Date of Birth', value: new Date(personalInfo.spouseBirthDate).toLocaleDateString() } : null,
-                            personalInfo.spouseOccupation ? { label: 'Spouse Occupation', value: personalInfo.spouseOccupation } : null,
-                            personalInfo.spouseStatus ? { label: 'Spouse Status', value: personalInfo.spouseStatus } : null,
-                            personalInfo.spouseContactNumber ? { label: 'Spouse Contact Number', value: personalInfo.spouseContactNumber } : null,
-                            personalInfo.spouseNationality ? { label: 'Spouse Nationality', value: personalInfo.spouseNationality } : null,
-                            personalInfo.numberOfChildren ? { label: 'Number of Children', value: personalInfo.numberOfChildren } : null,
-                            personalInfo.childrenNames ? { label: 'Children Names', value: personalInfo.childrenNames } : null,
-                            personalInfo.childrenAges ? { label: 'Children Ages', value: personalInfo.childrenAges } : null,
-                            personalInfo.motherName ? { label: 'Mother Name', value: personalInfo.motherName } : null,
-                            personalInfo.motherAge ? { label: 'Mother Age', value: personalInfo.motherAge } : null,
-                            personalInfo.motherBirthDate ? { label: 'Mother Date of Birth', value: new Date(personalInfo.motherBirthDate).toLocaleDateString() } : null,
-                            personalInfo.motherOccupation ? { label: 'Mother Occupation', value: personalInfo.motherOccupation } : null,
-                            personalInfo.motherStatus ? { label: 'Mother Status', value: personalInfo.motherStatus } : null,
-                            personalInfo.fatherName ? { label: 'Father Name', value: personalInfo.fatherName } : null,
-                            personalInfo.fatherAge ? { label: 'Father Age', value: personalInfo.fatherAge } : null,
-                            personalInfo.fatherBirthDate ? { label: 'Father Date of Birth', value: new Date(personalInfo.fatherBirthDate).toLocaleDateString() } : null,
-                            personalInfo.fatherOccupation ? { label: 'Father Occupation', value: personalInfo.fatherOccupation } : null,
-                            personalInfo.fatherStatus ? { label: 'Father Status', value: personalInfo.fatherStatus } : null,
-                          ].filter(Boolean)}
+                          dataSource={filterInformation([
+                            personalInfo?.spouseName ? { label: 'Spouse Name', value: personalInfo.spouseName } : null,
+                            personalInfo?.spouseAge ? { label: 'Spouse Age', value: personalInfo.spouseAge } : null,
+                            personalInfo?.spouseBirthDate ? { label: 'Spouse Date of Birth', value: new Date(personalInfo.spouseBirthDate).toLocaleDateString() } : null,
+                            personalInfo?.spouseOccupation ? { label: 'Spouse Occupation', value: personalInfo.spouseOccupation } : null,
+                            personalInfo?.spouseStatus ? { label: 'Spouse Status', value: personalInfo.spouseStatus } : null,
+                            personalInfo?.spouseContactNumber ? { label: 'Spouse Contact Number', value: personalInfo.spouseContactNumber } : null,
+                            personalInfo?.spouseNationality ? { label: 'Spouse Nationality', value: personalInfo.spouseNationality } : null,
+                            personalInfo?.spouseMiddleName ? { label: 'Spouse Middle Name', value: personalInfo.spouseMiddleName } : null,
+                            personalInfo?.spouseLastName ? { label: 'Spouse Last Name', value: personalInfo.spouseLastName } : null,
+                            personalInfo?.numberOfChildren ? { label: 'Number of Children', value: personalInfo.numberOfChildren } : null,
+                            personalInfo?.childrenNames ? { label: 'Children Names', value: personalInfo.childrenNames } : null,
+                            personalInfo?.childrenAges ? { label: 'Children Ages', value: personalInfo.childrenAges } : null,
+                            personalInfo?.motherName ? { label: 'Mother Name', value: personalInfo.motherName } : null,
+                            personalInfo?.motherAge ? { label: 'Mother Age', value: personalInfo.motherAge } : null,
+                            personalInfo?.motherBirthDate ? { label: 'Mother Date of Birth', value: new Date(personalInfo.motherBirthDate).toLocaleDateString() } : null,
+                            personalInfo?.motherOccupation ? { label: 'Mother Occupation', value: personalInfo.motherOccupation } : null,
+                            personalInfo?.motherStatus ? { label: 'Mother Status', value: personalInfo.motherStatus } : null,
+                            personalInfo?.fatherName ? { label: 'Father Name', value: personalInfo.fatherName } : null,
+                            personalInfo?.fatherAge ? { label: 'Father Age', value: personalInfo.fatherAge } : null,
+                            personalInfo?.fatherBirthDate ? { label: 'Father Date of Birth', value: new Date(personalInfo.fatherBirthDate).toLocaleDateString() } : null,
+                            personalInfo?.fatherOccupation ? { label: 'Father Occupation', value: personalInfo.fatherOccupation } : null,
+                            personalInfo?.fatherStatus ? { label: 'Father Status', value: personalInfo.fatherStatus } : null,
+                          ].filter(item => item && item.label && item.value), infoSearchTerm)}
                           renderItem={(item) => (
                             <List.Item className="info-list-item">
                               <List.Item.Meta
@@ -1245,23 +1254,23 @@ fields: {
                         <h3 style={{ color: '#333', fontWeight: 600, marginBottom: 12, fontSize: 16 }}>Business Information</h3>
                         <List
                           className="info-list"
-                          dataSource={[
-                            personalInfo.businessName ? { label: 'Business Name', value: personalInfo.businessName } : null,
-                            personalInfo.businessType ? { label: 'Business Type', value: personalInfo.businessType } : null,
-                            personalInfo.natureOfBusiness ? { label: 'Nature of Business', value: personalInfo.natureOfBusiness } : null,
-                            personalInfo.businessAddress ? { label: 'Business Address', value: personalInfo.businessAddress } : null,
-                            personalInfo.dateEstablished ? { label: 'Date Established', value: new Date(personalInfo.dateEstablished).toLocaleDateString() } : null,
-                            personalInfo.tin ? { label: 'TIN', value: personalInfo.tin } : null,
-                            personalInfo.registrationNumber ? { label: 'Registration Number', value: personalInfo.registrationNumber } : null,
-                            personalInfo.businessPermitNumber ? { label: 'Business Permit Number', value: personalInfo.businessPermitNumber } : null,
-                            personalInfo.barangayClearanceNumber ? { label: 'Barangay Clearance Number', value: personalInfo.barangayClearanceNumber } : null,
-                            personalInfo.numberOfEmployees ? { label: 'Number of Employees', value: personalInfo.numberOfEmployees } : null,
-                            personalInfo.capitalInvestment ? { label: 'Capital Investment', value: `₱${personalInfo.capitalInvestment.toLocaleString()}` } : null,
-                            personalInfo.annualGrossIncome ? { label: 'Annual Gross Income', value: `₱${personalInfo.annualGrossIncome.toLocaleString()}` } : null,
-                            personalInfo.businessContactPerson ? { label: 'Contact Person', value: personalInfo.businessContactPerson } : null,
-                            personalInfo.businessContactNumber ? { label: 'Contact Number', value: personalInfo.businessContactNumber } : null,
-                            personalInfo.businessEmail ? { label: 'Email', value: personalInfo.businessEmail } : null,
-                          ].filter(Boolean)}
+                          dataSource={filterInformation([
+                            personalInfo?.businessName ? { label: 'Business Name', value: personalInfo.businessName } : null,
+                            personalInfo?.businessType ? { label: 'Business Type', value: personalInfo.businessType } : null,
+                            personalInfo?.natureOfBusiness ? { label: 'Nature of Business', value: personalInfo.natureOfBusiness } : null,
+                            personalInfo?.businessAddress ? { label: 'Business Address', value: personalInfo.businessAddress } : null,
+                            personalInfo?.dateEstablished ? { label: 'Date Established', value: new Date(personalInfo.dateEstablished).toLocaleDateString() } : null,
+                            personalInfo?.tin ? { label: 'TIN', value: personalInfo.tin } : null,
+                            personalInfo?.registrationNumber ? { label: 'Registration Number', value: personalInfo.registrationNumber } : null,
+                            personalInfo?.businessPermitNumber ? { label: 'Business Permit Number', value: personalInfo.businessPermitNumber } : null,
+                            personalInfo?.barangayClearanceNumber ? { label: 'Barangay Clearance Number', value: personalInfo.barangayClearanceNumber } : null,
+                            personalInfo?.numberOfEmployees ? { label: 'Number of Employees', value: personalInfo.numberOfEmployees } : null,
+                            personalInfo?.capitalInvestment ? { label: 'Capital Investment', value: `₱${personalInfo.capitalInvestment?.toLocaleString()}` } : null,
+                            personalInfo?.annualGrossIncome ? { label: 'Annual Gross Income', value: `₱${personalInfo.annualGrossIncome?.toLocaleString()}` } : null,
+                            personalInfo?.businessContactPerson ? { label: 'Contact Person', value: personalInfo.businessContactPerson } : null,
+                            personalInfo?.businessContactNumber ? { label: 'Contact Number', value: personalInfo.businessContactNumber } : null,
+                            personalInfo?.businessEmail ? { label: 'Email', value: personalInfo.businessEmail } : null,
+                          ].filter(item => item && item.label && item.value), infoSearchTerm)}
                           renderItem={(item) => (
                             <List.Item className="info-list-item">
                               <List.Item.Meta
@@ -1292,13 +1301,13 @@ fields: {
                         <h3 style={{ color: '#333', fontWeight: 600, marginBottom: 12, fontSize: 16 }}>Additional Information</h3>
                         <List
                           className="info-list"
-                          dataSource={[
-                            personalInfo.passportNumber ? { label: 'Passport Number', value: personalInfo.passportNumber } : null,
-                            personalInfo.governmentIdNumber ? { label: 'Government ID Number', value: personalInfo.governmentIdNumber } : null,
-                            personalInfo.bloodType ? { label: 'Blood Type', value: personalInfo.bloodType } : null,
-                            personalInfo.disabilityStatus ? { label: 'Disability Status', value: personalInfo.disabilityStatus } : null,
-                            personalInfo.dateOfResidency ? { label: 'Date of Residency', value: new Date(personalInfo.dateOfResidency).toLocaleDateString() } : null,
-                          ].filter(Boolean)}
+                          dataSource={filterInformation([
+                            personalInfo?.passportNumber ? { label: 'Passport Number', value: personalInfo.passportNumber } : null,
+                            personalInfo?.governmentIdNumber ? { label: 'Government ID Number', value: personalInfo.governmentIdNumber } : null,
+                            personalInfo?.bloodType ? { label: 'Blood Type', value: personalInfo.bloodType } : null,
+                            personalInfo?.disabilityStatus ? { label: 'Disability Status', value: personalInfo.disabilityStatus } : null,
+                            personalInfo?.dateOfResidency ? { label: 'Date of Residency', value: new Date(personalInfo.dateOfResidency).toLocaleDateString() } : null,
+                          ].filter(item => item !== null && item.label !== null && item.value !== null), infoSearchTerm)}
                           renderItem={(item) => (
                             <List.Item className="info-list-item">
                               <List.Item.Meta

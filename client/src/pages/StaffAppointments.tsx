@@ -5,7 +5,8 @@ import '../components/staff/appointments/scheduling.css';
 import dayjs from 'dayjs';
 import AppointmentDetailsModal from '../components/AppointmentDetailsModal';
 import InquiryDetailsModal from '../components/InquiryDetailsModal';
-import { CalendarOutlined, ClockCircleOutlined, CheckCircleOutlined, SearchOutlined, ClockCircleTwoTone, EyeOutlined, DeleteOutlined } from '@ant-design/icons';
+import RescheduleRequestModal from '../components/staff/RescheduleRequestModal';
+import { CalendarOutlined, ClockCircleOutlined, CheckCircleOutlined, SearchOutlined, ClockCircleTwoTone, EyeOutlined, DeleteOutlined, RetweetOutlined } from '@ant-design/icons';
 
 const { Text } = Typography;
 
@@ -14,6 +15,7 @@ const StaffAppointments = () => {
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [inquiryModalVisible, setInquiryModalVisible] = useState(false);
+  const [rescheduleModalVisible, setRescheduleModalVisible] = useState(false);
   const [query, setQuery] = useState('');
   const [viewMode, setViewMode] = useState('table');
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 720);
@@ -90,6 +92,8 @@ const StaffAppointments = () => {
             statusConfig = { color: '#8c8c8c', bgColor: '#fafafa', border: '#8c8c8c', text: 'Resolved', icon: <CheckCircleOutlined /> };
           } else if (record.status === 'canceled') {
             statusConfig = { color: '#cf1322', bgColor: '#fff2f0', border: '#cf1322', text: 'Canceled', icon: <ClockCircleOutlined /> };
+          } else if (record.status === 'reschedule_request') {
+            statusConfig = { color: '#1890ff', bgColor: '#e6f7ff', border: '#1890ff', text: 'Reschedule Request', icon: <RetweetOutlined /> };
           }
           return (
             <Card
@@ -199,6 +203,23 @@ const StaffAppointments = () => {
                       >
                         View Details
                       </Button>
+                      {record.status === 'reschedule_request' && (
+                        <Button 
+                          type="primary"
+                          block
+                          size="small"
+                          onClick={() => { setSelectedRecord(record); setRescheduleModalVisible(true); }}
+                          icon={<RetweetOutlined />}
+                          style={{
+                            borderRadius: 6,
+                            fontSize: 12,
+                            fontWeight: 600,
+                            height: 36
+                          }}
+                        >
+                          Handle Reschedule
+                        </Button>
+                      )}
                       <Button 
                         danger
                         block
@@ -521,6 +542,14 @@ const StaffAppointments = () => {
                 inquiryId={selectedRecord?._id || null}
                 onClose={() => { setInquiryModalVisible(false); setSelectedRecord(null); }}
                 onChanged={() => { window.dispatchEvent(new Event('appointments-updated')); }}
+              />
+            )}
+            {selectedRecord && (
+              <RescheduleRequestModal
+                visible={rescheduleModalVisible}
+                inquiry={selectedRecord}
+                onClose={() => { setRescheduleModalVisible(false); setSelectedRecord(null); }}
+                onProcessed={() => { window.dispatchEvent(new Event('appointments-updated')); }}
               />
             )}
           </div> {/* End shiny container */}

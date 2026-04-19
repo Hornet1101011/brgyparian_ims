@@ -780,20 +780,45 @@ const TemplatesManager: React.FC = () => {
                       style={{ marginBottom: 0 }}
                     >
                       <Select
-                        placeholder="Select a field or create composite mapping"
+                        placeholder="Search for a field (e.g., 'name', 'birth', 'contact')..."
                         style={{ width: '100%' }}
                         showSearch
                         allowClear
-                        optionFilterProp="children"
-                        filterOption={(input, option) =>
-                          (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                        optionFilterProp="searchText"
+                        filterOption={(input, option) => {
+                          const searchText = (option?.searchText ?? '').toLowerCase();
+                          const searchTerms = input.toLowerCase().split(' ').filter(term => term.length > 0);
+                          
+                          // If multiple search terms, all must be present
+                          if (searchTerms.length > 1) {
+                            return searchTerms.every(term => searchText.includes(term));
+                          }
+                          
+                          // Single term search - check both label and category
+                          const label = (option?.label ?? '').toLowerCase();
+                          const category = (option?.category ?? '').toLowerCase();
+                          const searchValue = input.toLowerCase();
+                          
+                          return label.includes(searchValue) || 
+                                 category.includes(searchValue) || 
+                                 searchText.includes(searchValue);
+                        }}
+                        notFoundContent={
+                          <div style={{ padding: '8px 12px', color: '#999' }}>
+                            No fields found. Try searching for: name, birth, contact, address, etc.
+                          </div>
                         }
                       >
                         <Select.OptGroup label="Basic Fields">
                           {Object.entries(RESIDENT_PROFILE_FIELDS)
                             .filter(([_, info]) => info.category === 'Basic Information')
                             .map(([field, info]) => (
-                              <Select.Option key={field} value={field}>
+                              <Select.Option 
+                                key={field} 
+                                value={field}
+                                searchText={`${info.label} ${info.category} ${field}`}
+                                category={info.category}
+                              >
                                 {info.label}
                               </Select.Option>
                             ))}
@@ -803,7 +828,12 @@ const TemplatesManager: React.FC = () => {
                           {Object.entries(RESIDENT_PROFILE_FIELDS)
                             .filter(([_, info]) => info.category === 'Contact Information')
                             .map(([field, info]) => (
-                              <Select.Option key={field} value={field}>
+                              <Select.Option 
+                                key={field} 
+                                value={field}
+                                searchText={`${info.label} ${info.category} ${field}`}
+                                category={info.category}
+                              >
                                 {info.label}
                               </Select.Option>
                             ))}
@@ -813,7 +843,12 @@ const TemplatesManager: React.FC = () => {
                           {Object.entries(RESIDENT_PROFILE_FIELDS)
                             .filter(([_, info]) => info.category === 'Address Information')
                             .map(([field, info]) => (
-                              <Select.Option key={field} value={field}>
+                              <Select.Option 
+                                key={field} 
+                                value={field}
+                                searchText={`${info.label} ${info.category} ${field}`}
+                                category={info.category}
+                              >
                                 {info.label}
                               </Select.Option>
                             ))}
@@ -823,7 +858,12 @@ const TemplatesManager: React.FC = () => {
                           {Object.entries(RESIDENT_PROFILE_FIELDS)
                             .filter(([_, info]) => info.category === 'Family Information')
                             .map(([field, info]) => (
-                              <Select.Option key={field} value={field}>
+                              <Select.Option 
+                                key={field} 
+                                value={field}
+                                searchText={`${info.label} ${info.category} ${field}`}
+                                category={info.category}
+                              >
                                 {info.label}
                               </Select.Option>
                             ))}
@@ -833,7 +873,12 @@ const TemplatesManager: React.FC = () => {
                           {Object.entries(RESIDENT_PROFILE_FIELDS)
                             .filter(([_, info]) => info.category === 'Business Information')
                             .map(([field, info]) => (
-                              <Select.Option key={field} value={field}>
+                              <Select.Option 
+                                key={field} 
+                                value={field}
+                                searchText={`${info.label} ${info.category} ${field}`}
+                                category={info.category}
+                              >
                                 {info.label}
                               </Select.Option>
                             ))}
@@ -843,7 +888,12 @@ const TemplatesManager: React.FC = () => {
                           {Object.entries(RESIDENT_PROFILE_FIELDS)
                             .filter(([_, info]) => info.category === 'Additional Information')
                             .map(([field, info]) => (
-                              <Select.Option key={field} value={field}>
+                              <Select.Option 
+                                key={field} 
+                                value={field}
+                                searchText={`${info.label} ${info.category} ${field}`}
+                                category={info.category}
+                              >
                                 {info.label}
                               </Select.Option>
                             ))}
@@ -851,7 +901,12 @@ const TemplatesManager: React.FC = () => {
                         
                         <Select.OptGroup label="Composite Fields (Combinations)">
                           {Object.entries(COMPOSITE_FIELDS).map(([composite, info]) => (
-                            <Select.Option key={composite} value={composite}>
+                            <Select.Option 
+                              key={composite} 
+                              value={composite}
+                              searchText={`${info.label} Composite ${composite}`}
+                              category="Composite Fields"
+                            >
                               {info.label}
                             </Select.Option>
                           ))}

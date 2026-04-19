@@ -4,12 +4,44 @@ import { useTranslation } from 'react-i18next';
 import { residentPersonalInfoAPI, axiosInstance, verificationAPI } from '../services/api';
 import { initNotificationSocket, onNotificationEvent, offNotificationEvent } from '../services/notificationSocket';
 import { AxiosResponse } from 'axios';
-import { Form, Input, Button, Select, Typography, Row, Col, Card, Space, message, Upload, Alert, Tooltip, Progress, Tabs, Badge, Tag, Descriptions, Statistic, Divider, DatePicker } from 'antd';
+import { Form, Input, Button, Select, Typography, Row, Col, Card, Space, message, Upload, Alert, Tooltip, Progress, Tabs, Badge, Tag, Descriptions, Statistic, Divider, DatePicker, Checkbox } from 'antd';
 import { UploadOutlined, InfoCircleOutlined, SyncOutlined, EditOutlined, SaveOutlined, CheckCircleOutlined, ClockCircleOutlined, ExclamationCircleOutlined, UserOutlined, TeamOutlined, SafetyOutlined, FileTextOutlined } from '@ant-design/icons';
 import ResidentCreateModal from './ResidentCreateModal';
 import { useAuth } from '../contexts/AuthContext';
 import AvatarImage from './AvatarImage';
 import dayjs from 'dayjs';
+
+// Philippines-specific options for dropdowns
+const PHILIPPINE_OPTIONS = {
+  civilStatus: [
+    'Single', 'Married', 'Widowed', 'Separated', 'Divorced', 'Annulled', 
+    'Domestic Partnership', 'Common Law Marriage', 'Legally Separated'
+  ],
+  bloodType: [
+    'A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'
+  ],
+  education: [
+    'No Formal Education', 'Elementary', 'High School', 'Vocational', 'College',
+    'Bachelor\'s Degree', 'Master\'s Degree', 'Doctorate', 'Professional License'
+  ],
+  occupation: [
+    'Student', 'Teacher', 'Engineer', 'Doctor', 'Nurse', 'Accountant', 'Lawyer',
+    'Architect', 'Police Officer', 'Soldier', 'Seaman', 'OFW', 'Business Owner',
+    'Farmer', 'Driver', 'Construction Worker', 'Salesperson', 'Clerk', 'Manager',
+    'IT Professional', 'Government Employee', 'Private Employee', 'Freelancer',
+    'Self-Employed', 'Retired', 'Unemployed', 'Homemaker'
+  ],
+  nationality: [
+    'Filipino', 'American', 'Chinese', 'Japanese', 'Korean', 'Indian',
+    'British', 'Canadian', 'Australian', 'Singaporean', 'Malaysian', 'Indonesian',
+    'Thai', 'Vietnamese', 'German', 'French', 'Italian', 'Spanish', 'Other'
+  ],
+  religion: [
+    'Roman Catholic', 'Islam', 'Iglesia ni Cristo', 'Methodist', 'Baptist',
+    'Seventh-day Adventist', 'Jehovah\'s Witness', 'Buddhist', 'Hindu',
+    'Aglipayan', 'United Church of Christ', 'Other Christian', 'Other'
+  ]
+};
 
 const { Text } = Typography;
 
@@ -57,6 +89,7 @@ interface PersonalInfo {
 	dateOfResidency?: string;
 	sex?: string;
 	civilStatus?: string;
+	singleParent?: boolean;
 	facebook?: string;
 	email?: string;
 	contactNumber?: string;
@@ -172,7 +205,7 @@ export default function ResidentPortal() {
 		const personalFields = [
 			// Basic Information
 			'firstName', 'lastName', 'middleName', 'nameExtension', 'age', 'birthDate', 
-			'dateOfResidency', 'sex', 'civilStatus',
+			'dateOfResidency', 'sex', 'civilStatus', 'singleParent',
 			
 			// Personal Details
 			'nationality', 'placeOfBirth', 'religion', 'maritalStatus', 
@@ -364,6 +397,7 @@ export default function ResidentPortal() {
             dateOfResidency: '',
             sex: '',
             civilStatus: '',
+            singleParent: false,
             facebook: '',
             email: '',
             contactNumber: '',
@@ -1124,6 +1158,19 @@ useEffect(() => {
 																					</Form.Item>
 																				</Col>
 																				<Col xs={24} sm={8}>
+																					<Form.Item label="Single Parent">
+																						<Checkbox 
+																							checked={personalForm.singleParent || false} 
+																							onChange={(e) => setPersonalForm(prev => prev ? { ...prev, singleParent: e.target.checked } : prev)}
+																							disabled={!editingPersonal}
+																						>
+																							I am a single parent
+																						</Checkbox>
+																					</Form.Item>
+																				</Col>
+																			</Row>
+																			<Row gutter={[16, 8]}>
+																				<Col xs={24} sm={8}>
 																					<Form.Item 
 																						label="Date of Residency"
 																						tooltip="Select the date you became a resident of this barangay."
@@ -1184,7 +1231,18 @@ useEffect(() => {
 																			<Row gutter={[16, 8]}>
 																				<Col xs={24} sm={12}>
 																					<Form.Item label="Nationality">
-																						<Input name="nationality" value={personalForm.nationality || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																						<Select 
+																							name="nationality" 
+																							value={personalForm.nationality || ''} 
+																							onChange={(value) => setPersonalForm({...personalForm, nationality: value})} 
+																							disabled={!editingPersonal}
+																							placeholder="Select nationality"
+																							options={PHILIPPINE_OPTIONS.nationality.map(nat => ({ label: nat, value: nat }))}
+																							showSearch
+																							filterOption={(input, option) =>
+																								(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+																							}
+																						/>
 																					</Form.Item>
 																				</Col>
 																				<Col xs={24} sm={12}>
@@ -1196,7 +1254,18 @@ useEffect(() => {
 																			<Row gutter={[16, 8]}>
 																				<Col xs={24} sm={12}>
 																					<Form.Item label="Religion">
-																						<Input name="religion" value={personalForm.religion || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																						<Select 
+																							name="religion" 
+																							value={personalForm.religion || ''} 
+																							onChange={(value) => setPersonalForm({...personalForm, religion: value})} 
+																							disabled={!editingPersonal}
+																							placeholder="Select religion"
+																							options={PHILIPPINE_OPTIONS.religion.map(rel => ({ label: rel, value: rel }))}
+																							showSearch
+																							filterOption={(input, option) =>
+																								(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+																							}
+																						/>
 																					</Form.Item>
 																				</Col>
 																				<Col xs={24} sm={12}>
@@ -1251,12 +1320,43 @@ useEffect(() => {
 																				</Col>
 																				<Col xs={24} sm={8}>
 																					<Form.Item label="Disability Status">
-																						<Input name="disabilityStatus" value={personalForm.disabilityStatus || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																						<Select 
+																							name="disabilityStatus" 
+																							value={personalForm.disabilityStatus || ''} 
+																							onChange={(value) => setPersonalForm({...personalForm, disabilityStatus: value})} 
+																							disabled={!editingPersonal}
+																							placeholder="Select disability status"
+																							options={[
+																{ label: 'None', value: 'None' },
+																{ label: 'Physical Disability', value: 'Physical Disability' },
+																{ label: 'Visual Impairment', value: 'Visual Impairment' },
+																{ label: 'Hearing Impairment', value: 'Hearing Impairment' },
+																{ label: 'Speech/Language Disorder', value: 'Speech/Language Disorder' },
+																{ label: 'Mental Disability', value: 'Mental Disability' },
+																{ label: 'Learning Disability', value: 'Learning Disability' },
+																{ label: 'Other', value: 'Other' }
+															]}
+																							showSearch
+																							filterOption={(input, option) =>
+																								(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+																							}
+																						/>
 																					</Form.Item>
 																				</Col>
 																				<Col xs={24} sm={8}>
 																					<Form.Item label="Occupation">
-																						<Input name="occupation" value={personalForm.occupation || ''} onChange={handleChangePersonal} disabled={!editingPersonal} />
+																						<Select 
+																							name="occupation" 
+																							value={personalForm.occupation || ''} 
+																							onChange={(value) => setPersonalForm({...personalForm, occupation: value})} 
+																							disabled={!editingPersonal}
+																							placeholder="Select occupation"
+																							options={PHILIPPINE_OPTIONS.occupation.map(occ => ({ label: occ, value: occ }))}
+																							showSearch
+																							filterOption={(input, option) =>
+																								(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+																							}
+																						/>
 																					</Form.Item>
 																				</Col>
 																			</Row>

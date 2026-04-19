@@ -1,7 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Typography, Button, Badge, Modal, Table, Tooltip, Checkbox, Tag, List, Space, Tabs, message } from 'antd';
-import { FileTextOutlined, MailOutlined, NotificationOutlined, QuestionCircleOutlined, CalendarOutlined, MessageOutlined } from '@ant-design/icons';
+import { Row, Col, Card, Typography, Button, Badge, Modal, Table, Tooltip, Checkbox, Tag, List, Space, Tabs, message, Input, DatePicker, Select, Upload, Alert } from 'antd';
+import { FileTextOutlined, MailOutlined, NotificationOutlined, QuestionCircleOutlined, CalendarOutlined, MessageOutlined, EyeOutlined, DeleteOutlined, RetweetOutlined, UploadOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
+import { useAppointmentsQuery } from '../hooks/useAppointments';
+import { isPhilippinesHoliday } from '../utils/holidays';
+import dayjs from 'dayjs';
 import AvatarImage from './AvatarImage';
 import styles from './dashboard.module.css';
 import { getAbsoluteApiUrl } from '../services/api';
@@ -70,6 +73,14 @@ const Dashboard = () => {
   const [appointmentsScheduled, setAppointmentsScheduled] = useState([] as any[]);
   const [appointmentsPending, setAppointmentsPending] = useState([] as any[]);
   const [appointmentsCanceled, setAppointmentsCanceled] = useState([] as any[]);
+  
+  // Reschedule modal states
+  const [rescheduleModalVisible, setRescheduleModalVisible] = useState(false);
+  const [selectedRecord, setSelectedRecord] = useState<any>(null);
+  const [selectedDates, setSelectedDates] = useState<string[]>([]);
+  const [rescheduleReason, setRescheduleReason] = useState('');
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
+  const [attachmentPreview, setAttachmentPreview] = useState<string | null>(null);
 
   const formatDate = (val?: any) => {
     if (!val) return '';
@@ -78,6 +89,96 @@ const Dashboard = () => {
     } catch (err) {
       return String(val);
     }
+  };
+
+  // Enhanced cancel appointment function
+  const handleCancelAppointment = (record: any) => {
+    const isAlreadyCancelled = record.status === 'cancelled';
+    
+    Modal.confirm({
+      title: isAlreadyCancelled ? 'Delete Appointment' : 'Cancel Appointment',
+      content: isAlreadyCancelled 
+        ? `Are you sure you want to permanently delete this cancelled appointment? This action cannot be undone.`
+        : `Are you sure you want to cancel your appointment? This action cannot be undone.`,
+      okText: isAlreadyCancelled ? 'Delete' : 'Cancel Appointment',
+      okType: 'danger',
+      cancelText: 'Back',
+      onOk: async () => {
+        try {
+          if (isAlreadyCancelled) {
+            // For already cancelled appointments, delete them
+            await contactAPI.updateInquiry(String(record._id), { 
+              status: 'deleted'
+            });
+            message.success('Appointment deleted successfully');
+          } else {
+            // For pending/scheduled appointments, cancel them
+            await contactAPI.updateInquiry(String(record._id), { 
+              status: 'cancelled',
+              cancellationReason: 'Cancelled by resident'
+            });
+            message.success('Appointment cancelled successfully');
+          }
+          window.dispatchEvent(new Event('appointments-updated'));
+          // Refresh appointments
+          const res = await contactAPI.getMyInquiries();
+          const list = (Array.isArray(res) ? res : (res && res.data) ? res.data : []).filter((r: any) => r != null && r._id);
+          setAppointments(list);
+        } catch (err: any) {
+          message.error(isAlreadyCancelled ? 'Failed to delete appointment' : 'Failed to cancel appointment');
+        }
+      },
+    });
+  };
+
+  // Reschedule appointment function
+  const handleRescheduleAppointment = (record: any) => {
+    setSelectedRecord(record);
+    setSelectedDates([]);
+    setRescheduleReason('');
+    setAttachmentFile(null);
+    setAttachmentPreview(null);
+    setRescheduleModalVisible(true);
+  };
+
+  // Submit reschedule request
+  const handleRescheduleSubmit = async () => {
+    if (selectedDates.length === 0) {
+      message.error('Please select at least one date');
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append('status', 'reschedule_request');
+      formData.append('requestedDates', JSON.stringify(selectedDates));
+      formData.append('rescheduleReason', rescheduleReason);
+      
+      if (attachmentFile) {
+        formData.append('attachment', attachmentFile);
+      }
+
+      await contactAPI.updateInquiry(String(selectedRecord._id), formData);
+      message.success('Reschedule request submitted successfully');
+      setRescheduleModalVisible(false);
+      
+      window.dispatchEvent(new Event('appointments-updated'));
+      // Refresh appointments
+      const res = await contactAPI.getMyInquiries();
+      const list = (Array.isArray(res) ? res : (res && res.data) ? res.data : []).filter((r: any) => r != null && r._id);
+      setAppointments(list);
+    } catch (err: any) {
+      message.error('Failed to submit reschedule request');
+    }
+  };
+
+  // Date picker with weekends and holidays disabled
+  const disabledDate = (current: dayjs.Dayjs | null) => {
+    if (!current) return false;
+    const dayOfWeek = current.day();
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+    const isHoliday = isPhilippinesHoliday(current);
+    return isWeekend || isHoliday;
   };
 
   useEffect(() => {
@@ -246,26 +347,43 @@ const Dashboard = () => {
         const allInquiries = (Array.isArray(res) ? res : (res && res.data) ? res.data : []).filter((item: any) => item != null);
         console.info('[Dashboard] allInquiries normalized count:', allInquiries.length, allInquiries);
         
-        // Keep quick appointments (by type) for resident view; includes open/pending/scheduled/canceled.
-        const quickAppointmentTypes = ['SCHEDULE_APPOINTMENT', 'QUICK_APPOINTMENT', 'APPOINTMENT', 'SCHEDULED_APPOINTMENT'];
-        const list = allInquiries.filter((r: any) => {
+        // Separate appointment types for resident view
+        const scheduleAppointmentTypes = ['SCHEDULE_APPOINTMENT', 'APPOINTMENT', 'SCHEDULED_APPOINTMENT'];
+        const quickAppointmentTypes = ['QUICK_APPOINTMENT'];
+        
+        // Filter SCHEDULE_APPOINTMENT types (residents can cancel/reschedule these)
+        const scheduleList = allInquiries.filter((r: any) => {
+          const type = String(r?.type || '').toUpperCase();
+          return scheduleAppointmentTypes.includes(type);
+        });
+
+        // Filter QUICK_APPOINTMENT types (staff management only, residents can only view)
+        const quickList = allInquiries.filter((r: any) => {
           const type = String(r?.type || '').toUpperCase();
           return quickAppointmentTypes.includes(type);
         });
 
+        // Combine both types for display but handle them differently in actions
+        const list = [...scheduleList, ...quickList];
+
+        // Filter scheduled appointments (only SCHEDULE_APPOINTMENT types)
         const scheduledList = allInquiries.filter((r: any) => {
           const type = String(r?.type || '').toUpperCase();
           const status = String(r?.status || '').toLowerCase();
-          return quickAppointmentTypes.includes(type) && 
+          return scheduleAppointmentTypes.includes(type) && 
           ((status === 'scheduled' || (r.scheduledDates && r.scheduledDates.length)) && status !== 'resolved' && status !== 'canceled')
         });
+        
+        // Filter pending appointments (only SCHEDULE_APPOINTMENT types)
         const pendingList = allInquiries.filter((r: any) => {
           const type = String(r?.type || '').toUpperCase();
-          return quickAppointmentTypes.includes(type) && (String(r?.status || '').toLowerCase() === 'pending');
+          return scheduleAppointmentTypes.includes(type) && (String(r?.status || '').toLowerCase() === 'pending');
         });
+        
+        // Filter canceled appointments (only SCHEDULE_APPOINTMENT types)
         const canceledList = allInquiries.filter((r: any) => {
           const type = String(r?.type || '').toUpperCase();
-          return quickAppointmentTypes.includes(type) && (String(r?.status || '').toLowerCase() === 'canceled');
+          return scheduleAppointmentTypes.includes(type) && (String(r?.status || '').toLowerCase() === 'canceled');
         });
         
         setAppointmentsScheduledCount(scheduledList.length);
@@ -819,30 +937,29 @@ const Dashboard = () => {
                     <List.Item
                       actions={[
                         <Button key="view" type="link" onClick={() => { setSelectedAppt(item); setApptModalVisible(true); }}>View</Button>,
-                        <Button key="cancel" type="link" danger disabled={item.status === 'canceled'} onClick={async () => {
-                          Modal.confirm({
-                            title: 'Cancel appointment',
-                            content: 'Are you sure you want to cancel this appointment? This will mark the inquiry as resolved.',
-                            onOk: async () => {
-                              try {
-                                await contactAPI.resolveInquiry(item._id);
-                                message.success('Appointment cancelled');
-                                // refresh list
-                                const res = await contactAPI.getMyInquiries();
-                                const list = (Array.isArray(res) ? res : (res && res.data) ? res.data : []).filter((r: any) => r != null && r._id);
-                                setAppointments(list);
-                              } catch (err) {
-                                console.error('Failed to cancel appointment', err);
-                                message.error('Failed to cancel appointment');
-                              }
-                            }
-                          });
-                        }}>Cancel</Button>
+                        ...(item.type !== 'QUICK_APPOINTMENT' ? [
+                          <Button key="cancel" type="link" danger onClick={() => handleCancelAppointment(item)}>
+                            {item.status === 'canceled' ? 'Delete' : 'Cancel'}
+                          </Button>,
+                          <Button key="reschedule" type="link" onClick={() => handleRescheduleAppointment(item)}>
+                            Reschedule
+                          </Button>
+                        ] : [])
                       ]}
                     >
                       <List.Item.Meta
                         avatar={<div style={{ width: 52, height: 52, borderRadius: 8, background: '#f5f7fb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CalendarOutlined style={{ color: '#722ed1', fontSize: 20 }} /></div>}
-                        title={<div style={{ display: 'flex', gap: 12, alignItems: 'center' }}><strong>{item.subject || 'Appointment'}</strong> <Tag color={status === 'scheduled' ? 'blue' : (status === 'resolved' ? 'default' : (status === 'canceled' ? 'red' : 'orange'))}>{status}</Tag></div>}
+                        title={
+  <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+    <strong>{item.subject || 'Appointment'}</strong>
+    {item.type === 'QUICK_APPOINTMENT' && (
+      <Tag color="purple" style={{ fontSize: '11px' }}>Quick</Tag>
+    )}
+    <Tag color={status === 'scheduled' ? 'blue' : (status === 'resolved' ? 'default' : (status === 'canceled' ? 'red' : 'orange'))}>
+      {status}
+    </Tag>
+  </div>
+}
                         description={<div><div style={{ fontWeight: 600 }}>{dateLabel} · {timeLabel}</div><div style={{ color: '#666', marginTop: 6 }}>{item.message || ''}</div></div>}
                       />
                     </List.Item>
@@ -1178,9 +1295,90 @@ const Dashboard = () => {
           </Tabs>
         </Modal>
 
-        {/* ...other dashboard sections... */}
-      </div>
-    </>
+        </div>
+        
+        {/* Reschedule Modal */}
+        <Modal
+          title="Reschedule Appointment"
+          open={rescheduleModalVisible}
+          onCancel={() => setRescheduleModalVisible(false)}
+          footer={[
+            <Button key="cancel" onClick={() => setRescheduleModalVisible(false)}>
+              Cancel
+            </Button>,
+            <Button key="submit" type="primary" onClick={handleRescheduleSubmit}>
+              Submit Request
+            </Button>
+          ]}
+          width={600}
+        >
+          <Space direction="vertical" style={{ width: '100%' }} size="large">
+            <div>
+              <Typography.Text strong>Select Available Dates:</Typography.Text>
+              <div style={{ marginTop: 8 }}>
+                <DatePicker.RangePicker
+                  style={{ width: '100%' }}
+                  placeholder={['Start Date', 'End Date']}
+                  disabledDate={disabledDate}
+                  onChange={(dates) => {
+                    if (dates && dates[0] && dates[1]) {
+                      const start = dates[0];
+                      const end = dates[1];
+                      const dateRange = [];
+                      let current = start;
+                      while (current.isBefore(end) || current.isSame(end)) {
+                        dateRange.push(current.format('YYYY-MM-DD'));
+                        current = current.add(1, 'day');
+                      }
+                      setSelectedDates(dateRange);
+                    }
+                  }}
+                />
+              </div>
+              <div style={{ marginTop: 8 }}>
+                <Typography.Text type="secondary">
+                  Weekends and Philippine holidays are disabled
+                </Typography.Text>
+              </div>
+            </div>
+            
+            <div>
+              <Typography.Text strong>Reason for Rescheduling:</Typography.Text>
+              <Input.TextArea
+                style={{ marginTop: 8 }}
+                placeholder="Please provide a reason for rescheduling..."
+                value={rescheduleReason}
+                onChange={(e) => setRescheduleReason(e.target.value)}
+                rows={3}
+              />
+            </div>
+            
+            <div>
+              <Typography.Text strong>Attachment (Optional):</Typography.Text>
+              <Upload
+                style={{ marginTop: 8 }}
+                beforeUpload={(file) => {
+                  setAttachmentFile(file);
+                  setAttachmentPreview(URL.createObjectURL(file));
+                  return false;
+                }}
+                onRemove={() => {
+                  setAttachmentFile(null);
+                  setAttachmentPreview(null);
+                }}
+                maxCount={1}
+              >
+                <Button icon={<UploadOutlined />}>Select File</Button>
+              </Upload>
+              {attachmentPreview && (
+                <div style={{ marginTop: 8 }}>
+                  <Typography.Text>Selected: {attachmentFile?.name}</Typography.Text>
+                </div>
+              )}
+            </div>
+          </Space>
+        </Modal>
+      </>
   );
 };
 
