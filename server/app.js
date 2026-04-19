@@ -143,6 +143,8 @@ app.get('/', (req, res) => {
 app.use('/api/messages', require('./src/routes/messageRoutes').default);
 app.use('/api/inquiries', require('./src/routes/inquiryRoutes').default);
 app.use('/api/resident', require('./src/routes/residents').default);
+// Backward-compatible alias: some clients call the plural '/api/residents'
+app.use('/api/residents', require('./src/routes/residents').default);
 // Notifications routes
 app.use('/api/notifications', require('./src/routes/notificationRoutes'));
 // Analytics routes
