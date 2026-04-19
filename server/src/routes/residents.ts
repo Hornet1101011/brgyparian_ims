@@ -30,21 +30,208 @@ router.get('/with-avatars', async (req, res) => {
 	}
 });
 
-// Staff endpoint: get all users for selection (authenticated users only)
-// Removed role restriction to debug authorization issues
+// Advanced resident search with comprehensive filtering
+router.post('/search', auth, async (req: any, res) => {
+	try {
+		console.log('[Residents API] Advanced search called by user:', req.user?.username, 'role:', req.user?.role);
+		
+		const {
+			query = '',
+			filters = {},
+			page = 1,
+			limit = 20,
+			sortBy = 'lastName',
+			sortOrder = 'asc'
+		} = req.body;
+
+		// Build search criteria
+		const searchCriteria: any = {};
+
+		// Text search across multiple fields
+		if (query && query.trim()) {
+			const searchRegex = new RegExp(query.trim(), 'i');
+			searchCriteria.$or = [
+				{ firstName: searchRegex },
+				{ lastName: searchRegex },
+				{ middleName: searchRegex },
+				{ barangayID: searchRegex },
+				{ username: searchRegex },
+				{ email: searchRegex },
+				{ contactNumber: searchRegex },
+				{ address: searchRegex },
+				{ occupation: searchRegex },
+				{ businessName: searchRegex }
+			];
+		}
+
+		// Apply specific filters
+		if (filters.ageRange) {
+			const { min, max } = filters.ageRange;
+			if (min !== undefined || max !== undefined) {
+				searchCriteria.age = {};
+				if (min !== undefined) searchCriteria.age.$gte = min;
+				if (max !== undefined) searchCriteria.age.$lte = max;
+			}
+		}
+
+		if (filters.sex) {
+			searchCriteria.sex = filters.sex;
+		}
+
+		if (filters.civilStatus) {
+			searchCriteria.civilStatus = filters.civilStatus;
+		}
+
+		if (filters.nationality) {
+			searchCriteria.nationality = { $in: Array.isArray(filters.nationality) ? filters.nationality : [filters.nationality] };
+		}
+
+		if (filters.religion) {
+			searchCriteria.religion = { $in: Array.isArray(filters.religion) ? filters.religion : [filters.religion] };
+		}
+
+		if (filters.bloodType) {
+			searchCriteria.bloodType = { $in: Array.isArray(filters.bloodType) ? filters.bloodType : [filters.bloodType] };
+		}
+
+		if (filters.occupation) {
+			searchCriteria.occupation = { $in: Array.isArray(filters.occupation) ? filters.occupation : [filters.occupation] };
+		}
+
+		if (filters.educationalAttainment) {
+			searchCriteria.educationalAttainment = { $in: Array.isArray(filters.educationalAttainment) ? filters.educationalAttainment : [filters.educationalAttainment] };
+		}
+
+		if (filters.dateOfResidencyRange) {
+			const { start, end } = filters.dateOfResidencyRange;
+			if (start || end) {
+				searchCriteria.dateOfResidency = {};
+				if (start) searchCriteria.dateOfResidency.$gte = start;
+				if (end) searchCriteria.dateOfResidency.$lte = end;
+			}
+		}
+
+		if (filters.hasBusiness !== undefined) {
+			if (filters.hasBusiness) {
+				searchCriteria.businessName = { $exists: true, $ne: null };
+			} else {
+				searchCriteria.$or = [
+					{ businessName: { $exists: false } },
+					{ businessName: '' },
+					{ businessName: null }
+				];
+			}
+		}
+
+		if (filters.singleParent !== undefined) {
+			searchCriteria.singleParent = filters.singleParent;
+		}
+
+		if (filters.disabilityStatus) {
+			searchCriteria.disabilityStatus = { $in: Array.isArray(filters.disabilityStatus) ? filters.disabilityStatus : [filters.disabilityStatus] };
+		}
+
+		// Build sort options
+		const sortOptions: any = {};
+		sortOptions[sortBy] = sortOrder === 'desc' ? -1 : 1;
+
+		// Execute search with pagination
+		const skip = (page - 1) * limit;
+		const residents = await Resident.find(searchCriteria)
+			.select('_id barangayID username firstName middleName lastName nameExtension age sex civilStatus nationality occupation email contactNumber address dateOfResidency businessName profileImage')
+			.sort(sortOptions)
+			.skip(skip)
+			.limit(limit)
+			.lean();
+
+		// Get total count for pagination
+		const total = await Resident.countDocuments(searchCriteria);
+
+		console.log('[Residents API] Advanced search found', residents.length, 'residents out of', total, 'total');
+
+		res.json({
+			residents,
+			pagination: {
+				current: page,
+				pageSize: limit,
+				total,
+				totalPages: Math.ceil(total / limit)
+			},
+			filters: {
+				query,
+				filters,
+				sortBy,
+				sortOrder
+			}
+		});
+	} catch (err) {
+		console.error('Error in advanced resident search:', err);
+		res.status(500).json({ message: 'Failed to search residents', error: String(err) });
+	}
+});
+
+// Staff endpoint: get all residents for selection (authenticated users only)
 router.get('/list/all', auth, async (req, res) => {
 	try {
 		console.log('[Residents API] /list/all called by user:', req.user?.username, 'role:', req.user?.role);
-		const users = await User.find({})
-			.select('_id username fullName email contactNumber barangayID role')
-			.sort({ fullName: 1, username: 1 })
+		
+		// Build query to find residents - either through userId linkage or directly
+		const residents = await Resident.find({})
+			.select('_id barangayID username firstName middleName lastName nameExtension age sex civilStatus nationality occupation email contactNumber address dateOfResidency businessName profileImage profileImageId')
+			.sort({ lastName: 1, firstName: 1, username: 1 })
 			.lean();
-		console.log('[Residents API] Found', users.length, 'users');
-		console.log('[Residents API] Sample user:', users[0]);
-		res.json(users);
+		
+		console.log('[Residents API] Found', residents.length, 'residents');
+		
+		// If no residents found, also check if we have users without resident records
+		if (residents.length === 0) {
+			console.log('[Residents API] No residents found, checking for users...');
+			const users = await User.find({})
+				.select('_id username fullName email contactNumber barangayID role')
+				.sort({ fullName: 1, username: 1 })
+				.lean();
+			console.log('[Residents API] Found', users.length, 'users as fallback');
+			
+			// Transform users to resident-like format for compatibility
+			const transformedUsers = users.map(user => {
+				const parts = user.fullName && typeof user.fullName === 'string' ? user.fullName.trim().split(/\s+/) : [];
+				const firstName = parts.length > 0 ? parts[0] : (user.username || 'N/A');
+				const lastName = parts.length > 1 ? parts.slice(1).join(' ') : 'N/A';
+				
+				return {
+					_id: user._id,
+					barangayID: user.barangayID,
+					username: user.username,
+					firstName: firstName,
+					lastName: lastName,
+					email: user.email,
+					contactNumber: user.contactNumber,
+					role: user.role,
+					// Add empty fields for compatibility
+					middleName: '',
+					nameExtension: '',
+					age: null,
+					sex: '',
+					civilStatus: '',
+					nationality: '',
+					occupation: '',
+					address: '',
+					dateOfResidency: '',
+					businessName: '',
+					profileImage: '',
+					profileImageId: ''
+				};
+			});
+			
+			console.log('[Residents API] Sample transformed user:', transformedUsers[0]);
+			res.json(transformedUsers);
+		} else {
+			console.log('[Residents API] Sample resident:', residents[0]);
+			res.json(residents);
+		}
 	} catch (err) {
-		console.error('Error fetching users list:', err);
-		res.status(500).json({ message: 'Failed to fetch users list', error: String(err) });
+		console.error('Error fetching residents list:', err);
+		res.status(500).json({ message: 'Failed to fetch residents list', error: String(err) });
 	}
 });
 

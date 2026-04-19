@@ -127,6 +127,56 @@ export const residentsListAPI = {
       return [];
     }
   },
+
+  // Advanced search with comprehensive filtering
+  searchResidents: async (searchParams: {
+    query?: string;
+    filters?: {
+      ageRange?: { min?: number; max?: number };
+      sex?: string;
+      civilStatus?: string;
+      nationality?: string | string[];
+      religion?: string | string[];
+      bloodType?: string | string[];
+      occupation?: string | string[];
+      educationalAttainment?: string | string[];
+      dateOfResidencyRange?: { start?: string; end?: string };
+      hasBusiness?: boolean;
+      singleParent?: boolean;
+      disabilityStatus?: string | string[];
+    };
+    page?: number;
+    limit?: number;
+    sortBy?: string;
+    sortOrder?: string;
+  }) => {
+    try {
+      console.log('Advanced resident search with params:', searchParams);
+      const resp = await axiosInstance.post('/residents/search', searchParams);
+      console.log('Advanced search response status:', resp.status);
+      console.log('Advanced search results:', resp.data);
+      return resp.data;
+    } catch (err: any) {
+      console.error('Failed to search residents:', {
+        message: err?.message,
+        status: err?.response?.status,
+        statusText: err?.response?.statusText,
+        data: err?.response?.data,
+        fullError: err,
+        searchParams
+      });
+      return {
+        residents: [],
+        pagination: {
+          current: 1,
+          pageSize: 20,
+          total: 0,
+          totalPages: 0
+        },
+        filters: searchParams
+      };
+    }
+  },
 };
 
 // Fetch template text for a document type
