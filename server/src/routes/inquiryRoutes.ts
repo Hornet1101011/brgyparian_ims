@@ -102,12 +102,12 @@ const authorizeInquiryUpdate = async (req: any, res: Response, next: NextFunctio
 };
 
 // Update an inquiry (admin, staff, and residents updating their own)
-router.patch('/:id', auth, authorizeInquiryUpdate, (req: any, res: Response, next: NextFunction) => updateInquiry(req, res, next));
+router.patch('/:id', auth, upload.array('attachments'), authorizeInquiryUpdate, (req: any, res: Response, next: NextFunction) => updateInquiry(req, res, next));
 
 // Some hosting environments or proxies do not allow the HTTP PATCH method.
 // Provide a POST-based fallback that performs the same update logic so
 // clients that cannot send PATCH can still update inquiries.
-router.post('/:id', auth, authorizeInquiryUpdate, (req: any, res: Response, next: NextFunction) => updateInquiry(req, res, next));
+router.post('/:id', auth, upload.array('attachments'), authorizeInquiryUpdate, (req: any, res: Response, next: NextFunction) => updateInquiry(req, res, next));
 // PUT /:id/schedule - explicit scheduling/editing endpoint for appointments
 router.put('/:id/schedule', auth, authorize('admin', 'staff'), (req: any, res: Response, next: NextFunction) => updateInquiry(req, res, next));
 // Check availability for a set of scheduledDates (staff only) without committing

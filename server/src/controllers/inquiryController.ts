@@ -602,8 +602,21 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
   try {
     // Prepare update body and validate appointmentDates if supplied
     const updateBody: any = { ...req.body };
+    
+    // Handle FormData parsing for appointmentDates (might be JSON string from FormData)
     try {
-      const rawDates = updateBody.appointmentDates || updateBody['appointmentDates[]'];
+      let rawDates = updateBody.appointmentDates || updateBody['appointmentDates[]'];
+      
+      // If appointmentDates is a string (from FormData JSON.stringify), parse it first
+      if (typeof rawDates === 'string') {
+        try {
+          rawDates = JSON.parse(rawDates);
+        } catch (parseError) {
+          console.warn('Failed to parse appointmentDates JSON string:', parseError);
+          rawDates = undefined;
+        }
+      }
+      
       if (rawDates !== undefined) {
         const arr = Array.isArray(rawDates) ? rawDates : [rawDates];
         const now = new Date(); now.setHours(0,0,0,0);
