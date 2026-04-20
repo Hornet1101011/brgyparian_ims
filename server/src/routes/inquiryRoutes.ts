@@ -60,13 +60,54 @@ router.get('/slots', auth, authorize('admin', 'staff'), (req: any, res: Response
 router.get('/audit-logs', auth, authorize('admin', 'secretary'), (req: any, res: Response, next: NextFunction) => {
   return getAppointmentAuditLogs(req, res);
 });
-// Update an inquiry (admin and staff only)
-router.patch('/:id', auth, authorize('admin', 'staff'), (req: any, res: Response, next: NextFunction) => updateInquiry(req, res, next));
+// Custom authorization middleware for inquiry updates
+const authorizeInquiryUpdate = async (req: any, res: Response, next: NextFunction) => {
+  const user = req.user;
+  const inquiryId = req.params.id;
+  
+  try {
+    // Allow admin and staff to update any inquiry
+    if (user.role === 'admin' || user.role === 'staff') {
+      return next();
+    }
+    
+    // Allow residents to update their own inquiries
+    if (user.role === 'resident') {
+      const { Inquiry } = require('../models/Inquiry');
+      const inquiry = await Inquiry.findById(inquiryId);
+      
+      if (!inquiry) {
+        return res.status(404).json({ message: 'Inquiry not found' });
+      }
+      
+      // Check if the inquiry belongs to the current resident
+      // Match by username, barangayID, or createdBy
+      const isOwner = 
+        (inquiry.username && inquiry.username === user.username) ||
+        (inquiry.barangayID && inquiry.barangayID === user.barangayID) ||
+        (inquiry.createdBy && inquiry.createdBy.toString() === user._id.toString());
+      
+      if (!isOwner) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+      
+      return next();
+    }
+    
+    return res.status(403).json({ message: 'Access denied' });
+  } catch (error) {
+    console.error('Error in authorizeInquiryUpdate:', error);
+    return res.status(500).json({ message: 'Authorization error' });
+  }
+};
+
+// Update an inquiry (admin, staff, and residents updating their own)
+router.patch('/:id', auth, authorizeInquiryUpdate, (req: any, res: Response, next: NextFunction) => updateInquiry(req, res, next));
 
 // Some hosting environments or proxies do not allow the HTTP PATCH method.
 // Provide a POST-based fallback that performs the same update logic so
 // clients that cannot send PATCH can still update inquiries.
-router.post('/:id', auth, authorize('admin', 'staff'), (req: any, res: Response, next: NextFunction) => updateInquiry(req, res, next));
+router.post('/:id', auth, authorizeInquiryUpdate, (req: any, res: Response, next: NextFunction) => updateInquiry(req, res, next));
 // PUT /:id/schedule - explicit scheduling/editing endpoint for appointments
 router.put('/:id/schedule', auth, authorize('admin', 'staff'), (req: any, res: Response, next: NextFunction) => updateInquiry(req, res, next));
 // Check availability for a set of scheduledDates (staff only) without committing
