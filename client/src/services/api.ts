@@ -579,7 +579,10 @@ export const contactAPI = {
   getAllInquiries: () =>
   axiosInstance.get('/inquiries').then(response => response.data),
   updateInquiry: (id: string, data: any) =>
-    axiosInstance.patch(`/inquiries/${id}`, data).then(response => response.data),
+    // Support FormData (multipart) or JSON payloads for updates
+    (typeof FormData !== 'undefined' && data instanceof FormData)
+      ? axiosInstance.patch(`/inquiries/${id}`, data, { headers: { 'Content-Type': 'multipart/form-data' } }).then(response => response.data)
+      : axiosInstance.patch(`/inquiries/${id}`, data).then(response => response.data),
   respondToInquiry: (id: string, data: { response: string }) =>
     axiosInstance.post(`/inquiries/${id}/responses`, data).then(response => response.data),
   // Mark an inquiry as resolved (admin/staff)

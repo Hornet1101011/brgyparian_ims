@@ -652,6 +652,50 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
       console.warn('Failed to validate appointmentDates on update:', e);
     }
 
+    // Parse optional rescheduleRequest (may be JSON string from FormData)
+    try {
+      let rawRes = updateBody.rescheduleRequest || updateBody['rescheduleRequest'];
+      if (typeof rawRes === 'string' && rawRes.trim()) {
+        try { rawRes = JSON.parse(rawRes); } catch (parseErr) { rawRes = undefined; }
+      }
+      if (rawRes && typeof rawRes === 'object') {
+        const now = new Date(); now.setHours(0,0,0,0);
+        const requestedDates: string[] = [];
+        if (Array.isArray(rawRes.requestedDates)) {
+          for (const s of rawRes.requestedDates) {
+            if (!s) continue;
+            try {
+              const d = new Date(s);
+              if (isNaN(d.getTime())) continue;
+              const dStart = new Date(d); dStart.setHours(0,0,0,0);
+              if (dStart < now) continue; const wk = dStart.getDay(); if (wk === 0 || wk === 6) continue;
+              requestedDates.push(dStart.toISOString().slice(0,10));
+            } catch (ignore) {}
+          }
+        }
+        const rr: any = {};
+        if (requestedDates.length) rr.requestedDates = Array.from(new Set(requestedDates)).slice(0,3);
+        if (typeof rawRes.reason === 'string') rr.reason = String(rawRes.reason).trim();
+        rr.requestedAt = rawRes.requestedAt ? new Date(String(rawRes.requestedAt)) : new Date();
+        updateBody.rescheduleRequest = rr;
+      }
+    } catch (e) {
+      console.warn('Failed to parse rescheduleRequest on update:', e);
+    }
+
+    // If files were uploaded as part of the update (attachments for reschedule), map first file to rescheduleRequest.attachment
+    try {
+      if ((req.files && Array.isArray(req.files) && req.files.length > 0) && updateBody.rescheduleRequest) {
+        const host = req.get('host'); const proto = req.protocol;
+        const f = (req.files as any[])[0];
+        if (f && f.path) {
+          updateBody.rescheduleRequest.attachment = `${proto}://${host}/uploads/inquiries/${path.basename(f.path)}`;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to attach uploaded file to rescheduleRequest:', e);
+    }
+
     // Fetch existing inquiry to detect status transitions and for safety checks
     const beforeInquiry = await Inquiry.findById(req.params.id).lean();
     if (!beforeInquiry) return res.status(404).json({ message: 'Inquiry not found' });

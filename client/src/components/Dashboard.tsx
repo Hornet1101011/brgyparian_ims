@@ -151,21 +151,49 @@ const Dashboard = () => {
     try {
       const formData = new FormData();
       formData.append('status', 'pending');
+      // Keep appointmentDates for quick UI fallback
       formData.append('appointmentDates', JSON.stringify(selectedDates));
-      
+
+      // Include structured rescheduleRequest so staff can view reason + requested dates
+      const resReq = { requestedDates: selectedDates, reason: rescheduleReason || '', requestedAt: new Date().toISOString() };
+      formData.append('rescheduleRequest', JSON.stringify(resReq));
+
+      // Attach file(s) under the 'attachments' field so server's multer upload.array('attachments') receives them
       if (attachmentFile) {
-        formData.append('attachment', attachmentFile);
+        formData.append('attachments', attachmentFile);
       }
 
-      await contactAPI.updateInquiry(String(selectedRecord._id), formData);
+      const updated = await contactAPI.updateInquiry(String(selectedRecord._id), formData);
       message.success('Reschedule request submitted successfully');
       setRescheduleModalVisible(false);
-      
+
+      // If server returned the updated inquiry, use it to update local state immediately
+      try {
+        if (updated && updated._id) {
+          setAppointments(prev => (prev || []).map(a => (a && a._id && String(a._id) === String(updated._id)) ? ({ ...a, ...updated, nextAppointment: (updated.scheduledDates && updated.scheduledDates.length) ? updated.scheduledDates[0] : (updated.appointmentDates && updated.appointmentDates.length ? { date: updated.appointmentDates[0] } : null) }) : a));
+        } else {
+          // fallback optimistic update if server didn't return updated doc
+          const nowIso = new Date().toISOString();
+          setAppointments(prev => (prev || []).map(a => {
+            if (!a || !a._id) return a;
+            if (String(a._id) !== String(selectedRecord._id)) return a;
+            const next = (selectedDates && selectedDates.length) ? { date: selectedDates[0] } : null;
+            return {
+              ...a,
+              status: 'pending',
+              appointmentDates: Array.isArray(selectedDates) ? selectedDates.slice() : [],
+              rescheduleRequest: { requestedDates: Array.isArray(selectedDates) ? selectedDates.slice() : [], reason: rescheduleReason || '', requestedAt: nowIso },
+              scheduledDates: [],
+              nextAppointment: next
+            };
+          }));
+        }
+      } catch (e) {
+        // swallow optimistic update errors
+      }
+
+      // Notify other pages to refresh; avoid immediate re-fetch to prevent overwriting with stale data
       window.dispatchEvent(new Event('appointments-updated'));
-      // Refresh appointments
-      const res = await contactAPI.getMyInquiries();
-      const list = (Array.isArray(res) ? res : (res && res.data) ? res.data : []).filter((r: any) => r != null && r._id);
-      setAppointments(list);
     } catch (err: any) {
       message.error('Failed to submit reschedule request');
     }
@@ -396,7 +424,14 @@ const Dashboard = () => {
         
         // normalize and sort by next appointment date
         const normalized = list.map((r: any) => {
-          const next = (r.scheduledDates && r.scheduledDates.length) ? r.scheduledDates[0] : null;
+          // Prefer scheduledDates (actual appointments). If not present, fall back to
+          // resident-proposed appointmentDates so the UI shows requested reschedule dates.
+          let next = null as any;
+          if (r.scheduledDates && r.scheduledDates.length) {
+            next = r.scheduledDates[0];
+          } else if (r.appointmentDates && Array.isArray(r.appointmentDates) && r.appointmentDates.length) {
+            next = { date: r.appointmentDates[0] };
+          }
           return { ...r, nextAppointment: next };
         }).sort((a: any, b: any) => {
           const da = a.nextAppointment ? new Date(a.nextAppointment.date) : new Date(a.createdAt);

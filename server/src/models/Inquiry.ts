@@ -55,6 +55,13 @@ export interface IInquiry extends Document {
   // Each scheduled entry may include assignedUsernames (for advanced scheduling)
   scheduledDates?: Array<{ date: string; startTime: string; endTime: string; assignedUsernames?: string[] }>;
   scheduledBy?: mongoose.Types.ObjectId;
+  rescheduleRequest?: {
+    requestedDates?: string[];
+    reason?: string;
+    attachment?: string;
+    requestedAt?: Date;
+    requestedBy?: mongoose.Types.ObjectId;
+  };
   cancellationReason?: string;
   canceledBy?: mongoose.Types.ObjectId;
   canceledAt?: Date;
@@ -206,6 +213,14 @@ const inquirySchema = new mongoose.Schema({
   location: { type: String }, // Address or location details
   description: { type: String }, // Appointment description
   urgency: { type: String }, // 'normal' | 'high' | 'low'
+  // Reschedule request object created when resident requests a reschedule
+  rescheduleRequest: {
+    requestedDates: [{ type: String }],
+    reason: { type: String },
+    attachment: { type: String },
+    requestedAt: { type: Date },
+    requestedBy: { type: Schema.Types.ObjectId, ref: 'User' }
+  },
 }, {
   timestamps: true,
 });
