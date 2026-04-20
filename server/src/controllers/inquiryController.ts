@@ -603,6 +603,11 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
     // Prepare update body and validate appointmentDates if supplied
     const updateBody: any = { ...req.body };
     
+    // Debug logging to track status update
+    console.log('[updateInquiry] Request body keys:', Object.keys(req.body || {}));
+    console.log('[updateInquiry] Status from body:', req.body?.status);
+    console.log('[updateInquiry] UpdateBody status:', updateBody.status);
+    
     // Handle FormData parsing for appointmentDates (might be JSON string from FormData)
     try {
       let rawDates = updateBody.appointmentDates || updateBody['appointmentDates[]'];
@@ -911,8 +916,10 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
         return res.status(400).json({ message: 'Invalid scheduledDates payload' });
       }
     } else {
-      // No scheduledDates provided — perform a normal update
+      // No scheduledDates provided -- perform a normal update
+      console.log('[updateInquiry] Performing normal update with updateBody:', updateBody);
       inquiry = await Inquiry.findByIdAndUpdate(req.params.id, updateBody, { new: true });
+      console.log('[updateInquiry] Updated inquiry status:', inquiry?.status);
       if (!inquiry) {
         return res.status(404).json({ message: 'Inquiry not found' });
       }
