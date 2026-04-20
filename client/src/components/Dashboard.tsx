@@ -150,8 +150,8 @@ const Dashboard = () => {
 
     try {
       const formData = new FormData();
-      formData.append('status', 'reschedule_request');
-      formData.append('requestedDates', JSON.stringify(selectedDates));
+      formData.append('status', 'pending');
+      formData.append('appointmentDates', JSON.stringify(selectedDates));
       formData.append('rescheduleReason', rescheduleReason);
       
       if (attachmentFile) {
@@ -172,13 +172,14 @@ const Dashboard = () => {
     }
   };
 
-  // Date picker with weekends and holidays disabled
+  // Date picker with weekends, holidays, and past dates disabled
   const disabledDate = (current: dayjs.Dayjs | null) => {
     if (!current) return false;
     const dayOfWeek = current.day();
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
     const isHoliday = isPhilippinesHoliday(current);
-    return isWeekend || isHoliday;
+    const isPast = current.isBefore(dayjs(), 'day');
+    return isWeekend || isHoliday || isPast;
   };
 
   useEffect(() => {
@@ -1314,31 +1315,49 @@ const Dashboard = () => {
         >
           <Space direction="vertical" style={{ width: '100%' }} size="large">
             <div>
-              <Typography.Text strong>Select Available Dates:</Typography.Text>
+              <Typography.Text strong>Select Available Dates (Up to 3):</Typography.Text>
               <div style={{ marginTop: 8 }}>
-                <DatePicker.RangePicker
-                  style={{ width: '100%' }}
-                  placeholder={['Start Date', 'End Date']}
-                  disabledDate={disabledDate}
-                  onChange={(dates) => {
-                    if (dates && dates[0] && dates[1]) {
-                      const start = dates[0];
-                      const end = dates[1];
-                      const dateRange = [];
-                      let current = start;
-                      while (current.isBefore(end) || current.isSame(end)) {
-                        dateRange.push(current.format('YYYY-MM-DD'));
-                        current = current.add(1, 'day');
-                      }
-                      setSelectedDates(dateRange);
-                    }
-                  }}
-                />
+                <Space direction="vertical" style={{ width: '100%' }}>
+                  {[0, 1, 2].map((index) => (
+                    <DatePicker
+                      key={index}
+                      style={{ width: '100%' }}
+                      placeholder={`Select Date ${index + 1}`}
+                      disabledDate={disabledDate}
+                      value={selectedDates[index] ? dayjs(selectedDates[index]) : null}
+                      onChange={(date) => {
+                        const newDates = [...selectedDates];
+                        if (date) {
+                          // Ensure array has enough elements
+                          while (newDates.length <= index) {
+                            newDates.push('');
+                          }
+                          newDates[index] = date.format('YYYY-MM-DD');
+                        } else {
+                          if (newDates.length > index) {
+                            newDates[index] = '';
+                          }
+                        }
+                        // Remove empty dates and filter valid dates
+                        const filteredDates = newDates.filter(d => d && d !== '');
+                        setSelectedDates(filteredDates);
+                      }}
+                      disabled={index > 0 && (!selectedDates[index - 1] || selectedDates[index - 1] === '')}
+                    />
+                  ))}
+                </Space>
               </div>
               <div style={{ marginTop: 8 }}>
                 <Typography.Text type="secondary">
-                  Weekends and Philippine holidays are disabled
+                  Weekends, Philippine holidays, and past dates are disabled
                 </Typography.Text>
+                {selectedDates.length > 0 && (
+                  <div style={{ marginTop: 4 }}>
+                    <Typography.Text type="secondary">
+                      Selected dates: {selectedDates.length}/3
+                    </Typography.Text>
+                  </div>
+                )}
               </div>
             </div>
             
