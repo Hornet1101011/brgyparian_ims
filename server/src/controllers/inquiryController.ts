@@ -918,6 +918,14 @@ export const updateInquiry = async (req: any, res: Response, next: NextFunction)
     } else {
       // No scheduledDates provided -- perform a normal update
       console.log('[updateInquiry] Performing normal update with updateBody:', updateBody);
+      
+      // If status is being set to 'pending', clear scheduledDates to move it out of scheduled list
+      if (updateBody.status === 'pending') {
+        updateBody.scheduledDates = [];
+        updateBody.scheduledBy = undefined;
+        console.log('[updateInquiry] Clearing scheduledDates for status change to pending');
+      }
+      
       inquiry = await Inquiry.findByIdAndUpdate(req.params.id, updateBody, { new: true });
       console.log('[updateInquiry] Updated inquiry status:', inquiry?.status);
       if (!inquiry) {
