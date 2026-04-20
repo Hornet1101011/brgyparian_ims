@@ -152,7 +152,6 @@ const Dashboard = () => {
       const formData = new FormData();
       formData.append('status', 'pending');
       formData.append('appointmentDates', JSON.stringify(selectedDates));
-      formData.append('rescheduleReason', rescheduleReason);
       
       if (attachmentFile) {
         formData.append('attachment', attachmentFile);
@@ -1361,16 +1360,6 @@ const Dashboard = () => {
               </div>
             </div>
             
-            <div>
-              <Typography.Text strong>Reason for Rescheduling:</Typography.Text>
-              <Input.TextArea
-                style={{ marginTop: 8 }}
-                placeholder="Please provide a reason for rescheduling..."
-                value={rescheduleReason}
-                onChange={(e) => setRescheduleReason(e.target.value)}
-                rows={3}
-              />
-            </div>
             
             <div>
               <Typography.Text strong>Attachment (Optional):</Typography.Text>
